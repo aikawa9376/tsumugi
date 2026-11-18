@@ -95,7 +95,10 @@ const typesIn = (a) => (a instanceof HTMLInputElement || a instanceof HTMLTextAr
 const take = () => {
   if (!current()) return;
   const a = document.activeElement;
-  if (a !== t && !typesIn(a)) t.focus();
+  // Dialog buttons need their focus for Tab, Enter and Space as fields do.
+  const dialog = a instanceof Element && a.isConnected && !a.disabled
+    && a.getClientRects().length > 0 && a.closest('.dialog');
+  if (a !== t && !typesIn(a) && !dialog) t.focus();
 };
 const keep = () => setTimeout(take, 0);
 document.addEventListener('mouseup', keep);

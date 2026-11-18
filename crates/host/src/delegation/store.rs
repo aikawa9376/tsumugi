@@ -13,7 +13,9 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 9;
+
+mod issues;
 
 /// The tables as the first schema made them; a new database is made by it
 /// and then by every step in `MIGRATIONS`, so it ends as one carried forward.
@@ -107,6 +109,18 @@ const MIGRATIONS: &[&str] = &[
          ops TEXT NOT NULL
      );
      CREATE INDEX timeline_by_code ON timeline(code);",
+    "CREATE TABLE local_issues (
+         seq INTEGER PRIMARY KEY AUTOINCREMENT,
+         id TEXT NOT NULL UNIQUE,
+         dir TEXT NOT NULL,
+         title TEXT NOT NULL,
+         body TEXT NOT NULL,
+         state TEXT NOT NULL,
+         worked INTEGER NOT NULL DEFAULT 0,
+         session TEXT REFERENCES sessions(id),
+         error TEXT
+     );
+     CREATE INDEX local_issues_by_directory ON local_issues(dir, state, seq);",
 ];
 
 /// What the window or the work host knows of a session before its program starts.
@@ -1394,7 +1408,7 @@ PRAGMA user_version = 1;
             store
                 .connection
                 .execute_batch(
-                    "DROP INDEX sessions_by_code; ALTER TABLE sessions DROP COLUMN code;
+                    "DROP TABLE local_issues; DROP INDEX sessions_by_code; ALTER TABLE sessions DROP COLUMN code;
                      ALTER TABLE sessions DROP COLUMN name_given; DROP TABLE timeline; PRAGMA user_version = 5;",
                 )
                 .unwrap();
@@ -1652,7 +1666,7 @@ PRAGMA user_version = 1;
             store
                 .connection
                 .execute_batch(
-                    "DROP TABLE timeline; DROP INDEX sessions_by_code; ALTER TABLE sessions DROP COLUMN code; PRAGMA user_version = 6;",
+                    "DROP TABLE local_issues; DROP TABLE timeline; DROP INDEX sessions_by_code; ALTER TABLE sessions DROP COLUMN code; PRAGMA user_version = 6;",
                 )
                 .unwrap();
             (old, by, other)

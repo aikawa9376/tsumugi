@@ -81,6 +81,7 @@ fn App() -> Element {
             ContextMenu {}
             KeysHelp {}
             crate::adding::AddingSheet {}
+            crate::local_issues::LocalIssues {}
             ConfirmDialog {}
             super::lightbox::Lightbox {}
         }

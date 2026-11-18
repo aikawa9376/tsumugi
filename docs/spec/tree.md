@@ -6,6 +6,10 @@ each runs in. Sessions started outside Tsumugi are not listed; their
 conversations can be resumed in Tsumugi
 ([resuming](sessions.md#resuming-a-past-conversation)).
 
+The sidebar's Agents section offers a separate view of session states and the
+parents that started them, without unfolding directories
+([the agents panel](agents-panel.md)).
+
 ## Workspaces and worktrees
 
 A **workspace** is where sessions and the shells you open in Tsumugi run:
@@ -267,6 +271,11 @@ Add to Tree, in the Session menu, on an environment's heading or `A` in the
 tree, opens the picker on the directories alone, of the environment it was
 opened in: choosing one, from the list or the file tree, adds its workspace
 to the tree, and `Ctrl+s` and `Ctrl+e` still open a shell and Neovim there.
+
+The `+` of an environment, workspace or worktree also opens
+[Local Issues](local-issues.md), where requests can be queued for the
+environment's default agent. The working directory is filled from the row
+where it was opened and can be changed before queuing the request.
 
 `n` on a row starts a session in that row's worktree or directory without the
 picker. `Ctrl+q }` and `Ctrl+q {` open a session of the next and the

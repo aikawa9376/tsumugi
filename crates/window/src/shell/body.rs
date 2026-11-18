@@ -97,17 +97,18 @@ pub(crate) fn Body() -> Element {
                 }
                 panels::pointer_released(app);
             },
-            TreePanel {
+            crate::sidebar::SidebarPanel {
                 focused: area == Area::Sidebar,
+              TreePanel {
                 context: RowContext {
                     structure: structure.into(),
                     completions: completions.into(),
                     drafted: drafted.into(),
                 },
                 on: RowEvents {
-                    onopen: EventHandler::new(move |item| app.dispatch(Msg::RowClicked(item))),
-                    onstart: EventHandler::new(move |item| {
-                        app.dispatch(Msg::MenuRun { target: Target::Row(item), action: Action::SessionNew });
+                    onopen: EventHandler::new(move |item| {
+                        app.dispatch(Msg::SidebarPanel(tsumugi_core::sidebar::Panel::Tree));
+                        app.dispatch(Msg::RowClicked(item));
                     }),
                     onclose: EventHandler::new(move |item: Item| {
                         let action = match item {
@@ -117,15 +118,8 @@ pub(crate) fn Body() -> Element {
                         app.dispatch(Msg::MenuRun { target: Target::Row(item), action });
                     }),
                 },
-                field: local.filter_field,
                 waiting_keys: (waiting_prev, waiting_next),
-                ontaken: move |_| app.dispatch(Msg::Focus(Area::Sidebar)),
-                onfilter: move |on| local.focus_filter(on),
-                onworktrees: {
-                    let ui = ui.clone();
-                    move |_| ui.perform(Action::WorktreesToggle, None)
-                },
-                onpick: move |_| app.dispatch(Msg::PickerOpen),
+              }
             }
             if layout.show_sidebar {
                 Splitter { side: Side::Sidebar }

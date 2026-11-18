@@ -10,14 +10,19 @@ use crate::bridge::AppCtx;
 use crate::components::InlineField;
 
 #[component]
-pub fn SessionName(environment: EnvironmentId, id: String, name: String, place: Place) -> Element {
+pub fn SessionName(
+    environment: EnvironmentId,
+    id: String,
+    name: String,
+    place: Place,
+    #[props(default)] sidebar_panel: tsumugi_core::sidebar::Panel,
+) -> Element {
     let app = use_context::<AppCtx>();
-    let rename = app
-        .overlays
-        .read()
-        .rename
-        .clone()
-        .filter(|r| r.is_for(&environment, &id, place));
+    let active_panel = use_memo(move || app.sidebar.read().panel);
+    let rename = app.overlays.read().rename.clone().filter(|r| {
+        r.is_for(&environment, &id, place)
+            && (place == Place::Tab || active_panel() == sidebar_panel)
+    });
     let finish = {
         let (environment, id) = (environment.clone(), id.clone());
         move |commit: bool| {
@@ -66,6 +71,7 @@ pub fn SessionName(environment: EnvironmentId, id: String, name: String, place: 
                 class: "session-name",
                 ondoubleclick: move |e: Event<MouseData>| {
                     e.stop_propagation();
+                    if place != Place::Tab { app.dispatch(Msg::SidebarPanel(sidebar_panel)); }
                     app.dispatch(Msg::RenameStart {
                         environment: environment.clone(),
                         id: id.clone(),

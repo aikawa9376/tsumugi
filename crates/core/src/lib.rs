@@ -19,6 +19,7 @@ pub mod graph;
 pub mod host;
 pub mod icons;
 pub mod keymap;
+mod local_issues;
 pub mod msg;
 pub mod overlay;
 pub mod palette;
@@ -30,6 +31,7 @@ pub mod reference;
 pub mod scenario;
 pub mod settings;
 pub mod settle;
+pub mod sidebar;
 pub mod state;
 pub mod status;
 #[cfg(test)]

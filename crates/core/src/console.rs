@@ -247,19 +247,23 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
     // its answer; a shell takes every key but those.
     let pane = pane || (probe.pane && area == Area::Prompt);
     let passing = pane && route::passes(area, session, waits(state));
-    let contexts = route::for_agent(
-        route::filing(
-            route::contexts(
+    let contexts = crate::sidebar::contexts(
+        state.sidebar.panel,
+        area,
+        route::for_agent(
+            route::filing(
+                route::contexts(
+                    area,
+                    state.content.active(),
+                    passing,
+                    windowing,
+                    probe.inserting,
+                ),
                 area,
-                state.content.active(),
-                passing,
-                windowing,
-                probe.inserting,
+                matches!(state.tree.selected, Some(nav::Item::File { .. })),
             ),
-            area,
-            matches!(state.tree.selected, Some(nav::Item::File { .. })),
+            agent,
         ),
-        agent,
     );
     let seq = std::mem::take(&mut state.console.pending);
     if seq.is_empty()

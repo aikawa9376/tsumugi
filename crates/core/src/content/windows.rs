@@ -161,7 +161,7 @@ pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
             edit(view, &|c| c.cycle_tab(delta))
         }
         Action::CursorClose => {
-            let Some(item) = state.tree.selected.clone() else {
+            let Some(item) = crate::sidebar::selected(state) else {
                 return Vec::new();
             };
             let things =
@@ -175,7 +175,7 @@ pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
         }
         Action::SessionNew
             if let Some(Item::GitHubItem(environment, root, listing, number)) =
-                state.tree.selected.clone().filter(|_| on_list) =>
+                crate::sidebar::selected(state).filter(|_| on_list) =>
         {
             on_github(state, environment, &root, listing, number)
         }
@@ -299,7 +299,8 @@ pub(crate) fn draft_written(
 }
 
 fn place_here(state: &ViewState, on_list: bool) -> Option<Place> {
-    match state.tree.selected.as_ref().filter(|_| on_list) {
+    let selected = crate::sidebar::selected(state);
+    match selected.as_ref().filter(|_| on_list) {
         Some(Item::Environment(environment)) => {
             crate::picker::home_in(state, environment).map(|home| Place::at(environment, home))
         }

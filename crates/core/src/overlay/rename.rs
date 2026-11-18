@@ -183,6 +183,8 @@ pub(crate) fn keep_rename(state: &mut ViewState) {
         return;
     };
     let shown = match r.place {
+        Place::Sidebar if state.sidebar.panel == crate::sidebar::Panel::Agents => state.chrome.panels.layout.show_sidebar
+            && state.sidebar.rows().iter().any(|row| row.key == crate::sidebar::NodeKey::session(r.environment.clone(), r.id.clone())),
         Place::Sidebar => state.chrome.panels.layout.show_sidebar
             && state.tree.rows().iter().any(
                 |item| matches!(item.own(), Item::Session(e, id) | Item::Waiting(e, id) if *e == r.environment && *id == r.id),

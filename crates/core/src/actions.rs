@@ -95,6 +95,7 @@ pub enum Action {
     EnvironmentRetry,
     EnvironmentPair,
     WorkspaceAdd,
+    LocalIssues,
     WorkspaceRemove,
     WorktreeClose,
     WindowClose,
@@ -125,6 +126,9 @@ pub enum Action {
     ZoomOut,
     ZoomReset,
     TreeToggle,
+    SidebarNext,
+    AgentsExpand,
+    AgentsCollapse,
     DetailsToggle,
     ViewerZoomIn,
     ViewerZoomOut,
@@ -398,6 +402,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorkspaceAdd, "workspace.add", "open the picker on the directories alone, to add the one chosen to the tree with nothing running there ([details](tree.md#going-to-a-session-or-starting-one))")
         .bar("Add to Tree…", Icon::FolderPlus)
         .row("Add to tree…", Start),
+    S::new(A::LocalIssues, "local_issues.open", "open local issues for this environment and working directory, to queue work for its default agent ([details](local-issues.md))")
+        .bar("Local Issues…", Icon::Bug)
+        .row("Local issues…", Start),
     S::new(A::WorkspaceRemove, "workspace.remove", "take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](tree.md#workspaces-and-worktrees))")
         .icon(Icon::SquareMinus)
         .row("Remove from tree…", End),
@@ -435,6 +442,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::ZoomOut, "zoom.out", "draw the window a step smaller").bar("Zoom Out", Icon::ZoomOut),
     S::new(A::ZoomReset, "zoom.reset", "draw the window at the zoom the settings give").bar("Actual Size", Icon::ZoomReset),
     S::new(A::TreeToggle, "tree.toggle", "show or hide the tree").bar("Toggle Tree", Icon::LayoutSidebar),
+    S::new(A::SidebarNext, "sidebar.next", "focus the other sidebar section, giving its list more room ([agents](agents-panel.md))").says("Focus other sidebar section"),
+    S::new(A::AgentsExpand, "agents.expand", "expand the selected agent family or move to its first child").says("Expand agent family"),
+    S::new(A::AgentsCollapse, "agents.collapse", "fold the selected agent family or move to its parent").says("Fold agent family"),
     S::new(A::DetailsToggle, "details.toggle", "show or hide the details panel").bar("Toggle Details", Icon::LayoutSidebarRight),
     S::new(A::ViewerZoomIn, "viewer.zoom_in", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](content.md#viewers))").says("Zoom in"),
     S::new(A::ViewerZoomOut, "viewer.zoom_out", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller").says("Zoom out"),
@@ -678,6 +688,7 @@ mod tests {
             EnvironmentRetry,
             EnvironmentPair,
             WorkspaceAdd,
+            LocalIssues,
             WorkspaceRemove,
             WorktreeClose,
             WindowClose,
@@ -708,6 +719,9 @@ mod tests {
             ZoomOut,
             ZoomReset,
             TreeToggle,
+            SidebarNext,
+            AgentsExpand,
+            AgentsCollapse,
             DetailsToggle,
             ViewerZoomIn,
             ViewerZoomOut,

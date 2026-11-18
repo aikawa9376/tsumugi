@@ -89,6 +89,7 @@ async fn record(
         code: request.code.clone(),
     };
     let resumes = request.resume.clone();
+    let local_issue = request.local_issue.clone();
     let (id, token, code) = with_store(root, move |store| {
         let new = match (&new.code, &resumes) {
             (None, Some(conversation)) => NewSession {
@@ -98,6 +99,9 @@ async fn record(
             _ => new,
         };
         let (id, token) = store.register(new)?;
+        if let Some(issue) = local_issue {
+            store.attach_local_issue(&issue, id)?;
+        }
         Ok((id, token, store.known(id)?.code))
     })
     .await

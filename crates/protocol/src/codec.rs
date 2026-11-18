@@ -56,6 +56,35 @@ mod tests {
     }
 
     #[test]
+    fn local_issue_requests_and_progress_round_trip_without_losing_the_request() {
+        use crate::Ask;
+        use tsumugi_model::{LocalIssue, LocalIssueState, NewLocalIssue};
+        let new = NewLocalIssue {
+            id: tsumugi_model::SessionId::new().to_string(),
+            dir: "/project with spaces/日本語".into(),
+            title: "直してほしい".into(),
+            body: "First line\nSecond line".into(),
+        };
+        let ask = Ask::QueueLocalIssue(new.clone());
+        assert!(ask.mutates());
+        round_trips(ask);
+        round_trips(Ask::CancelLocalIssue { id: new.id.clone() });
+        round_trips(Ask::RetryLocalIssue { id: new.id.clone() });
+        round_trips(TreeChange::LocalIssues {
+            issues: vec![LocalIssue {
+                id: new.id,
+                dir: new.dir,
+                title: new.title,
+                body: new.body,
+                state: LocalIssueState::Waiting,
+                record: Some(tsumugi_model::SessionId::new()),
+                session: Some("ffff".into()),
+                error: None,
+            }],
+        });
+    }
+
+    #[test]
     fn every_request_round_trips() {
         round_trips(Request::Hello {
             versions: vec![Version(1), Version(2)],

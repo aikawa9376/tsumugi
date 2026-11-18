@@ -34,6 +34,7 @@ pub enum Context {
     /// Every area, after its own bindings.
     Global,
     Tree,
+    Agents,
     Details,
     /// The console while it shows a session.
     Console,
@@ -58,9 +59,10 @@ pub enum Context {
 }
 
 impl Context {
-    pub const ALL: [Context; 15] = [
+    pub const ALL: [Context; 16] = [
         Context::Global,
         Context::Tree,
+        Context::Agents,
         Context::Filer,
         Context::Details,
         Context::Console,
@@ -80,6 +82,7 @@ impl Context {
         match self {
             Context::Global => "global",
             Context::Tree => "tree",
+            Context::Agents => "agents",
             Context::Details => "details",
             Context::Console => "console",
             Context::Prompt => "prompt",
@@ -100,6 +103,7 @@ impl Context {
         match self {
             Context::Global => "Global",
             Context::Tree => "Tree",
+            Context::Agents => "Agents",
             Context::Details => "Details",
             Context::Console => "Console",
             Context::Prompt => "Prompt",
@@ -121,6 +125,7 @@ impl Context {
         match self {
             Context::Global => "Everywhere, after the area's own bindings.",
             Context::Tree => "The tree of workspaces, their files and what runs in them.",
+            Context::Agents => "Agent sessions, grouped by the parent that started them.",
             Context::Details => "The panel on the right.",
             Context::Console => "The console while it shows a session.",
             Context::Prompt => "The prompt, before Neovim takes the key.",

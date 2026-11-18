@@ -277,6 +277,25 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
         let gone = Tab::Session(environment.clone(), id.clone());
         close_showing(view, |t| *t == gone, after);
     }
+    // A stopped terminal may have no attached pane to report its exit.
+    let ended_shells: Vec<u128> = view
+        .windows
+        .shown()
+        .into_iter()
+        .filter_map(|tab| match tab {
+            Tab::Terminal(e, id)
+                if e == environment
+                    && !kept_shells.iter().any(|t| t.id == *id)
+                    && !waits(now, tab) =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .collect();
+    for id in ended_shells {
+        effects.extend(super::shell_closed(view, environment, Some(work), id));
+    }
     // A session no longer listed has nothing to show; its pane is closed,
     // and the images its console drew are not kept. Looked at only when the
     // host lists anew, so a pane started since the listing stays.

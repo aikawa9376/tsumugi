@@ -340,7 +340,9 @@ mod tests {
             .find(|l| l.starts_with("| `session.stop` |"))
             .unwrap();
         assert!(
-            row.contains("`global`: `Mod+Backspace`<br>`tree`: `X`<br>`console`: `X`"),
+            row.contains(
+                "`global`: `Mod+Backspace`<br>`tree`: `X`<br>`agents`: `X`<br>`console`: `X`"
+            ),
             "{row}"
         );
         let row = keys

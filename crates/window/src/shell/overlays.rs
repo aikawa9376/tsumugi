@@ -52,6 +52,7 @@ pub(crate) fn ContextMenu() -> Element {
     let (x, y, target, cursor) = (menu.x, menu.y, menu.target, menu.cursor);
     // The keys that work wherever the keys are come first.
     let contexts: &[Context] = match target {
+        Target::Agent(..) => &[Context::Global, Context::Agents],
         Target::Row(_) | Target::Start(_) => &[Context::Global, Context::Tree],
         Target::Tab(_) => &[Context::Global, Context::Console, Context::Tree],
         Target::Link { .. } => &[Context::Details, Context::Tree, Context::Global],

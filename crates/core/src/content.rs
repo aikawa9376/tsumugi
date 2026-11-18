@@ -187,6 +187,12 @@ pub fn shown_environment_of(content: &ContentView, hosts: &crate::host::Hosts) -
 /// The environment the user is at: that of the row selected while the tree
 /// has the keys, or else of what the middle shows.
 pub fn focused_environment(state: &crate::state::ViewState) -> EnvironmentId {
+    if state.content.focus == Area::Sidebar
+        && state.sidebar.panel == crate::sidebar::Panel::Agents
+        && let Some(key) = &state.sidebar.selected
+    {
+        return key.environment.clone();
+    }
     match &state.tree.selected {
         Some(row) if state.content.focus == Area::Sidebar => row.environment().clone(),
         _ => shown_environment(state),
@@ -436,7 +442,6 @@ pub(crate) fn shell_closed(
     if !view.windows.shows_anywhere(&shell) {
         return Vec::new();
     }
-    // The host's list holds the shell until it is told it closed.
     let next = view.place.as_ref().and_then(|p| {
         let left: Vec<u128> = crate::tree::terminals(work)
             .iter()

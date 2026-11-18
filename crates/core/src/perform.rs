@@ -35,7 +35,10 @@ pub(crate) fn perform(
     let area = state.content.focus;
     let pane = probe.pane && matches!(area, Area::Console | Area::Prompt);
     let prompt_runs = state.console.prompt_runs;
-    let cur = state.tree.selected.clone();
+    if let Some(effects) = crate::sidebar::press(state, &action) {
+        return effects;
+    }
+    let cur = crate::sidebar::selected(state);
     let on_list = matches!(area, Area::Sidebar | Area::Details);
     // In the console, the scroll actions move its view back through what
     // scrolled off instead.
@@ -69,13 +72,25 @@ pub(crate) fn perform(
         }];
     }
     match action {
+        Action::SidebarNext => {
+            let panel = match state.sidebar.panel {
+                crate::sidebar::Panel::Tree => crate::sidebar::Panel::Agents,
+                crate::sidebar::Panel::Agents => crate::sidebar::Panel::Tree,
+            };
+            crate::sidebar::switch(state, panel)
+        }
+        Action::AgentsExpand | Action::AgentsCollapse => Vec::new(),
         Action::None => Vec::new(),
         Action::KeysHelp => step(
             state,
-            Msg::KeysHelpOpen(route::filing(
-                route::help_contexts(area, thing.as_ref()),
+            Msg::KeysHelpOpen(crate::sidebar::contexts(
+                state.sidebar.panel,
                 area,
-                matches!(cur, Some(Item::File { .. })),
+                route::filing(
+                    route::help_contexts(area, thing.as_ref()),
+                    area,
+                    matches!(cur, Some(Item::File { .. })),
+                ),
             )),
         ),
         Action::ViewerZoomIn
@@ -254,6 +269,12 @@ pub(crate) fn perform(
             None => Vec::new(),
         },
         Action::SessionRename => {
+            if area == Area::Sidebar
+                && state.sidebar.panel == crate::sidebar::Panel::Agents
+                && cur.is_none()
+            {
+                return Vec::new();
+            }
             let chosen = match cur.as_ref().map(Item::own) {
                 Some(Item::Session(environment, id) | Item::Waiting(environment, id))
                     if on_list =>
@@ -426,6 +447,7 @@ pub(crate) fn perform(
         }
         Action::SessionPick => step(state, Msg::PickerOpen),
         Action::WorkspaceAdd => step(state, Msg::PickerAddOpen),
+        Action::LocalIssues => crate::local_issues::open(state),
         // An environment holds no directory to start in: where the session
         // works is picked in that environment.
         Action::SessionNew if on_list && matches!(cur, Some(Item::Environment(_))) => {
@@ -555,7 +577,12 @@ pub(crate) fn perform(
         Action::ZoomReset => step(state, Msg::Zoom(zoom::Step::Reset)),
         Action::Filter => {
             let mut effects = step(state, Msg::Focus(Area::Sidebar));
-            effects.extend(step(state, Msg::TreeFilter(String::new())));
+            let message = if state.sidebar.panel == crate::sidebar::Panel::Agents {
+                Msg::SidebarFilter(String::new())
+            } else {
+                Msg::TreeFilter(String::new())
+            };
+            effects.extend(step(state, message));
             effects.push(Effect::FilterFocus(true));
             effects
         }

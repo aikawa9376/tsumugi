@@ -20,6 +20,29 @@ pub fn step(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
 /// `msg` applied to the slices it concerns.
 pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
     match msg {
+        Msg::SidebarPanel(panel) => crate::sidebar::switch(state, panel),
+        Msg::SidebarSelect(key) => {
+            if state.sidebar.rows().iter().any(|row| row.key == key) {
+                state.sidebar.selected = Some(key);
+            }
+            Vec::new()
+        }
+        Msg::SidebarFold(key) => {
+            crate::sidebar::toggle(&mut state.sidebar, key);
+            Vec::new()
+        }
+        Msg::SidebarFilter(text) => {
+            state.sidebar.filter = text;
+            Vec::new()
+        }
+        Msg::SidebarFiltering(on) => {
+            state.sidebar.filtering = on;
+            Vec::new()
+        }
+        Msg::LocalIssuesClose => {
+            state.overlays.local_issues = None;
+            Vec::new()
+        }
         Msg::Opened { home, environment } => {
             state.picker.home = home;
             state.hosts.open(environment.clone());

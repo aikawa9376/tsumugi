@@ -142,6 +142,37 @@
 "}" = "workspace.next"
 "{" = "workspace.prev"
 
+"Tab" = "sidebar.next"
+"Shift+Tab" = "sidebar.next"
+
+[agents]
+"Tab" = "sidebar.next"
+"Shift+Tab" = "sidebar.next"
+"j" = "cursor.down"
+"ArrowDown" = "cursor.down"
+"k" = "cursor.up"
+"ArrowUp" = "cursor.up"
+"g g" = "cursor.first"
+"G" = "cursor.last"
+"Enter" = "cursor.go"
+"o" = "cursor.go"
+"l" = "agents.expand"
+"ArrowRight" = "agents.expand"
+"h" = "agents.collapse"
+"ArrowLeft" = "agents.collapse"
+"s" = "cursor.split"
+"v" = "cursor.vsplit"
+"t" = "cursor.tab"
+"X" = "session.stop"
+"R" = "session.rename"
+"n" = "session.new"
+"i" = "prompt.write"
+"a" = "prompt.write"
+"/" = "filter"
+"y" = "cursor.copy"
+"r" = "refresh"
+"w" = "session.pick"
+
 [filer]
 "j" = "filer.down"
 "ArrowDown" = "filer.down"
@@ -155,6 +186,8 @@
 "!" = "filer.hidden"
 
 [details]
+"Tab" = "tab.next"
+"Shift+Tab" = "tab.prev"
 "j" = "cursor.down"
 "ArrowDown" = "cursor.down"
 "k" = "cursor.up"

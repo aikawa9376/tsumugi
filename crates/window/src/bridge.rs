@@ -118,6 +118,7 @@ pub(crate) struct AppCtx {
     pub(crate) hosts: Signal<Hosts>,
     pub(crate) content: Signal<ContentView>,
     pub(crate) tree: Signal<TreeView>,
+    pub(crate) sidebar: Signal<tsumugi_core::sidebar::Sidebar>,
     pub(crate) details: Signal<Details>,
     pub(crate) picker: Signal<PickerView>,
     pub(crate) overlays: Signal<Overlays>,
@@ -232,6 +233,7 @@ pub(crate) fn use_app() -> AppCtx {
             hosts: Signal::new(view.hosts.clone()),
             content: Signal::new(view.content.clone()),
             tree: Signal::new(view.tree.clone()),
+            sidebar: Signal::new(view.sidebar.clone()),
             details: Signal::new(view.details.clone()),
             picker: Signal::new(view.picker.clone()),
             overlays: Signal::new(view.overlays.clone()),
@@ -617,6 +619,7 @@ impl AppCtx {
         set_changed(self.hosts, &view.hosts);
         set_changed(self.content, &view.content);
         set_changed(self.tree, &view.tree);
+        set_changed(self.sidebar, &view.sidebar);
         set_changed(self.details, &view.details);
         set_changed(self.picker, &view.picker);
         set_changed(self.overlays, &view.overlays);

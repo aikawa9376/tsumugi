@@ -6,6 +6,7 @@ mod naming_field;
 mod panel;
 mod row;
 mod signals;
+pub(crate) use filter_field::FilterField;
 
 pub(crate) use signals::use_structure;
 

@@ -39,6 +39,8 @@ pub(crate) fn spawn_failure(error: &tsumugi_term::Error) -> String {
 
 #[derive(Debug, Clone, Default)]
 pub struct StartRequest {
+    /// A local issue reserved for this session, linked before its program starts.
+    pub local_issue: Option<String>,
     pub agent: Agent,
     /// The profile it starts from, which has to start `agent`; `agent`'s
     /// default profile when none is named.

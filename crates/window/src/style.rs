@@ -24,6 +24,7 @@ pub const CSS: &str = concat!(
     include_str!("../assets/css/chrome.css"),
     include_str!("../assets/css/desktop.css"),
     include_str!("../assets/css/tree.css"),
+    include_str!("../assets/css/sidebar.css"),
     include_str!("../assets/css/content.css"),
     include_str!("../assets/css/console.css"),
     include_str!("../assets/css/prompt.css"),
@@ -35,6 +36,7 @@ pub const CSS: &str = concat!(
     include_str!("../assets/css/picker.css"),
     include_str!("../assets/css/keys-help.css"),
     include_str!("../assets/css/adding.css"),
+    include_str!("../assets/css/local-issues.css"),
     include_str!("../assets/css/lightbox.css"),
 );
 

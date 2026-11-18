@@ -30,6 +30,8 @@ pub struct TreeSight {
 /// What the host read for the tree.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TreeWork {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub local_issues: Vec<tsumugi_model::LocalIssue>,
     /// The sessions and terminals as last listed; none before the first
     /// list.
     pub listed: Option<Box<Listed>>,
@@ -94,6 +96,9 @@ impl From<WireListed> for Listed {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TreeChange {
+    LocalIssues {
+        issues: Vec<tsumugi_model::LocalIssue>,
+    },
     Listed {
         listed: Box<Listed>,
     },
@@ -130,6 +135,7 @@ impl TreeWork {
     /// The tree's facts with `change` made; whether that changed them.
     pub fn apply(&mut self, change: TreeChange) -> bool {
         match change {
+            TreeChange::LocalIssues { issues } => set(&mut self.local_issues, issues),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),
             TreeChange::Failing { error } => set(&mut self.failing, error),
             TreeChange::Marks { worktree, marks } => {

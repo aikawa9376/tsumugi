@@ -24,6 +24,7 @@ pub mod gateway;
 mod held;
 mod jobs;
 pub mod kept;
+mod local_issues;
 mod making;
 mod mutation;
 mod neovim;

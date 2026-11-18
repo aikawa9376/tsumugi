@@ -1,0 +1,42 @@
+.sidebar-frame { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.sidebar-fixed-find { flex: none; }
+.sidebar-sections { display: grid; grid-template-rows: minmax(80px, 4fr) minmax(80px, 1fr); flex: 1; min-height: 0; transition: grid-template-rows 180ms ease; }
+.sidebar-sections.agents-focused { grid-template-rows: minmax(80px, 1fr) minmax(80px, 4fr); }
+.sidebar-section { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-top: 1px solid var(--line); }
+.sidebar-section-header { flex: none; display: flex; align-items: center; height: 30px; }
+.sidebar-section-title { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 100%; padding: 0 12px; border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.sidebar-section.active .sidebar-section-title { color: var(--text); box-shadow: inset 2px 0 var(--run); }
+.sidebar-section-title:hover { color: var(--text); background: var(--run-tint-soft); }
+.sidebar-section-title:focus-visible { outline: 1px solid var(--input-focus); outline-offset: -2px; }
+.sidebar-section-key { color: var(--text-3); font: 9px var(--mono); font-weight: 400; opacity: 0; text-transform: none; letter-spacing: 0; }
+.sidebar-section-title:hover .sidebar-section-key, .sidebar-section-title:focus-visible .sidebar-section-key { opacity: 1; }
+.sidebar-section-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.sidebar-section:not(.active) .agent-row.selected { border-left-color: transparent; background: transparent; }
+.sidebar-section:not(.active) .list-row.selected { box-shadow: none; background: transparent; }
+@media (prefers-reduced-motion: reduce) { .sidebar-sections { transition: none; } }
+.sidebar-view, .sidebar-tree-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.agents-overview { display: flex; flex-direction: column; gap: 5px; padding: 2px 12px 8px; flex-shrink: 0; border-bottom: 1px solid var(--line); }
+.agents-overview-title { font-size: 10px; color: var(--text-3); }
+.agent-counts { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10px; }
+.agent-total { white-space: nowrap; }
+.agent-total.active { color: var(--run); }
+.agent-total.waiting { color: var(--wait); }
+.agent-total.failed { color: var(--fail); }
+.agent-total.idle { color: var(--text-3); }
+.agent-total.done { color: var(--done); }
+.agents-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 12px; }
+.agents-empty { padding: 14px 12px; font-size: 12px; color: var(--text-3); }
+.agents-environment { display: flex; align-items: center; gap: 6px; padding: 10px 12px 6px; font-size: 10px; color: var(--text-3); overflow-wrap: anywhere; }
+.agent-row { padding: 9px 10px 9px 8px; border-left: 2px solid transparent; cursor: pointer; }
+.agent-row:hover { background: var(--select); }
+.agent-row.selected { background: var(--raised); border-left-color: var(--run); }
+.agent-row-heading { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.agent-fold { display: flex; align-items: center; justify-content: center; width: 14px; height: 18px; flex-shrink: 0; padding: 0; border: 0; color: var(--text-3); background: transparent; cursor: pointer; }
+.agent-leaf { width: 14px; flex-shrink: 0; }
+.agent-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.agent-state { flex-shrink: 0; font-size: 10px; color: var(--text-2); }
+.agent-row-meta { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 4px 0 0 19px; font-size: 10px; color: var(--text-3); }
+.agent-row-meta > span:not(.agent-directory) { flex-shrink: 0; white-space: nowrap; }
+.agent-directory { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-origin { margin: 3px 0 0 19px; font-size: 10px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-family { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin: 5px 0 0 19px; font-size: 10px; color: var(--text-3); }

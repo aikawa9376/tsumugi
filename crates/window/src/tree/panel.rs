@@ -1,14 +1,10 @@
-//! The tree's panel: its bar with the filter and the buttons that list
-//! every worktree and start a session, the rows, adding an environment below
-//! them, and the sessions waiting on the user.
-
-use std::rc::Rc;
+//! The Tree section's rows, adding an environment and the sessions waiting
+//! on the user. Its Find field belongs to the shared sidebar frame.
 
 use dioxus::prelude::*;
 use tsumugi_core::msg::Msg;
 use tsumugi_core::tree;
 
-use super::filter_field::FilterField;
 use super::naming_field::NamingField;
 use super::row::{RowContext, RowEvents, TreeRow, WaitingRow};
 use crate::bridge::AppCtx;
@@ -16,33 +12,17 @@ use crate::components::{Hint, Keys, ListRow};
 use crate::icons::{Icon, IconView};
 use crate::nav::Item;
 
-/// The panel, drawn `focused` while it has the keys. `waiting_keys` are the
-/// keys that go to the previous and the next session waiting.
+/// `waiting_keys` go to the previous and the next session waiting.
 #[component]
 pub(crate) fn TreePanel(
-    focused: bool,
     context: RowContext,
     on: RowEvents,
-    field: Signal<Option<Rc<MountedData>>>,
     waiting_keys: (Option<String>, Option<String>),
-    /// The panel was pressed on, or its filter took the keys.
-    ontaken: EventHandler<()>,
-    onfilter: EventHandler<bool>,
-    onworktrees: EventHandler<()>,
-    onpick: EventHandler<()>,
 ) -> Element {
     let app = use_context::<AppCtx>();
-    let (shown, width) = {
-        let chrome = app.chrome.read();
-        (chrome.panels.layout.show_sidebar, chrome.panels.drawn().0)
-    };
-    let (rows, waiting, every) = {
+    let (rows, waiting) = {
         let view = app.tree.read();
-        (
-            view.rows().to_vec(),
-            view.narrowed_waiting().to_vec(),
-            view.every_worktree,
-        )
+        (view.rows().to_vec(), view.narrowed_waiting().to_vec())
     };
     // A new entry's name is typed first among the entries of its directory.
     let naming = app.overlays.read().naming.clone().map(|naming| {
@@ -58,28 +38,7 @@ pub(crate) fn TreePanel(
     };
     let (waiting_prev, waiting_next) = waiting_keys;
     rsx! {
-        div { class: if focused { "app-panel sidebar focused" } else { "app-panel sidebar" },
-            hidden: !shown,
-            style: "width:{width}px",
-            onmousedown: move |_| ontaken.call(()),
-            div { class: "sidebar-bar",
-                FilterField { field, onfocus: onfilter, ontaken }
-                span { class: "sidebar-tools",
-                    button {
-                        class: if every { "sidebar-tool on" } else { "sidebar-tool" },
-                        "aria-pressed": every,
-                        title: if every { "List only the worktrees with sessions" } else { "List every worktree, those without sessions too" },
-                        onclick: move |_| onworktrees.call(()),
-                        IconView { icon: Icon::ListTree }
-                    }
-                    span {
-                        class: "sidebar-tool",
-                        title: "Start a session: choose where it works",
-                        onclick: move |_| onpick.call(()),
-                        IconView { icon: Icon::Plus }
-                    }
-                }
-            }
+        div { class: "sidebar-tree-body",
             div { class: "list-rows", style: "flex:1",
                 if empty {
                     ListRow { kind: "dim", "No sessions yet" }

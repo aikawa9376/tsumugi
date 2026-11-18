@@ -116,8 +116,6 @@ pub(crate) struct RowContext {
 pub(crate) struct RowEvents {
     /// Open the row as a click does.
     pub(crate) onopen: EventHandler<Item>,
-    /// Start a session where the row works.
-    pub(crate) onstart: EventHandler<Item>,
     /// Take a workspace out of the tree, or close a worktree.
     pub(crate) onclose: EventHandler<Item>,
 }
@@ -454,7 +452,6 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     let renames_here = focus.renames_here;
     let badge = row_badge(t, &app.config.read().settings, &own);
     let here = it.clone();
-    let start = it.clone();
     let close = it.clone();
     rsx! {
         ListRow {
@@ -495,11 +492,8 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 IconButton {
                     icon: Icon::Plus,
                     place: "list-row-start",
-                    title: "Start a session here",
-                    onclick: move |e: Event<MouseData>| {
-                        e.stop_propagation();
-                        on.onstart.call(start.clone());
-                    },
+                    title: "Start work here: a session, a local issue, a shell, or Neovim",
+                    onclick: start_menu(app, it.clone()),
                 }
             }
             if let Some(tip) = closes {

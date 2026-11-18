@@ -52,6 +52,7 @@ fn every_other_area_follows_in_the_order_the_file_names_them() {
             Context::Viewer,
             Context::Global,
             Context::Tree,
+            Context::Agents,
             Context::Filer,
             Context::Details,
             Context::Console,

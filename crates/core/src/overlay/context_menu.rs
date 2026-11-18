@@ -10,6 +10,7 @@ use crate::tree::nav::{Heading, Item};
 /// What a menu was opened on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
+    Agent(EnvironmentId, String),
     Row(Item),
     /// The `+` of a row: what starts work where the row is, and nothing
     /// else its menu offers.
@@ -51,7 +52,13 @@ pub fn entries(
     own: &EnvironmentId,
     reach: Reach,
 ) -> Vec<(Action, &'static str)> {
-    let here = [Action::SessionNew, Action::ShellOpen, Action::NeovimOpen].map(offer);
+    let here = [
+        Action::SessionNew,
+        Action::ShellOpen,
+        Action::NeovimOpen,
+        Action::LocalIssues,
+    ]
+    .map(offer);
     let ending = session.map(|_| offer(Action::SessionStop));
     let rename = session.map(|_| offer(Action::SessionRename));
     // The key says where a row opens, as in fern.
@@ -72,6 +79,12 @@ pub fn entries(
     let close_tab = offer(Action::TabClose);
     let stop_terminal = offer(Action::TerminalStop);
     match target {
+        Target::Agent(environment, id) => entries(
+            &Target::Row(Item::Session(environment.clone(), id.clone())),
+            session,
+            own,
+            reach,
+        ),
         Target::Row(Item::Gathered(row)) => {
             entries(&Target::Row((**row).clone()), session, own, reach)
         }

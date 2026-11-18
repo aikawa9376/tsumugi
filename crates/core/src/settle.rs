@@ -38,6 +38,7 @@ const RULES: &[Rule] = &[
     tree_rows,
     tree_kept,
     tree_switched,
+    sidebar_rows,
     tree_completions,
     tree_changes,
     tree_filter_left,
@@ -54,6 +55,10 @@ const RULES: &[Rule] = &[
     picker_listed,
     watched,
 ];
+
+fn sidebar_rows(state: &mut ViewState, _: &mut Vec<Effect>) {
+    state.sidebar.rebuild(&state.hosts);
+}
 
 /// The configuration the host read is the one the window works by.
 fn config_taken(state: &mut ViewState, effects: &mut Vec<Effect>) {
@@ -258,7 +263,8 @@ fn details_told(state: &mut ViewState, _: &mut Vec<Effect>) {
     let open = state.chrome.panels.layout.show_details;
     let settings = &state.config.settings;
     details::follow_settings(&mut state.details, open, &settings.details, &settings.panel);
-    details::follow_selected(&mut state.details, state.tree.selected.as_ref());
+    let selected = crate::sidebar::selected(state);
+    details::follow_selected(&mut state.details, selected.as_ref());
 }
 
 /// The details panel shows the account usage of the agent the focused

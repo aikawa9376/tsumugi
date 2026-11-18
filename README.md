@@ -23,6 +23,8 @@ limited platform coverage; issues and small, focused contributions are welcome.
 - Write prompts in embedded Neovim and edit files with your normal Neovim setup.
 - Keep projects, worktrees, sessions and shells together, with tabs and splits.
 - Read changes, conversation history and session activity beside the work.
+- Keep Tree and Agents together in the sidebar, with more room for the section in focus.
+- Queue local issues from a `+` menu for the default agent to work through.
 - Close a window and return to the sessions still running in the background.
 - Use an integrated Linux header, system clipboard, notifications and display scaling.
 

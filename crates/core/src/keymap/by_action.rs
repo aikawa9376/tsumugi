@@ -450,17 +450,20 @@ mod tests {
     fn keys_are_told_with_the_areas_they_run_the_action_in() {
         let sections = sections("").unwrap();
         let down = find(&sections, "cursor.down").1;
-        assert_eq!(down.areas, [Context::Tree, Context::Details]);
+        assert_eq!(
+            down.areas,
+            [Context::Tree, Context::Agents, Context::Details]
+        );
         assert_eq!(
             keys_of(down),
             [
-                ("j", vec!["tree", "details"]),
-                ("ArrowDown", vec!["tree", "details"]),
+                ("j", vec!["tree", "agents", "details"]),
+                ("ArrowDown", vec!["tree", "agents", "details"]),
             ]
         );
         assert!(down.everywhere(&down.keys[0]));
         let new = find(&sections, "session.new").1;
-        assert_eq!(new.areas, [Context::Global, Context::Tree]);
+        assert_eq!(new.areas, [Context::Global, Context::Tree, Context::Agents]);
         // Global covers every area; the tree alone does not.
         assert!(new.everywhere(&new.keys[0]));
         assert!(!new.everywhere(&new.keys[1]));
@@ -482,7 +485,10 @@ mod tests {
         assert!(!find(&sections, "cursor.first").1.changed);
         assert_eq!(
             keys_of(find(&sections, "cursor.up").1),
-            [("ArrowUp", vec!["tree", "details"]), ("k", vec!["details"])]
+            [
+                ("ArrowUp", vec!["tree", "agents", "details"]),
+                ("k", vec!["agents", "details"])
+            ]
         );
     }
 
@@ -512,7 +518,7 @@ mod tests {
             "# mine\n[tree]\n",
             "cursor.down",
             "J",
-            &[Context::Tree, Context::Details],
+            &[Context::Tree, Context::Agents, Context::Details],
         )
         .unwrap();
         assert!(out.starts_with("# mine\n"), "{out}");
@@ -537,9 +543,18 @@ mod tests {
 
     #[test]
     fn a_key_removed_goes_from_each_area_it_runs_the_action_in() {
-        let out = remove("", "cursor.down", "j", &[Context::Tree, Context::Details]).unwrap();
+        let out = remove(
+            "",
+            "cursor.down",
+            "j",
+            &[Context::Tree, Context::Agents, Context::Details],
+        )
+        .unwrap();
         let down = find(&sections(&out).unwrap(), "cursor.down").1.clone();
-        assert_eq!(keys_of(&down), [("ArrowDown", vec!["tree", "details"])]);
+        assert_eq!(
+            keys_of(&down),
+            [("ArrowDown", vec!["tree", "agents", "details"])]
+        );
         assert!(down.changed);
         // An area where the keys run something else keeps them.
         let out = remove("", "cursor.down", "j", &[Context::Viewer]).unwrap();
@@ -551,7 +566,7 @@ mod tests {
         let out = replace(
             "",
             "cursor.down",
-            ("j", &[Context::Tree, Context::Details]),
+            ("j", &[Context::Tree, Context::Agents, Context::Details]),
             ("Ctrl+n", &[Context::Tree]),
         )
         .unwrap();
@@ -559,7 +574,7 @@ mod tests {
         assert_eq!(
             keys_of(&down),
             [
-                ("ArrowDown", vec!["tree", "details"]),
+                ("ArrowDown", vec!["tree", "agents", "details"]),
                 ("Ctrl+n", vec!["tree"]),
             ]
         );
@@ -573,7 +588,7 @@ mod tests {
 
     #[test]
     fn a_form_adds_its_keys_or_puts_them_in_place_of_those_it_changes() {
-        let areas = [Context::Tree, Context::Details];
+        let areas = [Context::Tree, Context::Agents, Context::Details];
         assert_eq!(
             edited("", "cursor.down", None, "J", &areas),
             Some(add("", "cursor.down", "J", &areas))
@@ -605,10 +620,14 @@ mod tests {
                 &map,
                 "tab.close",
                 "k",
-                &[Context::Tree, Context::Details],
+                &[Context::Tree, Context::Agents, Context::Details],
                 None
             ),
-            ["Tree: k is cursor.up", "Details: k is cursor.up"]
+            [
+                "Tree: k is cursor.up",
+                "Agents: k is cursor.up",
+                "Details: k is cursor.up"
+            ]
         );
     }
 
@@ -625,10 +644,10 @@ mod tests {
                 &map,
                 "tab.close",
                 "k",
-                &[Context::Tree, Context::Details],
+                &[Context::Tree, Context::Agents, Context::Details],
                 Some(&old)
             ),
-            ["Details: k is cursor.up"]
+            ["Agents: k is cursor.up", "Details: k is cursor.up"]
         );
     }
 

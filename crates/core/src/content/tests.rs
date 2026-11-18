@@ -797,6 +797,81 @@ fn a_closed_shell_gives_its_windows_up_to_another_thing_of_its_worktree() {
 }
 
 #[test]
+fn a_terminal_removed_from_the_listing_closes_its_background_tabs_and_splits() {
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(snapshot().listed(listed().session(session("a")).terminal(shell(7, "/r"))))
+        .event_from(
+            there(),
+            snapshot().listed(listed().terminal(shell(7, "/other"))),
+        )
+        .send(show(Tab::Terminal(here(), 7)))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(Msg::Show {
+            thing: session_tab("a"),
+            place: None,
+            how: Some(Opening::Tab),
+        })
+        .send(Msg::Show {
+            thing: Tab::Terminal(there(), 7),
+            place: None,
+            how: Some(Opening::Tab),
+        });
+    let run = run.event(patch(2).listed(listed().session(session("a"))));
+    assert!(!shown(&run).contains(&Tab::Terminal(here(), 7)));
+    assert!(shown(&run).contains(&session_tab("a")));
+    assert_eq!(active(&run), Some(Tab::Terminal(there(), 7)));
+}
+
+#[test]
+fn a_terminal_missing_after_reconnect_gives_its_windows_to_its_worktree() {
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(
+            snapshot().listed(
+                listed()
+                    .session(session("a").cwd("/r"))
+                    .terminal(shell(7, "/r")),
+            ),
+        )
+        .send(show(Tab::Terminal(here(), 7)))
+        .event(
+            snapshot()
+                .seq(2)
+                .listed(listed().session(session("a").cwd("/r"))),
+        );
+    assert_eq!(shown(&run), [session_tab("a")]);
+}
+
+#[test]
+fn a_finished_command_keeps_its_tab_until_the_terminal_is_stopped() {
+    let mut command = shell(7, "/r");
+    command.program = TerminalProgram::Command;
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(snapshot().listed(listed().terminal(command.clone())))
+        .send(show(Tab::Terminal(here(), 7)));
+    command.exit = Some(0);
+    let run = run.event(patch(2).listed(listed().terminal(command)));
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 7)]);
+    let run = run.event(patch(3).listed(listed()));
+    assert!(shown(&run).is_empty());
+}
+
+#[test]
+fn an_interrupted_terminal_keeps_its_tab_until_it_is_let_go() {
+    let old = tsumugi_model::daemon::hex(7);
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(snapshot().listed(listed().terminal(shell(7, "/r"))))
+        .send(show(Tab::Terminal(here(), 7)))
+        .event(patch(2).listed(listed().interrupted(interrupted(&old))));
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 7)]);
+    let run = run.event(patch(3).listed(listed()));
+    assert!(shown(&run).is_empty());
+}
+
+#[test]
 fn dragging_a_border_resizes_the_windows_beside_it() {
     let run = Scenario::new()
         .send(show(session_tab("a")))

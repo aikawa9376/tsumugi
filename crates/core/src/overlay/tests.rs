@@ -20,6 +20,27 @@ fn window() -> Scenario {
         .send(Msg::ShowSession(here(), "a".into()))
 }
 
+#[test]
+fn local_issues_open_in_the_selected_environment_and_keep_that_place() {
+    let run = crate::testing::shows_there(window(), [session("other")])
+        .send(Msg::TreeSelect(Some(Item::Worktree(
+            there(),
+            "/r/other".into(),
+        ))))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::Perform {
+            action: Action::LocalIssues,
+            key: None,
+            probe: Box::default(),
+        });
+    let place = run.state().overlays.local_issues.as_ref().unwrap();
+    assert_eq!(place.environment, there());
+    assert_eq!(place.worktree, std::path::PathBuf::from("/r/other"));
+    assert_eq!(held_by(&run), (Some(Holder::LocalIssues), true, true));
+    let closed = run.send(held("Escape"));
+    assert!(closed.state().overlays.local_issues.is_none());
+}
+
 fn held(name: &str) -> Msg {
     Msg::HeldKey(Key::new(name))
 }

@@ -13,6 +13,33 @@ use super::*;
 /// The window a host run without one speaks as, in [`scenario`].
 const LONE: WindowId = WindowId(1);
 
+#[test]
+fn local_issues_reach_every_window_and_are_in_a_new_windows_snapshot() {
+    let mut host = two_windows("a", "b");
+    let issue = tsumugi_model::LocalIssue {
+        id: "issue".into(),
+        dir: "/project".into(),
+        title: "Fix it".into(),
+        body: "Details".into(),
+        state: tsumugi_model::LocalIssueState::Queued,
+        record: None,
+        session: None,
+        error: None,
+    };
+    let change = TreeChange::LocalIssues {
+        issues: vec![issue.clone()],
+    };
+    let sent = host.record([change.clone()]);
+    for window in [A, B] {
+        let event = to(window, sent.clone()).pop().unwrap();
+        assert!(
+            matches!(event, Event::Patch(patch) if patch.changes == [Change::Tree(change.clone())])
+        );
+    }
+    let opened = host.handle(WindowId(3), hello(&[SPOKEN[0].0]));
+    assert!(opened.iter().any(|(_, event)| matches!(event, Event::Snapshot(work) if work.tree.local_issues == [issue.clone()])));
+}
+
 /// A host run without a window: `requests` in turn, as one window asks
 /// them, the work they leave and every event they draw for that window.
 fn scenario(work: Work, requests: impl IntoIterator<Item = Request>) -> (Work, Vec<Event>) {

@@ -12,6 +12,13 @@ use crate::{DraftChanges, Drafts, HostPath};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Ask {
+    QueueLocalIssue(tsumugi_model::NewLocalIssue),
+    CancelLocalIssue {
+        id: String,
+    },
+    RetryLocalIssue {
+        id: String,
+    },
     PathEntries {
         root: Option<HostPath>,
         typed: String,

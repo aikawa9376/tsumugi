@@ -24,6 +24,12 @@ use crate::zoom;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Msg {
+    SidebarPanel(crate::sidebar::Panel),
+    SidebarSelect(crate::sidebar::NodeKey),
+    SidebarFold(crate::sidebar::NodeKey),
+    SidebarFilter(String),
+    SidebarFiltering(bool),
+    LocalIssuesClose,
     /// The window opened, with the home directory the paths it draws
     /// shorten to `~`.
     Opened {

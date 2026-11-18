@@ -680,7 +680,10 @@ fn common(change: &Change) -> bool {
     matches!(
         change,
         Change::Tree(
-            TreeChange::Listed { .. } | TreeChange::Failing { .. } | TreeChange::GitHub { .. }
+            TreeChange::Listed { .. }
+                | TreeChange::Failing { .. }
+                | TreeChange::GitHub { .. }
+                | TreeChange::LocalIssues { .. }
         ) | Change::Details(DetailsChange::Usage { .. } | DetailsChange::System { .. })
             | Change::Config(_)
     )
@@ -692,7 +695,10 @@ fn in_sight(change: &Change, sight: &Sight) -> bool {
     match change {
         Change::Details(change) => details_in_sight(change, sight),
         Change::Tree(
-            TreeChange::Listed { .. } | TreeChange::Failing { .. } | TreeChange::GitHub { .. },
+            TreeChange::Listed { .. }
+            | TreeChange::Failing { .. }
+            | TreeChange::GitHub { .. }
+            | TreeChange::LocalIssues { .. },
         ) => true,
         Change::Tree(TreeChange::Marks { worktree, .. } | TreeChange::MarksLeft { worktree }) => {
             sight.tree.marked.contains(worktree)

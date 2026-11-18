@@ -47,6 +47,8 @@ pub struct Overlays {
     pub naming: Option<Naming>,
     /// The sheet adding an environment is open.
     pub adding: bool,
+    /// Local issues are opened on this environment and directory.
+    pub local_issues: Option<crate::tree::Place>,
     /// A session's images looked at one at a time.
     pub lightbox: Option<Lightbox>,
     pub banner: Banner,
@@ -82,6 +84,7 @@ pub fn menu_entries(menu: &Menu, hosts: &Hosts) -> Vec<MenuEntry> {
     };
     let session = match &target {
         Target::Row(Item::Session(environment, id) | Item::Waiting(environment, id))
+        | Target::Agent(environment, id)
         | Target::Tab(Tab::Session(environment, id)) => {
             let tree = crate::tree::listed(hosts.work(environment));
             nav::find(tree, id).map(|(_, s)| s.clone())
@@ -107,6 +110,7 @@ pub fn menu_entries(menu: &Menu, hosts: &Hosts) -> Vec<MenuEntry> {
 /// What holds the keys over the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Holder {
+    LocalIssues,
     Menu,
     KeysHelp,
     Picker,
@@ -126,6 +130,7 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (overlays.rename.is_some(), Holder::Rename),
         (overlays.naming.is_some(), Holder::Naming),
         (overlays.adding, Holder::Adding),
+        (overlays.local_issues.is_some(), Holder::LocalIssues),
         (overlays.confirm.is_some(), Holder::Confirm),
         (overlays.lightbox.is_some(), Holder::Lightbox),
     ]
@@ -160,6 +165,7 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
                 | Holder::Rename
                 | Holder::Naming
                 | Holder::Adding
+                | Holder::LocalIssues
                 | Holder::Confirm
                 | Holder::Lightbox
         )
@@ -172,7 +178,9 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
         Holder::Confirm => &[Context::Confirm, Context::Overlay],
         Holder::Lightbox => &[Context::Lightbox],
         Holder::Rename | Holder::Naming => &[],
-        Holder::Menu | Holder::KeysHelp | Holder::Picker | Holder::Adding => &[Context::Overlay],
+        Holder::Menu | Holder::KeysHelp | Holder::Picker | Holder::Adding | Holder::LocalIssues => {
+            &[Context::Overlay]
+        }
     }
 }
 
@@ -217,6 +225,13 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
             Some(Action::OverlayClose) => adding(state, false),
             _ => Vec::new(),
         },
+        Holder::LocalIssues => match action {
+            Some(Action::OverlayClose) => {
+                state.overlays.local_issues = None;
+                Vec::new()
+            }
+            _ => Vec::new(),
+        },
         // Renaming, the keys are its field's; none act behind it.
         Holder::Rename | Holder::Naming => Vec::new(),
     }
@@ -255,8 +270,22 @@ fn menu_key(state: &mut ViewState, action: Option<Action>) -> Vec<Effect> {
 }
 
 pub(crate) fn open_menu(state: &mut ViewState, menu: Menu) -> Vec<Effect> {
+    let mut effects = Vec::new();
+    if let Some(panel) = menu_panel(&menu.target)
+        && panel != state.sidebar.panel
+    {
+        effects.extend(crate::sidebar::switch(state, panel));
+    }
     state.overlays.menu = Some(menu);
-    Vec::new()
+    effects
+}
+
+fn menu_panel(target: &Target) -> Option<crate::sidebar::Panel> {
+    match target {
+        Target::Row(_) | Target::Start(_) => Some(crate::sidebar::Panel::Tree),
+        Target::Agent(..) => Some(crate::sidebar::Panel::Agents),
+        _ => None,
+    }
 }
 
 pub(crate) fn close_menu(state: &mut ViewState) -> Vec<Effect> {
@@ -268,12 +297,19 @@ pub(crate) fn close_menu(state: &mut ViewState) -> Vec<Effect> {
 /// would with that row selected, that tab shown or that link selected.
 pub(crate) fn run_menu(state: &mut ViewState, target: Target, action: Action) -> Vec<Effect> {
     state.overlays.menu = None;
+    let mut effects = menu_panel(&target)
+        .map(|panel| crate::sidebar::switch(state, panel))
+        .unwrap_or_default();
     let (at, area) = match target {
+        Target::Agent(environment, id) => (
+            Msg::SidebarSelect(crate::sidebar::NodeKey::session(environment, id)),
+            Area::Sidebar,
+        ),
         Target::Row(item) | Target::Start(item) => (Msg::TreeSelect(Some(item)), Area::Sidebar),
         Target::Tab(tab) => (Msg::TabReveal(tab), Area::Console),
         Target::Link { at, .. } => (Msg::DetailsSelect(at), Area::Details),
     };
-    let mut effects = step(state, at);
+    effects.extend(step(state, at));
     effects.extend(step(state, Msg::Focus(area)));
     effects.push(Effect::Perform(action));
     effects
@@ -292,7 +328,15 @@ pub(crate) fn ask(state: &mut ViewState, ask: Ask) -> Vec<Effect> {
 /// Ask to end a session: the selected row's, from the tree, or else the
 /// one the console shows.
 pub(crate) fn ask_stop(state: &mut ViewState, selection: bool) -> Vec<Effect> {
-    let chosen = match state.tree.selected.as_ref().map(Item::own) {
+    let selected = crate::sidebar::selected(state);
+    if selection
+        && state.content.focus == crate::content::Area::Sidebar
+        && state.sidebar.panel == crate::sidebar::Panel::Agents
+        && selected.is_none()
+    {
+        return Vec::new();
+    }
+    let chosen = match selected.as_ref().map(Item::own) {
         Some(Item::Session(environment, id) | Item::Waiting(environment, id)) if selection => {
             Some((environment, id))
         }

@@ -34,7 +34,7 @@ pub(crate) fn Footer() -> Element {
     });
     let active = app.content.read().active().cloned();
     // The picker holds every key while it is open, the console's too.
-    let (mode, class) = Footing {
+    let (mut mode, class) = Footing {
         picking: app.picker.read().open.is_some(),
         area,
         shown: active.as_ref(),
@@ -45,6 +45,11 @@ pub(crate) fn Footer() -> Element {
         repeating,
     }
     .mode();
+    let agents =
+        area == Area::Sidebar && app.sidebar.read().panel == tsumugi_core::sidebar::Panel::Agents;
+    if agents && mode == "TREE" {
+        mode = "AGENTS".into();
+    }
     let km = app.chrome.read().keymap.clone();
     let k_moves = km.keys_for_all(
         Context::Global,
@@ -59,7 +64,13 @@ pub(crate) fn Footer() -> Element {
     let k_to_tab = km.keys_for(Context::Global, &Action::WindowToTab);
     let k_merge = km.keys_for(Context::Global, &Action::TabMergeLast);
     // The footer names the keys that work where the keys are now.
-    let k_waiting_next = km.keys_in(route::footer_contexts(area), &Action::WaitingNext);
+    let contexts = tsumugi_core::sidebar::contexts(
+        app.sidebar.read().panel,
+        area,
+        route::footer_contexts(area).to_vec(),
+    );
+    let k_waiting_next = km.keys_in(&contexts, &Action::WaitingNext);
+    let k_sidebar = km.keys_in(&contexts, &Action::SidebarNext);
     let k_write = km.keys_for(Context::Console, &Action::PromptWrite);
     let k_escape = km.keys_for(
         Context::Console,
@@ -73,6 +84,7 @@ pub(crate) fn Footer() -> Element {
     );
     rsx! {
         StatusBar { mode, class, dialog: in_dialog,
+            if let Some(k) = k_sidebar { KeyHint { keys: k, does: "focus section" } }
             if let Some(k) = k_moves {
                 KeyHint { keys: k, does: "move" }
             }
@@ -85,7 +97,7 @@ pub(crate) fn Footer() -> Element {
             if let Some(k) = k_waiting_next {
                 KeyHint { keys: k, does: "next waiting" }
             }
-            if area == Area::Sidebar && app.tree.read().filtering {
+            if area == Area::Sidebar && (if agents { app.sidebar.read().filtering } else { app.tree.read().filtering }) {
                 KeyHint { keys: "Enter", does: "keep the filter" }
                 KeyHint { keys: "Esc", does: "clear it" }
             }

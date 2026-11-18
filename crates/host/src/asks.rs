@@ -56,6 +56,9 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         }
     }
     let answered = match ask {
+        Ask::QueueLocalIssue(issue) => crate::local_issues::queue(watched, issue).await,
+        Ask::CancelLocalIssue { id } => crate::local_issues::change(watched, id, false).await,
+        Ask::RetryLocalIssue { id } => crate::local_issues::change(watched, id, true).await,
         Ask::PathEntries { root, typed } => crate::completion::read(root, typed)
             .await
             .map(|entries| Answer::PathEntries { entries }),
