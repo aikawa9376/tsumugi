@@ -62,7 +62,7 @@ licenses-check:
 licenses-check:
 
 # Everything CI runs, the tests in the Neovim the app carries.
-ci: fmt-check lint stamp-check notices-test licenses-check
+ci: fmt-check lint stamp-check notices-test bundle-test licenses-check
     just test-neovim "$(assets/neovim/fetch.sh)/bin/nvim"
     just test-headless
 
@@ -86,8 +86,9 @@ test-neovim nvim:
 # Build target/macos/Tsumugi.app, the window as a macOS application.
 [macos]
 build-macos:
-    cargo build --release -p tsumugi
+    cargo build --release --locked -p tsumugi
     assets/macos/bundle.sh
+    python3 assets/macos/verify_bundle.py "${CARGO_TARGET_DIR:-target}/macos/Tsumugi.app"
 
 # Put the app built by `build-macos` in /Applications, replacing one there.
 [macos]
@@ -103,6 +104,7 @@ install-macos: build-macos
 bundle version="0.0.0-ci":
     cargo build --release --locked -p tsumugi
     assets/macos/bundle.sh
+    python3 assets/macos/verify_bundle.py "${CARGO_TARGET_DIR:-target}/macos/Tsumugi.app"
     assets/macos/dmg.sh {{version}} dist
 
 # Make a new identity to sign the macOS app with, "Tsumugi Release", into a
@@ -142,3 +144,7 @@ source-archive version="0.0.0-ci":
 # License comparisons ignore record order while preserving notice contents.
 notices-test:
     python3 -m unittest discover -s assets/release -p 'test_*.py'
+
+# Check that app startup verification rejects broken bundled programs.
+bundle-test:
+    python3 -m unittest discover -s assets/macos -p 'test_*.py'

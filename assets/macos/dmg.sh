@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Put the Tsumugi.app bundle.sh assembled into the disk image a GitHub Release
-# carries and the Homebrew cask installs, beside a link to /Applications:
+# carries, beside a link to /Applications:
 #
 #   dmg.sh <version> <dist>
 #

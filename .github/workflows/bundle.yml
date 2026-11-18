@@ -49,8 +49,16 @@ jobs:
           retention-days: 3
 
   macos:
-    name: bundle (macos-aarch64)
-    runs-on: macos-latest
+    name: bundle (macos-${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: aarch64
+          - os: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
     environment: ${{ inputs.sign && 'release' || '' }}
     timeout-minutes: 60
     env:
@@ -81,7 +89,7 @@ jobs:
         run: just bundle "$VERSION"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: bundle-macos-aarch64
+          name: bundle-macos-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
           # A release attaches its disk image; a pull request's only needs to

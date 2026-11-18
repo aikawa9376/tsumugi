@@ -5,6 +5,13 @@ and runtime helpers. `nix develop` provides the development tools; alternatively
 install Rust, just, Neovim, Node.js, jj and Ghostscript alongside those libraries.
 The Rust toolchain and bundled Neovim are pinned in the repository.
 
+On macOS, install the Xcode Command Line Tools (`xcode-select --install`) and
+Rust before building. The system webview replaces Linux's GTK/WebKitGTK
+libraries, and PDF rendering uses PDFKit rather than Ghostscript. The Nix
+development shell supports both `aarch64-darwin` (Apple Silicon) and
+`x86_64-darwin` (Intel). Without Nix, install just, Neovim, Node.js, jj,
+Python 3 and cargo-about as well as Rust to run the complete quality gate.
+
 Run `just ci` before submitting a change. It builds a version without the
 desktop runtime last, so rebuild `cargo build --locked -p tsumugi` before
 launching `target/debug/tsumugi` directly. `just run` selects the desktop build.
@@ -16,9 +23,19 @@ icon, full license notices and a source-code reference. Build on the oldest
 Linux distribution you intend to support: the executable links system GTK,
 WebKitGTK and other libraries and is not a universal static binary.
 
-On macOS, `just bundle VERSION` builds the application and disk image. A new
-maintainer must supply their own signing identity for signed distribution;
-ad hoc signatures are used locally. Windows remains a source build.
+On macOS, `just build-macos` builds `target/macos/Tsumugi.app` and verifies its
+signature, executable startup and bundled Neovim runtime with isolated user
+state. `just bundle VERSION` also writes the disk image. Build outside the Nix
+shell for distribution: the image rejects executables linked to `/nix/store`.
+Both Apple Silicon and Intel packages are built natively in CI, with distinct
+architecture names; the app is not a universal binary. Windows remains a
+source build.
+
+Default bundles are signed ad hoc and are not notarized. A maintainer can
+provide their own signing identity through `TSUMUGI_SIGN_IDENTITY`; the bundle
+workflow's `sign` input imports the identity from its release environment.
+No signing account is required for a local build. macOS may ask users to allow
+an unnotarized app in Privacy & Security.
 
 A published GitHub Release builds artifacts in this repository, attaches their
 checksums and includes a source archive with vendored Cargo dependencies.

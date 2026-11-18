@@ -14,8 +14,9 @@ the tools that do the work.
 
 People who prefer Vim's way of moving and editing, use coding agents as part of
 their own development, and want to keep several pieces of work within reach.
-Linux is the primary desktop. This is a personal, experimental product whose
-scope grows from the maintainer's daily use and focused contributions.
+The workspace spans Linux, macOS and Windows, with Linux as the primary
+development environment. This is a personal, experimental product whose scope
+grows from the maintainer's daily use and focused contributions.
 
 ## Where its value lies
 

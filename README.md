@@ -7,7 +7,7 @@
 
 <p align="center">Coding agents, terminals and your Neovim. One place to weave the work together.</p>
 
-Tsumugi（つむぎ）is a Linux-first desktop workspace for people who work with
+Tsumugi（つむぎ）is a cross-platform desktop workspace for people who work with
 coding agents and live in Vim. Keep agents beside your files and shells,
 write prompts in a real Neovim, and move between them with familiar keys.
 
@@ -68,9 +68,37 @@ The installer places the app, desktop launcher, icon and license notices under
 Python 3. Background services for paired clients are enabled separately with
 `tsumugi remote enable`.
 
-Linux is the primary development platform. macOS and Windows code is retained,
-but support on those systems depends on testing and contributions. Agent
-availability, authentication and remote machines require their own setup.
+## Run on macOS
+
+Apple Silicon and Intel Macs have separate disk images in
+[GitHub Releases](https://github.com/aikawa9376/tsumugi/releases): choose
+`aarch64` for Apple Silicon or `x86_64` for Intel, open the image and drag
+Tsumugi to Applications. The app carries Neovim; install and authenticate the
+agents you want to use separately.
+
+For a source build, install the Xcode Command Line Tools, Rust, Neovim and Git,
+then run the same `cargo run --locked -p tsumugi` command as on Linux. macOS
+uses its system webview and does not need GTK or WebKitGTK. With the
+[development tools](docs/building.md) installed, build a standalone app with:
+
+```sh
+just build-macos
+open target/macos/Tsumugi.app
+```
+
+Move the built app to `/Applications` to keep it. Builds without a signing
+identity use ad hoc signing and are not notarized; macOS may require you to allow
+the app in System Settings → Privacy & Security before opening it. macOS keeps
+the native menu bar and window controls; `F1` shows the active keys.
+
+## Platform coverage
+
+Linux remains the primary development environment. CI runs the quality gate
+on Linux, macOS (Apple Silicon and Intel), and Windows. The release workflow
+packages Linux archives and both Mac disk images; Windows remains a source
+build. Desktop interaction, input methods and permissions still need testing
+on the actual OS. Agent availability, authentication and remote machines
+require their own setup.
 
 ## Development
 

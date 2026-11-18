@@ -66,5 +66,6 @@ while IFS= read -r -d '' code; do
   fi
 done < <(find "$app/Contents/Resources/neovim" -type f -print0)
 codesign --force --sign "$identity" "$app"
+codesign --verify --deep --strict "$app"
 rm -rf "$work"
 echo "$app"

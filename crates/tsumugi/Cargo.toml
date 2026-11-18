@@ -1,7 +1,7 @@
 [package]
 name = "tsumugi"
 default-run = "tsumugi"
-description = "A Linux-first workspace for coding agents, terminals and Neovim"
+description = "A cross-platform workspace for coding agents, terminals and Neovim"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
