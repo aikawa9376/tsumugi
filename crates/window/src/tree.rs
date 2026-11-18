@@ -5,6 +5,9 @@ mod filter_field;
 mod naming_field;
 mod panel;
 mod row;
+mod signals;
+
+pub(crate) use signals::use_structure;
 
 pub(crate) use panel::*;
 pub(crate) use row::*;

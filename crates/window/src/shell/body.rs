@@ -27,6 +27,7 @@ pub(crate) fn Body() -> Element {
     // The finished sessions the user has seen, and the tabs with something
     // written for them kept aside.
     let completions = use_memo(move || app.tree.read().completions.clone());
+    let structure = crate::tree::use_structure(app.tree);
     let drafted = use_memo(move || app.prompt.read().drafted.clone());
     let area = app.content.read().focus;
     let layout = app.chrome.read().panels.layout;
@@ -99,6 +100,7 @@ pub(crate) fn Body() -> Element {
             TreePanel {
                 focused: area == Area::Sidebar,
                 context: RowContext {
+                    structure: structure.into(),
                     completions: completions.into(),
                     drafted: drafted.into(),
                 },

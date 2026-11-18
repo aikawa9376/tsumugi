@@ -12,6 +12,7 @@ use tsumugi_core::tree;
 use tsumugi_model::github::{Listing, Standing};
 use tsumugi_model::{EnvironmentId, InboxItem, TerminalSession, Tree};
 
+use super::signals::use_row_focus;
 use crate::bridge::AppCtx;
 use crate::completion::Completions;
 use crate::components::{
@@ -101,10 +102,11 @@ fn short(path: &Path) -> String {
     tsumugi_core::picker::short(path, &crate::paths::home())
 }
 
-/// What a row reaches outside the tree and the content: the sessions'
-/// states, and the drafts written for them.
+/// What rows share: the tree's structure, the sessions' states and the
+/// drafts written for them. Each row follows its own selection separately.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct RowContext {
+    pub(crate) structure: ReadSignal<tree::TreeView>,
     pub(crate) completions: ReadSignal<Completions>,
     pub(crate) drafted: ReadSignal<HashSet<Tab>>,
 }
@@ -138,7 +140,9 @@ fn start_menu(app: AppCtx, item: Item) -> EventHandler<MouseEvent> {
 #[component]
 pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element {
     let app = use_context::<AppCtx>();
-    let view = app.tree.read();
+    let focus = use_row_focus(app.tree, item.clone());
+    let focus = focus.read();
+    let view = context.structure.read();
     let hosts = app.hosts.read();
     let work = hosts.work(item.environment());
     let t = tree::listed(work);
@@ -149,13 +153,17 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     let shows = content_now.focused().cloned();
     let it = item;
     let own = it.own().clone();
-    let is_sel = view.selected.as_ref() == Some(&it);
+    let is_sel = focus.selected;
     let open = view.folds.is_open(&it);
     // The rows of the environments the tree is not at stand back; those
     // waiting on the user, gathered from all of them, do not.
     let elsewhere = !matches!(it, Item::Waiting(..))
         && hosts.each().nth(1).is_some()
-        && *it.environment() != view.environment_at(&app.shown_environment());
+        && *it.environment()
+            != focus
+                .environment
+                .clone()
+                .unwrap_or_else(|| app.shown_environment());
     if let Item::File {
         environment,
         worktree,
@@ -443,9 +451,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     };
     // A session listed twice takes its new name on one row: the selected
     // one, or else its worktree's.
-    let renames_here = is_sel
-        || (!matches!(it, Item::Gathered(_))
-            && view.selected.as_ref().map(Item::own) != Some(&own));
+    let renames_here = focus.renames_here;
     let badge = row_badge(t, &app.config.read().settings, &own);
     let here = it.clone();
     let start = it.clone();
@@ -516,7 +522,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
 pub(crate) fn WaitingRow(environment: EnvironmentId, waiting: InboxItem, on: RowEvents) -> Element {
     let app = use_context::<AppCtx>();
     let item = Item::Waiting(environment.clone(), waiting.session.id.clone());
-    let is_sel = app.tree.read().selected.as_ref() == Some(&item);
+    let selected = use_memo({
+        let item = item.clone();
+        move || app.tree.read().selected.as_ref() == Some(&item)
+    });
+    let is_sel = selected();
     let shown = app.content.read().active()
         == Some(&Tab::Session(
             environment.clone(),
