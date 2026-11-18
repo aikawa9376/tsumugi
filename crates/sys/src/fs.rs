@@ -243,7 +243,7 @@ fn staged(
 pub fn private_dir(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
     let path = path.as_ref();
     let above = parent(path);
-    std::fs::create_dir_all(above)?;
+    private_parents(above)?;
     match std::fs::DirBuilder::new().mode(0o700).create(path) {
         Ok(()) => {
             // Made in `0o700` less the umask, which may take the user's own bits.
@@ -254,6 +254,23 @@ pub fn private_dir(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
         Err(error) => return Err(error),
     }
     check_private_dir(path)
+}
+
+fn private_parents(path: &std::path::Path) -> std::io::Result<()> {
+    if path.as_os_str().is_empty() || path.is_dir() {
+        return Ok(());
+    }
+    match std::fs::DirBuilder::new().mode(0o700).create(path) {
+        // A socket bind may temporarily mask the owner's execute bit. Restore
+        // each new parent's bits before creating anything underneath it.
+        Ok(()) => set_mode(path, 0o700),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            private_parents(parent(path))?;
+            private_parents(path)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 /// Whether `path` is a private folder of this user: a folder, not a link to
@@ -274,6 +291,48 @@ pub fn check_private_dir(path: impl AsRef<std::path::Path>) -> std::io::Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn private_directory_parents_remain_traversable_under_a_socket_umask() {
+        const FIXTURE: &str = "TSUMUGI_TEST_PRIVATE_DIR_MASK";
+        if let Some(root) = std::env::var_os(FIXTURE) {
+            let root = std::path::PathBuf::from(root);
+            // SAFETY: only this test runs in the child, which exits below.
+            unsafe { libc::umask(0o177) };
+            let path = root.join("state/instances/private");
+            private_dir(&path).unwrap();
+            std::fs::write(path.join("record"), "kept").unwrap();
+            assert_eq!(
+                std::fs::metadata(root.join("state")).unwrap().mode() & 0o700,
+                0o700
+            );
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "fs::tests::private_directory_parents_remain_traversable_under_a_socket_umask",
+                "--nocapture",
+            ])
+            .env(FIXTURE, root.path())
+            .output()
+            .unwrap();
+        // The failed fixture may leave a parent without its execute bit.
+        for path in [
+            root.path().join("state"),
+            root.path().join("state/instances"),
+        ] {
+            let _ = set_mode(path, 0o700);
+        }
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     fn a_canonical_path_is_absolute_resolved_and_not_verbatim() {
