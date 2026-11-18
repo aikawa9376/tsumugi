@@ -1,0 +1,29 @@
+[package]
+name = "tsumugi-core"
+description = "The window's state and the rules it changes by, free of the UI and of running programs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tsumugi-model.workspace = true
+tsumugi-protocol.workspace = true
+nucleo-matcher.workspace = true
+regex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
+
+[dev-dependencies]
+tsumugi-model = { workspace = true, features = ["testing"] }
+tsumugi-protocol = { workspace = true, features = ["testing"] }
+tempfile.workspace = true
+ttf-parser = "0.25.1"
+wuff = "0.2.9"

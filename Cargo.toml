@@ -1,0 +1,71 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+# A placeholder: the tag is the only record of the version, and the release
+# workflow stamps it here before building and publishing.
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/aikawa9376/tsumugi"
+
+[workspace.dependencies]
+tsumugi-model = { path = "crates/model", version = "0.0.0" }
+tsumugi-term = { path = "crates/term", version = "0.0.0" }
+tsumugi-nvim = { path = "crates/nvim", version = "0.0.0" }
+tsumugi-agents = { path = "crates/agents", version = "0.0.0" }
+tsumugi-vcs = { path = "crates/vcs", version = "0.0.0" }
+tsumugi-core = { path = "crates/core", version = "0.0.0" }
+tsumugi-protocol = { path = "crates/protocol", version = "0.0.0" }
+tsumugi-host = { path = "crates/host", version = "0.0.0" }
+tsumugi-window = { path = "crates/window", version = "0.0.0" }
+tsumugi-connect = { path = "crates/connect", version = "0.0.0" }
+tsumugi-net = { path = "crates/net", version = "0.0.0" }
+tsumugi-sys = { path = "crates/sys", version = "0.0.0" }
+
+felis-vt = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
+felis-grid = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
+felis-protocol = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
+felis-daemon = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
+felis-transport = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
+felis-client-core = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
+base64 = "0.23.1"
+core-foundation = "0.10.1"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+libc = "0.2.190"
+mdns-sd = "0.21.6"
+png = "0.18.1"
+async-trait = "0.1.92"
+nvim-rs = { version = "0.9.2", features = ["use_tokio"] }
+rmpv = "1.3.1"
+nucleo-matcher = "0.3.1"
+regex = "1.13.1"
+resvg = { version = "0.48.1", default-features = false }
+hkdf = "0.13.0"
+hmac = "0.13.0"
+ring = "0.17.14"
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+block2 = "0.6.2"
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "NSEvent", "NSBitmapImageRep", "NSGraphics", "NSImage", "NSImageRep", "NSMenu", "NSMenuItem", "NSResponder", "NSTextInputContext", "NSWindow"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSData", "NSDictionary", "NSGeometry", "NSString", "NSURL"] }
+objc2-pdf-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-app-kit", "PDFDocument", "PDFPage"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "process", "sync", "time", "io-util", "io-std", "net"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["ansi", "env-filter", "fmt", "std"] }
+
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+schemars = { version = "1.2.3", features = ["uuid1"] }
+shell-words = "1.1.1"
+spake2 = "0.4.0"
+thiserror = "2.0.21"
+toml = { version = "1.1.8", features = ["preserve_order"] }
+toml_edit = "0.25.17"
+tempfile = "3.27.0"
+uuid = { version = "1.28.0", features = ["v4"] }
+windows-sys = "0.61.2"

@@ -1,0 +1,235 @@
+use crate::*;
+use tsumugi_model::config::SessionOptions;
+
+pub struct Claude;
+
+impl AgentAdapter for Claude {
+    fn agent(&self) -> Agent {
+        Agent::Claude
+    }
+
+    fn judge_startup(&self, screen: &[String]) -> Judgement<tsumugi_model::StartupReadiness> {
+        crate::rules::judge_startup(Agent::Claude, screen)
+    }
+
+    fn instruction_args(&self, instructions: &str) -> Vec<String> {
+        vec!["--append-system-prompt".into(), instructions.into()]
+    }
+
+    fn image_prompt(&self, text: &str, images: &[PathBuf]) -> String {
+        let mut prompt = text.to_string();
+        for image in images {
+            prompt.push_str(&format!(" @\"{}\"", image.display()));
+        }
+        prompt
+    }
+
+    // Named with `@` in a prompt typed in, an image is a file for the model
+    // to read; pasted, Claude Code attaches it.
+    fn image_pastes(&self, images: &[PathBuf]) -> Vec<String> {
+        crate::quoted_pastes(images)
+    }
+
+    fn program(&self) -> String {
+        super::claude_program()
+    }
+    fn state_variable(&self) -> &'static str {
+        "CLAUDE_CONFIG_DIR"
+    }
+    fn denies(&self, name: &str) -> bool {
+        super::denies(name)
+    }
+    fn login_args(&self) -> Vec<String> {
+        vec!["auth".into(), "login".into()]
+    }
+    // Not `claude doctor`, which makes keychain items of its own as it looks.
+    fn status_args(&self, _context: &AgentContext) -> Vec<String> {
+        vec!["auth".into(), "status".into(), "--json".into()]
+    }
+    fn standing(&self, code: Option<i32>, out: &str) -> tsumugi_model::profile::LoginStanding {
+        use tsumugi_model::profile::LoginStanding;
+        let said = crate::login::first_json(out)
+            .and_then(|v| v.get("loggedIn").and_then(serde_json::Value::as_bool));
+        match (code, said) {
+            (Some(0), Some(true)) => LoginStanding::LoggedIn,
+            (Some(0 | 1), Some(false)) => LoginStanding::LoggedOut,
+            (code, _) if crate::login::missing(code) => LoginStanding::Missing,
+            _ => LoginStanding::Unknown,
+        }
+    }
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            command_probe: true,
+            usage_limits: true,
+            shell_bang: true,
+        }
+    }
+    fn usage_url(&self) -> Option<&'static str> {
+        Some("https://claude.ai/settings/usage")
+    }
+    fn commands(&self, context: AgentContext, dir: PathBuf) -> Probe<super::commands::Command> {
+        Box::pin(async move {
+            super::commands::probe(
+                |args| asked(&context, args),
+                &dir,
+                super::commands::PROBE_TIMEOUT,
+            )
+            .await
+        })
+    }
+    fn models_within(
+        &self,
+        context: AgentContext,
+        dir: PathBuf,
+        timeout: std::time::Duration,
+    ) -> Probe<tsumugi_model::ProviderModel> {
+        Box::pin(async move {
+            super::models::probe(|args| launch_in(&context, args, Vec::new()), &dir, timeout).await
+        })
+    }
+    fn usage(&self, context: AgentContext, home: PathBuf) -> Probe<super::usage::Limit> {
+        Box::pin(async move {
+            super::usage::probe(
+                |args| asked(&context, args),
+                &home,
+                super::usage::PROBE_TIMEOUT,
+            )
+            .await
+        })
+    }
+    fn context(
+        &self,
+        context: AgentContext,
+        session: &tsumugi_model::Session,
+        model: Option<String>,
+    ) -> ContextProbe {
+        let (dir, id) = (session.cwd.clone(), session.session_id.clone());
+        Box::pin(async move {
+            if id.is_empty() {
+                return None;
+            }
+            super::context::probe(
+                |args| asked(&context, args),
+                &dir,
+                &id,
+                model.as_deref(),
+                super::context::PROBE_TIMEOUT,
+            )
+            .await
+        })
+    }
+    fn transcript(
+        &self,
+        context: &AgentContext,
+        home: &Path,
+        session: &tsumugi_model::Session,
+    ) -> Option<Box<dyn ConversationReader>> {
+        let path = super::places::transcript(context, home, &session.cwd, &session.session_id);
+        Some(Box::new(ClaudeConversation(
+            super::transcript::Transcript::new(path, &session.cwd, home.to_path_buf()),
+        )))
+    }
+    fn work_behind(
+        &self,
+        context: &AgentContext,
+        home: &Path,
+        session: &tsumugi_model::Session,
+    ) -> Option<Box<dyn WorkBehind>> {
+        let path = super::places::transcript(context, home, &session.cwd, &session.session_id);
+        Some(Box::new(super::subagents::Behind::new(&path)))
+    }
+    fn list_sessions(&self, context: AgentContext) -> Listing {
+        Box::pin(async move {
+            super::list_sessions(|args| asked(&context, args))
+                .await
+                .map_err(|e| e.to_string())
+        })
+    }
+    fn follow(
+        &self,
+        own: &mut [tsumugi_model::Session],
+        listed: Vec<tsumugi_model::Running>,
+    ) -> Vec<(u128, Learned)> {
+        crate::follow(Agent::Claude, own, listed)
+    }
+    fn resume_args(&self, context: &AgentContext, conversation: &str) -> Option<Vec<String>> {
+        Some(super::resume_args(
+            conversation,
+            &options(&context.claude()),
+        ))
+    }
+    fn past(
+        &self,
+        context: &AgentContext,
+        home: &Path,
+        dir: Option<&Path>,
+    ) -> Vec<tsumugi_model::Past> {
+        crate::kept_in(
+            context,
+            super::past::read(&super::places::projects(context, home), dir),
+        )
+    }
+    fn conversation(&self) -> String {
+        super::new_session_id()
+    }
+    fn start_args(
+        &self,
+        context: &AgentContext,
+        name: &str,
+        conversation: &str,
+        prompt: &str,
+    ) -> Vec<String> {
+        let options = options(&context.claude());
+        super::start_args(name, conversation, &options, prompt)
+    }
+    fn integration_args(&self, program: &Path, state: &Path) -> Vec<String> {
+        super::plugin::args(program, &state.join("plugin"))
+    }
+    fn environment(&self) -> Vec<(String, String)> {
+        super::ENV
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+    fn history(&self, context: &AgentContext, home: &Path, project: &Path) -> Vec<String> {
+        super::history::read(context, home, project)
+    }
+    fn rename_command(&self, name: &str) -> Option<String> {
+        Some(format!("/rename {name}"))
+    }
+}
+
+struct ClaudeConversation(super::transcript::Transcript);
+
+impl ConversationReader for ClaudeConversation {
+    fn stats(&self) -> tsumugi_model::ConversationStats {
+        self.0.stats()
+    }
+    fn read(&mut self) -> super::links::Links {
+        self.0.read(&|p: &Path| p.is_file());
+        self.0.links()
+    }
+}
+
+/// Claude Code's options for a session as `sessions` says, each word trimmed
+/// and empty tools dropped.
+fn options(sessions: &SessionOptions) -> super::Options {
+    super::Options {
+        model: sessions.model.trim().to_string(),
+        permission_mode: sessions.permission_mode.trim().to_string(),
+        disallowed_tools: sessions
+            .disallowed_tools
+            .iter()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .collect(),
+        read_only: sessions.read_only.as_ref().map(super::ReadOnly::protecting),
+    }
+}
+
+/// What starts Claude Code with `args` to ask it something outside a console,
+/// as `context` starts a session: the program, its arguments, and the
+/// variables its launch adds.
+fn asked(context: &AgentContext, args: Vec<String>) -> Started {
+    crate::own_login::started(&Claude, context, args, Vec::new())
+}

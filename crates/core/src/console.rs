@@ -1,0 +1,620 @@
+//! The console as the window holds it: where its keys go, whether they pass
+//! on to the program or are read in the reader, and asking the session shown
+//! for what was typed into its own input.
+
+pub mod keys;
+pub mod reader;
+pub mod route;
+#[cfg(test)]
+mod tests;
+
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::time::Duration;
+
+use tsumugi_model::{Key, State};
+use tsumugi_protocol::Listed;
+
+use crate::actions::{Action, Steps};
+use crate::content::{Area, Tab};
+use crate::effect::Effect;
+use crate::keymap::{Context, Step};
+use crate::msg::Msg;
+use crate::overlay;
+use crate::state::ViewState;
+use crate::tree::nav;
+use crate::update::step;
+use reader::{Edge, Exit};
+use route::Typed;
+
+/// How long a session is given to ask for its input after `Ctrl-g`. The
+/// answer clears it, so it only has to outlast a slow start: a request
+/// arriving after it is taken for the user's own and opens their editor.
+pub const PULL_WAIT: Duration = Duration::from_secs(10);
+
+/// How long the session is left to put its input line back once keys stop
+/// going to it as they are, before it is asked for what was typed there.
+pub const PULL_AFTER_FREE: Duration = Duration::from_millis(300);
+
+/// A repeating binding just run: a key its keys before the last begin a
+/// binding with, to an action stepping through the same, runs it alone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Repeat {
+    pub before: Vec<Key>,
+    pub steps: Steps,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ConsoleView {
+    /// The keys pressed so far of a binding not complete yet.
+    pub pending: Vec<Key>,
+    /// The repeating a repeating binding just run began, until another key.
+    pub repeat: Option<Repeat>,
+    /// Whether the next key goes to the session as it is.
+    pub send_next: bool,
+    /// Whether the console passes every key on to the session it shows.
+    pub direct: bool,
+    /// Whether the console is read in its reader.
+    pub reading: bool,
+    /// The key the reader took last, for the second key of `gg`.
+    pub read_last: Option<Key>,
+    /// Whether the session shown shows a dialog of its agent's own, which,
+    /// as a choice it waits on, takes every key.
+    pub dialog: bool,
+    /// The sessions whose input may hold text since it was last taken: keys
+    /// went to them as they are, or they were just attached.
+    pub stale: HashSet<Tab>,
+    /// The session asked to hand its input over through the external editor.
+    pub pull: Option<Tab>,
+    /// Counts the requests, so one lapsing does not take a later one with it.
+    pulls: u64,
+    /// Whether the prompt's Neovim runs, which takes what is handed over.
+    pub prompt_runs: bool,
+    /// Whether this window answers the editor's requests, and so is handed
+    /// a session's input.
+    pub answers: bool,
+    /// Where the keys were and what was shown when last looked at.
+    seen: Option<(Area, Option<Tab>)>,
+    /// What was shown when the reading was last looked at.
+    read_for: Option<Option<Tab>>,
+    /// The listing the sessions' inputs were last kept by.
+    listed_seen: Option<Listed>,
+    /// Whether the session shown was held from being asked for its input
+    /// when last looked at.
+    held: bool,
+}
+
+/// What the window knows of its programs when a key is pressed, which the
+/// view state does not hold.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Probe {
+    /// The focused window's program has a pane here.
+    pub pane: bool,
+    /// That program scrolls what it shows itself, as it takes the mouse.
+    pub scrolls_itself: bool,
+    /// The console's reader, while it runs.
+    pub reader: Option<ReaderAt>,
+    /// The prompt's Neovim is inserting.
+    pub inserting: bool,
+    /// How many rows the console's terminal has.
+    pub rows: u16,
+}
+
+/// Where the console's reader is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReaderAt {
+    /// It is in its normal mode.
+    pub normal: bool,
+    pub edge: Edge,
+}
+
+/// Whether the session the console shows waits on a choice, which every key
+/// answers.
+pub fn waits(state: &ViewState) -> bool {
+    match state.content.active() {
+        Some(Tab::Session(environment, id)) => {
+            state.console.dialog
+                || state
+                    .hosts
+                    .session(environment, id)
+                    .is_some_and(|(_, s)| s.state.takes_every_key())
+        }
+        _ => false,
+    }
+}
+
+/// The agent of the session the console shows.
+fn shown_agent(state: &ViewState) -> Option<tsumugi_model::Agent> {
+    match state.content.active() {
+        Some(Tab::Session(environment, id)) => {
+            state.hosts.session(environment, id).map(|(_, s)| s.agent)
+        }
+        _ => None,
+    }
+}
+
+/// Where text typed or pasted now goes. A dialog open types in its own
+/// field, or takes no text.
+pub fn text_goes(state: &ViewState) -> Typed {
+    if overlay::takes_text_away(&overlay::holding(
+        &state.overlays,
+        &state.picker,
+        &state.chrome,
+    )) {
+        return Typed::Nowhere;
+    }
+    let session = matches!(state.content.active(), Some(Tab::Session(_, _)));
+    route::typed_into(
+        state.content.focus,
+        session,
+        state.console.direct,
+        waits(state),
+    )
+}
+
+/// A key or text goes to the session shown as it is: it may type into its
+/// input.
+fn typed(state: &mut ViewState) {
+    if let Some(tab @ Tab::Session(_, _)) = state.content.active() {
+        state.console.stale.insert(tab.clone());
+    }
+}
+
+/// A key pressed, where the keys are now.
+pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect> {
+    if overlay::holder(state).is_some() {
+        return overlay::press(state, key);
+    }
+    if let Some(effects) = crate::prompt::image_key(state, &key) {
+        return effects;
+    }
+    let area = state.content.focus;
+    let pane = probe.pane && area == Area::Console;
+    // Any key but one that repeats ends the repeating.
+    let repeat = state.console.repeat.take();
+    let console = &mut state.console;
+    // A Ctrl-g among keys sent as they are is the user's own: a request of
+    // tsumugi's still waiting would take its answer.
+    if console.direct || console.send_next {
+        console.pull = None;
+    }
+    // Passing every key on holds the keyboard, Ctrl-q included, until
+    // Escape.
+    if console.direct && !route::app_key(&key) {
+        if pane {
+            return match keys::direct_key(&key) {
+                Some(k) => {
+                    typed(state);
+                    vec![Effect::PaneKey(k)]
+                }
+                None => {
+                    state.console.direct = false;
+                    Vec::new()
+                }
+            };
+        }
+        console.direct = false;
+    }
+    if console.send_next && !route::app_key(&key) {
+        console.send_next = false;
+        if !pane {
+            return Vec::new();
+        }
+        typed(state);
+        return vec![Effect::PaneKey(key)];
+    }
+    // Reading, the keys are the reader's, but for those that begin a
+    // global binding and those that leave it from its normal mode: Escape,
+    // q and G for the live console, i, a and o for the prompt. A key taken
+    // as global is only global: the console's binding of it is for the live
+    // console.
+    let mut windowing = false;
+    let agent = shown_agent(state);
+    if area == Area::Console
+        && state.console.reading
+        && let Some(reader) = probe.reader
+    {
+        let console = &state.console;
+        windowing = !console.pending.is_empty()
+            || route::app_key(&key)
+            || state.chrome.keymap.resolve(&[Context::Global], &[], &key) != Step::Nothing
+            || repeated(state, &[Context::Global], repeat.as_ref(), &key).is_some();
+        // The agent's own bindings hold in its console read as live; they
+        // are looked up below with the console's.
+        let agent_binds = agent.is_some_and(|a| {
+            state.chrome.keymap.resolve(&[Context::Agent(a)], &[], &key) != Step::Nothing
+        });
+        if !windowing && !agent_binds {
+            // A console that takes every key has no prompt to write in: the
+            // keys that would write one go back to it live instead.
+            let session = matches!(state.content.active(), Some(Tab::Session(_, _)));
+            let passes = route::passes(area, session, waits(state));
+            match reader::exit(&key, reader.normal) {
+                Some(Exit::Live) => return leave_reading(&mut state.console),
+                Some(Exit::Prompt) if passes => return leave_reading(&mut state.console),
+                Some(Exit::Prompt) => {}
+                // Held with Ctrl, Enter is what it is without: it was meant
+                // for the prompt, where it sends.
+                None => {
+                    let key = route::plain_enter(key);
+                    return read(&mut state.console, key, reader, probe.scrolls_itself);
+                }
+            }
+        }
+    }
+    let session = matches!(state.content.active(), Some(Tab::Session(_, _)));
+    // A session waiting on a choice takes every key but the window's own as
+    // its answer; a shell takes every key but those.
+    let pane = pane || (probe.pane && area == Area::Prompt);
+    let passing = pane && route::passes(area, session, waits(state));
+    let contexts = route::for_agent(
+        route::filing(
+            route::contexts(
+                area,
+                state.content.active(),
+                passing,
+                windowing,
+                probe.inserting,
+            ),
+            area,
+            matches!(state.tree.selected, Some(nav::Item::File { .. })),
+        ),
+        agent,
+    );
+    let seq = std::mem::take(&mut state.console.pending);
+    if seq.is_empty()
+        && let Some(action) = repeated(state, &contexts, repeat.as_ref(), &key)
+    {
+        state.console.repeat = repeat;
+        return vec![Effect::PerformKey(action, key)];
+    }
+    let action = match state.chrome.keymap.resolve(&contexts, &seq, &key) {
+        Step::Wait => {
+            state.console.pending = seq.into_iter().chain(Some(key)).collect();
+            return Vec::new();
+        }
+        Step::Run(action) => {
+            if let Some(steps) = action.steps()
+                && !seq.is_empty()
+            {
+                state.console.repeat = Some(Repeat { before: seq, steps });
+            }
+            action
+        }
+        Step::Nothing => {
+            // In a session's console, a key tsumugi does not bind is a Vim
+            // key: it starts reading the console with it, and with a
+            // sequence it broke off, such as `g` before `g`.
+            if route::starts_reading(area, session, passing, state.console.reading) && pane {
+                return vec![Effect::ReadConsole(
+                    seq.into_iter().chain(Some(key)).collect(),
+                )];
+            }
+            // A key that ends no binding is the area's to take, unless it
+            // broke off a sequence.
+            if !seq.is_empty() {
+                return Vec::new();
+            }
+            // Passed on as an answer, the key goes to the choice, not the
+            // input: taking the input back after it would send Ctrl-g to a
+            // session that has gone back to work.
+            return match area {
+                _ if passing => vec![Effect::PaneKey(key)],
+                Area::Prompt => vec![Effect::PromptKey(key)],
+                _ => Vec::new(),
+            };
+        }
+    };
+    if action == Action::KeysHelp {
+        return crate::chrome::open_keys_help(&mut state.chrome, contexts);
+    }
+    vec![Effect::PerformKey(action, key)]
+}
+
+/// The action `key` runs after the keys before it of `repeat`, looked up in
+/// `contexts`, when it steps through what they stepped through. A key held
+/// with Ctrl does not mean what it means without here: the prefix pressed
+/// again begins a sequence rather than completing one.
+fn repeated(
+    state: &ViewState,
+    contexts: &[Context],
+    repeat: Option<&Repeat>,
+    key: &Key,
+) -> Option<Action> {
+    let repeat = repeat?;
+    match state
+        .chrome
+        .keymap
+        .resolve_as_bound(contexts, &repeat.before, key)
+    {
+        Step::Run(action) if action.steps() == Some(repeat.steps) => Some(action),
+        _ => None,
+    }
+}
+
+/// A key the reader takes. A program that scrolls what it shows itself, as
+/// Claude Code on the alternate screen does, leaves nothing scrolled off to
+/// read: moving past the reader's first or last line scrolls the program,
+/// and the reader follows what it then shows. `gg` scrolls it to its start,
+/// and moves there too.
+fn read(console: &mut ConsoleView, key: Key, at: ReaderAt, scrolls_itself: bool) -> Vec<Effect> {
+    let previous = console.read_last.replace(key.clone());
+    let program = at.normal && scrolls_itself;
+    if program && let Some(to) = reader::to_start(&key, previous.as_ref()) {
+        return vec![Effect::PaneScrollKey(to), Effect::ReaderKey(key)];
+    }
+    if program && let Some(by) = reader::past_edge(&key, at.edge) {
+        return vec![Effect::PaneWheel(by)];
+    }
+    vec![Effect::ReaderKey(key)]
+}
+
+/// The console no longer read. A session left scrolled back would show its
+/// jump-to-bottom line live, moving with its layout: it is returned to its
+/// latest output.
+fn leave_reading(console: &mut ConsoleView) -> Vec<Effect> {
+    console.reading = false;
+    console.read_last = None;
+    vec![Effect::ConsoleLive]
+}
+
+/// Text typed, or pasted, where the keys are now; it breaks off a sequence
+/// of keys begun.
+pub(crate) fn text(state: &mut ViewState, text: String, pasted: bool) -> Vec<Effect> {
+    state.console.pending.clear();
+    state.console.repeat = None;
+    match text_goes(state) {
+        Typed::Prompt => {
+            let mut effects = step(state, Msg::Focus(Area::Prompt));
+            effects.push(Effect::PromptText { text, pasted });
+            effects
+        }
+        Typed::Program => {
+            if state.console.direct {
+                typed(state);
+            }
+            vec![Effect::PaneText { text, pasted }]
+        }
+        Typed::Nowhere => Vec::new(),
+    }
+}
+
+/// An image pasted: kept for the prompt, which takes the keys as it does for
+/// text, or handed to the console's program as an empty paste, as a terminal
+/// hands on an image paste, for it to read the image off the clipboard
+/// itself.
+pub(crate) fn image(state: &mut ViewState, mime: String, data: String) -> Vec<Effect> {
+    state.console.pending.clear();
+    state.console.repeat = None;
+    match text_goes(state) {
+        Typed::Prompt => {
+            let mut effects = step(state, Msg::Focus(Area::Prompt));
+            effects.push(Effect::KeepImage { mime, data });
+            effects
+        }
+        Typed::Program => vec![Effect::PaneText {
+            text: String::new(),
+            pasted: true,
+        }],
+        Typed::Nowhere => Vec::new(),
+    }
+}
+
+/// Files dropped: the images among them kept for the prompt, as a pasted
+/// image is. A program in the console gets nothing: it has no clipboard to
+/// read them off.
+pub(crate) fn dropped(state: &mut ViewState, paths: Vec<PathBuf>) -> Vec<Effect> {
+    let images: Vec<PathBuf> = paths
+        .into_iter()
+        .filter(|path| crate::prompt::images::is_image(path))
+        .collect();
+    if images.is_empty() || text_goes(state) != Typed::Prompt {
+        return Vec::new();
+    }
+    state.console.pending.clear();
+    state.console.repeat = None;
+    let mut effects = step(state, Msg::Focus(Area::Prompt));
+    effects.push(Effect::KeepImageFiles(images));
+    effects
+}
+
+/// The keys came into the prompt from elsewhere: the console stops being
+/// read, and the session there is asked for what was typed into it.
+pub(crate) fn prompt_entered(state: &mut ViewState) -> Vec<Effect> {
+    let mut effects = leave_reading(&mut state.console);
+    effects.extend(ask_input(state));
+    effects
+}
+
+/// Ask the session shown to hand its input over, when it may hold text:
+/// `Ctrl-g` opens its external editor, which is `tsumugi editor`. A session
+/// whose editor is not tsumugi's would open the user's own editor in the
+/// pane, which then waits on keys nobody sends; one waiting on an answer
+/// never calls it, so the request would lapse. One at work is left to it:
+/// its input is asked for once it stops.
+pub(crate) fn ask_input(state: &ViewState) -> Vec<Effect> {
+    let Some(tab @ Tab::Session(environment, id)) = state.content.active() else {
+        return Vec::new();
+    };
+    let console = &state.console;
+    let hands_back = state
+        .hosts
+        .session(environment, id)
+        .is_some_and(|(_, s)| s.tsumugi_editor);
+    if waits(state)
+        || works(state)
+        || console.direct
+        || !console.stale.contains(tab)
+        || !console.prompt_runs
+        || !console.answers
+        || !hands_back
+    {
+        return Vec::new();
+    }
+    vec![Effect::AskInput(tab.clone())]
+}
+
+/// The session in `tab` was asked for its input.
+pub(crate) fn input_asked(console: &mut ConsoleView, tab: Tab) -> Vec<Effect> {
+    console.stale.remove(&tab);
+    console.pulls += 1;
+    console.pull = Some(tab);
+    vec![Effect::LapsePull {
+        pull: console.pulls,
+        after: PULL_WAIT,
+    }]
+}
+
+/// The request numbered `pull` lapsed, unless a later one was made since.
+pub(crate) fn pull_lapsed(console: &mut ConsoleView, pull: u64) -> Vec<Effect> {
+    if console.pulls == pull {
+        console.pull = None;
+    }
+    Vec::new()
+}
+
+pub(crate) fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
+    match msg {
+        Msg::Key { key, probe } => press(state, key, *probe),
+        Msg::Text { text, pasted } => self::text(state, text, pasted),
+        Msg::ImagePasted { mime, data } => image(state, mime, data),
+        Msg::FilesDropped(paths) => dropped(state, paths),
+        Msg::ConsoleTyped => {
+            typed(state);
+            Vec::new()
+        }
+        Msg::AskInput => ask_input(state),
+        msg => set(&mut state.console, msg),
+    }
+}
+
+/// What the console is told of itself.
+fn set(console: &mut ConsoleView, msg: Msg) -> Vec<Effect> {
+    match msg {
+        Msg::InputMayHold(tab) => {
+            if matches!(tab, Tab::Session(_, _)) {
+                console.stale.insert(tab);
+            }
+        }
+        Msg::SequenceDropped => {
+            console.pending.clear();
+            console.repeat = None;
+        }
+        Msg::ConsoleSendNext => console.send_next = true,
+        Msg::ConsolePassEveryKey => console.direct = true,
+        Msg::ReadingStarted => console.reading = true,
+        Msg::ReaderQuit => return leave_reading(console),
+        Msg::PromptRuns(runs) => console.prompt_runs = runs,
+        Msg::EditorAnswers => console.answers = true,
+        Msg::InputAsked(tab) => return input_asked(console, tab),
+        Msg::PullLapsed(pull) => return pull_lapsed(console, pull),
+        Msg::InputTaken => console.pull = None,
+        msg => unreachable!("not the console's: {msg:?}"),
+    }
+    Vec::new()
+}
+
+/// Keys meant for one area do not carry over to another: a sequence begun
+/// in the sidebar would otherwise complete as a console binding after a
+/// click there.
+pub(crate) fn keep_to_area(state: &mut ViewState) {
+    let now = (state.content.focus, state.content.active().cloned());
+    let console = &mut state.console;
+    if console.seen.as_ref() == Some(&now) {
+        return;
+    }
+    // Every key passed on goes to the one session it was started for: shown
+    // something else, as when that session ends, they would go where the
+    // user did not choose to type.
+    let shown_before = console.seen.as_ref().map(|(_, shown)| shown);
+    if now.0 != Area::Console || shown_before.is_some_and(|shown| *shown != now.1) {
+        console.direct = false;
+    }
+    console.pending.clear();
+    console.send_next = false;
+    console.seen = Some(now);
+}
+
+/// A list of the sessions drops the inputs kept for those no longer listed.
+pub(crate) fn keep_listed(state: &mut ViewState) {
+    let Some(now) = state
+        .hosts
+        .own()
+        .work
+        .as_ref()
+        .and_then(|w| w.tree.listed.as_deref())
+    else {
+        return;
+    };
+    let console = &mut state.console;
+    if console.listed_seen.as_ref() == Some(now) {
+        return;
+    }
+    console.stale = nav::followed(&now.sessions, &console.stale);
+    console.listed_seen = Some(now.clone());
+}
+
+/// The session shown has a dialog of its agent's own open while the host
+/// last saw one on its screen.
+pub(crate) fn follow_dialog(state: &mut ViewState) {
+    let open = match state.content.active() {
+        Some(Tab::Session(environment, id)) => state
+            .hosts
+            .work(environment)
+            .is_some_and(|work| work.console.dialog_open(id)),
+        _ => false,
+    };
+    if state.console.dialog != open {
+        state.console.dialog = open;
+    }
+}
+
+/// Another tab shown is shown live.
+pub(crate) fn live_when_shown(state: &mut ViewState) {
+    let now = state.content.active().cloned();
+    let console = &mut state.console;
+    if console.read_for.as_ref() == Some(&now) {
+        return;
+    }
+    console.read_for = Some(now);
+    console.reading = false;
+}
+
+/// While every key went to the session, some may have landed in its input
+/// rather than a choice; they are taken back once the keys stop going
+/// there, after the session puts its input line back. A session at work is
+/// asked once it stops instead: its editor opened then would interrupt it.
+pub(crate) fn ask_when_freed(state: &mut ViewState) -> Vec<Effect> {
+    let held = held_from_input(state);
+    let console = &mut state.console;
+    let was = std::mem::replace(&mut console.held, held);
+    if was && !held {
+        return vec![Effect::AskInputAfter(PULL_AFTER_FREE)];
+    }
+    Vec::new()
+}
+
+/// Whether the session shown is not to be asked for its input now: keys go
+/// to it as they are, as it waits on a choice, shows a dialog or the console
+/// passes every key on, or it works.
+fn held_from_input(state: &ViewState) -> bool {
+    let waiting = match state.content.active() {
+        Some(Tab::Session(environment, id)) => state
+            .hosts
+            .session(environment, id)
+            .is_some_and(|(_, s)| s.state.takes_every_key()),
+        _ => false,
+    };
+    waiting || state.console.dialog || state.console.direct || works(state)
+}
+
+/// Whether the session shown is at work.
+fn works(state: &ViewState) -> bool {
+    match state.content.active() {
+        Some(Tab::Session(environment, id)) => state
+            .hosts
+            .session(environment, id)
+            .is_some_and(|(_, s)| s.state == State::Working),
+        _ => false,
+    }
+}

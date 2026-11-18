@@ -1,0 +1,31 @@
+[package]
+name = "tsumugi"
+default-run = "tsumugi"
+description = "A Linux-first workspace for coding agents, terminals and Neovim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["desktop"]
+desktop = ["dep:tsumugi-window"]
+
+[dependencies]
+tsumugi-agents.workspace = true
+tsumugi-host.workspace = true
+tsumugi-connect.workspace = true
+tsumugi-window = { workspace = true, optional = true }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tsumugi-sys.workspace = true
+tsumugi-model.workspace = true
+tsumugi-net.workspace = true
+tsumugi-protocol = { workspace = true, features = ["client"] }
+tsumugi-term.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+

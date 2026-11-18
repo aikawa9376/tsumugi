@@ -1,0 +1,583 @@
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+/// A line that does not hold the message it was read as.
+#[derive(Debug, thiserror::Error)]
+#[error("cannot read the message: {0}")]
+pub struct DecodeError(#[from] serde_json::Error);
+
+/// `message` as one line of JSON, ending in a newline, as it goes on the
+/// wire.
+pub fn encode<T: Serialize>(message: &T) -> String {
+    let mut line =
+        serde_json::to_string(message).expect("a protocol message always serializes to JSON");
+    line.push('\n');
+    line
+}
+
+/// The message one line holds, with or without its newline.
+pub fn decode<T: DeserializeOwned>(line: impl AsRef<str>) -> Result<T, DecodeError> {
+    Ok(serde_json::from_str(line.as_ref().trim_end_matches('\n'))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::path::Path;
+
+    use tsumugi_model::Past;
+    use tsumugi_model::files::Entry;
+    use tsumugi_model::links::Links;
+    use tsumugi_model::repository::Marks;
+    use tsumugi_model::repository::{Listing, Rev, Spot};
+    use tsumugi_model::testing::{session, shell};
+    use tsumugi_model::usage::{Limit, Severity, Window};
+
+    use crate::testing::{listed, patch, snapshot};
+    use crate::{
+        AgentFacts, AgentsWork, Change, Colours, CommandsRead, CommandsSight, Composed,
+        ConfigChange, ConfigFile, ConfigWork, Configured, ConsoleChange, ConsoleWork,
+        ConversationRead, DetailsChange, DetailsWork, Dialog, Event, FileText, HistoryRead, Offers,
+        PastChange, PastSight, PastWork, PickChange, PickSight, PickWork, PlaceChange, PlaceRead,
+        PlaceWork, PromptChange, PromptWork, RepositoryRead, RepositorySight, Request, Seq,
+        SessionRead, Sight, SystemUsage, ThemeKind, ThemeListed, ThemeRead, Told, TreeChange,
+        TreeSight, Typing, Version, WorkSnapshot,
+    };
+
+    fn round_trips<T>(message: T)
+    where
+        T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug,
+    {
+        let line = encode(&message);
+        assert!(line.ends_with('\n'));
+        assert_eq!(line.matches('\n').count(), 1, "one line: {line:?}");
+        assert_eq!(decode::<T>(&line).unwrap(), message);
+    }
+
+    #[test]
+    fn every_request_round_trips() {
+        round_trips(Request::Hello {
+            versions: vec![Version(1), Version(2)],
+        });
+        round_trips(Request::Snapshot);
+        round_trips(Request::Watch(Box::default()));
+        round_trips(Request::ReadAgain);
+        round_trips(Request::Watch(Box::new(Sight {
+            session: Some("s".into()),
+            details: true,
+            overview: true,
+            repositories: vec![RepositorySight {
+                worktree: "/w".into(),
+                spot: Spot::Files(Rev::Commit("abc".into())),
+            }],
+            usage: Some(crate::Account {
+                agent: tsumugi_model::Agent::Codex,
+                home: Some("/w".into()),
+            }),
+            agents: true,
+            system: Some(tsumugi_model::config::UsageSettings {
+                gpu: false,
+                ..Default::default()
+            }),
+            tree: TreeSight {
+                every_worktree: true,
+                marked: BTreeSet::from(["/w".into()]),
+                listed: BTreeSet::from(["/w".into(), "/w/src".into()]),
+                github: BTreeSet::from([("/w".into(), tsumugi_model::github::Listing::Issues)]),
+            },
+            past: Some(PastSight {
+                dir: Some("/w".into()),
+            }),
+            pick: Some(PickSight {
+                listed: BTreeSet::from(["/home".into()]),
+                owners: BTreeSet::from(["aikawa9376".into()]),
+                accounts: true,
+            }),
+            place: Some(crate::HostPath::local("/w")),
+            commands: Some(CommandsSight {
+                agent: tsumugi_model::Agent::Codex,
+                home: Some("/w".into()),
+                dir: "/w".into(),
+            }),
+            terminals: BTreeSet::from([u128::MAX, 7]),
+        })));
+        round_trips(Request::Relist);
+        round_trips(Request::Call {
+            name: "作業".into(),
+        });
+        round_trips(Request::Typed {
+            inputs: BTreeMap::from([(u128::MAX, 1_700_000_000_000)]),
+        });
+        round_trips(Request::TerminalOpened {
+            terminal: shell(u128::MAX - 1, "/w"),
+        });
+        round_trips(Request::TerminalClosed { id: u128::MAX });
+        round_trips(Request::Ask {
+            asked: 9,
+            ask: Box::new(crate::Ask::LoginStanding {
+                profile: "claude-work".parse().unwrap(),
+                after: Some(u128::MAX),
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 10,
+            ask: Box::new(crate::Ask::OpenLogin {
+                profile: "claude".parse().unwrap(),
+                cols: 80,
+                rows: 24,
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 11,
+            ask: Box::new(crate::Ask::DeleteLogin {
+                profile: "claude-work".parse().unwrap(),
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 12,
+            ask: Box::new(crate::Ask::Clone {
+                typed: "git@github.com:o/r.git".into(),
+                cols: 80,
+                rows: 24,
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 13,
+            ask: Box::new(crate::Ask::Cloned {
+                path: "github.com/o/r".into(),
+                after: u128::MAX,
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 12,
+            ask: Box::new(crate::Ask::PullWorktree {
+                repository: "/w".into(),
+                number: 7,
+                title: "修正".into(),
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 13,
+            ask: Box::new(crate::Ask::GitHubThread {
+                repository: "/w".into(),
+                listing: tsumugi_model::github::Listing::Issues,
+                number: 3,
+            }),
+        });
+        round_trips(Request::History {
+            asked: 3,
+            agent: tsumugi_model::Agent::Claude,
+            home: Some("/w".into()),
+            project: "/w".into(),
+        });
+        round_trips(Request::CommandsWanted);
+        round_trips(Request::Redrawn {
+            session: "0a".into(),
+            agent: tsumugi_model::Agent::Codex,
+        });
+        let session = Box::new(session("0a").name("fix").build());
+        round_trips(Request::Stop {
+            session: session.clone(),
+        });
+        round_trips(Request::Kill {
+            session,
+            process: tsumugi_model::Process {
+                pid: 7,
+                ..Default::default()
+            },
+        });
+        round_trips(Request::Rename {
+            id: "0a".into(),
+            name: "fixer".into(),
+            was: "fix".into(),
+            agent: tsumugi_model::Agent::Claude,
+        });
+        round_trips(Request::HandBackName { id: "0a".into() });
+        round_trips(Request::Compose {
+            asked: 4,
+            agent: tsumugi_model::Agent::Codex,
+            text: "look".into(),
+            images: vec!["/p/shot.png".into()],
+        });
+    }
+
+    #[test]
+    fn every_event_round_trips() {
+        round_trips(Event::Welcome {
+            version: Version(1),
+        });
+        round_trips(Event::Refused {
+            versions: vec![Version(3)],
+        });
+        round_trips(Event::Told(Told::Notice {
+            text: "ended fix".into(),
+        }));
+        round_trips(Event::Answer {
+            asked: 13,
+            answer: crate::Answer::Thread {
+                thread: Box::new(tsumugi_model::github::Thread {
+                    state: "open".into(),
+                    body: tsumugi_model::github::Post {
+                        author: "me".into(),
+                        body: "修正 ![a](https://x/a.png)".into(),
+                        ..Default::default()
+                    },
+                    said: vec![tsumugi_model::github::Post {
+                        did: tsumugi_model::github::Did::ChangesRequested,
+                        ..Default::default()
+                    }],
+                    images: vec![tsumugi_model::github::Image {
+                        address: "https://x/a.png".into(),
+                        mime: "image/png".into(),
+                        data: "iVBORw0K".into(),
+                    }],
+                    files: vec![tsumugi_model::github::FileChange {
+                        path: "a.rs".into(),
+                        patch: Some("@@ -1 +1 @@\n-a\n+b".into()),
+                        ..Default::default()
+                    }],
+                    checks: vec![tsumugi_model::github::Check {
+                        name: "lint".into(),
+                        outcome: tsumugi_model::github::Outcome::Failed,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            },
+        });
+        round_trips(Event::Told(Told::Failure {
+            text: "cannot end fix".into(),
+        }));
+        round_trips(Event::Type {
+            session: "0a".into(),
+            typing: vec![Typing::Paste {
+                text: "/rename fixer".into(),
+            }],
+        });
+        round_trips(Event::from(snapshot().seq(7)));
+        round_trips(Event::Snapshot(Box::new(WorkSnapshot {
+            seq: Seq(7),
+            agents: AgentsWork {
+                agents: vec![AgentFacts {
+                    agent: tsumugi_model::Agent::Codex,
+                    program: "codex".into(),
+                    usage_url: Some("https://chatgpt.com/settings/usage".into()),
+                    usage_limits: true,
+                }],
+            },
+            details: DetailsWork {
+                sessions: BTreeMap::from([(
+                    "s".to_string(),
+                    SessionRead {
+                        links: Some(Links::default()),
+                        thumbs: BTreeMap::from([("/w/a.png".to_string(), Some("data:".into()))]),
+                        ..Default::default()
+                    },
+                )]),
+                usage: BTreeMap::from([(
+                    crate::Account {
+                        agent: tsumugi_model::Agent::Claude,
+                        home: Some("/w".into()),
+                    },
+                    Vec::new(),
+                )]),
+                system: Some(SystemUsage::default()),
+                ..Default::default()
+            },
+            tree: Default::default(),
+            past: PastWork {
+                listed: Some((
+                    PastSight::default(),
+                    vec![Past {
+                        agent: tsumugi_model::Agent::Codex,
+                        id: "019f7a4b".into(),
+                        cwd: "/w".into(),
+                        title: "review".into(),
+                        at_ms: 1,
+                        ..Default::default()
+                    }],
+                )),
+            },
+            pick: PickWork {
+                offers: Some(Offers::default()),
+                owned: [("aikawa9376".into(), vec!["tsumugi".into()])].into(),
+                accounts: Some(vec!["aikawa9376".into()]),
+            },
+            place: PlaceWork {
+                read: Some(PlaceRead::default()),
+            },
+            prompt: PromptWork {
+                history: Some(HistoryRead::default()),
+                commands: Some(CommandsRead {
+                    agent: tsumugi_model::Agent::Claude,
+                    home: None,
+                    dir: "/w".into(),
+                    commands: vec![tsumugi_model::Command {
+                        name: "compact".into(),
+                        description: "Clear history but keep a summary".into(),
+                        argument_hint: String::new(),
+                    }],
+                }),
+                composed: Some(Composed::default()),
+            },
+            config: ConfigWork {
+                settings: Some(ConfigFile::default()),
+                keys: None,
+                configured: Some(Configured {
+                    scratch: "/s".into(),
+                    theme: ThemeRead {
+                        name: "Mine".into(),
+                        colours: Colours::Theme {
+                            text: "background = #010203\n".into(),
+                        },
+                    },
+                    themes: vec![ThemeListed {
+                        name: "Mine".into(),
+                        kind: ThemeKind::Light,
+                    }],
+                    system: ThemeKind::Light,
+                    themes_dir: "/c/themes".into(),
+                    login_shell: "/bin/zsh".into(),
+                    home: "/home/me".into(),
+                }),
+            },
+            console: ConsoleWork {
+                dialog: Some(Dialog {
+                    session: "0a".into(),
+                    open: false,
+                }),
+            },
+        })));
+        round_trips(Event::from(patch(8)));
+        let details = |change| Change::Details(change);
+        round_trips(Event::from(
+            patch(9).changes([
+                details(DetailsChange::Conversation {
+                    session: "s".into(),
+                    conversation: ConversationRead::default(),
+                }),
+                details(DetailsChange::Repository {
+                    worktree: "/w".into(),
+                    read: RepositoryRead {
+                        spot: Spot::Log,
+                        listing: Err("not a repository".into()),
+                        revision: None,
+                    },
+                }),
+                details(DetailsChange::Repository {
+                    worktree: "/w".into(),
+                    read: RepositoryRead {
+                        spot: Spot::Log,
+                        listing: Ok(Listing::Log(Vec::new())),
+                        revision: None,
+                    },
+                }),
+                details(DetailsChange::Usage {
+                    account: crate::Account {
+                        agent: tsumugi_model::Agent::Claude,
+                        home: Some("/w".into()),
+                    },
+                    limits: vec![Limit {
+                        window: Window::WeekOf("Opus".into()),
+                        percent: 12.5,
+                        resets_ms: Some(1),
+                        severity: Severity::Warning,
+                    }],
+                }),
+                details(DetailsChange::SessionLeft {
+                    session: "s".into(),
+                }),
+                Change::Tree(TreeChange::Listed {
+                    listed: Box::new(
+                        listed()
+                            .session(session("s").cwd("/w"))
+                            .terminal(shell(u128::MAX, "/w/src"))
+                            .build(),
+                    ),
+                }),
+                Change::Tree(TreeChange::Failing {
+                    error: Some("no daemon".into()),
+                }),
+                Change::Tree(TreeChange::Marks {
+                    worktree: "/w".into(),
+                    marks: Marks::new(
+                        Path::new("/w"),
+                        &[tsumugi_model::repository::Change {
+                            status: " M".into(),
+                            path: "a.rs".into(),
+                            from: None,
+                        }],
+                        &["target/".into()],
+                        false,
+                    ),
+                }),
+                Change::Tree(TreeChange::Entries {
+                    dir: "/w".into(),
+                    entries: vec![Entry {
+                        path: "/w/a.rs".into(),
+                        dir: false,
+                    }],
+                }),
+                Change::Tree(TreeChange::EntriesLeft { dir: "/w".into() }),
+                Change::Tree(TreeChange::GitHub {
+                    repository: "/w".into(),
+                    github: Some(Box::new(tsumugi_model::github::Repository {
+                        slug: "o/r".into(),
+                        pulls: Some(Ok(vec![tsumugi_model::github::Item {
+                            number: 1,
+                            title: "Draft".into(),
+                            url: "https://github.com/o/r/pull/1".into(),
+                            author: "me".into(),
+                            draft: true,
+                            created_at: "2026-11-01T00:00:00Z".into(),
+                            labels: vec![tsumugi_model::github::Label {
+                                name: "bug".into(),
+                                color: "d73a4a".into(),
+                            }],
+                            pull: Some(tsumugi_model::github::Pull {
+                                head: "fix".into(),
+                                base: "main".into(),
+                                review: Some(tsumugi_model::github::Review::Approved),
+                                checks: tsumugi_model::github::Checks {
+                                    failed: 1,
+                                    failing: vec!["lint".into()],
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }])),
+                        issues: Some(Err("gh is not logged in".into())),
+                        open: Some(tsumugi_model::github::Counts {
+                            pulls: 1,
+                            issues: 40,
+                        }),
+                    })),
+                }),
+                Change::Tree(TreeChange::GitHub {
+                    repository: "/v".into(),
+                    github: None,
+                }),
+                Change::Config(ConfigChange::Settings {
+                    file: ConfigFile {
+                        path: "/c/settings.toml".into(),
+                        text: FileText::Read {
+                            text: "zoom = 1.25\n".into(),
+                        },
+                    },
+                }),
+                Change::Config(ConfigChange::Keys {
+                    file: ConfigFile {
+                        path: "/c/keys.toml".into(),
+                        text: FileText::Unreadable {
+                            error: "denied".into(),
+                        },
+                    },
+                }),
+                Change::Config(ConfigChange::Keys {
+                    file: ConfigFile::default(),
+                }),
+                Change::Tree(TreeChange::MarksLeft {
+                    worktree: "/w".into(),
+                }),
+                Change::Past(PastChange::Listed {
+                    sight: PastSight {
+                        dir: Some("/w".into()),
+                    },
+                    conversations: Vec::new(),
+                }),
+                Change::Past(PastChange::Left),
+                Change::Pick(PickChange::Offers {
+                    offers: Offers {
+                        recent: vec!["/w".into()],
+                        ghq: vec!["/g/r".into()],
+                        clones: true,
+                        listed: vec!["/l/a".into()],
+                        roots: vec!["/g".into(), "/l".into()],
+                    },
+                }),
+                Change::Pick(PickChange::Left),
+                Change::Place(PlaceChange::Read {
+                    read: PlaceRead {
+                        worktree: crate::HostPath::local("/w"),
+                        files: vec!["src/a.rs".into()],
+                        jj: true,
+                    },
+                }),
+                Change::Place(PlaceChange::Left),
+                Change::Prompt(PromptChange::History {
+                    read: HistoryRead {
+                        asked: 1,
+                        project: "/w".into(),
+                        sent: vec!["fix".into()],
+                    },
+                }),
+                Change::Prompt(PromptChange::Commands {
+                    read: CommandsRead {
+                        agent: tsumugi_model::Agent::Codex,
+                        home: None,
+                        dir: "/w".into(),
+                        commands: Vec::new(),
+                    },
+                }),
+                Change::Console(ConsoleChange::Dialog {
+                    dialog: Dialog {
+                        session: "0a".into(),
+                        open: true,
+                    },
+                }),
+                Change::Prompt(PromptChange::Composed {
+                    composed: Composed {
+                        asked: 4,
+                        shell: true,
+                        image_missing: false,
+                        typing: vec![
+                            Typing::Text { text: "!".into() },
+                            Typing::Pause { ms: 40 },
+                            Typing::Paste { text: "ls".into() },
+                            Typing::Key {
+                                name: "Enter".into(),
+                            },
+                        ],
+                    },
+                }),
+            ]),
+        ));
+    }
+
+    #[test]
+    fn the_handshake_reads_the_same_in_every_version() {
+        // A peer reads the handshake before it knows which version the other
+        // speaks, so its shape must never change.
+        let cases = [
+            (
+                encode(&Request::Hello {
+                    versions: vec![Version(1)],
+                }),
+                "{\"type\":\"hello\",\"versions\":[1]}\n",
+            ),
+            (
+                encode(&Event::Welcome {
+                    version: Version(1),
+                }),
+                "{\"type\":\"welcome\",\"version\":1}\n",
+            ),
+            (
+                encode(&Event::Refused {
+                    versions: vec![Version(2)],
+                }),
+                "{\"type\":\"refused\",\"versions\":[2]}\n",
+            ),
+        ];
+        for (line, want) in cases {
+            assert_eq!(line, want);
+        }
+    }
+
+    #[test]
+    fn a_line_that_is_not_a_message_is_an_error() {
+        assert!(decode::<Request>("{\"type\":\"no_such\"}").is_err());
+        assert!(decode::<Event>("not json").is_err());
+    }
+}

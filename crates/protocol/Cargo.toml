@@ -1,0 +1,26 @@
+[package]
+name = "tsumugi-protocol"
+description = "What the window and the work host say to each other: requests, events, the work they describe, and the versions they speak"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tsumugi-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tsumugi-sys = { workspace = true, optional = true }
+felis-transport = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+tsumugi-model = { workspace = true, features = ["testing"] }
+
+[features]
+# The asking side of the work host's socket.
+client = ["dep:tsumugi-sys", "dep:felis-transport", "dep:tokio"]
+# Builders for the host's words tests feed a window, for other crates' tests.
+testing = ["tsumugi-model/testing"]

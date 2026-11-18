@@ -1,0 +1,233 @@
+//! The content's panel: the tabs bar over the shown tab's windows, each
+//! where its share of the content puts it, and the borders between them.
+
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+
+use crate::shell::Ui;
+use crate::themes;
+use dioxus::prelude::*;
+use tsumugi_core::completion::Completions;
+use tsumugi_core::msg::Msg;
+use tsumugi_core::tree as tree_view;
+
+use super::bodies::{DrawnWindow, FocusedBody, GitHubWindow, UnfocusedBody, ViewerWindow};
+use super::tabs_bar::TabsBar;
+use super::window::{ContentWindow, WindowBorder, WindowDrop, window_strip};
+use crate::actions::Action;
+use crate::bridge::AppCtx;
+use crate::content::{Dir, DropAt, Tab, WindowId, thing_name};
+use crate::pictures::Gallery;
+use crate::viewers;
+use tsumugi_core::overlay::context_menu::Target;
+
+/// The panel, drawn `focused` while the console or the prompt has the keys.
+/// The focused window shows its console and the prompt under its strip, the
+/// whole panel's body while nothing is open; the other windows draw their
+/// programs at the sizes they put in `boxes`.
+#[component]
+pub(crate) fn ContentPanel(
+    focused: bool,
+    viewer_command: ReadSignal<Option<(WindowId, viewers::Command)>>,
+    /// The images the consoles drew, which a drawn image's window shows.
+    gallery: ReadSignal<Gallery>,
+    completions: ReadSignal<Completions>,
+    drafted: ReadSignal<HashSet<Tab>>,
+    boxes: Signal<HashMap<WindowId, (f64, f64)>>,
+    frame: Signal<u64>,
+    cell_width: f64,
+    background: String,
+    /// A tab's close button was pressed, after its tab was shown.
+    ontabclose: EventHandler<Target>,
+) -> Element {
+    let app = use_context::<AppCtx>();
+    // How each document was left in each window, to read on from there.
+    let left_at = use_signal(viewers::LeftAt::new);
+    // A document is painted in the colours of the theme in force.
+    let palette = use_context::<Ui>().hub.palette;
+    let theme = use_memo(move || themes::document(&palette.read()));
+    // How large the content's windows are drawn, which a border's drag is
+    // measured against.
+    let mut drawn = use_signal(|| (0.0f64, 0.0f64));
+    let (windows, marked_window, moving) = {
+        let content = app.content.read();
+        (
+            content.windows.clone(),
+            content.marked_window(),
+            content.moving.clone(),
+        )
+    };
+    let focused_window = windows.focused_window();
+    // What is dragged, by its name, beside the pointer: a tab by what its
+    // focused window shows and how many windows go with it.
+    let ghost = moving.as_ref().filter(|m| m.dragging).and_then(|m| {
+        let shows = windows.shows(m.window)?;
+        let hosts = app.hosts.read();
+        let work = hosts.work(shows.environment());
+        let name = tree_view::github_title(work, shows).unwrap_or_else(|| {
+            thing_name(tree_view::listed(work), tree_view::terminals(work), shows)
+        });
+        let more = m
+            .tab
+            .and_then(|at| windows.tabs().get(at))
+            .map_or(0, |t| t.windows().len().saturating_sub(1));
+        let label = if more > 0 {
+            format!("{name} +{more}")
+        } else {
+            name
+        };
+        let style = format!("left:{}px;top:{}px", m.at.0 + 14.0, m.at.1 + 10.0);
+        Some((label, style))
+    });
+    let windows_el: Vec<Element> = match windows.current() {
+        None => vec![rsx! { FocusedBody {} }],
+        Some(tab) => {
+            let hosts = app.hosts.read();
+            let mut out = Vec::new();
+            for (id, r) in tab.rects() {
+                let Some(shows) = windows.shows(id).cloned() else {
+                    continue;
+                };
+                let work = hosts.work(shows.environment());
+                let (t, terms) = (tree_view::listed(work), tree_view::terminals(work));
+                let focused = Some(id) == focused_window;
+                let marked = Some(id) == marked_window;
+                let settings = &app.config.read().settings;
+                let title = tree_view::github_title(work, &shows);
+                let strip = window_strip(t, terms, &completions.read(), settings, &shows, title);
+                // A viewer is drawn the same focused or not, so it keeps its
+                // zoom, page and playback as the focus moves.
+                let body = if let Tab::Viewer(environment, path) = &shows {
+                    let environment = environment.clone();
+                    // A document shows images from the worktree it is in,
+                    // or else from its own folder.
+                    let root = tree_view::place_of_tab(t, terms, &shows)
+                        .map(|p| p.worktree)
+                        .or_else(|| path.parent().map(PathBuf::from))
+                        .unwrap_or_default();
+                    rsx! {
+                        ViewerWindow {
+                            key: "{id}",
+                            window: id,
+                            path: path.clone(),
+                            root,
+                            theme,
+                            left_at,
+                            commands: viewer_command,
+                            on_close: move |_| app.dispatch(Msg::Window(Action::WindowQuit)),
+                            on_link: move |file| {
+                                app.dispatch(Msg::OpenFile(environment.clone(), file))
+                            },
+                        }
+                    }
+                } else if let Tab::GitHub {
+                    environment,
+                    repository,
+                    listing,
+                    number,
+                } = &shows
+                {
+                    rsx! {
+                        GitHubWindow {
+                            key: "{id}",
+                            window: id,
+                            environment: environment.clone(),
+                            repository: repository.clone(),
+                            listing: *listing,
+                            number: *number,
+                            theme,
+                            commands: viewer_command,
+                            on_close: move |_| app.dispatch(Msg::Window(Action::WindowQuit)),
+                        }
+                    }
+                } else if let Tab::Drawn {
+                    environment,
+                    session,
+                    id: image,
+                    ..
+                } = &shows
+                {
+                    rsx! {
+                        DrawnWindow {
+                            key: "{id}",
+                            window: id,
+                            environment: environment.clone(),
+                            session: session.clone(),
+                            id: *image,
+                            name: thing_name(t, terms, &shows),
+                            gallery,
+                            commands: viewer_command,
+                            on_close: move |_| app.dispatch(Msg::Window(Action::WindowQuit)),
+                        }
+                    }
+                } else if focused {
+                    rsx! { FocusedBody {} }
+                } else {
+                    rsx! {
+                        UnfocusedBody { id, shows, background: background.clone(), frame, cell_width, boxes }
+                    }
+                };
+                out.push(rsx! {
+                    ContentWindow { key: "{id}", id, r, marked, strip, body }
+                });
+            }
+            for b in tab.borders() {
+                let key = format!("border-{:?}-{}", b.split, b.after);
+                out.push(rsx! {
+                    WindowBorder { key: "{key}", border: b, drawn }
+                });
+            }
+            if let Some(moving) = moving.filter(|m| m.dragging) {
+                // The tab shown, dragged onto a window of its own, goes to
+                // that side of the whole tab it would merge into.
+                let whole = moving.tab == Some(windows.current_index());
+                for (id, r) in tab.rects() {
+                    let over = match moving.over {
+                        Some(DropAt::Side(w, side)) if w == id && !whole => Some(side),
+                        _ => None,
+                    };
+                    out.push(rsx! {
+                        WindowDrop { key: "drop-{id}", id, r, drawn, over }
+                    });
+                }
+                if let (true, Some(DropAt::Side(_, side))) = (whole, moving.over) {
+                    let class = format!("win-drop-side {}", side_class(side));
+                    out.push(rsx! {
+                        div { key: "drop-whole-{side_class(side)}", class: "win-drop-whole",
+                            div { class }
+                        }
+                    });
+                }
+            }
+            out
+        }
+    };
+    rsx! {
+        div { class: if focused { "app-panel center-panel focused" } else { "app-panel center-panel" },
+            onmousedown: move |_| app.dispatch(Msg::Focus(crate::content::Area::Console)),
+            TabsBar { completions, drafted, onclose: ontabclose }
+            div { class: "content-windows",
+                onresize: move |e: Event<ResizeData>| {
+                    e.stop_propagation();
+                    if let Ok(sz) = e.data().get_content_box_size() {
+                        drawn.set((sz.width, sz.height));
+                    }
+                },
+                for w in windows_el { {w} }
+            }
+            if let Some((label, style)) = ghost {
+                div { class: "drag-ghost", style: "{style}", "{label}" }
+            }
+        }
+    }
+}
+
+/// The class naming the side a window would drop onto.
+pub(super) fn side_class(side: Dir) -> &'static str {
+    match side {
+        Dir::Left => "left",
+        Dir::Right => "right",
+        Dir::Up => "up",
+        Dir::Down => "down",
+    }
+}

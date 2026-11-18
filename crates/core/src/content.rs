@@ -1,0 +1,700 @@
+//! The content as the window holds it: its tabs and the windows they split
+//! into, what each window shows, the worktree in the middle, which area has
+//! the keys, and the options a draft starts with.
+
+pub mod draft;
+mod editing;
+mod focus;
+mod layout;
+mod listing;
+mod moving;
+mod naming;
+mod tab;
+mod windows;
+
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::PathBuf;
+
+use tsumugi_model::profile::{AgentProfile, ProfileId};
+use tsumugi_model::{Agent, EnvironmentId, TerminalProgram, Tree};
+use tsumugi_protocol::{Seq, WorkSnapshot};
+
+use crate::chrome::panels::layout::Layout;
+use crate::effect::Effect;
+use crate::tree::Place;
+
+pub(crate) use editing::*;
+pub use focus::*;
+pub use layout::*;
+pub(crate) use listing::{listed, tell_live};
+pub use listing::{newly_waiting, waits_to_come_back};
+pub use moving::*;
+pub use naming::*;
+pub use tab::*;
+pub(crate) use windows::*;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContentView {
+    /// The tabs, each split into windows that each show one thing.
+    pub windows: Content<Tab>,
+    /// The worktree, or the directory outside git, the middle is of.
+    pub place: Option<Place>,
+    /// The area that has the keys.
+    pub focus: Area,
+    /// Where the keys were before where they are now.
+    pub came_from: Option<Spot>,
+    /// The session last shown in each workspace, by its root, which the
+    /// next workspace's session goes back to.
+    pub last_shown: HashMap<PathBuf, String>,
+    /// A border between windows being dragged.
+    pub drag: Option<WindowDrag>,
+    /// A window being dragged with the mouse, to move it.
+    pub moving: Option<WindowMove>,
+    pub drafts: Drafts,
+    /// Where a session started with nothing open runs.
+    scratch: PathBuf,
+    /// Where the keys are.
+    spot: Spot,
+    /// The content as the window last closed, until each environment's
+    /// first listing gave its tabs their chance to come back.
+    restore: Option<listing::Restore>,
+    /// Whether the first listing was looked at, and so whether what is shown
+    /// is kept for the next run and what starts waiting is told of.
+    pub restored: bool,
+    /// Each environment's tree as last looked at, against which its next
+    /// listing is.
+    looked_at: BTreeMap<EnvironmentId, Tree>,
+    /// What each environment's listing was last looked at with.
+    looked: BTreeMap<EnvironmentId, (Seq, BTreeSet<String>)>,
+    /// The names of the sessions shown that their listing no longer lists
+    /// but that stay live here, to say they ended once they stop being live.
+    unlisted: BTreeMap<(EnvironmentId, String), String>,
+    /// The sessions shown live here, or being attached to: one started a
+    /// moment ago may not be listed yet.
+    live: BTreeSet<(EnvironmentId, String)>,
+    /// What the content kept was last made to say.
+    kept: Option<Kept<String>>,
+    /// The tab the place last followed.
+    placed_for: Option<Tab>,
+    /// The tab the focus last settled for.
+    settled_for: Option<Tab>,
+    /// Whether each side panel was shown when last looked at.
+    panels_seen: Option<(bool, bool)>,
+    /// The documents switched between their viewer and a Neovim.
+    editing: editing::Editing,
+}
+
+impl Default for ContentView {
+    fn default() -> Self {
+        Self {
+            windows: Content::default(),
+            place: None,
+            focus: Area::Sidebar,
+            came_from: None,
+            last_shown: HashMap::new(),
+            drag: None,
+            moving: None,
+            drafts: Drafts::default(),
+            scratch: PathBuf::new(),
+            spot: Spot::SIDEBAR,
+            restore: None,
+            restored: false,
+            looked_at: BTreeMap::new(),
+            looked: BTreeMap::new(),
+            unlisted: BTreeMap::new(),
+            live: BTreeSet::new(),
+            kept: None,
+            placed_for: None,
+            settled_for: None,
+            panels_seen: None,
+            editing: editing::Editing::default(),
+        }
+    }
+}
+
+/// The options chosen for each draft shown, those chosen with nothing open
+/// for the next draft, and the profile last chosen.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Drafts {
+    pub options: HashMap<Tab, DraftOptions>,
+    pub next: Option<DraftOptions>,
+    pub last_profile: Option<ProfileId>,
+}
+
+impl Drafts {
+    /// The agent the prompt written for `tab` goes to, as `settings` say: a
+    /// session's own, else that of the profile it would start from.
+    pub fn agent_of(
+        &self,
+        tree: &Tree,
+        tab: Option<&Tab>,
+        settings: &crate::settings::Settings,
+    ) -> Agent {
+        if let Some(Tab::Session(_, id)) = tab
+            && let Some((_, session)) = crate::tree::nav::find(tree, id)
+        {
+            return session.agent;
+        }
+        let profile = self.profile_of(tree, tab, settings);
+        settings
+            .find_profile(&profile)
+            .map_or_else(|| settings.default_agent(), |p| p.agent())
+    }
+
+    /// The profile the prompt written for `tab` goes to, as `settings` say: a
+    /// session's own; for a draft, or with nothing open, the one chosen for
+    /// it, else the one last chosen, while a session can start from either,
+    /// else the default profile.
+    pub fn profile_of(
+        &self,
+        tree: &Tree,
+        tab: Option<&Tab>,
+        settings: &crate::settings::Settings,
+    ) -> ProfileId {
+        if let Some(Tab::Session(_, id)) = tab
+            && let Some((_, session)) = crate::tree::nav::find(tree, id)
+        {
+            return session.profile.clone();
+        }
+        let chosen = match tab {
+            Some(draft @ Tab::Draft { .. }) => self.options.get(draft),
+            None => self.next.as_ref(),
+            Some(_) => None,
+        }
+        .and_then(|options| options.profile.clone())
+        .or_else(|| self.last_profile.clone());
+        draft::profile_for(settings, chosen.as_ref())
+    }
+}
+
+/// The environment of what the middle shows: that of the focused window's
+/// tab, or of the worktree in the middle with nothing open, or else the
+/// window's own.
+pub fn shown_environment(state: &crate::state::ViewState) -> EnvironmentId {
+    shown_environment_of(&state.content, &state.hosts)
+}
+
+/// The environment of what `content` shows in the middle, as
+/// [`shown_environment`] says, `hosts` naming the window's own.
+pub fn shown_environment_of(content: &ContentView, hosts: &crate::host::Hosts) -> EnvironmentId {
+    match (content.active(), &content.place) {
+        (Some(tab), _) => tab.environment().clone(),
+        (None, Some(place)) => place.environment.clone(),
+        (None, None) => hosts.environment.clone(),
+    }
+}
+
+/// The environment the user is at: that of the row selected while the tree
+/// has the keys, or else of what the middle shows.
+pub fn focused_environment(state: &crate::state::ViewState) -> EnvironmentId {
+    match &state.tree.selected {
+        Some(row) if state.content.focus == Area::Sidebar => row.environment().clone(),
+        _ => shown_environment(state),
+    }
+}
+
+/// The agent the prompt of `tab` goes to; see [`Drafts::agent_of`].
+pub fn agent_of(state: &crate::state::ViewState, tab: Option<&Tab>) -> Agent {
+    let tree = crate::tree::listed(state.hosts.work(state.hosts.environment_of(tab)));
+    state
+        .content
+        .drafts
+        .agent_of(tree, tab, &state.config.settings)
+}
+
+/// The profile the prompt of `tab` goes to; see [`Drafts::profile_of`].
+pub fn profile_of(state: &crate::state::ViewState, tab: Option<&Tab>) -> ProfileId {
+    let tree = crate::tree::listed(state.hosts.work(state.hosts.environment_of(tab)));
+    state
+        .content
+        .drafts
+        .profile_of(tree, tab, &state.config.settings)
+}
+
+/// The folder of the login the prompt of `tab` goes to, none for its agent's
+/// own environment: a session's own, else the one the profile it would start
+/// from runs in.
+pub fn home_of(state: &crate::state::ViewState, tab: Option<&Tab>) -> Option<std::path::PathBuf> {
+    let tree = crate::tree::listed(state.hosts.work(state.hosts.environment_of(tab)));
+    if let Some(Tab::Session(_, id)) = tab
+        && let Some((_, session)) = crate::tree::nav::find(tree, id)
+    {
+        return session.home.clone();
+    }
+    state
+        .config
+        .settings
+        .find_profile(&profile_of(state, tab))
+        .and_then(|p| p.home.clone())
+}
+
+/// A border between windows being dragged: where the pointer was pressed,
+/// along the border's axis, and how long the split it divides is drawn.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WindowDrag {
+    pub border: Border,
+    pub from: f64,
+    pub px: f64,
+}
+
+/// What the content's focused window shows, and the worktree it is in.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Showing {
+    pub tab: Option<Tab>,
+    pub place: Option<Place>,
+}
+
+/// A shell or a Neovim to start: where, on which file, in which window, and
+/// whether the keys move to it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerminalAsk {
+    pub place: Place,
+    pub runs: TerminalProgram,
+    pub file: Option<PathBuf>,
+    pub opening: Opening,
+    pub focus: bool,
+}
+
+impl ContentView {
+    /// What the focused window shows.
+    pub fn active(&self) -> Option<&Tab> {
+        self.windows.focused()
+    }
+
+    /// The window drawn as having the keys: the focused window, while the
+    /// keys are in its console or prompt rather than in a side panel.
+    pub fn marked_window(&self) -> Option<WindowId> {
+        match self.focus {
+            Area::Console | Area::Prompt => self.windows.focused_window(),
+            Area::Sidebar | Area::Details => None,
+        }
+    }
+
+    pub fn showing(&self) -> Showing {
+        Showing {
+            tab: self.active().cloned(),
+            place: self.place.clone(),
+        }
+    }
+
+    /// The worktree the details describe and the header names: the one in
+    /// the middle, while a window shows something there.
+    pub fn described(&self) -> Option<&Place> {
+        self.place.as_ref().filter(|_| self.active().is_some())
+    }
+
+    /// Where a session started with nothing open runs.
+    pub fn scratch(&self) -> &std::path::Path {
+        &self.scratch
+    }
+}
+
+/// The window opened, with the content as it last closed and where a
+/// scratch session runs.
+pub(crate) fn opened(view: &mut ContentView, kept: Kept<String>, scratch: PathBuf) -> Vec<Effect> {
+    view.restore = Some(listing::Restore::new(kept));
+    view.scratch = scratch;
+    // A host that lists the sessions already may have told them before the
+    // window opened; the listing is looked at again for the content kept.
+    view.looked.clear();
+    Vec::new()
+}
+
+pub(crate) fn focus(view: &mut ContentView, area: Area) -> Vec<Effect> {
+    view.focus = area;
+    Vec::new()
+}
+
+/// Show `thing` where the user is, or as `how` says, in the worktree
+/// `place` when one is given.
+pub(crate) fn show(
+    view: &mut ContentView,
+    thing: Tab,
+    place: Option<Place>,
+    how: Option<Opening>,
+    local: bool,
+) -> Vec<Effect> {
+    if matches!(thing, Tab::Viewer(..)) && !local {
+        return vec![Effect::Notice(REMOTE_PREVIEW.into())];
+    }
+    if place.is_some() {
+        view.place = place;
+    }
+    match how {
+        Some(how) => {
+            let how = started_in(view, how);
+            view.windows.open_in(thing, how)
+        }
+        None => view.windows.open(thing),
+    }
+    Vec::new()
+}
+
+/// What the window says when a viewer is asked for a file of a work machine.
+pub(crate) const REMOTE_PREVIEW: &str = "Remote file previews are unavailable";
+
+/// A new session's draft in `worktree` of `environment`, with the options
+/// chosen for the next one.
+pub(crate) fn draft_at(
+    view: &mut ContentView,
+    environment: EnvironmentId,
+    worktree: PathBuf,
+) -> Tab {
+    let draft = Tab::draft(environment, worktree);
+    view.drafts.options.insert(
+        draft.clone(),
+        DraftOptions::for_new_draft(&mut view.drafts.next),
+    );
+    draft
+}
+
+/// A new session's draft shown in `worktree`, which the middle is then of;
+/// `write` gives the keys to the prompt to write its first prompt.
+pub(crate) fn draft(
+    view: &mut ContentView,
+    environment: EnvironmentId,
+    worktree: PathBuf,
+    write: bool,
+) -> Vec<Effect> {
+    view.place = Some(Place::at(&environment, worktree.clone()));
+    let draft = draft_at(view, environment, worktree);
+    view.windows.open(draft);
+    if write {
+        view.focus = Area::Prompt;
+        return vec![Effect::StartWriting];
+    }
+    Vec::new()
+}
+
+/// `from` shows as `to` in every window, as a draft does once it starts.
+pub(crate) fn replace(view: &mut ContentView, from: &Tab, to: Tab) -> Vec<Effect> {
+    view.windows.replace(from, to);
+    Vec::new()
+}
+
+/// Close windows by `f`. The prompt's text for a draft no window shows any
+/// longer goes to what the focused window shows next, or to nothing open
+/// when that has no prompt.
+pub(crate) fn closing(view: &mut ContentView, f: impl FnOnce(&mut Content<Tab>)) -> Vec<Effect> {
+    let was = view.active().cloned();
+    f(&mut view.windows);
+    match was {
+        Some(draft @ Tab::Draft { .. }) if !view.windows.shows_anywhere(&draft) => {
+            // A shell has no prompt to take it; it waits with nothing open.
+            let to = view.active().cloned().filter(|t| shows_prompt(Some(t)));
+            vec![Effect::PromptClose(to)]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Close every window showing what `gone` says is gone, and show `after`
+/// once nothing is left open; whether the focused window now shows
+/// something else.
+pub(crate) fn close_showing(
+    view: &mut ContentView,
+    gone: impl Fn(&Tab) -> bool,
+    after: Option<Tab>,
+) -> bool {
+    let was = view.active().cloned();
+    view.windows.close_showing(gone);
+    if view.windows.is_empty()
+        && let Some(next) = after
+    {
+        view.windows.open(next);
+    }
+    view.active() != was.as_ref()
+}
+
+/// The window no longer shows `environment`: the windows showing anything
+/// of it close, and what was looked at of its listing is forgotten.
+pub(crate) fn forget_environment(view: &mut ContentView, environment: &EnvironmentId) {
+    close_showing(view, |t| t.environment() == environment, None);
+    view.looked.remove(environment);
+    view.looked_at.remove(environment);
+    view.unlisted.retain(|(e, _), _| e != environment);
+    view.live.retain(|(e, _)| e != environment);
+    if view
+        .place
+        .as_ref()
+        .is_some_and(|p| p.environment == *environment)
+    {
+        view.place = None;
+    }
+}
+
+/// The shell `id` of `environment` closed: its windows close, and another
+/// thing of its worktree shows if no window is left. The prompt's text goes
+/// with the focus, as when a draft's tab closes.
+pub(crate) fn shell_closed(
+    view: &mut ContentView,
+    environment: &EnvironmentId,
+    work: Option<&WorkSnapshot>,
+    id: u128,
+) -> Vec<Effect> {
+    let shell = Tab::Terminal(environment.clone(), id);
+    if !view.windows.shows_anywhere(&shell) {
+        return Vec::new();
+    }
+    // The host's list holds the shell until it is told it closed.
+    let next = view.place.as_ref().and_then(|p| {
+        let left: Vec<u128> = crate::tree::terminals(work)
+            .iter()
+            .filter(|s| s.id != id && s.cwd == p.worktree)
+            .map(|s| s.id)
+            .collect();
+        crate::tree::nav::tab_after_closing(environment, crate::tree::listed(work), p, &left)
+    });
+    if close_showing(view, |t| *t == shell, next) {
+        return vec![Effect::PromptClose(view.active().cloned())];
+    }
+    Vec::new()
+}
+
+pub(crate) fn drag_start(
+    view: &mut ContentView,
+    border: Border,
+    from: f64,
+    px: f64,
+) -> Vec<Effect> {
+    if px > 0.0 {
+        view.drag = Some(WindowDrag { border, from, px });
+    }
+    Vec::new()
+}
+
+/// The pointer, dragging a border, moved to `pos` along its axis.
+pub(crate) fn drag_move(view: &mut ContentView, pos: f64) -> Vec<Effect> {
+    if let Some(d) = view.drag.clone() {
+        let to = d.border.at + (pos - d.from) / d.px;
+        view.windows.drag(&d.border.split, d.border.after, to);
+    }
+    Vec::new()
+}
+
+/// The pointer pressed the window `window` at `at`, to drag it, by the tab
+/// at `tab` among the tabs if by a tab.
+pub(crate) fn move_start(
+    view: &mut ContentView,
+    window: WindowId,
+    tab: Option<usize>,
+    at: (f64, f64),
+) -> Vec<Effect> {
+    view.moving = Some(WindowMove::new(window, tab, at));
+    Vec::new()
+}
+
+/// The pointer, pressing a window, moved to `at`, over `over`; held over a
+/// tab while dragging, it shows that tab.
+pub(crate) fn move_over(
+    view: &mut ContentView,
+    at: (f64, f64),
+    over: Option<DropAt>,
+) -> Vec<Effect> {
+    let Some(moving) = view.moving.as_mut() else {
+        return Vec::new();
+    };
+    moving.point(at, over);
+    if let Some(DropAt::Tab(tab)) = moving.over
+        && tab != view.windows.current_index()
+    {
+        view.windows.go_to_tab(tab);
+    }
+    Vec::new()
+}
+
+/// The pointer let a window go, or left the window: it moves where it was
+/// dropped, if anywhere.
+pub(crate) fn move_end(view: &mut ContentView) -> Vec<Effect> {
+    if let Some(moving) = view.moving.take() {
+        view.windows.drop_moved(&moving);
+    }
+    Vec::new()
+}
+
+pub(crate) fn drag_end(view: &mut ContentView) -> Vec<Effect> {
+    view.drag = None;
+    Vec::new()
+}
+
+/// The options chosen for the draft `tab`, or for the next draft with none.
+fn options_of(view: &ContentView, tab: Option<&Tab>) -> DraftOptions {
+    match tab {
+        Some(tab) => view.drafts.options.get(tab).cloned(),
+        None => view.drafts.next.clone(),
+    }
+    .unwrap_or_default()
+}
+
+/// The profile `profile` chosen for the draft `tab`, or for the next draft
+/// with none, which ran `from`; it is the one later drafts start from while
+/// the window is open. What to tell of the options that do not carry over
+/// to its agent.
+pub(crate) fn choose_profile(
+    view: &mut ContentView,
+    tab: Option<Tab>,
+    profile: &AgentProfile,
+    from: Agent,
+) -> Option<String> {
+    if !draft::can_choose(tab.as_ref()) {
+        return None;
+    }
+    let agent = profile.agent();
+    let (options, told) = draft::carried(
+        &options_of(view, tab.as_ref()),
+        from,
+        agent,
+        profile.label(),
+    );
+    choose_options(
+        view,
+        tab,
+        DraftOptions {
+            profile: Some(profile.id.clone()),
+            ..options
+        },
+    );
+    view.drafts.last_profile = Some(profile.id.clone());
+    told
+}
+
+/// The options chosen for the draft `tab`, or for the next draft with none.
+pub(crate) fn choose_options(
+    view: &mut ContentView,
+    tab: Option<Tab>,
+    options: DraftOptions,
+) -> Vec<Effect> {
+    match tab {
+        Some(tab) => {
+            view.drafts.options.insert(tab, options);
+        }
+        None => view.drafts.next = Some(options),
+    }
+    Vec::new()
+}
+
+/// The worktree in the middle follows what the focused window shows, however
+/// the focus came to it.
+pub(crate) fn follow_place(view: &mut ContentView, work: Option<&WorkSnapshot>) {
+    let now = view.active().cloned();
+    if now == view.placed_for {
+        return;
+    }
+    view.placed_for = now.clone();
+    let Some(now) = now else {
+        return;
+    };
+    let at = crate::tree::place_of_tab(
+        crate::tree::listed(work),
+        crate::tree::terminals(work),
+        &now,
+    );
+    if at.is_some() && view.place != at {
+        view.place = at;
+    }
+}
+
+/// The session shown is remembered as its workspace's last.
+pub(crate) fn remember_shown(view: &mut ContentView, work: Option<&WorkSnapshot>) {
+    let Some(Tab::Session(_, id)) = view.active() else {
+        return;
+    };
+    let Some(root) = crate::tree::listed(work)
+        .find(id)
+        .map(|(ws, _, _)| ws.root.clone())
+    else {
+        return;
+    };
+    if view.last_shown.get(&root) != Some(id) {
+        let id = id.clone();
+        view.last_shown.insert(root, id);
+    }
+}
+
+/// A draft no window shows any longer is given up, with what was chosen for
+/// it.
+pub(crate) fn forget_drafts(view: &mut ContentView) {
+    let shown = view.windows.shown();
+    if view.drafts.options.keys().any(|t| !shown.contains(&t)) {
+        let shown: Vec<Tab> = shown.into_iter().cloned().collect();
+        view.drafts.options.retain(|t, _| shown.contains(t));
+    }
+}
+
+/// The content is kept for the next run as it changes, once the content kept
+/// from the last run had its chance to come back. A border or a window being
+/// dragged is kept where it is dropped, not at every step on the way.
+pub(crate) fn keep_content(view: &mut ContentView) -> Vec<Effect> {
+    if !view.restored || view.drag.is_some() || view.moving.is_some() {
+        return Vec::new();
+    }
+    let now = match view
+        .restore
+        .as_ref()
+        .and_then(|r| r.kept_while_unchanged(&view.windows))
+    {
+        Some(kept) => kept.clone(),
+        None => view.windows.kept(kept_name),
+    };
+    if view.kept.as_ref() == Some(&now) {
+        return Vec::new();
+    }
+    view.kept = Some(now.clone());
+    vec![Effect::KeepContent(now)]
+}
+
+/// Hiding the panel that has the keys gives them to the console.
+pub(crate) fn follow_panels(view: &mut ContentView, layout: &Layout) {
+    let now = (layout.show_sidebar, layout.show_details);
+    let was = view.panels_seen.replace(now);
+    let Some((sidebar, details)) = was else {
+        return;
+    };
+    let hidden = (sidebar && !now.0 && view.focus == Area::Sidebar)
+        || (details && !now.1 && view.focus == Area::Details);
+    if hidden {
+        view.focus = Area::Console;
+    }
+}
+
+/// A shell shown takes the keys from a prompt that goes away with it.
+pub(crate) fn settle_focus(view: &mut ContentView) {
+    let now = view.active().cloned();
+    if now == view.settled_for {
+        return;
+    }
+    view.settled_for = now;
+    let to = settled(view.focus, shows_prompt(view.active()));
+    if to != view.focus {
+        view.focus = to;
+    }
+}
+
+/// Where the keys were is remembered as they move; whether they came into
+/// the prompt from elsewhere.
+pub(crate) fn follow_spot(view: &mut ContentView) -> bool {
+    let spot = spot_of(view.focus, &view.windows);
+    let before = view.spot;
+    if before == spot {
+        return false;
+    }
+    view.spot = spot;
+    view.came_from = Some(before);
+    view.focus == Area::Prompt && before.area != Area::Prompt
+}
+
+/// Where the keys are, in `area`: in the console or the prompt of the
+/// content's focused window, or in a side panel.
+pub fn spot_of(area: Area, content: &Content<Tab>) -> Spot {
+    match area {
+        Area::Console | Area::Prompt => Spot {
+            area,
+            window: content.focused_window(),
+        },
+        Area::Sidebar => Spot::SIDEBAR,
+        Area::Details => Spot::DETAILS,
+    }
+}
+
+#[cfg(test)]
+mod tests;

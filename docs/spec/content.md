@@ -1,0 +1,275 @@
+# Content
+
+The middle of the window is the content. It holds tabs, each tab is split into
+windows, and each window shows one thing: a session, a session not started
+yet, a terminal Tsumugi runs ([terminals](#terminals)), or a file in the viewer
+of its kind ([viewers](#viewers)).
+
+## Tabs
+
+The tabs line up above the windows, numbered from 1. A tab is named after what
+its focused window shows, with how many windows it holds, and keeps its own
+focused window while another tab is shown. A tab holds whatever was opened in
+it, from any worktree. Closing a tab closes every window in it. The tab shown
+is moved a place to either side by keys ([keys](reference/keys.md#actions)),
+and any tab is dragged to another place among the tabs.
+
+## Windows
+
+A window is split side by side or one above the other; the new window lies
+right of it or below it, shows the same thing and takes the focus. Splits
+nest. Windows are resized by keys or by dragging the border between them,
+moved to a side of their tab, exchanged, rotated and moved to a tab of their
+own ([keys](reference/keys.md#actions)).
+
+The tab shown is merged into another, named by its number or as the tab shown
+before, or else the tab beside it: every window of it, split as it was, comes
+right of the windows there, the window focused in it keeping the focus, and
+the tab merged closes. With the mouse, a window's strip is dragged onto a side
+of a window, in its own tab or another, or onto a tab, and that window alone
+goes there; while dragging, holding it over a tab shows that tab. A tab
+dragged onto a side of a window puts every window of it there; the tab shown,
+dragged onto a window of its own, goes to that side of every window of the
+tab it would be merged into. Dragged onto another tab, a tab takes its place. Dropped anywhere else, nothing moves.
+
+The same thing may stand in any number of windows and tabs. A program shown in
+several windows runs at one size, the focused window's when it is one of them.
+
+Each window has a strip on top that tells what it shows: its state, its name,
+its agent, and the worktree it is in; a file's window shows the file's icon
+and name, and a `×` at its right end closes the window. The focused window is
+marked while the keys are in its console or prompt, and not while they are
+in the tree or the details; it is marked again when they come back.
+A session's window shows the agent's interface; the focused one shows the
+prompt below it as well ([prompt](prompt.md)). A terminal's window takes every
+key but the window commands' prefix and `Mod` keys. A viewer's window has no
+prompt and takes the `viewer` area's keys.
+
+## Opening
+
+Nothing opened takes the place of what a window shows, but for a document
+switched between its viewer and its Neovim ([viewers](#viewers)). Opening
+something moves the focus to a window of any tab already showing it; when no
+window shows it, it opens in a new tab after the one shown. Going to the next
+or previous session, workspace or waiting session opens it so too.
+
+From the tree, the key says how a row opens and the row says what: opened,
+in a new window split below or beside the focused one, or in a new
+tab though a window shows it already ([keys](reference/keys.md#actions)). A
+row clicked is opened, but for one with rows under it, which a click folds or
+unfolds: a worktree too, which a key opens once it is unfolded. A file opened from the tree opens by its kind, in a
+viewer or in Neovim ([viewers](#viewers)).
+
+## Closing
+
+Closing a window or a tab only hides what it shows: sessions and terminals run
+on, and the tree still reaches them. A viewer ends with the last window
+showing it. A Neovim started on a file is asked to quit, as `:qa` would
+quit it, once no window of the instance shows it any longer; closing Tsumugi's window
+itself leaves it running. One holding an unsaved change refuses and runs on,
+and opening the file's row shows it again. A Neovim a window switched to its
+document's viewer counts as shown while that window shows the viewer. A session not started yet that no window shows any longer is
+given up.
+
+A terminal that ends or a session that ends closes every window that shows
+it. When that leaves nothing open, the next session or terminal of
+its worktree is shown.
+
+## Across runs
+
+The content as it was when the window closed comes back when a window with the
+same number opens ([windows](sessions.md#windows)): every tab, the windows it
+is split into and their sizes, the window focused in each, and the tab shown.
+What cannot come back is left out, the layout closing around it as it does
+when what a window shows ends: a session or terminal no longer listed, a
+viewer, a session not started yet. With nothing left, the content opens
+empty, and something opened before the sessions are first listed takes the
+kept content's place.
+
+## Terminals
+
+A terminal runs a shell, Neovim or any other program, apart from agent
+conversations, and is listed beside the sessions of the worktree it runs in
+([the tree](tree.md)). A shell is the account's login shell unless configured
+otherwise; Neovim reads the user's own configuration. A command terminal runs
+its program through the shell, as an interactive login shell would run it,
+with the environment a shell gets, and is listed among the shells under the
+name of its program unless given another. A command terminal outlives its
+program: its screen stays, saying the status the program ended with, until the
+terminal is stopped; a shell or Neovim terminal ends with its program. The
+Neovims of the prompt and the console's reader are part of the window, not
+terminals.
+
+Closing a terminal's windows hides it and leaves its program running, save a
+Neovim started on a file ([closing](#closing)); its row in the tree opens it
+again, and closing the window leaves it running too. Stop
+Terminal (`terminal.stop`) ends the selected or shown terminal, as its program
+quitting does; on a terminal's row in the tree, ending a session
+(`session.stop`) ends that terminal the same way.
+
+A terminal has an identity apart from its name and its directory. It is not an
+agent session: it neither starts sessions nor sends or receives messages
+between them.
+
+### From the command line
+
+These commands are run by the instance's work host, started when none runs,
+and work without a window:
+
+```sh
+tsumugi terminal start --program shell --dir /src/api --json
+tsumugi terminal start --program neovim --dir /src/api --json
+tsumugi terminal start --program command --dir /src/api --json -- claude --debug
+tsumugi terminal list --json
+tsumugi terminal input --terminal <resource-id> --text "hello" --keys Tab Enter --json
+tsumugi terminal screen --terminal <resource-id> --json
+tsumugi terminal wait --terminal <resource-id> --text "ready" --timeout 60 --new --json
+tsumugi terminal stop --terminal <resource-id> --json
+```
+
+`start` accepts an optional `--name`. Without `--json` it prints the new
+resource ID. `list` prints resource IDs and names separated by a tab, one per
+line; `screen` prints the visible screen without trailing empty rows. A
+resource is addressed by ID, not by a name or the caller's directory.
+`start` creates a terminal in the given directory, or the caller's current
+directory when omitted. A command terminal takes its program and arguments
+after `--`, and only it does.
+
+A terminal `start` makes opens in the window as a session another opens does
+([opening sessions](opening-sessions.md)): with the keys while the user is
+looking at the session Tsumugi runs that started it, and otherwise behind the
+tab shown. `start --background` keeps it to the tree.
+
+`input` sends what it is given to the terminal's program, in the order given,
+and returns once the terminal has taken it. `--text` is typed as it is, so a
+newline in it is Enter; `--paste` is pasted, bracketed when the program asks
+for it; `--keys` presses each key it names, written as the keys file writes a
+key ([keys](keys.md#keys)): `Tab`, `Shift+Tab`, `Ctrl+g`, `Escape`,
+`Enter`. A key reaches the program as it would from the window, in the
+keyboard protocol the program asked for. A key that never reaches a program,
+such as one held with Command, is refused, and nothing is sent. `screen`
+reads the screen as it is and does not wait.
+
+`wait` waits for a line of the terminal's output that holds `--text` as it
+is written, or that matches `--regex`, and prints that line. It looks at the
+screen and the lines scrolled off it, as text without colours, and counts
+the lines already there, so it returns at once when the line was written
+before it was called. With `--new` it counts only lines written or changed
+after it was called; a line written between an earlier command and the call
+is then missed. It waits 60 seconds unless `--timeout` gives the seconds;
+when none matches in that time it exits with status 1 and says how the screen
+ends, and when the terminal ends first it exits with status 1. Stopping the
+command ends the wait.
+
+A JSON resource contains `resource_id` (UUID), `name`, `cwd`, `program`
+(`shell`, `neovim` or `command`), and for a command terminal `command`, its
+program and arguments. `list --json` returns an array of these resources.
+A command terminal whose program has ended adds `exit`, the status it ended
+with: its exit code, or 128 and the number of the signal that ended it.
+`screen --json` returns `resource_id`, `lines` and `exit`, null while the
+program runs; `wait --json` returns `resource_id` and `line`; `input --json`
+returns `resource_id` and `sent`; `stop --json` returns `resource_id` and
+`stopped`.
+Without `--json`, `input` and `stop` print the resource ID.
+
+Invalid arguments exit with status 2. A missing resource, a failed launch or
+an unreachable host exits with status 1.
+
+## Viewers
+
+A file that is read rather than edited is shown by a viewer of its kind,
+drawn by the window itself: images, movies, HTML pages, Markdown documents and
+PDFs. Every other file, including one of a kind Tsumugi does not know, opens in
+Neovim. A pull request or an issue on GitHub has a tab of its own, drawn
+as its conversation is on GitHub ([the tree](tree.md)), which takes the
+viewer's keys.
+
+A file is opened from the tree as any row is: in its viewer, or in a Neovim started on it in its worktree, which the file's row stands
+for in the tree. A file already open in a Neovim started on it opens that Neovim
+again, a Markdown document included. A viewer ends with the windows showing it; it keeps its zoom, page and
+playback while the focus moves between windows. A viewer reads the files of
+this computer alone ([remote execution](remote-execution.md)).
+
+A file's kind is decided by its extension alone, whatever its case. The common
+image formats open in the image viewer, the common movie formats in the movie
+viewer, `.html` and `.htm` in the HTML viewer, `.md` and `.markdown` in the
+Markdown viewer, and `.pdf` in the PDF viewer.
+
+- **Image** draws the picture whole within the window, and zooms in and out
+  from there; zooming back to the fit shows it whole again.
+- **Movie** plays and pauses the movie and moves back and forward a few
+  seconds at a time. The time played and the movie's length are shown.
+- **HTML** draws the page as a browser would, scripts included. It shows a
+  file, never an address.
+- **Markdown** draws the document as [Arto](https://github.com/arto-app/Arto)
+  draws it: diagrams, formulas, the colours of code and GitHub's alerts
+  included, in the colours of the theme in force: its ground, text and lines
+  are the window's, and its links, alerts and code take the theme's own
+  colours. It draws the document
+  again whenever its file changes, at the place it was read; a document
+  removed stays as it was last drawn and says it is gone. A link to another
+  file opens that file as its row in the tree would, and a link within the
+  document scrolls to its place. It zooms like an image.
+- **PDF** shows one page at a time, turned by keys, and zooms like an image.
+  The page shown and the page count are shown.
+
+In every viewer the content scrolls by lines, by half the window, and to its
+top and bottom, and the file's path can be copied.
+
+A Markdown document's window switches to a Neovim on the document, and back,
+in place ([actions](reference/keys.md#actions)). The Neovim switched to is the
+one the window switched away from, or else any Neovim on the document, or else
+one started for it in its worktree, which takes the keys. The Neovim switched
+away from runs on, hidden, while the window shows the document, so switching
+back finds it as it was; the document is drawn again from what it saved. A
+document read in a window comes back at its zoom and its place when the window
+switches back to it.
+
+A viewer only reads its file, and reads nothing else, with two exceptions: an
+HTML page also reads the files under its own directory, which it links to by
+relative paths, and a Markdown document reads the images it shows from under
+its worktree, or its own folder outside one. Neither reaches the window it is
+drawn in, nor Tsumugi. Images a Markdown document takes from an address load
+from there.
+
+A viewer's keys are actions of the `viewer` area, bound in the keys file like
+any other ([actions](reference/keys.md#actions)). They reach the viewer of the
+focused window alone. Keys pressed while an HTML page or a Markdown document
+has the focus reach the viewer as well, except those typed into the page's
+own fields.
+
+## Images in the console
+
+Programs in a session or a terminal can show images with the
+[kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/),
+so tools that draw plots or previews in a terminal draw them in Tsumugi too.
+Claude Code draws its own pictures, such as diagrams a mod renders, in the
+sessions Tsumugi starts: they are told the console draws images, which Claude
+Code otherwise believes only of kitty and Ghostty.
+
+The protocol is understood as felis understands it, which follows kitty:
+images sent in the escape sequence, in a file or in shared memory, at once or
+in chunks, as PNG or raw pixels, compressed or not; put as they are sent or
+later by id or number, whole or a part of them; put by placeholder
+characters; moved with the lines they are on and taken away as kitty takes
+them away. A program asking whether images work is answered.
+
+Images are drawn over the text, the later ones above the earlier, and an
+animation shows the frame the program last showed.
+
+The images a session's console drew are listed by the details panel
+of the details panel, and stay listed after the console lets them go
+([details](details.md)). A click on an image in a session's console looks at
+it in the lightbox, as a click on it in Resources does, and does not reach the
+program. Opened in a split or a new tab from Resources, one is shown in the
+image viewer like an image file, in a window of the content; its tab is not
+kept for the next run.
+
+The **lightbox** shows one image at a time over the window, the images of
+the session's Resources before and after it a step away, going round at
+either end; an image not among them is shown alone. The image is drawn whole,
+and is zoomed and moved about by keys, the mouse's wheel and dragging; going
+to another image draws it whole again. While the lightbox is open it takes
+every key, by the actions of the `lightbox` area
+([actions](reference/keys.md#actions)), and nothing behind it acts. It closes
+by its key, its close button or a click outside it.

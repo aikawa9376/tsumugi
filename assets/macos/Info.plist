@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>Tsumugi</string>
+  <key>CFBundleDisplayName</key>
+  <string>Tsumugi</string>
+  <key>CFBundleIdentifier</key>
+  <string>io.github.aikawa9376.tsumugi</string>
+  <key>CFBundleExecutable</key>
+  <string>tsumugi</string>
+  <key>CFBundleIconFile</key>
+  <string>tsumugi</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.0.0</string>
+  <key>CFBundleVersion</key>
+  <string>0.0.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Tsumugi reaches and announces work machines paired with this computer on your local network.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_tsumugi._tcp</string>
+  </array>
+</dict>
+</plist>

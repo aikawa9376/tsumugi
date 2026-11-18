@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.release.tag_name }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        run: echo "version=${TAG#v}" >>"$GITHUB_OUTPUT"
+
+  bundle:
+    needs: version
+    uses: ./.github/workflows/bundle.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  source:
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Package rebuildable source
+        run: |
+          perl assets/release/stamp-version.pl "$VERSION"
+          assets/release/source.sh "$VERSION" dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: source
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 3
+
+  attach:
+    needs: [bundle, source]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          for file in *; do
+            sha256sum "$file" > "$file.sha256"
+          done
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" dist/* --clobber

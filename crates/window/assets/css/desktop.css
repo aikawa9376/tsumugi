@@ -1,0 +1,42 @@
+/* Linux integrates the title and workspace controls into one quiet strip. */
+.desktop-header {
+  height: 46px; gap: 10px; padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--panel) 55%, var(--ground)), var(--ground) 65%);
+  margin-bottom: 8px;
+}
+.desktop-brand {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  height: 32px; padding: 0 8px 0 0; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text-2); font: inherit; cursor: default;
+}
+.desktop-brand:hover { color: var(--text); }
+.desktop-brand:focus-visible, .desktop-window-button:focus-visible {
+  outline: 1px solid var(--focus-border); outline-offset: 2px;
+}
+.desktop-brand-mark { display: inline-flex; width: 23px; height: 23px; }
+.desktop-brand-mark svg { width: 100%; height: 100%; }
+.desktop-brand-name { font-size: 12px; font-weight: 650; letter-spacing: .035em; }
+.desktop-brand > .icon { color: var(--text-3); margin-left: 2px; }
+.desktop-divider { height: 16px; width: 1px; flex: none; background: var(--line); margin: 0 2px; }
+.desktop-drag-space { flex: 1; align-self: stretch; min-width: 24px; }
+.desktop-window-controls { display: flex; align-items: center; gap: 3px; flex: none; }
+.desktop-window-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+  color: var(--text-3); background: transparent; cursor: default;
+  transition: background .12s, color .12s;
+}
+.desktop-window-button:hover { background: var(--select); color: var(--text); }
+.desktop-window-close:hover { background: var(--fail-tint); color: var(--fail); }
+.desktop-minimize-mark { display: block; width: 10px; height: 1px; background: currentColor; }
+
+.desktop-resize { position: fixed; z-index: 100; }
+.desktop-resize-n { top: 0; left: 8px; right: 8px; height: 4px; cursor: n-resize; }
+.desktop-resize-s { bottom: 0; left: 8px; right: 8px; height: 4px; cursor: s-resize; }
+.desktop-resize-w { left: 0; top: 8px; bottom: 8px; width: 4px; cursor: w-resize; }
+.desktop-resize-e { right: 0; top: 8px; bottom: 8px; width: 4px; cursor: e-resize; }
+.desktop-resize-nw { top: 0; left: 0; width: 8px; height: 8px; cursor: nw-resize; }
+.desktop-resize-ne { top: 0; right: 0; width: 8px; height: 8px; cursor: ne-resize; }
+.desktop-resize-sw { bottom: 0; left: 0; width: 8px; height: 8px; cursor: sw-resize; }
+.desktop-resize-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: se-resize; }

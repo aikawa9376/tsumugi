@@ -1,0 +1,10 @@
+/target
+/.envrc
+.direnv/
+result
+/.claude/worktrees/
+nvim.log
+
+/dist
+
+__pycache__/

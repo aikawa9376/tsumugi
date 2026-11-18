@@ -1,0 +1,22 @@
+[package]
+name = "tsumugi-connect"
+description = "Tsumugi's selected work machine and the way through its gateway to its hosts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tsumugi-sys.workspace = true
+tsumugi-model.workspace = true
+tsumugi-net.workspace = true
+tsumugi-protocol = { workspace = true, features = ["client"] }
+tsumugi-term.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+toml.workspace = true
+libc.workspace = true
+uuid.workspace = true

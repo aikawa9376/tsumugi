@@ -1,0 +1,15 @@
+html, body { margin: 0; height: 100%; background: var(--ground); color: var(--text);
+  font-family: var(--sans); font-size: 13px; overflow: hidden; user-select: none; }
+#main { height: 100%; }
+#tsumugi-keys { position: fixed; left: 0; top: 0; width: 1px; height: var(--cell-h); opacity: 0; z-index: 50; pointer-events: none;
+  margin: 0; padding: 0; border: 0; outline: none; resize: none; overflow: hidden; white-space: pre;
+  font-family: var(--term-font); font-size: var(--term-size); font-weight: var(--term-weight); line-height: var(--cell-h); color: var(--text); background: var(--raised); caret-color: transparent; }
+#tsumugi-keys.composing { opacity: 1; caret-color: var(--text); }
+#tsumugi-keys.composing.gridded { opacity: 0; }
+#tsumugi-compose { position: fixed; display: none; height: var(--cell-h); z-index: 50; pointer-events: none; white-space: pre;
+  font-family: var(--term-font); font-size: var(--term-size); font-weight: var(--term-weight); line-height: var(--cell-h); color: var(--text); background: var(--raised); }
+#tsumugi-compose.on { display: flex; }
+/* The underline spans each character's cells, not its glyph, which a wide
+   character leaves short of its two cells. */
+#tsumugi-compose span { display: inline-block; flex: none; overflow: hidden; height: calc(var(--cell-h) - 1px); box-shadow: inset 0 -1px 0 currentColor; }
+.app { height: 100%; display: flex; flex-direction: column; }

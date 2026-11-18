@@ -1,0 +1,118 @@
+# Tsumugi
+
+An Agent Workspace for people who live in Vim: drive any coding agent in its own terminal interface, by hand and the way you edit.
+
+## How it is built
+
+- **Test first.** Red → green → refactor. Write the failing test before the
+  code that makes it pass.
+- **Each layer holds one thing.** Put a fact in the one layer that owns it,
+  and nowhere else.
+
+  | Layer | Holds |
+  | --- | --- |
+  | `docs/concept.md` | what this is and for whom |
+  | `docs/adr/` | one decision and why it was made |
+  | `docs/spec/` | the behaviour users and other components can rely on |
+  | Tests | the details that pin the behaviour down: rules, boundaries, tables |
+  | Code | how it is done |
+  | Commits | why a change was made |
+  | Comments | why it is not done another way |
+
+  Before writing, fixing or reviewing a record, read `docs/adr/README.md`;
+  before writing, fixing or reviewing a spec, read `docs/spec/README.md`.
+  Follow their writing order.
+- **Dependencies are current.** Before adding or bumping one, look up its
+  latest release in the registry. Do not copy a version from memory or from
+  another repository.
+
+## Quality gate
+
+Run `just ci` before reporting a change as done. CI runs the same recipe, and
+`just ci-windows` on Windows.
+
+## Layout
+
+| Path | What lives there |
+| --- | --- |
+| `crates/tsumugi/` | the `tsumugi` application binary: which of the window, the hosts and the commands to run |
+| `crates/window/` | the window: its Dioxus UI, menu bar and Settings window, which reaches the work only through the work host's socket |
+| `crates/window/assets/` | the windows' stylesheets and page scripts, taken in with `include_str!` |
+| `crates/agents/` | each agent's adapter: how Claude Code, Codex, Pi and OpenCode are started, asked and read back |
+| `crates/agents/plugin/` | the Claude Code plugin every session Tsumugi starts loads |
+| `crates/agents/opencode/` | the plugin the OpenCode sessions Tsumugi starts load |
+| `crates/agents/rules/` | the rules, as data, that read each agent's screen: how it stands, whether a dialog holds the keys, whether it is ready |
+| `crates/core/` | the window's state and the rules it changes by, with no UI and no programs run |
+| `crates/core/icons/` | the Tabler icons the window draws, with their licence |
+| `crates/core/examples/` | `references`, which writes `docs/spec/reference/` from the code |
+| `crates/model/` | the data every part shares: sessions, places, the tree they form, agents' launch settings, with test builders |
+| `crates/protocol/` | what the window and the work host say to each other: requests, events, the work they describe, the versions they speak |
+| `crates/connect/` | the selected work machine, pairing with it, finding it and the way through its gateway to both hosts; serving this computer to paired clients |
+| `crates/net/` | Tsumugi's own network connection to a work machine: the keys each side keeps and TLS that pins them |
+| `crates/host/` | the work host, `tsumugi host`: the work, the sessions and shells it starts in the terminal host, delegation, its socket, and the commands that ask it |
+| `crates/host/themes/` | the console themes Tsumugi comes with |
+| `crates/host/terminfo/` | the terminfo entry the console's programs are given |
+| `crates/host/nvim/` | the colorscheme the Neovims a session runs can choose to draw in the theme in force, taken in with `include_str!` |
+| `crates/host/tests/` | tests that start the terminal host, sessions and shells |
+| `crates/term/` | the terminal host's client and server: felis sessions, their tags, screens and keys, and the protocol's versions |
+| `crates/nvim/` | the Neovims the window embeds for the prompt and the console's reader |
+| `crates/nvim/lua/` | the Lua the prompt's and the reader's Neovims run, taken in with `include_str!` |
+| `crates/vcs/` | what Tsumugi reads of and makes in git and jj repositories, and the repositories ghq keeps |
+| `crates/sys/` | the Unix calls on files, processes and sockets Tsumugi makes, and what stands in for them on Windows |
+| `assets/logo/` | the weave logo and geometric wordmark as SVG, and `build.py` that regenerates them |
+| `assets/macos/` | the macOS app's Info.plist and the script that assembles the app |
+| `assets/file-icons/` | vim-nerdfont's and vim-glyph-palette's icon tables at a pinned revision, their licences, and `update.sh` that copies them again |
+| `assets/arto-frontend/` | the licences of the packages Arto's frontend bundles, which the Markdown viewer draws with and `Tsumugi.app` ships |
+| `assets/fonts/` | JetBrainsMono Nerd Font Mono in the styles the console draws, its licences, the release it came from, and `update.sh` that copies it again |
+| `assets/neovim/` | the Neovim release the macOS app carries and the tests run in, pinned by its tag and archives' SHA-256, its licence, `fetch.sh` that fetches and checks it, and `update.sh` that pins another |
+| `docs/` | concept, ADRs, specs, references |
+
+## Language
+
+- README, docs and commit messages: English
+- Code comments, log and error messages: English
+
+## Commits
+
+Scoped Commits:
+
+```
+<scope>: <description>
+
+<why this change is needed>
+```
+
+- The scope names where the change is, from the table below. Several scopes
+  are joined with `, `; a change across the whole tree uses `treewide`.
+- The description starts in lower case, has no trailing period, and stays
+  within 72 characters.
+- The body explains why. The code shows how; the tests show what.
+- A release commit is `release: vX.Y.Z`.
+- A breaking change says so in the body and carries a `BREAKING CHANGE:`
+  trailer.
+
+| Scope | Covers |
+| --- | --- |
+| `tsumugi` | `crates/tsumugi/` |
+| `window` | `crates/window/` |
+| `agents` | `crates/agents/` |
+| `core` | `crates/core/` |
+| `host` | `crates/host/` |
+| `nvim` | `crates/nvim/` |
+| `model` | `crates/model/` |
+| `protocol` | `crates/protocol/` |
+| `connect` | `crates/connect/` |
+| `net` | `crates/net/` |
+| `term` | `crates/term/` |
+| `vcs` | `crates/vcs/` |
+| `sys` | `crates/sys/` |
+| `assets` | `assets/` |
+| `docs` | `docs/concept.md`, `README.md`, `AGENTS.md` |
+| `adr` | `docs/adr/` |
+| `spec` | `docs/spec/` |
+| `ci` | `.github/` |
+| `nix` | `flake.nix`, `flake.lock` |
+| `tooling` | `justfile`, `rust-toolchain.toml`, `Cargo.toml`, `clippy.toml`, `.envrc.sample`, `.gitattributes`, `vitro.toml` |
+| `deps` | dependency updates |
+
+Add a row when a new area appears.

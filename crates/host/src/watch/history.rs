@@ -1,0 +1,38 @@
+//! The prompts an agent kept as sent in a project, read each time a window
+//! steps back or forth through them, as they grow with every prompt sent,
+//! and told that window.
+
+use tsumugi_protocol::{HistoryRead, PromptChange};
+
+use tokio::sync::mpsc::UnboundedReceiver;
+
+use super::Watched;
+use crate::work::HistoryAsk;
+
+pub(super) async fn watch(watched: Watched, mut asks: UnboundedReceiver<HistoryAsk>) {
+    while let Some(ask) = asks.recv().await {
+        let project = ask.project.clone();
+        let context = super::asked_in(&watched.seen(), ask.agent, ask.home.as_deref()).await;
+        // An agent's history can run to megabytes: not on a runtime thread.
+        let sent = crate::environment::spawn_blocking(move || match context {
+            Some(context) => tsumugi_agents::adapter(ask.agent).history(
+                &context,
+                &crate::paths::home(),
+                &project,
+            ),
+            None => Vec::new(),
+        })
+        .await
+        .unwrap_or_default();
+        watched.record_for(
+            ask.window,
+            [PromptChange::History {
+                read: HistoryRead {
+                    asked: ask.asked,
+                    project: ask.project,
+                    sent,
+                },
+            }],
+        );
+    }
+}

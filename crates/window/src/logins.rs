@@ -1,0 +1,367 @@
+//! What the window knows of each profile's login in each environment, as
+//! the CLI that environment's host starts said: asked as a draft shows the profile, kept a while so drafts shown
+//! one after another ask once, and asked again once a login terminal opened
+//! from a draft ends.
+
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+use dioxus::prelude::*;
+use tsumugi_model::profile::{LoginStanding, ProfileId};
+use tsumugi_model::{Agent, EnvironmentId};
+use tsumugi_protocol::{Answer, Ask};
+
+use crate::bridge::AppCtx;
+
+/// How long an answer stands before a draft shown again asks again.
+const FRESH: Duration = Duration::from_secs(60);
+
+/// What is known of one profile's login.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Login {
+    Asking,
+    /// Its login terminal, by its id, is open; it is asked again once that
+    /// ends.
+    LoggingIn(u128),
+    /// As its CLI answered at that moment.
+    Is(LoginStanding, Instant),
+}
+
+/// What is known of each profile's login in each environment: the same
+/// profile keeps a login of its own on each machine.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct Logins(HashMap<(EnvironmentId, ProfileId), Login>);
+
+impl Logins {
+    pub(crate) fn get(&self, environment: &EnvironmentId, profile: &ProfileId) -> Option<&Login> {
+        self.0.get(&(environment.clone(), profile.clone()))
+    }
+
+    /// What to ask `environment`'s host of `profile`'s login, once the
+    /// terminal `after` has ended when one is named, known meanwhile as
+    /// asked.
+    pub(crate) fn ask(
+        &mut self,
+        environment: &EnvironmentId,
+        profile: &ProfileId,
+        after: Option<u128>,
+    ) -> Ask {
+        let now = asking(self.get(environment, profile), after);
+        self.0.insert((environment.clone(), profile.clone()), now);
+        Ask::LoginStanding {
+            profile: profile.clone(),
+            after,
+        }
+    }
+
+    /// What is known of `profile`'s login in `environment` once its host
+    /// gave `answer` at `at` to an ask that waited for the terminal `after`;
+    /// one not answered is asked again when a draft shows it next.
+    pub(crate) fn answer(
+        &mut self,
+        environment: &EnvironmentId,
+        profile: &ProfileId,
+        after: Option<u128>,
+        answer: Answer,
+        at: Instant,
+    ) {
+        let key = (environment.clone(), profile.clone());
+        let known = self.0.get(&key).copied();
+        match answer {
+            Answer::LoginStanding { standing } => {
+                self.0
+                    .insert(key, answered(known.as_ref(), after, standing, at));
+            }
+            _ => {
+                if still_waited(known.and_then(|k| k.waiting()), after, None).is_none() {
+                    self.0.remove(&key);
+                }
+            }
+        }
+    }
+}
+
+/// Whether a login terminal can be opened in an environment, `remote` when
+/// it is on a work machine, where the user logs in instead.
+pub(crate) fn login_terminal(remote: bool) -> Result<(), &'static str> {
+    if remote {
+        Err("log in on the work machine; login terminals are unavailable from a remote window")
+    } else {
+        Ok(())
+    }
+}
+
+/// What a profile of `agent` can do without a login, said where it shows as
+/// not logged in: OpenCode runs its free models and local ones without one.
+pub(crate) fn without_login(agent: Agent) -> Option<&'static str> {
+    match agent {
+        Agent::OpenCode => Some("Free and local models need no login."),
+        Agent::Claude | Agent::Codex | Agent::Pi => None,
+    }
+}
+
+/// How a login known as `known` reads, in a few words, with the tone that
+/// colours them.
+pub(crate) fn said(known: Option<&Login>) -> (&'static str, &'static str) {
+    match known {
+        None | Some(Login::Asking) => ("Checking…", ""),
+        Some(Login::LoggingIn(_)) => ("Waiting for login…", ""),
+        Some(Login::Is(standing, _)) => (
+            standing.label(),
+            match standing {
+                LoginStanding::LoggedIn => "in",
+                LoginStanding::LoggedOut => "out",
+                LoginStanding::Unknown => "",
+                LoginStanding::Missing => "missing",
+            },
+        ),
+    }
+}
+
+/// Whether a login known as `known` is to be asked of its CLI at `now`:
+/// never asked, or answered too long ago; not while it is being asked.
+pub(crate) fn stale(known: Option<&Login>, now: Instant) -> bool {
+    match known {
+        None => true,
+        Some(Login::Is(_, at)) => now.saturating_duration_since(*at) >= FRESH,
+        Some(Login::Asking | Login::LoggingIn(_)) => false,
+    }
+}
+
+/// What is known of a login known as `known` while it is asked, once the
+/// terminal `after` has ended when one is named: a login terminal still
+/// open is still waited for.
+pub(crate) fn asking(known: Option<&Login>, after: Option<u128>) -> Login {
+    waited(known.and_then(Login::waiting), after).map_or(Login::Asking, Login::LoggingIn)
+}
+
+impl Login {
+    /// The login terminal waited for, while one is.
+    fn waiting(&self) -> Option<u128> {
+        match self {
+            Login::LoggingIn(terminal) => Some(*terminal),
+            Login::Asking | Login::Is(..) => None,
+        }
+    }
+}
+
+/// The login terminal an ask that waits for the terminal `after`, when one
+/// is named, waits for, `waiting` being the one waited for already.
+pub(crate) fn waited(waiting: Option<u128>, after: Option<u128>) -> Option<u128> {
+    after.or(waiting)
+}
+
+/// The login terminal `waiting` while it is waited for still once an ask
+/// that waited for the terminal `after` is answered, `standing` when the
+/// CLI gave one.
+pub(crate) fn still_waited(
+    waiting: Option<u128>,
+    after: Option<u128>,
+    standing: Option<LoginStanding>,
+) -> Option<u128> {
+    waiting.filter(|&terminal| !ends_wait(terminal, after, standing))
+}
+
+/// What is known of a login known as `known` once its CLI answered
+/// `standing` at `at`, to an ask that waited for the terminal `after`: a
+/// login terminal waited for is waited for still, unless the answer came
+/// once it ended or says the login is done.
+pub(crate) fn answered(
+    known: Option<&Login>,
+    after: Option<u128>,
+    standing: LoginStanding,
+    at: Instant,
+) -> Login {
+    still_waited(known.and_then(Login::waiting), after, Some(standing))
+        .map_or(Login::Is(standing, at), Login::LoggingIn)
+}
+
+/// Whether an answer, `standing` when the CLI gave one, ends the wait for
+/// the login terminal `waited`: given once that terminal ended, or saying
+/// the login is done.
+pub(crate) fn ends_wait(
+    waited: u128,
+    after: Option<u128>,
+    standing: Option<LoginStanding>,
+) -> bool {
+    after == Some(waited) || standing == Some(LoginStanding::LoggedIn)
+}
+
+/// Ask `environment`'s host whether `profile` is logged in there, once the
+/// terminal `after` has ended when one is named; the answer goes to the
+/// window's logins whichever draft asked.
+pub(crate) fn ask(
+    app: AppCtx,
+    environment: EnvironmentId,
+    profile: ProfileId,
+    after: Option<u128>,
+) {
+    let mut logins = app.logins;
+    let asked = logins.write().ask(&environment, &profile, after);
+    let answer = app.ask_in(&environment, asked);
+    app.keep(async move {
+        let answer = answer.await;
+        logins
+            .write()
+            .answer(&environment, &profile, after, answer, Instant::now());
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn claude() -> ProfileId {
+        "claude".parse().unwrap()
+    }
+
+    #[test]
+    fn the_same_profile_s_login_is_known_apart_in_each_environment() {
+        let (a, b) = (EnvironmentId::new("a"), EnvironmentId::new("b"));
+        let mut logins = Logins::default();
+        logins.ask(&a, &claude(), None);
+        logins.ask(&b, &claude(), None);
+        let now = Instant::now();
+        let standing = LoginStanding::LoggedIn;
+        logins.answer(&b, &claude(), None, Answer::LoginStanding { standing }, now);
+        assert_eq!(logins.get(&b, &claude()), Some(&Login::Is(standing, now)));
+        assert_eq!(logins.get(&a, &claude()), Some(&Login::Asking));
+    }
+
+    #[test]
+    fn a_login_is_asked_of_its_profile_once_the_terminal_named_ends() {
+        let mut logins = Logins::default();
+        let asked = logins.ask(&EnvironmentId::new("b"), &claude(), Some(7));
+        assert_eq!(
+            asked,
+            Ask::LoginStanding {
+                profile: claude(),
+                after: Some(7),
+            }
+        );
+    }
+
+    #[test]
+    fn a_login_not_answered_is_forgotten_in_its_environment_alone() {
+        let (a, b) = (EnvironmentId::new("a"), EnvironmentId::new("b"));
+        let mut logins = Logins::default();
+        logins.ask(&a, &claude(), None);
+        logins.ask(&b, &claude(), None);
+        let failed = Answer::Failed {
+            text: "gone".into(),
+        };
+        logins.answer(&b, &claude(), None, failed, Instant::now());
+        assert_eq!(logins.get(&b, &claude()), None);
+        assert_eq!(logins.get(&a, &claude()), Some(&Login::Asking));
+    }
+
+    #[test]
+    fn a_login_terminal_is_refused_for_an_environment_on_a_work_machine() {
+        assert_eq!(login_terminal(false), Ok(()));
+        assert!(login_terminal(true).is_err());
+    }
+
+    #[test]
+    fn a_login_is_asked_when_unknown_or_answered_long_enough_ago_and_not_while_asked() {
+        let now = Instant::now();
+        let answered = |ago| Login::Is(LoginStanding::LoggedIn, now - ago);
+        assert!(stale(None, now));
+        assert!(!stale(Some(&answered(Duration::from_secs(5))), now));
+        assert!(stale(Some(&answered(FRESH)), now));
+        assert!(!stale(Some(&Login::Asking), now));
+        assert!(!stale(Some(&Login::LoggingIn(7)), now));
+    }
+
+    #[test]
+    fn a_login_reads_as_its_cli_last_said_or_as_being_checked() {
+        let now = Instant::now();
+        // (what is known, words, tone)
+        let cases = [
+            (None, "Checking…", ""),
+            (Some(Login::Asking), "Checking…", ""),
+            (Some(Login::LoggingIn(7)), "Waiting for login…", ""),
+            (
+                Some(Login::Is(LoginStanding::LoggedIn, now)),
+                "Logged in",
+                "in",
+            ),
+            (
+                Some(Login::Is(LoginStanding::LoggedOut, now)),
+                "Not logged in",
+                "out",
+            ),
+            (Some(Login::Is(LoginStanding::Unknown, now)), "Unknown", ""),
+            (
+                Some(Login::Is(LoginStanding::Missing, now)),
+                "CLI not found",
+                "missing",
+            ),
+        ];
+        for (known, words, tone) in cases {
+            assert_eq!(said(known.as_ref()), (words, tone), "{known:?}");
+        }
+    }
+
+    #[test]
+    fn only_opencode_says_what_runs_without_a_login() {
+        for agent in Agent::ALL {
+            assert_eq!(
+                without_login(agent).is_some(),
+                agent == Agent::OpenCode,
+                "{agent:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn asking_while_a_login_terminal_is_waited_for_keeps_waiting_for_it() {
+        assert_eq!(asking(None, None), Login::Asking);
+        assert_eq!(asking(None, Some(7)), Login::LoggingIn(7));
+        assert_eq!(
+            asking(Some(&Login::LoggingIn(7)), None),
+            Login::LoggingIn(7)
+        );
+        assert_eq!(
+            asking(Some(&Login::LoggingIn(7)), Some(8)),
+            Login::LoggingIn(8)
+        );
+    }
+
+    #[test]
+    fn an_ask_waits_for_the_terminal_it_names_or_else_the_one_waited_for() {
+        assert_eq!(waited(None, None), None);
+        assert_eq!(waited(None, Some(7)), Some(7));
+        assert_eq!(waited(Some(7), None), Some(7));
+        assert_eq!(waited(Some(7), Some(8)), Some(8));
+    }
+
+    #[test]
+    fn a_terminal_waited_for_is_waited_for_still_until_an_answer_ends_the_wait() {
+        use LoginStanding::*;
+        assert_eq!(still_waited(None, Some(7), Some(LoggedOut)), None);
+        assert_eq!(still_waited(Some(7), Some(7), Some(LoggedOut)), None);
+        assert_eq!(still_waited(Some(7), None, Some(LoggedIn)), None);
+        assert_eq!(still_waited(Some(7), None, Some(LoggedOut)), Some(7));
+        assert_eq!(still_waited(Some(7), Some(6), None), Some(7));
+    }
+
+    #[test]
+    fn a_wait_ends_when_its_terminal_does_or_an_answer_says_logged_in() {
+        use LoginStanding::*;
+        let now = Instant::now();
+        let waiting = Login::LoggingIn(7);
+        let is = |standing| Login::Is(standing, now);
+        assert_eq!(
+            answered(Some(&waiting), Some(7), LoggedOut, now),
+            is(LoggedOut)
+        );
+        assert_eq!(answered(Some(&waiting), None, LoggedIn, now), is(LoggedIn));
+        assert_eq!(answered(Some(&waiting), None, LoggedOut, now), waiting);
+        assert_eq!(answered(Some(&waiting), Some(6), Unknown, now), waiting);
+        assert_eq!(
+            answered(Some(&Login::Asking), None, LoggedOut, now),
+            is(LoggedOut)
+        );
+        assert_eq!(answered(None, Some(6), LoggedOut, now), is(LoggedOut));
+    }
+}

@@ -1,0 +1,187 @@
+//! The window's settings, kept in `settings.toml` in tsumugi's configuration
+//! folder, and told to every window as they change.
+
+use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, RwLock};
+
+use tokio::sync::broadcast;
+
+use crate::paths::config_dir;
+pub use tsumugi_core::settings::*;
+
+/// Where scratch sessions run as `settings` say, `~` standing for `home`.
+pub fn scratch_folder(settings: &Settings, home: &Path) -> PathBuf {
+    settings.scratch_folder(home, &crate::paths::data_dir())
+}
+
+pub fn path() -> PathBuf {
+    config_dir().join("settings.toml")
+}
+
+/// Where the user's own themes are, one file a theme, named as it is.
+pub fn themes_dir() -> PathBuf {
+    config_dir().join("themes")
+}
+
+/// The settings `file` holds, as [`Settings::read`] has them, with the one
+/// theme an earlier version named taken by its kind.
+pub fn read(file: &tsumugi_protocol::ConfigFile) -> Result<Settings, String> {
+    Settings::read(file).map(|s| crate::themes::migrated(s, &themes_dir()))
+}
+
+fn read_path(path: &Path) -> Result<Settings, String> {
+    read(&crate::config::file(path))
+}
+
+/// Keep the UI available for repairing an invalid configuration, with
+/// its error reported separately and saving blocked until it is fixed.
+pub fn load() -> Settings {
+    load_path(&path())
+}
+
+pub fn try_load() -> Result<Settings, String> {
+    read_path(&path())
+}
+
+fn load_path(path: &Path) -> Settings {
+    read_path(path).unwrap_or_else(recover)
+}
+
+pub(crate) fn recover(error: String) -> Settings {
+    tracing::warn!(%error, "settings unreadable; delegation is off until they are fixed");
+    Settings {
+        delegation: DelegationSettings { enabled: false },
+        ..Settings::default()
+    }
+}
+
+pub fn save(settings: &Settings) -> Result<(), String> {
+    save_path(settings, &path())
+}
+
+fn save_path(settings: &Settings, path: &Path) -> Result<(), String> {
+    read_path(path)
+        .map_err(|error| format!("{error}. Fix the configuration file before saving settings"))?;
+    let text = toml::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    crate::config::write(path, &text).map_err(|e| e.to_string())
+}
+
+pub fn load_error() -> Option<String> {
+    read_path(&path()).err()
+}
+
+/// The settings every window works by.
+pub static SETTINGS: LazyLock<RwLock<Settings>> = LazyLock::new(|| RwLock::new(load()));
+
+/// Told whenever [`SETTINGS`] changes.
+pub static CHANGED: LazyLock<broadcast::Sender<()>> = LazyLock::new(|| broadcast::channel(16).0);
+
+pub fn current() -> Settings {
+    if let Some(context) = crate::environment::current() {
+        return context
+            .settings
+            .read()
+            .map(|s| s.clone())
+            .unwrap_or_default();
+    }
+    SETTINGS.read().map(|s| s.clone()).unwrap_or_default()
+}
+
+/// Take in the settings `file` holds, as it changed on disk, edited by hand
+/// or by another program, and tell every window: a file that does not read
+/// leaves the settings as they are.
+pub fn take_in(file: &tsumugi_protocol::ConfigFile) {
+    match read(file) {
+        Ok(next) if next != current() => {
+            if let Ok(mut s) = crate::environment::current()
+                .as_ref()
+                .map_or(&*SETTINGS, |c| &c.settings)
+                .write()
+            {
+                *s = next;
+            }
+        }
+        Err(error) => tracing::warn!(%error, "settings unreadable; the ones in force are kept"),
+        _ => {}
+    }
+    let _ = CHANGED.send(());
+}
+
+/// Make `next` the settings: keep them for the next run and tell every window.
+pub fn set(next: Settings) -> Result<(), String> {
+    let next = next.sane();
+    save(&next)?;
+    if let Ok(mut s) = crate::environment::current()
+        .as_ref()
+        .map_or(&*SETTINGS, |c| &c.settings)
+        .write()
+    {
+        *s = next;
+    }
+    let _ = CHANGED.send(());
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_settings_default_but_invalid_or_unreadable_settings_report_the_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.toml");
+        assert_eq!(read_path(&path).unwrap(), Settings::default());
+        for text in ["[readers]\nmodel = 'haiku'\n", "zoom = "] {
+            std::fs::write(&path, text).unwrap();
+            let error = read_path(&path).unwrap_err();
+            assert!(error.contains(&path.display().to_string()), "{error}");
+        }
+        let error = read_path(directory.path()).unwrap_err();
+        assert!(
+            error.contains(&directory.path().display().to_string()),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn saving_refuses_invalid_existing_settings_until_the_file_is_fixed() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.toml");
+        let invalid = "[codex_readers]\nmodel = 'review-model'\n";
+        std::fs::write(&path, invalid).unwrap();
+        let changed = Settings {
+            zoom: 1.25,
+            ..Settings::default()
+        };
+        assert!(save_path(&changed, &path).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
+        std::fs::write(&path, "zoom = 1.0\n").unwrap();
+        save_path(&changed, &path).unwrap();
+        assert_eq!(read_path(&path).unwrap(), changed);
+    }
+
+    #[test]
+    fn an_invalid_configuration_switches_sessions_opening_sessions_off() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.toml");
+        std::fs::write(&path, "zoom = 1.0\n").unwrap();
+        assert!(load_path(&path).delegation.enabled);
+        std::fs::write(&path, "zoom = ").unwrap();
+        assert!(!load_path(&path).sane().delegation.enabled);
+    }
+
+    #[test]
+    fn scratch_sessions_run_in_the_folder_the_settings_name_or_tsumugi_s_own() {
+        let home = std::path::Path::new("/h");
+        let at = |text: &str| scratch_folder(&Settings::parse(text).unwrap(), home);
+        assert_eq!(
+            at(""),
+            crate::paths::data_dir().join("tsumugi").join("scratch")
+        );
+        assert_eq!(
+            at("scratch_dir = \"~/notes/scratch\"\n"),
+            PathBuf::from("/h/notes/scratch")
+        );
+        assert_eq!(at("scratch_dir = \"/tmp/s\"\n"), PathBuf::from("/tmp/s"));
+    }
+}

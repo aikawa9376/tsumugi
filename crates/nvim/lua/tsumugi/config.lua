@@ -1,0 +1,94 @@
+local M = {}
+
+-- The prompt and reader can start together on a fresh account. Neovim's
+-- manifest loader does not tolerate another process making a shared ancestor.
+local function ensure_directory(path)
+  local stat = vim.uv.fs_stat(path)
+  if stat then
+    assert(stat.type == "directory", path .. " is not a directory")
+    return
+  end
+  local parent = vim.fs.dirname(path)
+  if parent and parent ~= path then
+    ensure_directory(parent)
+  end
+  local ok, err, code = vim.uv.fs_mkdir(path, 448)
+  if not ok then
+    stat = vim.uv.fs_stat(path)
+    assert(code == "EEXIST" and stat and stat.type == "directory", err)
+  end
+end
+
+function M.prepare()
+  ensure_directory(vim.fn.stdpath("data"))
+end
+
+-- Tells the window whenever the user's configuration is saved: `init.lua`,
+-- or a file under the configuration folder's `lua/`. The window starts this
+-- Neovim again rather than it reading the configuration again, as plugin
+-- managers such as lazy.nvim cannot be set up twice in one Neovim.
+function M.watch()
+  local init = vim.env.MYVIMRC
+  if not init or init == "" then
+    init = vim.fs.joinpath(vim.fn.stdpath("config"), "init.lua")
+  end
+  local dir = vim.fs.dirname(init)
+  local name = vim.fs.basename(init)
+  -- A folder that is not there cannot be watched, and a configuration first
+  -- written after starting is to be told of too. Another Neovim may be making
+  -- it at the same moment.
+  pcall(vim.fn.mkdir, dir, "p")
+  local timer = vim.uv.new_timer()
+  -- Each folder is watched on its own, as only macOS and Windows watch one
+  -- with all the folders under it.
+  local watched = {}
+  local watch_lua
+  local function watch(path, prefix)
+    if watched[path] then
+      return
+    end
+    local watcher = vim.uv.new_fs_event()
+    -- Watched by its whole name: libuv names a file in a folder watched by
+    -- its short Windows name, such as `RUNNER~1`, after the rest of the
+    -- long one.
+    local ok = watcher
+      and watcher:start(vim.uv.fs_realpath(path) or path, {}, function(err, file)
+        if err or not file then
+          return
+        end
+        local rel = prefix .. file
+        if rel ~= name and rel ~= "lua" and not vim.startswith(rel, "lua/") then
+          return
+        end
+        -- An editor's save comes as several events: tell once they stop. A
+        -- folder made meanwhile is watched from then on.
+        timer:start(
+          100,
+          0,
+          vim.schedule_wrap(function()
+            watch_lua()
+            vim.rpcnotify(vim.g.tsumugi_channel, "tsumugi_configuration_saved")
+          end)
+        )
+      end)
+    if ok then
+      watched[path] = watcher
+    end
+  end
+  watch_lua = function()
+    local lua = vim.fs.joinpath(dir, "lua")
+    if not vim.uv.fs_stat(lua) then
+      return
+    end
+    watch(lua, "lua/")
+    for sub, kind in vim.fs.dir(lua, { depth = math.huge }) do
+      if kind == "directory" then
+        watch(vim.fs.joinpath(lua, sub), "lua/" .. sub .. "/")
+      end
+    end
+  end
+  watch(dir, "")
+  watch_lua()
+end
+
+return M

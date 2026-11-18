@@ -1,0 +1,51 @@
+/* The variables and the icons' rules every window shares. */
+:root {
+  color-scheme: dark;
+  --ground: #131a24;
+  --panel: #192330;
+  --raised: #242d3a;
+  --select: #2f3843;
+  --line: #29323e;
+  --line-strong: #38404b;
+  --focus-line: #3d4550;
+  --focus-border: #4f5660;
+  /* The border of the field that takes what is typed. */
+  --input-focus: var(--run);
+  --text: #cdcecf;
+  --text-2: #9b9ea2;
+  --text-3: #7c8187;
+  --text-4: #5d636c;
+  --wait: #dbc074;
+  --run: #719cd6;
+  --done: #81b29a;
+  --fail: #c94f6d;
+  --coord: #9d79d6;
+  --shell: #b364a2;
+  --wait-tint: rgba(219,192,116,0.16);
+  --wait-tint-soft: rgba(219,192,116,0.12);
+  --run-tint: rgba(113,156,214,0.16);
+  --run-tint-soft: rgba(113,156,214,0.08);
+  --done-tint: rgba(129,178,154,0.14);
+  --fail-tint: rgba(201,79,109,0.14);
+  --coord-tint: rgba(157,121,214,0.14);
+  --shell-tint: rgba(179,100,162,0.14);
+  --veil: rgba(19,26,36,0.92);
+  --track: rgba(205,206,207,0.05);
+  --scrim: rgba(8,9,11,0.6);
+  --usage-cpu: #63cdcf;
+  --usage-gpu: #9d79d6;
+  --usage-memory: #81b29a;
+  --usage-storage: #d7a472;
+  --usage-context: #63cdcf;
+  --mono: "SF Mono", Menlo, ui-monospace, "Hiragino Kaku Gothic ProN", monospace;
+  /* The console's font and line height, set from the settings. */
+  --term-font: var(--mono); --term-size: 13px; --term-weight: 400; --cell-h: 17px;
+  --sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --kbd-text: #9b9ea2;
+  --on-run: #fff;
+  --shadow: rgba(0,0,0,0.45);
+}
+* { box-sizing: border-box; }
+.icon { display: inline-flex; flex: none; align-items: center; justify-content: center; }
+/* As thick as icons::STROKE, which the menu bar's icons are drawn with. */
+.icon svg { width: var(--icon, 14px); height: var(--icon, 14px); stroke-width: 1.75; }

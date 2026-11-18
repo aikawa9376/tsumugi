@@ -1,0 +1,298 @@
+//! The prompt's Neovim as the window runs it: started, and started again
+//! when it quits, as `:q` makes it, or when its configuration is saved, with
+//! what is written kept; sized to the prompt card, its rows to the lines it
+//! asks for within the settings' bounds.
+
+use std::sync::Arc;
+use std::time::Instant;
+
+use dioxus::prelude::*;
+use tokio::sync::mpsc;
+use tsumugi_core::actions::Action;
+use tsumugi_core::msg::Msg;
+use tsumugi_nvim::{Embedded, Event as NvimEvent, View};
+
+use super::restart::Restarts;
+use super::{mode_of, prompt_rows};
+use crate::bridge::AppCtx;
+
+/// The prompt's Neovim and the grid the window draws it in.
+#[derive(Clone, Copy)]
+pub(crate) struct PromptNeovim {
+    pub nvim: Signal<Option<Arc<Embedded>>>,
+    pub prompt_frame: Signal<u64>,
+    /// The line the prompt shows from, and how many it has.
+    pub prompt_view: Signal<(usize, usize)>,
+    /// The lines the prompt shows.
+    pub prompt_rows: Signal<usize>,
+    /// The fewest and the most lines the settings let the prompt show.
+    bounds: Memo<(usize, usize)>,
+    /// The lines Neovim asks for, which the settings bound.
+    prompt_height: Signal<usize>,
+    prompt_cols: Signal<u16>,
+}
+
+/// The prompt's Neovim, its card `prompt_width` wide in cells `cell_width`
+/// wide, drawn taller by a row while images are attached. `commands_wanted`
+/// is told when a `/` asks for the agent's commands, and `asked` each action a
+/// key or a command of the prompt asks for.
+pub(crate) fn use_prompt_neovim(
+    app: AppCtx,
+    has_images: Memo<bool>,
+    cell_width: Signal<f64>,
+    prompt_width: Signal<f64>,
+    commands_wanted: Callback<()>,
+    asked: Callback<Action>,
+) -> PromptNeovim {
+    let prompt = PromptNeovim {
+        nvim: use_signal(|| None),
+        prompt_frame: use_signal(|| 0),
+        prompt_view: use_signal(|| (0, 0)),
+        prompt_rows: use_signal(|| app.config.peek().settings.prompt_min_rows),
+        bounds: use_memo(move || {
+            let s = &app.config.read().settings;
+            (s.prompt_min_rows, s.prompt_max_rows)
+        }),
+        prompt_height: use_signal(|| 1),
+        prompt_cols: use_signal(|| 80),
+    };
+    // Fitted again as images come and go, and as the settings bound it anew.
+    use_effect(move || {
+        let has_images = has_images();
+        let _ = (prompt.bounds)();
+        if let Some(rows) = prompt.fit(has_images)
+            && let Some(nv) = prompt.nvim.peek().clone()
+        {
+            let cols = *prompt.prompt_cols.peek();
+            spawn(async move {
+                let _ = nv.resize(cols, rows as u16).await;
+            });
+        }
+    });
+    use_hook(move || {
+        spawn(async move { prompt.run(app, has_images, commands_wanted, asked).await });
+    });
+    // The prompt's grid is as wide as its box allows.
+    use_effect(move || {
+        let width = prompt_width();
+        let cw = cell_width();
+        let nv = (prompt.nvim)();
+        if width <= 0.0 {
+            return;
+        }
+        let cols = ((width - 28.0) / cw).floor().max(10.0) as u16;
+        if cols != *prompt.prompt_cols.peek() {
+            let mut prompt_cols = prompt.prompt_cols;
+            prompt_cols.set(cols);
+        }
+        if let Some(nv) = nv {
+            let rows = *prompt.prompt_rows.peek() as u16;
+            spawn(async move {
+                let _ = nv.resize(cols, rows).await;
+            });
+        }
+    });
+    prompt
+}
+
+impl PromptNeovim {
+    /// The rows the prompt shows for the lines Neovim asks for, as the
+    /// settings bound them, when they changed.
+    fn fit(&self, has_images: bool) -> Option<usize> {
+        let (least, most) = *self.bounds.peek();
+        let rows = prompt_rows(*self.prompt_height.peek(), has_images, least, most);
+        if rows == *self.prompt_rows.peek() {
+            return None;
+        }
+        let mut prompt_rows = self.prompt_rows;
+        prompt_rows.set(rows);
+        Some(rows)
+    }
+
+    async fn run(
+        self,
+        app: AppCtx,
+        has_images: Memo<bool>,
+        commands_wanted: Callback<()>,
+        asked: Callback<Action>,
+    ) {
+        let mut nvim = self.nvim;
+        let mut restarts = Restarts::default();
+        // Whether the status line tells of a Neovim that could not run.
+        let mut told = false;
+        // What was written in the Neovim before, for the one started next.
+        let mut kept: Option<(String, View)> = None;
+        loop {
+            let (tx, rx) = mpsc::unbounded_channel();
+            let started = Embedded::spawn(&tsumugi_nvim::program(), &[], 80, 1, move |ev| {
+                let _ = tx.send(ev);
+            })
+            .await;
+            let (lived, trouble) = match started {
+                Ok(e) => {
+                    if told {
+                        told = false;
+                        app.status(None);
+                    }
+                    let born = Instant::now();
+                    if let Some((text, view)) = kept.take() {
+                        let _ = e.put_back(&text).await;
+                        let _ = e.set_view(&view).await;
+                    }
+                    if app.remote_status_of(&app.active_environment()).is_some() {
+                        let _ = e.freeze_prompt(true).await;
+                    }
+                    let embedded = Arc::new(e);
+                    nvim.set(Some(embedded.clone()));
+                    app.dispatch(Msg::PromptRuns(true));
+                    let ended = self
+                        .serve(&embedded, rx, app, has_images, commands_wanted, asked)
+                        .await;
+                    nvim.set(None);
+                    app.dispatch(Msg::PromptRuns(false));
+                    kept = ended.left;
+                    if ended.saved {
+                        let wait = restarts.saved(born.elapsed());
+                        if !wait.is_zero() {
+                            app.status(Some(format!(
+                                "the prompt's configuration is saved as Neovim starts; trying again in {}s",
+                                wait.as_secs()
+                            )));
+                            told = true;
+                            tokio::time::sleep(wait).await;
+                        }
+                        continue;
+                    }
+                    (
+                        Some(born.elapsed()),
+                        "Neovim quit as it started".to_string(),
+                    )
+                }
+                Err(e) => (None, format!("cannot start Neovim: {e}")),
+            };
+            let wait = restarts.wait(lived);
+            if wait.is_zero() {
+                app.notice("Neovim quit; the prompt starts again with what was written".into());
+                continue;
+            }
+            // One that quits as it starts is not started over and over.
+            app.status(Some(format!(
+                "{trouble}; trying again in {}s",
+                wait.as_secs()
+            )));
+            told = true;
+            tokio::time::sleep(wait).await;
+        }
+    }
+
+    /// Tell the window what the prompt's Neovim does until it quits, or
+    /// until its configuration is saved and it is quit for it.
+    async fn serve(
+        &self,
+        embedded: &Embedded,
+        mut rx: mpsc::UnboundedReceiver<NvimEvent>,
+        app: AppCtx,
+        has_images: Memo<bool>,
+        commands_wanted: Callback<()>,
+        asked: Callback<Action>,
+    ) -> Ended {
+        let mut ended = Ended::default();
+        let mut prompt_frame = self.prompt_frame;
+        let mut prompt_view = self.prompt_view;
+        let mut prompt_height = self.prompt_height;
+        let (paths, mut path_queries) =
+            tokio::sync::watch::channel::<Option<(u64, String, String)>>(None);
+        if let Some(embedded) = self.nvim.peek().clone() {
+            spawn(async move {
+                while path_queries.changed().await.is_ok() {
+                    let Some((id, root, typed)) = path_queries.borrow_and_update().clone() else {
+                        continue;
+                    };
+                    let root = (!root.is_empty()).then(|| tsumugi_protocol::HostPath::local(root));
+                    let answer = tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        app.ask_in(
+                            &app.shown_environment(),
+                            tsumugi_protocol::Ask::PathEntries { root, typed },
+                        ),
+                    )
+                    .await;
+                    let entries = match answer {
+                        Ok(tsumugi_protocol::Answer::PathEntries { entries }) => entries
+                            .into_iter()
+                            .map(|entry| {
+                                tsumugi_nvim::Candidate::new(
+                                    entry.path,
+                                    if entry.directory { "dir" } else { "file" },
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                        _ => Vec::new(),
+                    };
+                    match path_queries.has_changed() {
+                        Ok(false) => {
+                            let _ = embedded.set_paths(id, &entries).await;
+                        }
+                        Ok(true) => {}
+                        Err(_) => break,
+                    }
+                }
+            });
+        }
+        let rows = *self.prompt_rows.peek() as u16;
+        let cols = *self.prompt_cols.peek();
+        let _ = embedded.resize(cols, rows).await;
+        while let Some(ev) = rx.recv().await {
+            match ev {
+                NvimEvent::Redraw => {
+                    *prompt_frame.write() += 1;
+                    let m = mode_of(&embedded.state());
+                    if app.prompt.peek().mode != m {
+                        app.dispatch(Msg::PromptMode(m.0, m.1));
+                    }
+                }
+                // Only the console's reader tells of yanks and of where
+                // it is scrolled to.
+                NvimEvent::Yank { .. } | NvimEvent::Scrolled { .. } => {}
+                NvimEvent::Shell(on) => app.dispatch(Msg::PromptShell(on)),
+                NvimEvent::CommandsWanted => commands_wanted(()),
+                NvimEvent::PathsWanted { id, root, typed } => {
+                    let _ = paths.send(Some((id, root, typed)));
+                }
+                NvimEvent::Action(name) => match name.parse::<Action>() {
+                    Ok(action) => asked(action),
+                    Err(e) => app.notice(format!("cannot run {name}: {e}")),
+                },
+                NvimEvent::ConfigurationSaved => {
+                    ended.saved = true;
+                    let _ = embedded.quit().await;
+                    app.notice("The prompt's configuration was saved; it starts again".into());
+                }
+                NvimEvent::Leaving { text, view } => ended.left = Some((text, view)),
+                NvimEvent::View { top, lines } => {
+                    if *prompt_view.peek() != (top, lines) {
+                        prompt_view.set((top, lines));
+                    }
+                }
+                NvimEvent::Height(h) => {
+                    prompt_height.set(h);
+                    let images = *has_images.peek();
+                    if let Some(rows) = self.fit(images) {
+                        let cols = *self.prompt_cols.peek();
+                        let _ = embedded.resize(cols, rows as u16).await;
+                    }
+                }
+            }
+        }
+        ended
+    }
+}
+
+/// How the prompt's Neovim ended.
+#[derive(Default)]
+struct Ended {
+    /// What it held as it quit, for the Neovim started next.
+    left: Option<(String, View)>,
+    /// It was quit as its configuration was saved, not by the user.
+    saved: bool,
+}

@@ -1,0 +1,518 @@
+//! What the keys and clicks do to the content: move the focus among the
+//! windows, split, close and arrange them, go through the tabs, and open
+//! what a row stands for.
+
+use std::path::{Path, PathBuf};
+
+use tsumugi_model::github::Listing;
+use tsumugi_model::{EnvironmentId, TerminalProgram};
+
+use super::{
+    Area, Axis, Content, Dir, Opening, Shown, Spot, Tab, TerminalAsk, closing, corner, cycled,
+    draft, draft_at, moved, settled, shows_prompt, spot_of,
+};
+use crate::actions::Action;
+use crate::details;
+use crate::effect::Effect;
+use crate::state::ViewState;
+use crate::tree::Place;
+use crate::tree::nav::Item;
+use crate::tree::{self, nav};
+
+/// How much of its split a window grows or shrinks by a key.
+const RESIZE_STEP: f64 = 0.05;
+
+/// The keys go to `to`, unless it is a side panel that is hidden; a window
+/// there is focused first.
+fn go(state: &mut ViewState, to: Spot) {
+    let layout = state.chrome.panels.layout;
+    let hidden = (to.area == Area::Sidebar && !layout.show_sidebar)
+        || (to.area == Area::Details && !layout.show_details);
+    if hidden {
+        return;
+    }
+    let view = &mut state.content;
+    if let Some(w) = to.window
+        && view.windows.focused_window() != Some(w)
+    {
+        view.windows.focus(w);
+    }
+    view.focus = settled(to.area, shows_prompt(view.active()));
+}
+
+/// Run `action` on the content, where the keys are now. From a side panel
+/// an action is on the selected row; from elsewhere, on what the focused
+/// window shows.
+pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
+    if action == Action::WindowEdit {
+        return super::switch_editing(state);
+    }
+    let area = state.content.focus;
+    let on_list = matches!(area, Area::Sidebar | Area::Details);
+    let shown = {
+        let l = state.chrome.panels.layout;
+        Shown {
+            sidebar: l.show_sidebar,
+            details: l.show_details,
+        }
+    };
+    let here = spot_of(area, &state.content.windows);
+    let prompts_of = |t: Option<&Tab>| shows_prompt(t);
+    let view = &mut state.content;
+    let thing = view.active().cloned();
+    let edit = |view: &mut super::ContentView, f: &dyn Fn(&mut Content<Tab>)| {
+        f(&mut view.windows);
+        Vec::new()
+    };
+    match action {
+        Action::WindowLeft | Action::WindowDown | Action::WindowUp | Action::WindowRight => {
+            let d = match action {
+                Action::WindowLeft => Dir::Left,
+                Action::WindowDown => Dir::Down,
+                Action::WindowUp => Dir::Up,
+                _ => Dir::Right,
+            };
+            // Each spot is found before `go` is told it, which changes the
+            // content.
+            let to = moved(here, d, &view.windows, prompts_of, shown);
+            go(state, to);
+            Vec::new()
+        }
+        Action::WindowNext | Action::WindowPrev => {
+            let to = cycled(
+                here,
+                action == Action::WindowNext,
+                &view.windows,
+                prompts_of,
+                shown,
+            );
+            go(state, to);
+            Vec::new()
+        }
+        Action::WindowTop | Action::WindowBottom => {
+            let to = corner(
+                action == Action::WindowTop,
+                &view.windows,
+                prompts_of,
+                shown,
+            );
+            go(state, to);
+            Vec::new()
+        }
+        Action::WindowBack => {
+            if let Some(to) = view.came_from
+                && !to.window.is_some_and(|w| view.windows.shows(w).is_none())
+            {
+                go(state, to);
+            }
+            Vec::new()
+        }
+        Action::WindowSplit | Action::WindowVsplit => {
+            let axis = if action == Action::WindowVsplit {
+                Axis::Row
+            } else {
+                Axis::Column
+            };
+            if let Some(t) = thing {
+                view.windows.split(axis, t);
+            }
+            Vec::new()
+        }
+        Action::WindowNew => {
+            let (environment, dir) = view.place.as_ref().map_or_else(
+                || (state.hosts.environment.clone(), view.scratch.clone()),
+                |p| (p.environment.clone(), p.worktree.clone()),
+            );
+            let draft = draft_at(view, environment, dir);
+            view.windows.split(Axis::Column, draft);
+            view.focus = Area::Prompt;
+            vec![Effect::StartWriting]
+        }
+        Action::WindowQuit => closing(view, Content::close_window),
+        Action::WindowOnly => closing(view, Content::only),
+        Action::TabClose => closing(view, Content::close_tab),
+        Action::WindowMoveLeft => edit(view, &|c| c.move_to_edge(Dir::Left)),
+        Action::WindowMoveDown => edit(view, &|c| c.move_to_edge(Dir::Down)),
+        Action::WindowMoveUp => edit(view, &|c| c.move_to_edge(Dir::Up)),
+        Action::WindowMoveRight => edit(view, &|c| c.move_to_edge(Dir::Right)),
+        Action::WindowExchange => edit(view, &Content::exchange),
+        Action::WindowRotate => edit(view, &Content::rotate),
+        Action::WindowEqualize => edit(view, &Content::equalize),
+        Action::WindowWider => edit(view, &|c| c.resize(Axis::Row, RESIZE_STEP)),
+        Action::WindowNarrower => edit(view, &|c| c.resize(Axis::Row, -RESIZE_STEP)),
+        Action::WindowTaller => edit(view, &|c| c.resize(Axis::Column, RESIZE_STEP)),
+        Action::WindowShorter => edit(view, &|c| c.resize(Axis::Column, -RESIZE_STEP)),
+        Action::WindowMaximizeWidth => edit(view, &|c| c.maximize(Axis::Row)),
+        Action::WindowMaximizeHeight => edit(view, &|c| c.maximize(Axis::Column)),
+        Action::WindowToTab => edit(view, &Content::to_new_tab),
+        Action::TabMerge(n) => edit(view, &|c| c.merge_into_numbered_tab(n)),
+        Action::TabMergeLast => edit(view, &Content::merge_into_last_tab),
+        Action::TabGo(n) => edit(view, &|c| c.go_to_numbered_tab(n)),
+        Action::TabLast => edit(view, &Content::go_to_last_tab),
+        Action::TabMovePrev => edit(view, &|c| c.shift_tab(-1)),
+        Action::TabMoveNext => edit(view, &|c| c.shift_tab(1)),
+        // The tabs of the area the keys are in: the details panel's sheets
+        // there, the content's tabs elsewhere.
+        Action::TabNext | Action::TabPrev => {
+            let delta = if action == Action::TabNext { 1 } else { -1 };
+            if area == Area::Details {
+                return details::step_tab(&mut state.details, delta);
+            }
+            edit(view, &|c| c.cycle_tab(delta))
+        }
+        Action::CursorClose => {
+            let Some(item) = state.tree.selected.clone() else {
+                return Vec::new();
+            };
+            let things =
+                nav::stands_for(&item, tree::terminals(state.hosts.work(item.environment())));
+            if things.is_empty() {
+                return Vec::new();
+            }
+            closing(&mut state.content, |c| {
+                c.close_showing(|t| things.contains(t))
+            })
+        }
+        Action::SessionNew
+            if let Some(Item::GitHubItem(environment, root, listing, number)) =
+                state.tree.selected.clone().filter(|_| on_list) =>
+        {
+            on_github(state, environment, &root, listing, number)
+        }
+        Action::SessionNew => match place_here(state, on_list) {
+            Some(p) => draft(&mut state.content, p.environment, p.worktree, true),
+            None => Vec::new(),
+        },
+        Action::SessionScratch => {
+            let scratch = state.content.scratch.clone();
+            draft(
+                &mut state.content,
+                state.hosts.environment.clone(),
+                scratch,
+                true,
+            )
+        }
+        Action::ShellOpen | Action::NeovimOpen => {
+            let runs = if action == Action::NeovimOpen {
+                TerminalProgram::Neovim
+            } else {
+                TerminalProgram::Shell
+            };
+            match place_here(state, on_list) {
+                Some(place) => vec![Effect::StartTerminal(TerminalAsk {
+                    place,
+                    runs,
+                    file: None,
+                    opening: Opening::Existing,
+                    focus: true,
+                })],
+                None => Vec::new(),
+            }
+        }
+        Action::SessionNext | Action::SessionPrev => {
+            let environment = state.hosts.environment_of(state.content.active()).clone();
+            let next = nav::next_session(
+                tree::listed(state.hosts.work(&environment)),
+                state.content.active(),
+                state.content.place.as_ref(),
+                action == Action::SessionNext,
+            );
+            match next {
+                Some(id) => show_session(state, environment, id),
+                None => Vec::new(),
+            }
+        }
+        Action::WorkspaceNext | Action::WorkspacePrev => {
+            let environment = state.hosts.environment_of(state.content.active()).clone();
+            let next = nav::next_workspace(
+                tree::listed(state.hosts.work(&environment)),
+                state.content.active(),
+                state.content.place.as_ref(),
+                &state.content.last_shown,
+                action == Action::WorkspaceNext,
+            );
+            match next {
+                Some(id) => show_session(state, environment, id),
+                None => Vec::new(),
+            }
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Where something new starts: the selected row's worktree, from a side
+/// panel, or the home of the environment whose heading is selected, or else
+/// the one in the middle.
+/// A new session on the pull request or issue numbered `number` of the
+/// repository at `root`, its first prompt naming it: an issue's in the
+/// repository's checkout, a pull request's in a worktree made for it that
+/// starts at its head.
+fn on_github(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    root: &Path,
+    listing: Listing,
+    number: u64,
+) -> Vec<Effect> {
+    let work = state.hosts.work(&environment);
+    let Some(item) = tree::github(work, root).and_then(|r| r.item(listing, number)) else {
+        return Vec::new();
+    };
+    let kind = match listing {
+        Listing::Pulls => "Pull request",
+        Listing::Issues => "Issue",
+    };
+    let prompt = format!("{kind} #{number}: {}\n{}\n", item.title, item.url);
+    match listing {
+        Listing::Pulls => vec![Effect::PullWorktree {
+            environment,
+            repository: root.to_path_buf(),
+            number,
+            title: item.title.clone(),
+            prompt,
+        }],
+        Listing::Issues => {
+            let row = Item::GitHubItem(environment.clone(), root.to_path_buf(), listing, number);
+            match nav::place_of(tree::listed(work), &row) {
+                Some(place) => draft_written(state, environment, place.worktree, prompt),
+                None => Vec::new(),
+            }
+        }
+    }
+}
+
+/// A new session's draft shown in `worktree` with `prompt` written in it,
+/// the keys in the prompt.
+pub(crate) fn draft_written(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    worktree: PathBuf,
+    prompt: String,
+) -> Vec<Effect> {
+    let mut effects = draft(&mut state.content, environment, worktree, true);
+    effects.push(Effect::PromptRestore {
+        tab: state.content.active().cloned(),
+        text: prompt,
+        images: Vec::new(),
+    });
+    effects
+}
+
+fn place_here(state: &ViewState, on_list: bool) -> Option<Place> {
+    match state.tree.selected.as_ref().filter(|_| on_list) {
+        Some(Item::Environment(environment)) => {
+            crate::picker::home_in(state, environment).map(|home| Place::at(environment, home))
+        }
+        selected => selected
+            .and_then(|c| nav::place_of(tree::listed(state.hosts.work(c.environment())), c))
+            .or_else(|| state.content.place.clone()),
+    }
+}
+
+/// Open the session `id` of `environment` wherever it runs, as opening its
+/// row does, and select its row, but leave the keys where they are.
+pub(crate) fn show_session(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    id: String,
+) -> Vec<Effect> {
+    let work = state.hosts.work(&environment);
+    let Some((p, _)) = nav::find(tree::listed(work), &id) else {
+        return Vec::new();
+    };
+    let p = Place::at(&environment, p);
+    let tab = Tab::Session(environment, id);
+    if let Some(row) = nav::row_of(
+        state.tree.rows(),
+        tree::listed(work),
+        tab.environment(),
+        Some(&tab),
+        &p,
+    ) {
+        state.tree.selected = Some(row);
+    }
+    state.content.place = Some(p);
+    state.content.windows.open(tab);
+    Vec::new()
+}
+
+/// Edit the file at `path` of `environment`, one that need not be under any
+/// worktree, in the Neovim already on it or in one started in its folder,
+/// with the keys.
+pub(crate) fn edit_file(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    path: std::path::PathBuf,
+) -> Vec<Effect> {
+    let terminals = tree::terminals(state.hosts.work(&environment));
+    let folder = path.parent().map(|d| d.to_path_buf()).unwrap_or_default();
+    let place = Place::at(&environment, folder.clone());
+    let item = Item::File {
+        environment,
+        worktree: folder.clone(),
+        path: path.clone(),
+        dir: false,
+    };
+    let open = nav::stands_for(&item, terminals)
+        .into_iter()
+        .find(|t| matches!(t, Tab::Terminal(_, _)));
+    let content = &mut state.content;
+    match open {
+        Some(tab) => {
+            content.place = Some(place);
+            content.windows.open(tab);
+            content.focus = Area::Console;
+            Vec::new()
+        }
+        None => vec![Effect::StartTerminal(TerminalAsk {
+            place,
+            runs: TerminalProgram::Neovim,
+            file: Some(path),
+            opening: super::Opening::Existing,
+            focus: true,
+        })],
+    }
+}
+
+/// Open the file at `path` of `environment` as its row in the tree opens, in
+/// the worktree it lies in or else its own folder, where a thing already
+/// shown opens, with the keys; the tree's selection stays where it is.
+pub(crate) fn open_file(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    path: PathBuf,
+) -> Vec<Effect> {
+    let work = state.hosts.work(&environment);
+    let listed = tree::listed(work);
+    let worktree = tsumugi_model::innermost(listed.worktrees().map(|w| &w.worktree.path), &path)
+        .cloned()
+        .or_else(|| path.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_default();
+    let item = Item::File {
+        environment: environment.clone(),
+        worktree: worktree.clone(),
+        path,
+        dir: false,
+    };
+    let local = state.hosts.is_local(&environment);
+    let opens = nav::opens(&item, listed, tree::terminals(work), local);
+    let content = &mut state.content;
+    match opens {
+        nav::Opens::Shows(thing, place) => {
+            content.place = place.or(Some(Place::at(&environment, worktree)));
+            content.windows.open_in(thing, Opening::Existing);
+            content.focus = Area::Console;
+            Vec::new()
+        }
+        nav::Opens::Edit(worktree, file) => vec![Effect::StartTerminal(TerminalAsk {
+            place: Place::at(&environment, worktree),
+            runs: TerminalProgram::Neovim,
+            file: Some(file),
+            opening: Opening::Existing,
+            focus: true,
+        })],
+        nav::Opens::Unavailable => vec![Effect::Notice(super::REMOTE_PREVIEW.into())],
+        nav::Opens::Fold | nav::Opens::Draft(_) => Vec::new(),
+    }
+}
+
+/// Open a row where `how` says, or as anything else opens a thing when it
+/// says nothing. Only the keys that open rather than split fold a row, and on a
+/// folded one they unfold it first. With `take_keys`, the keys go to what
+/// opened: the prompt of a draft, or the console.
+pub(crate) fn open_row(
+    state: &mut ViewState,
+    item: Item,
+    how: Option<Opening>,
+    take_keys: bool,
+) -> Vec<Effect> {
+    let work = state.hosts.work(item.environment());
+    let terminals = tree::terminals(work);
+    let view = &mut state.tree;
+    view.selected = Some(item.clone());
+    let in_place = matches!(how, None | Some(Opening::Existing));
+    let unfolds = nav::unfolds(&item, &view.folds);
+    if in_place && unfolds {
+        view.folds.set(&item, true);
+        return Vec::new();
+    }
+    let local = state.hosts.is_local(item.environment());
+    let opens = nav::opens(&item, view.narrowed(item.environment()), terminals, local);
+    let toggles = unfolds || matches!(opens, nav::Opens::Fold);
+    let content = &mut state.content;
+    let show = |content: &mut super::ContentView, thing: Tab| match how {
+        Some(how) => content.windows.open_in(thing, how),
+        None => content.windows.open(thing),
+    };
+    let mut effects = Vec::new();
+    match opens {
+        nav::Opens::Fold if in_place => view.folds.toggle(&item),
+        nav::Opens::Fold => {}
+        nav::Opens::Shows(thing, p) => {
+            if p.is_some() {
+                content.place = p;
+            }
+            show(content, thing);
+        }
+        nav::Opens::Edit(worktree, file) => effects.push(Effect::StartTerminal(TerminalAsk {
+            place: Place::at(item.environment(), worktree),
+            runs: TerminalProgram::Neovim,
+            file: Some(file),
+            opening: how.unwrap_or(Opening::Existing),
+            // A Neovim still starting takes the keys once it has.
+            focus: take_keys,
+        })),
+        nav::Opens::Draft(worktree) => {
+            let draft = draft_at(content, item.environment().clone(), worktree.clone());
+            show(content, draft);
+            content.place = Some(Place::at(item.environment(), worktree));
+        }
+        nav::Opens::Unavailable => {
+            return vec![Effect::Notice(super::REMOTE_PREVIEW.into())];
+        }
+    }
+    if take_keys && !toggles {
+        match content.active() {
+            Some(Tab::Draft { .. }) => {
+                content.focus = Area::Prompt;
+                effects.push(Effect::StartWriting);
+            }
+            Some(_) => content.focus = Area::Console,
+            None => {}
+        }
+    }
+    effects
+}
+
+/// A row clicked: one with rows under it folds or unfolds, a worktree's too,
+/// which a key opens once it is unfolded, for a click has no other way to
+/// fold it; any other row opens in place and takes the keys.
+pub(crate) fn click_row(state: &mut ViewState, item: Item) -> Vec<Effect> {
+    if !nav::holds(&item) {
+        return open_row(state, item, Some(Opening::Existing), true);
+    }
+    let view = &mut state.tree;
+    view.folds.toggle(&item);
+    view.selected = Some(item);
+    Vec::new()
+}
+
+/// The window `id` clicked, which takes the focus.
+pub(crate) fn focus_window(state: &mut ViewState, id: super::WindowId) -> Vec<Effect> {
+    if state.content.windows.focused_window() != Some(id) {
+        state.content.windows.focus(id);
+    }
+    Vec::new()
+}
+
+/// The tab at `at`, counted from 0, shown.
+pub(crate) fn show_tab(state: &mut ViewState, at: usize) -> Vec<Effect> {
+    state.content.windows.go_to_tab(at);
+    Vec::new()
+}
+
+/// A window showing `tab` focused, as a menu opened on its tab asks.
+pub(crate) fn reveal(state: &mut ViewState, tab: &Tab) -> Vec<Effect> {
+    state.content.windows.reveal(tab);
+    Vec::new()
+}

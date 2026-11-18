@@ -1,0 +1,275 @@
+//! A profile's login, which its agent's CLI keeps: asking the CLI whether
+//! it is logged in, and what starts the CLI's own login in a terminal.
+
+use std::path::Path;
+use std::time::Duration;
+
+use tsumugi_model::profile::LoginStanding;
+
+use crate::{AgentContext, Started, adapter};
+
+/// How long the CLI has to say whether it is logged in.
+const ASKED_FOR: Duration = Duration::from_secs(20);
+
+/// What starts the CLI's own login in `context`'s login, for a terminal
+/// to run.
+pub fn login(context: &AgentContext) -> Started {
+    let adapter = adapter(context.agent());
+    adapter.launch(context, adapter.login_args(), Vec::new())
+}
+
+/// Whether the CLI says `context`'s login is logged in, asked in `dir`.
+pub async fn standing(context: &AgentContext, dir: &Path) -> LoginStanding {
+    let adapter = adapter(context.agent());
+    let started = adapter.launch(context, adapter.status_args(context), Vec::new());
+    match crate::output(started, dir, ASKED_FOR).await {
+        Ok(Some(out)) => adapter.standing(out.status.code(), &String::from_utf8_lossy(&out.stdout)),
+        Ok(None) => LoginStanding::Unknown,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => LoginStanding::Missing,
+        Err(_) => LoginStanding::Unknown,
+    }
+}
+
+/// What a CLI that answers whether it is logged in by its exit status alone
+/// says: 0 when it is, 1 when it is not, and when it is not installed as
+/// [`missing`] tells.
+pub(crate) fn by_status(code: Option<i32>) -> LoginStanding {
+    match code {
+        Some(0) => LoginStanding::LoggedIn,
+        Some(1) => LoginStanding::LoggedOut,
+        code if missing(code) => LoginStanding::Missing,
+        _ => LoginStanding::Unknown,
+    }
+}
+
+/// Whether a CLI ended with `code` as a shell and `tsumugi in-own-login` end
+/// when the program cannot be started, 126 or 127: it is not installed.
+pub(crate) fn missing(code: Option<i32>) -> bool {
+    matches!(code, Some(126 | 127))
+}
+
+/// The first JSON object in `out`: a shell that starts the CLI may print
+/// from its startup files ahead of the answer.
+pub(crate) fn first_json(out: &str) -> Option<serde_json::Value> {
+    out.match_indices('{')
+        .find_map(|(at, _)| serde_json::from_str(out[at..].trim()).ok())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use tsumugi_model::Agent;
+    use tsumugi_model::config::PiOptions;
+    use tsumugi_model::profile::AgentOptions;
+
+    use super::*;
+
+    #[test]
+    fn the_first_json_object_is_found_past_what_a_shell_prints_first() {
+        assert_eq!(
+            first_json("welcome {to} the shell\n{\"a\": 1}\n"),
+            Some(serde_json::json!({"a": 1}))
+        );
+        assert_eq!(first_json("fine"), None);
+        assert_eq!(first_json(""), None);
+    }
+
+    #[test]
+    fn a_program_that_cannot_be_started_ends_with_126_or_127() {
+        assert!(missing(Some(126)));
+        assert!(missing(Some(127)));
+        for code in [Some(0), Some(1), Some(2), None] {
+            assert!(!missing(code), "{code:?}");
+        }
+    }
+
+    /// A context whose CLI is a script that prints `out` and ends with `code`.
+    fn answering(agent: Agent, dir: &Path, out: &str, code: i32) -> AgentContext {
+        let script = dir.join("cli");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\nprintf '%s' '{out}'\nexit {code}\n"),
+        )
+        .unwrap();
+        tsumugi_sys::fs::set_mode(&script, 0o755).unwrap();
+        let mut context = AgentContext::builtin(agent);
+        context.launch.command = vec![script.display().to_string()];
+        context
+    }
+
+    #[tokio::test]
+    #[cfg_attr(windows, ignore = "fakes the agent with a shell script")]
+    async fn claude_code_is_logged_in_only_when_its_status_says_so() {
+        let dir = tempfile::tempdir().unwrap();
+        let asked = |out: &str, code| {
+            let context = answering(Agent::Claude, dir.path(), out, code);
+            async move { standing(&context, Path::new("/")).await }
+        };
+        assert_eq!(
+            asked(r#"{"loggedIn": true}"#, 0).await,
+            LoginStanding::LoggedIn
+        );
+        assert_eq!(
+            asked(r#"{"loggedIn": false}"#, 1).await,
+            LoginStanding::LoggedOut
+        );
+        assert_eq!(
+            asked(r#"{"loggedIn": false}"#, 0).await,
+            LoginStanding::LoggedOut
+        );
+        // A shell's startup files may print ahead of the answer.
+        assert_eq!(
+            asked("welcome\n{\"loggedIn\": true}", 0).await,
+            LoginStanding::LoggedIn
+        );
+        assert_eq!(asked("fine", 0).await, LoginStanding::Unknown);
+        // A CLI that fails without answering, too old for `--json` say.
+        assert_eq!(
+            asked("error: unknown option '--json'", 1).await,
+            LoginStanding::Unknown
+        );
+        assert_eq!(asked("", 3).await, LoginStanding::Unknown);
+    }
+
+    #[tokio::test]
+    #[cfg_attr(windows, ignore = "fakes the agent with a shell script")]
+    async fn codex_is_logged_in_when_its_status_ends_well() {
+        let dir = tempfile::tempdir().unwrap();
+        for (code, standing_is) in [
+            (0, LoginStanding::LoggedIn),
+            (1, LoginStanding::LoggedOut),
+            (2, LoginStanding::Unknown),
+        ] {
+            let context = answering(Agent::Codex, dir.path(), "", code);
+            assert_eq!(standing(&context, Path::new("/")).await, standing_is);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_cli_that_is_not_installed_is_told_apart() {
+        for agent in Agent::ALL {
+            let mut context = AgentContext::builtin(agent);
+            context.launch.command = vec!["/nonexistent/tsumugi-test-cli".into()];
+            assert_eq!(
+                standing(&context, Path::new("/")).await,
+                LoginStanding::Missing
+            );
+            // Through the shell, which ends with 127 when it finds no program.
+            context.launch.via_shell = true;
+            context.shell = "/bin/sh".into();
+            assert_eq!(
+                standing(&context, Path::new("/")).await,
+                LoginStanding::Missing
+            );
+        }
+    }
+
+    #[test]
+    fn the_login_and_its_status_are_the_cli_s_own_commands() {
+        let claude = login(&AgentContext::builtin(Agent::Claude));
+        assert_eq!(claude.1, ["auth", "login"]);
+        let codex = login(&AgentContext::builtin(Agent::Codex));
+        assert_eq!(
+            (codex.0.as_str(), codex.1.as_slice()),
+            ("codex", &["login".to_string()][..])
+        );
+        assert_eq!(
+            adapter(Agent::Claude).status_args(&AgentContext::builtin(Agent::Claude)),
+            ["auth", "status", "--json"]
+        );
+        assert_eq!(
+            adapter(Agent::Codex).status_args(&AgentContext::builtin(Agent::Codex)),
+            ["login", "status"]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "fakes the agent with a shell script")]
+    fn pi_is_asked_about_the_provider_of_its_profile_s_model_and_logs_in_in_its_own_interface() {
+        let mut context = AgentContext::builtin(Agent::Pi);
+        context.options = AgentOptions::Pi(PiOptions {
+            model: "anthropic/claude-sonnet-4-5".into(),
+            ..PiOptions::default()
+        });
+        assert_eq!(
+            adapter(Agent::Pi).status_args(&context),
+            ["auth", "check", "--provider", "anthropic", "--json"]
+        );
+        let (program, args, _) = login(&context);
+        assert_eq!(program, "pi");
+        assert!(args.contains(&"--no-session".to_string()), "{args:?}");
+        assert!(
+            args.last().is_some_and(|a| a.ends_with("/pi/login.ts")),
+            "{args:?}"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg_attr(windows, ignore = "fakes the agent with a shell script")]
+    async fn pi_is_logged_in_when_its_provider_is_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let with_model = |out: &str, code| {
+            let mut context = answering(Agent::Pi, dir.path(), out, code);
+            context.options = AgentOptions::Pi(PiOptions {
+                model: "ollama/qwen3".into(),
+                ..PiOptions::default()
+            });
+            context
+        };
+        for (out, code, standing_is) in [
+            (
+                r#"{"status":"ready","provider":"ollama","authType":"api_key"}"#,
+                0,
+                LoginStanding::LoggedIn,
+            ),
+            (
+                r#"{"status":"not_ready","provider":"ollama","reason":"credentials_not_configured"}"#,
+                1,
+                LoginStanding::LoggedOut,
+            ),
+            (
+                r#"{"status":"invalid","provider":"ollama"}"#,
+                2,
+                LoginStanding::Unknown,
+            ),
+            ("", 0, LoginStanding::Unknown),
+        ] {
+            let context = with_model(out, code);
+            assert_eq!(
+                standing(&context, Path::new("/")).await,
+                standing_is,
+                "{out}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn pi_without_a_provider_to_ask_about_is_unknown_unless_it_is_not_installed() {
+        let dir = tempfile::tempdir().unwrap();
+        let context = answering(Agent::Pi, dir.path(), "1.3.0", 0);
+        assert_eq!(adapter(Agent::Pi).status_args(&context), ["--version"]);
+        assert_eq!(
+            standing(&context, Path::new("/")).await,
+            LoginStanding::Unknown
+        );
+    }
+
+    #[test]
+    fn a_login_of_a_profile_s_own_runs_in_its_state_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("work");
+        let context = AgentContext {
+            home: Some(home.clone()),
+            tsumugi: "/tsumugi".into(),
+            ..AgentContext::builtin(Agent::Codex)
+        };
+        let (program, args, _) = login(&context);
+        assert_eq!(program, "/tsumugi");
+        let line = args.join(" ");
+        assert!(
+            line.starts_with(&format!("in-own-login codex {} codex", home.display())),
+            "{line}"
+        );
+        assert!(line.ends_with("login"), "{line}");
+    }
+}

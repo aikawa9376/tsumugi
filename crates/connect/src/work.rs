@@ -1,0 +1,546 @@
+//! Bounded work requests, with durable identity before any mutation write.
+
+use crate::journal::{Intent, Journal};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+use tsumugi_protocol::client::Connection;
+use tsumugi_protocol::{
+    Answer, Ask, Event, MutationStamp, MutationState, RemoteInfo, Request, SPOKEN, agree,
+};
+
+const REPLY: Duration = Duration::from_secs(30);
+
+pub struct Work {
+    socket: PathBuf,
+    info: RemoteInfo,
+    journal: Arc<Journal>,
+    /// The environment of the work machine's host the work belongs to.
+    scope: Option<String>,
+    pending: tokio::sync::Semaphore,
+}
+
+pub struct Outcome {
+    pub intent: Intent,
+    pub state: MutationState,
+    pub problem: Option<String>,
+}
+
+impl Work {
+    pub(crate) fn new(
+        socket: PathBuf,
+        info: RemoteInfo,
+        journal: Arc<Journal>,
+        scope: Option<String>,
+    ) -> Result<Self, String> {
+        info.validate()?;
+        if journal.instance() != info.instance {
+            return Err("mutation journal belongs to another remote instance".into());
+        }
+        Ok(Self {
+            socket,
+            info,
+            journal,
+            scope,
+            pending: tokio::sync::Semaphore::new(8),
+        })
+    }
+
+    pub fn journal(&self) -> &Journal {
+        &self.journal
+    }
+
+    async fn connection(&self) -> Result<Connection, String> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut link = Connection::open_in(&self.socket, self.scope.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
+            if link.hello.endpoint.as_ref() != Some(&self.info.work)
+                || link.hello.terminal.as_ref() != Some(&self.info.terminal)
+                || agree(SPOKEN, &link.hello.speaks).is_none()
+            {
+                return Err("remote work identity changed before the request".into());
+            }
+            link.requests
+                .send(&Request::Hello {
+                    versions: SPOKEN.to_vec(),
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            loop {
+                match link.events.next().await.map_err(|e| e.to_string())? {
+                    Some(Event::Welcome { .. }) => return Ok(link),
+                    Some(Event::Refused { .. }) | None => {
+                        return Err("remote work host refused the connection".into());
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .map_err(|_| "remote work greeting timed out".to_string())?
+    }
+
+    async fn ask(link: &mut Connection, ask: Ask) -> Result<Answer, String> {
+        tokio::time::timeout(REPLY, async {
+            link.requests
+                .send(&Request::Ask {
+                    asked: 1,
+                    ask: Box::new(ask),
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            loop {
+                match link.events.next().await.map_err(|e| e.to_string())? {
+                    Some(Event::Answer { asked: 1, answer }) => return Ok(answer),
+                    None => return Err("remote work host went away before its answer".into()),
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .map_err(|_| "remote work reply timed out".to_string())?
+    }
+
+    pub async fn read(&self, ask: Ask) -> Result<Answer, String> {
+        if ask.mutates() || matches!(ask, Ask::Apply { .. }) {
+            return Err("work mutations must be journaled before sending".into());
+        }
+        let _permit = self
+            .pending
+            .try_acquire()
+            .map_err(|_| "too many remote requests are pending".to_string())?;
+        Self::ask(&mut self.connection().await?, ask).await
+    }
+
+    /// Errors before admission are returned as errors; after persistence, a
+    /// missing reply is an outcome to resolve, never a reason to send again.
+    pub async fn mutate(&self, request: Request) -> Result<Outcome, String> {
+        self.change(request, None).await
+    }
+
+    pub async fn mutate_prompt(
+        &self,
+        request: Request,
+        prompt: crate::journal::PromptContext,
+    ) -> Result<Outcome, String> {
+        if !matches!(&request, Request::Ask { ask, .. } if matches!(ask.as_ref(), Ask::SubmitPrompt { .. } | Ask::StartSession(_)))
+        {
+            return Err("prompt context requires a prompt or session-start request".into());
+        }
+        self.change(request, Some(prompt)).await
+    }
+
+    async fn change(
+        &self,
+        request: Request,
+        prompt: Option<crate::journal::PromptContext>,
+    ) -> Result<Outcome, String> {
+        if !request.mutates() {
+            return Err("only work mutations can be applied".into());
+        }
+        let _permit = self
+            .pending
+            .try_acquire()
+            .map_err(|_| "too many remote changes are pending".to_string())?;
+        let mut link = self.connection().await?;
+        let epoch = match Self::ask(&mut link, Ask::MutationEpoch).await? {
+            Answer::MutationEpoch { epoch } => epoch,
+            _ => return Err("remote work host supplied no mutation epoch".into()),
+        };
+        let mut intent = Intent::new(&self.info, epoch, request)?;
+        intent.prompt = prompt;
+        self.journal.prepare(&intent)?;
+        let result = tokio::time::timeout(REPLY, async {
+            let mut answer = Self::ask(&mut link, intent.apply()).await?;
+            loop {
+                match answer {
+                    Answer::Mutation {
+                        status: MutationState::Accepted,
+                    } => {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        answer = Self::ask(&mut link, intent.query()).await?;
+                    }
+                    Answer::Mutation { status } => return Ok(settled(status)),
+                    _ => return Err("remote work host supplied no mutation outcome".to_string()),
+                }
+            }
+        })
+        .await
+        .unwrap_or_else(|_| Err("remote mutation outcome timed out".into()));
+        let (state, mut problem) = match result {
+            Ok(state) => (state, None),
+            Err(text) => (MutationState::Unknown, Some(text)),
+        };
+        if let Err(text) = self.journal.finish(&intent.stamp, &state) {
+            problem = Some(text);
+        }
+        Ok(Outcome {
+            intent,
+            state,
+            problem,
+        })
+    }
+
+    /// Recovery only queries the original ID. Even an intent saved before a
+    /// write that never happened is left unknown rather than applied again.
+    pub async fn recover(&self, stamp: &MutationStamp) -> Result<Outcome, String> {
+        let record = self
+            .journal
+            .records()?
+            .into_iter()
+            .find(|r| r.intent.stamp == *stamp)
+            .ok_or("remote mutation is absent from the journal")?;
+        if let Some(state) = record.outcome {
+            return Ok(Outcome {
+                intent: record.intent,
+                state,
+                problem: None,
+            });
+        }
+        if stamp.work != self.info.work.generation
+            || stamp.terminal != self.info.terminal.generation
+        {
+            return Ok(Outcome {
+                intent: record.intent,
+                state: MutationState::Unknown,
+                problem: Some(
+                    "remote host incarnation changed before the outcome was confirmed".into(),
+                ),
+            });
+        }
+        let _permit = self
+            .pending
+            .try_acquire()
+            .map_err(|_| "too many remote requests are pending".to_string())?;
+        let mut link = self.connection().await?;
+        let state = match Self::ask(&mut link, record.intent.query()).await? {
+            Answer::Mutation { status } => status,
+            _ => return Err("remote work host supplied no mutation outcome".into()),
+        };
+        self.journal.finish(stamp, &state)?;
+        Ok(Outcome {
+            intent: record.intent,
+            state,
+            problem: None,
+        })
+    }
+}
+
+/// An apply's answer as the journal keeps it: a host that refused to admit
+/// the change never ran it, which is as certain as a rejection.
+fn settled(state: MutationState) -> MutationState {
+    let why = match state {
+        MutationState::Full => "has too many changes in flight",
+        MutationState::Retired => "no longer accepts changes from this connection",
+        MutationState::Conflict => "holds another change under the same ID",
+        state => return state,
+    };
+    MutationState::Rejected {
+        text: format!("The remote work host {why}; the change was not applied"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncWriteExt, BufReader};
+    use tsumugi_protocol::{Hello, RemoteEndpoint, SPOKEN, encode};
+
+    fn info() -> RemoteInfo {
+        let endpoint = |generation: &str| RemoteEndpoint {
+            instance: "a".repeat(32),
+            generation: generation.repeat(32),
+            pid: 1,
+            build: "test".into(),
+            protocols: vec![1],
+            socket: format!(
+                "/tmp/tsumugi-r-501/{}/{}.sock",
+                "a".repeat(32),
+                generation.repeat(32)
+            )
+            .into(),
+        };
+        RemoteInfo {
+            instance: "a".repeat(32),
+            work: endpoint("b"),
+            terminal: endpoint("c"),
+        }
+    }
+
+    #[tokio::test]
+    async fn work_asks_for_the_environment_it_was_made_for_whatever_the_process_says() {
+        let dir = tempfile::Builder::new()
+            .prefix("tsumugi-w-")
+            .tempdir_in(tsumugi_sys::local::temp_dir())
+            .unwrap();
+        let socket = dir.path().join("work.sock");
+        let listener = tsumugi_sys::local::Listener::bind(&socket).unwrap();
+        let info = info();
+        let server_info = info.clone();
+        let server = tokio::spawn(async move {
+            let mut stream = listener.accept().await.unwrap();
+            stream
+                .write_all(
+                    encode(&Hello {
+                        speaks: SPOKEN.to_vec(),
+                        build: "test".into(),
+                        endpoint: Some(server_info.work.clone()),
+                        terminal: Some(server_info.terminal.clone()),
+                        mutation_epoch: Some(1),
+                    })
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let (read, mut write) = tokio::io::split(stream);
+            let mut read = BufReader::new(read);
+            let first = tsumugi_protocol::client::read_line(&mut read)
+                .await
+                .unwrap()
+                .unwrap();
+            let asked: serde_json::Value = serde_json::from_str(&first).unwrap();
+            write
+                .write_all(
+                    format!(
+                        "{}\n",
+                        serde_json::json!({"environment": asked["id"], "epoch": 1})
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            asked
+        });
+        let journal = Arc::new(Journal::open(&dir.path().join("journal"), &info.instance).unwrap());
+        let client = Work::new(socket, info, journal, Some("scope-b".into())).unwrap();
+        // The hello that follows is not answered; only what was asked first
+        // matters here.
+        let _ =
+            tokio::time::timeout(Duration::from_millis(200), client.read(Ask::TerminalHost)).await;
+        let asked = server.await.unwrap();
+        assert_eq!(
+            asked,
+            serde_json::json!({"op": "environment", "id": "scope-b"})
+        );
+    }
+
+    #[tokio::test]
+    async fn two_lost_replies_and_two_client_restarts_never_apply_the_intent_again() {
+        let dir = tempfile::Builder::new()
+            .prefix("tsumugi-w-")
+            .tempdir_in(tsumugi_sys::local::temp_dir())
+            .unwrap();
+        let socket = dir.path().join("work.sock");
+        let listener = tsumugi_sys::local::Listener::bind(&socket).unwrap();
+        let info = info();
+        let server_info = info.clone();
+        let effects = Arc::new(AtomicUsize::new(0));
+        let queries = Arc::new(AtomicUsize::new(0));
+        let (effect_count, query_count) = (effects.clone(), queries.clone());
+        let server = tokio::spawn(async move {
+            loop {
+                let mut stream = listener.accept().await.unwrap();
+                stream
+                    .write_all(
+                        encode(&Hello {
+                            speaks: SPOKEN.to_vec(),
+                            build: "test".into(),
+                            endpoint: Some(server_info.work.clone()),
+                            terminal: Some(server_info.terminal.clone()),
+                            mutation_epoch: Some(1),
+                        })
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+                let (read, mut write) = tokio::io::split(stream);
+                let mut read = BufReader::new(read);
+                assert!(matches!(
+                    tsumugi_protocol::decode::<Request>(
+                        &tsumugi_protocol::client::read_line(&mut read)
+                            .await
+                            .unwrap()
+                            .unwrap()
+                    )
+                    .unwrap(),
+                    Request::Hello { .. }
+                ));
+                write
+                    .write_all(encode(&Event::Welcome { version: SPOKEN[0] }).as_bytes())
+                    .await
+                    .unwrap();
+                while let Some(line) = tsumugi_protocol::client::read_line(&mut read)
+                    .await
+                    .unwrap()
+                {
+                    let Request::Ask { asked, ask } = tsumugi_protocol::decode(&line).unwrap()
+                    else {
+                        panic!("expected ask");
+                    };
+                    let answer = match *ask {
+                        Ask::MutationEpoch => Answer::MutationEpoch { epoch: 1 },
+                        Ask::Apply { .. } => {
+                            effect_count.fetch_add(1, Ordering::SeqCst);
+                            break;
+                        }
+                        Ask::MutationStatus { .. } => {
+                            if query_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                                break;
+                            }
+                            Answer::Mutation {
+                                status: MutationState::Result {
+                                    answer: Box::new(Answer::Done),
+                                },
+                            }
+                        }
+                        _ => panic!("unexpected ask"),
+                    };
+                    write
+                        .write_all(encode(&Event::Answer { asked, answer }).as_bytes())
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+        let journal =
+            || Arc::new(Journal::open(&dir.path().join("journal"), &info.instance).unwrap());
+        let client = Work::new(socket.clone(), info.clone(), journal(), None).unwrap();
+        let prompt = crate::journal::PromptContext {
+            target: crate::journal::PromptTarget::Session {
+                id: "session".into(),
+            },
+            text: "日本語の依頼".into(),
+            images: vec![],
+        };
+        let outcome = client
+            .mutate_prompt(
+                Request::Ask {
+                    asked: 1,
+                    ask: Box::new(Ask::SubmitPrompt {
+                        session: "session".into(),
+                        agent: tsumugi_model::Agent::Codex,
+                        text: prompt.text.clone(),
+                        images: vec![],
+                    }),
+                },
+                prompt.clone(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(outcome.state, MutationState::Unknown);
+        let stamp = outcome.intent.stamp;
+        drop(client);
+        let client = Work::new(socket.clone(), info.clone(), journal(), None).unwrap();
+        assert!(client.recover(&stamp).await.is_err());
+        drop(client);
+        let client = Work::new(socket, info.clone(), journal(), None).unwrap();
+        let outcome = client.recover(&stamp).await.unwrap();
+        assert_eq!(outcome.intent.prompt, Some(prompt));
+        assert_eq!(
+            outcome.state,
+            MutationState::Result {
+                answer: Box::new(Answer::Done)
+            }
+        );
+        assert_eq!(effects.load(Ordering::SeqCst), 1);
+        assert_eq!(queries.load(Ordering::SeqCst), 2);
+        assert_eq!(client.journal.records().unwrap().len(), 1);
+        client.journal.acknowledge(&stamp).unwrap();
+        assert!(client.journal.records().unwrap().is_empty());
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn a_change_the_host_refused_to_admit_is_settled_as_rejected() {
+        for refused in [
+            MutationState::Full,
+            MutationState::Retired,
+            MutationState::Conflict,
+        ] {
+            let dir = tempfile::Builder::new()
+                .prefix("tsumugi-w-")
+                .tempdir_in(tsumugi_sys::local::temp_dir())
+                .unwrap();
+            let socket = dir.path().join("work.sock");
+            let listener = tsumugi_sys::local::Listener::bind(&socket).unwrap();
+            let info = info();
+            let server_info = info.clone();
+            let answer = refused.clone();
+            let server = tokio::spawn(async move {
+                let mut stream = listener.accept().await.unwrap();
+                stream
+                    .write_all(
+                        encode(&Hello {
+                            speaks: SPOKEN.to_vec(),
+                            build: "test".into(),
+                            endpoint: Some(server_info.work.clone()),
+                            terminal: Some(server_info.terminal.clone()),
+                            mutation_epoch: Some(1),
+                        })
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+                let (read, mut write) = tokio::io::split(stream);
+                let mut read = BufReader::new(read);
+                tsumugi_protocol::client::read_line(&mut read)
+                    .await
+                    .unwrap();
+                write
+                    .write_all(encode(&Event::Welcome { version: SPOKEN[0] }).as_bytes())
+                    .await
+                    .unwrap();
+                while let Some(line) = tsumugi_protocol::client::read_line(&mut read)
+                    .await
+                    .unwrap()
+                {
+                    let Request::Ask { asked, ask } = tsumugi_protocol::decode(&line).unwrap()
+                    else {
+                        panic!("expected ask");
+                    };
+                    let answer = match *ask {
+                        Ask::MutationEpoch => Answer::MutationEpoch { epoch: 1 },
+                        Ask::Apply { .. } => Answer::Mutation {
+                            status: answer.clone(),
+                        },
+                        _ => panic!("unexpected ask"),
+                    };
+                    write
+                        .write_all(encode(&Event::Answer { asked, answer }).as_bytes())
+                        .await
+                        .unwrap();
+                }
+            });
+            let journal =
+                Arc::new(Journal::open(&dir.path().join("journal"), &info.instance).unwrap());
+            let client = Work::new(socket, info, journal, None).unwrap();
+            let outcome = client
+                .mutate(Request::Ask {
+                    asked: 1,
+                    ask: Box::new(Ask::SubmitPrompt {
+                        session: "session".into(),
+                        agent: tsumugi_model::Agent::Codex,
+                        text: "never admitted".into(),
+                        images: vec![],
+                    }),
+                })
+                .await
+                .unwrap();
+            assert!(
+                matches!(outcome.state, MutationState::Rejected { .. }),
+                "{refused:?} was settled as {:?}",
+                outcome.state
+            );
+            assert_eq!(outcome.problem, None);
+            assert_eq!(
+                client.journal.records().unwrap()[0].outcome,
+                Some(outcome.state)
+            );
+            server.abort();
+            let _ = server.await;
+        }
+    }
+}

@@ -1,0 +1,40 @@
+//! The window's state and the rules it changes by: plain data and functions
+//! over it, with no UI and no programs run.
+
+pub mod actions;
+pub mod agent_pages;
+pub mod attention;
+pub mod chrome;
+pub mod complete;
+pub mod completion;
+pub mod config;
+pub mod console;
+pub mod content;
+pub mod cursor;
+pub mod details;
+pub mod effect;
+pub mod file_icons;
+pub mod fonts;
+pub mod graph;
+pub mod host;
+pub mod icons;
+pub mod keymap;
+pub mod msg;
+pub mod overlay;
+pub mod palette;
+pub mod perform;
+pub mod picker;
+pub mod profiles;
+pub mod prompt;
+pub mod reference;
+pub mod scenario;
+pub mod settings;
+pub mod settle;
+pub mod state;
+pub mod status;
+#[cfg(test)]
+pub mod testing;
+pub mod tree;
+pub mod update;
+pub mod viewers;
+pub mod zoom;

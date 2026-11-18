@@ -1,0 +1,857 @@
+//! How the window stands with each environment it shows: what the
+//! environment's heading says of it, and the card the details show while
+//! the heading is selected. The work shown may be stale while a link is
+//! down, so how it stands stays in sight.
+
+use std::time::Instant;
+
+use dioxus::prelude::*;
+use tsumugi_connect::Target;
+use tsumugi_connect::environments::Catalog;
+use tsumugi_core::config::Config;
+use tsumugi_core::details::{ProfileRow, profile_rows};
+use tsumugi_core::host::Link;
+use tsumugi_core::overlay::context_menu::Reach;
+use tsumugi_model::EnvironmentId;
+use tsumugi_model::time::now_ms;
+
+use crate::bridge::AppCtx;
+use crate::components::{Button, CopyValue, LinkButton, PlacedButton, Spacer};
+use crate::details::Gauges;
+use crate::icons::{Icon, IconView};
+use crate::link::{RemotePhase, RemoteStatus};
+
+/// Where an environment works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Kind {
+    /// On this computer.
+    Local,
+    /// On a work machine.
+    Remote,
+}
+
+impl Kind {
+    pub(crate) fn icon(self) -> Icon {
+        match self {
+            Kind::Local => Icon::DeviceDesktop,
+            Kind::Remote => Icon::Server,
+        }
+    }
+}
+
+/// The dot before an environment's name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mark {
+    /// The window and the environment's host work together.
+    Connected,
+    /// The host is being reached.
+    Reaching,
+    /// The host cannot be worked with.
+    Stopped,
+}
+
+impl Mark {
+    pub(crate) fn class(self) -> &'static str {
+        match self {
+            Mark::Connected => "ok",
+            Mark::Reaching => "busy",
+            Mark::Stopped => "fail",
+        }
+    }
+}
+
+/// What an environment's heading says beside its name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Note {
+    Connecting,
+    Reconnecting,
+    /// The work machine cannot be reached; its work was last received this
+    /// many milliseconds ago, if ever.
+    Offline {
+        age_ms: Option<u64>,
+    },
+    ReadOnly,
+    /// A change sent there has an outcome the user has to look at.
+    SendUnconfirmed,
+    /// The host speaks no version this window speaks.
+    Incompatible,
+}
+
+impl Note {
+    pub(crate) fn text(self) -> String {
+        match self {
+            Note::Connecting => "Connecting".into(),
+            Note::Reconnecting => "Reconnecting".into(),
+            Note::Offline { age_ms: None } => "Offline".into(),
+            Note::Offline {
+                age_ms: Some(age_ms),
+            } => format!("Offline · {}", short_age(age_ms)),
+            Note::ReadOnly => "Read only".into(),
+            Note::SendUnconfirmed => "Send unconfirmed".into(),
+            Note::Incompatible => "Incompatible".into(),
+        }
+    }
+
+    pub(crate) fn class(self) -> &'static str {
+        match self {
+            Note::Connecting | Note::Reconnecting => "busy",
+            Note::Offline { .. } | Note::Incompatible => "fail",
+            Note::ReadOnly => "quiet",
+            Note::SendUnconfirmed => "wait",
+        }
+    }
+
+    pub(crate) fn icon(self) -> Option<Icon> {
+        (self == Note::ReadOnly).then_some(Icon::Lock)
+    }
+}
+
+/// How an environment's connection stands, as its heading and its card
+/// say it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Standing {
+    pub(crate) kind: Kind,
+    pub(crate) mark: Mark,
+    /// Nothing while it is connected and nothing waits on the user.
+    pub(crate) note: Option<Note>,
+}
+
+impl Standing {
+    /// How it stands, said in a few words.
+    pub(crate) fn words(self) -> &'static str {
+        match self.note {
+            None => "Connected",
+            Some(Note::ReadOnly) => "Connected, read only",
+            Some(Note::SendUnconfirmed) => "Connected; a change sent there needs you",
+            Some(Note::Connecting) => "Connecting",
+            Some(Note::Reconnecting) => "Reconnecting",
+            Some(Note::Offline { .. }) => "Connection stopped",
+            Some(Note::Incompatible) => "The host speaks no version this window speaks",
+        }
+    }
+}
+
+/// How the window stands with an environment whose host link is `link`,
+/// and whose work machine link is `remote` for one on a work machine, at
+/// `now_ms`.
+pub(crate) fn standing(link: &Link, remote: Option<&RemoteStatus>, now_ms: u64) -> Standing {
+    let refused = matches!(link, Link::Refused { .. });
+    let Some(remote) = remote else {
+        let (mark, note) = match link {
+            Link::Opening => (Mark::Reaching, Some(Note::Connecting)),
+            Link::Ready { .. } => (Mark::Connected, None),
+            Link::Refused { .. } => (Mark::Stopped, Some(Note::Incompatible)),
+        };
+        return Standing {
+            kind: Kind::Local,
+            mark,
+            note,
+        };
+    };
+    let (mark, note) = match remote.phase {
+        RemotePhase::Connecting => (Mark::Reaching, Some(Note::Connecting)),
+        RemotePhase::Reconnecting => (Mark::Reaching, Some(Note::Reconnecting)),
+        RemotePhase::Error => {
+            let age_ms = remote.last_work_ms.map(|at| now_ms.saturating_sub(at));
+            (Mark::Stopped, Some(Note::Offline { age_ms }))
+        }
+        RemotePhase::Connected if refused => (Mark::Stopped, Some(Note::Incompatible)),
+        RemotePhase::Connected if !remote.pending.is_empty() => {
+            (Mark::Connected, Some(Note::SendUnconfirmed))
+        }
+        RemotePhase::Connected if !remote.writable => (Mark::Connected, Some(Note::ReadOnly)),
+        RemotePhase::Connected => (Mark::Connected, None),
+    };
+    Standing {
+        kind: Kind::Remote,
+        mark,
+        note,
+    }
+}
+
+/// `ms` in the largest whole unit, as short as a heading has room for.
+fn short_age(ms: u64) -> String {
+    let s = ms / 1000;
+    match s {
+        0..60 => format!("{s}s"),
+        60..3600 => format!("{}m", s / 60),
+        3600..86_400 => format!("{}h", s / 3600),
+        _ => format!("{}d", s / 86_400),
+    }
+}
+
+/// How the window stands with `environment` now.
+pub(crate) fn standing_of(app: &AppCtx, environment: &EnvironmentId) -> Standing {
+    let hosts = app.hosts.read();
+    let link = hosts
+        .get(environment)
+        .map(|h| h.link.clone())
+        .unwrap_or_default();
+    let remotes = app.remotes.read();
+    standing(&link, remotes.get(environment), *app.clock.read())
+}
+
+/// Where `environment` works, as its heading's menu offers to reach it.
+pub(crate) fn reach_of(app: &AppCtx, environment: &EnvironmentId) -> Reach {
+    reach(app.remotes.read().get(environment))
+}
+
+/// Where an environment whose work machine link is `remote` works, none
+/// for one on this computer: one the window waits to try again can be
+/// retried at once, as its card offers.
+pub(crate) fn reach(remote: Option<&RemoteStatus>) -> Reach {
+    match remote {
+        None => Reach::Here,
+        Some(r) => Reach::Machine {
+            retryable: r.retryable
+                && matches!(r.phase, RemotePhase::Reconnecting | RemotePhase::Error),
+        },
+    }
+}
+
+/// The dot that marks how an environment's connection stands.
+#[component]
+pub(crate) fn StandingDot(mark: Mark) -> Element {
+    rsx! {
+        span { class: "standing-dot {mark.class()}", "aria-hidden": "true" }
+    }
+}
+
+/// What an environment's heading says beside its name.
+#[component]
+pub(crate) fn StandingPill(note: Note) -> Element {
+    rsx! {
+        span { class: "standing-pill {note.class()}",
+            if let Some(icon) = note.icon() {
+                IconView { icon, size: 11 }
+            }
+            "{note.text()}"
+        }
+    }
+}
+
+/// How the connection to `environment` stands: where it is, what went
+/// wrong, and the facts of its work machine.
+#[component]
+pub(crate) fn EnvironmentCard(environment: EnvironmentId) -> Element {
+    let app = use_context::<AppCtx>();
+    let name = app.environment_name(&environment);
+    let standing = standing_of(&app, &environment);
+    let remote = app.remotes.read().get(&environment).cloned();
+    let now = *app.clock.read();
+    let machine = {
+        let environment = environment.clone();
+        use_memo(use_reactive((&environment,), |(environment,)| {
+            work_machine(&environment)
+        }))
+    };
+    let last_work = remote
+        .as_ref()
+        .and_then(|r| r.last_work_ms)
+        .map(|at| tsumugi_model::time::ago(now.saturating_sub(at)));
+    let problem = remote.as_ref().and_then(|r| r.problem.clone());
+    rsx! {
+        div { class: "environment-card",
+            div { class: "environment-card-head",
+                div { class: "environment-card-title",
+                    StandingDot { mark: standing.mark }
+                    IconView { icon: standing.kind.icon(), size: 14 }
+                    span { class: "environment-card-name", "{name}" }
+                }
+                if let Some(remote) = &remote {
+                    div { class: "environment-card-address", "{remote.host}" }
+                }
+            }
+            div { class: "details-block",
+                if let Some(problem) = problem {
+                    div { class: "environment-card-problem", role: "status", "{problem}" }
+                }
+                div { class: "details-facts",
+                    span { class: "details-facts-key", "Status" }
+                    span { class: "details-facts-value", "{standing.words()}" CopyValue { text: standing.words().to_string() } }
+                    if let Some(last_work) = last_work {
+                        span { class: "details-facts-key", "Last work" }
+                        span { class: "details-facts-value", "{last_work}" CopyValue { text: last_work.clone() } }
+                    }
+                    if let Some(machine) = machine() {
+                        span { class: "details-facts-key", "Address" }
+                        span { class: "details-facts-value environment-card-mono", "{machine.address}" CopyValue { text: machine.address.to_string() } }
+                        span { class: "details-facts-key", "Machine key" }
+                        span { class: "details-facts-value environment-card-mono", title: "{machine.server}",
+                            "{crate::serving_pane::short(&machine.server)}"
+                            CopyValue { text: machine.server.to_string() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// What a button of an environment does.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum EnvironmentPress {
+    Retry,
+    Pair,
+    Settings,
+}
+
+/// A button for `environment`: one that tries its connection again, while
+/// that can be done, pairs with its work machine again, or opens Settings
+/// on it.
+#[component]
+pub(crate) fn EnvironmentButton(
+    press: EnvironmentPress,
+    placed: tsumugi_core::details::Placed,
+    environment: EnvironmentId,
+) -> Element {
+    let app = use_context::<AppCtx>();
+    let remote = app.remotes.read().get(&environment).cloned();
+    let retryable = remote.as_ref().is_some_and(|r| {
+        r.retryable && matches!(r.phase, RemotePhase::Reconnecting | RemotePhase::Error)
+    });
+    let shows = match press {
+        EnvironmentPress::Retry => retryable,
+        EnvironmentPress::Pair => remote.is_some(),
+        EnvironmentPress::Settings => true,
+    };
+    let tip = (press == EnvironmentPress::Pair).then(|| {
+        "Pair with this work machine again, as when it no longer accepts this computer".to_string()
+    });
+    rsx! {
+        if shows {
+            PlacedButton {
+                placed,
+                tip,
+                onclick: move |_| match press {
+                    EnvironmentPress::Retry => app.retry_remote(&environment),
+                    EnvironmentPress::Pair => match work_machine(&environment) {
+                        Some(machine) => app.pair_again(machine.address, app.environment_name(&environment)),
+                        None => app.notice("this environment's work machine is no longer listed".into()),
+                    },
+                    EnvironmentPress::Settings => app.open_settings(&environment),
+                },
+            }
+        }
+    }
+}
+
+/// The changes and drafts waiting for `environment`; nothing while none
+/// waits.
+#[component]
+pub(crate) fn EnvironmentWaiting(environment: EnvironmentId) -> Element {
+    let app = use_context::<AppCtx>();
+    let (pending, drafts) = app
+        .remotes
+        .read()
+        .get(&environment)
+        .map(|r| (r.pending.clone(), r.drafts.clone()))
+        .unwrap_or_default();
+    rsx! {
+        if !pending.is_empty() || !drafts.is_empty() {
+            div { class: "details-block",
+                for record in pending.iter() {
+                    PendingChange { environment: environment.clone(), record: record.clone() }
+                }
+                for record in drafts.iter() {
+                    PendingChange { environment: environment.clone(), record: record.clone(), saved: true }
+                }
+            }
+        }
+    }
+}
+
+/// The agents `environment`'s profiles start, each with how its login
+/// stands and what is left of its usage limits.
+#[component]
+pub(crate) fn EnvironmentAgents(environment: EnvironmentId) -> Element {
+    let app = use_context::<AppCtx>();
+    let files = {
+        let environment = environment.clone();
+        use_memo(use_reactive((&environment,), move |(environment,)| {
+            let files = app
+                .hosts
+                .read()
+                .work(&environment)
+                .map(|w| w.config.clone())
+                .unwrap_or_default();
+            (environment, files)
+        }))
+    };
+    // A file that no longer reads leaves the profiles last read in force on
+    // the host, as the window's own environment does; so does this list,
+    // each environment's apart, as the card shows one after another.
+    let last_read = use_hook(|| {
+        std::rc::Rc::new(std::cell::RefCell::new(std::collections::HashMap::<
+            EnvironmentId,
+            crate::settings::Settings,
+        >::new()))
+    });
+    let read = use_memo(move || {
+        let (environment, files) = files();
+        let config = Config::of_work(&files);
+        match config.settings_error {
+            None => {
+                last_read
+                    .borrow_mut()
+                    .insert(environment, config.settings.clone());
+                (config.settings, None)
+            }
+            Some(error) => {
+                let kept = last_read.borrow().get(&environment).cloned();
+                (kept.unwrap_or(config.settings), Some(error))
+            }
+        }
+    });
+    let settings = use_memo(move || read().0);
+    let unread = read().1;
+    let mut clock = use_signal(now_ms);
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            clock.set(now_ms());
+        }
+    });
+    let rows = {
+        let hosts = app.hosts.read();
+        let work = hosts.work(&environment);
+        let agents = work.map(|w| w.agents.clone()).unwrap_or_default();
+        let usage = work.map(|w| w.details.usage.clone()).unwrap_or_default();
+        profile_rows(&settings.read(), &agents, &usage, clock())
+    };
+    rsx! {
+        if !rows.is_empty() {
+            div { class: "details-block",
+                if let Some(error) = unread {
+                    div { class: "environment-card-problem", role: "status",
+                        "The settings cannot be read, so the profiles last read are listed: {error}"
+                    }
+                }
+                for row in rows {
+                    ProfileItem { key: "{row.id}", environment: environment.clone(), row }
+                }
+            }
+        }
+    }
+}
+
+/// One profile of an environment: its name and agent, whether it is the
+/// default, how its login stands, asked once the row shows unless known a
+/// short while, and its usage gauges with a link to its agent's usage page.
+#[component]
+fn ProfileItem(environment: EnvironmentId, row: ProfileRow) -> Element {
+    let app = use_context::<AppCtx>();
+    {
+        // Asked again once the host can be reached: an ask that failed
+        // while it could not leaves the login unknown.
+        let reached = standing_of(&app, &environment).mark == Mark::Connected;
+        let (environment, profile) = (environment.clone(), row.id.clone());
+        use_effect(use_reactive(
+            (&environment, &profile, &reached),
+            move |(environment, profile, reached)| {
+                let known = app.logins.peek().get(&environment, &profile).copied();
+                if reached && crate::logins::stale(known.as_ref(), Instant::now()) {
+                    crate::logins::ask(app, environment, profile, None);
+                }
+            },
+        ));
+    }
+    let known = app.logins.read().get(&environment, &row.id).copied();
+    let (login, tone) = crate::logins::said(known.as_ref());
+    let agent = row.agent;
+    let url = row.usage_url.clone();
+    rsx! {
+        div { class: "environment-agent",
+            div { class: "environment-agent-head",
+                span { class: "environment-agent-name", title: "{row.id}", "{row.name}" }
+                span { class: "agent-badge", "{agent.key()}" }
+                if row.default {
+                    span { class: "environment-agent-default", "default" }
+                }
+                Spacer {}
+                span { class: "environment-login {tone}", "{login}" }
+                if let Some(url) = url {
+                    LinkButton {
+                        icon: Icon::Link,
+                        title: "Open {agent.label()} usage settings in your browser",
+                        onclick: move |ev: MouseEvent| {
+                            ev.stop_propagation();
+                            crate::bridge::open([url.clone()]);
+                        },
+                        "Web"
+                    }
+                }
+            }
+            if row.reports_usage {
+                Gauges { gauges: row.gauges }
+            }
+        }
+    }
+}
+
+fn label(request: &tsumugi_protocol::Request) -> String {
+    use tsumugi_protocol::{Ask, Request};
+    match request {
+        Request::Ask { ask, .. } => match ask.as_ref() {
+            Ask::StartSession(start) => format!("Start session: {}", start.name),
+            Ask::SubmitPrompt { .. } => "Send prompt".into(),
+            Ask::StartTerminal(start) => format!("Open terminal: {}", start.name),
+            Ask::KeepDrafts(_) => "Save drafts".into(),
+            Ask::ConsumeDraft { .. } => "Finish a sent draft".into(),
+            Ask::KeepImage { .. } => "Upload an image".into(),
+            Ask::MakeEntry { path, dir: true } => format!("Make directory: {}", path.display()),
+            Ask::MakeEntry { path, .. } => format!("Make file: {}", path.display()),
+            Ask::SaveSettings { .. } | Ask::SaveKeys { .. } => "Save settings".into(),
+            Ask::Run { .. } => "Run a command on the work machine".into(),
+            Ask::Clone { typed, .. } => format!("Clone: {typed}"),
+            _ => "Change the remote work".into(),
+        },
+        Request::Stop { .. } | Request::Kill { .. } => "Stop a remote program".into(),
+        Request::Rename { name, .. } => format!("Rename session: {name}"),
+        Request::EndTerminal { .. } => "Close a terminal".into(),
+        Request::KeepWorkspace { dir } => format!("Add to the tree: {}", dir.display()),
+        Request::DropWorkspace { root } => format!("Remove from the tree: {}", root.display()),
+        Request::Release { .. } => "Release a held program".into(),
+        _ => "Change the remote work".into(),
+    }
+}
+
+#[component]
+fn PendingChange(
+    environment: EnvironmentId,
+    record: tsumugi_connect::journal::Record,
+    #[props(default)] saved: bool,
+) -> Element {
+    let app = use_context::<AppCtx>();
+    let ui = use_context::<crate::shell::Ui>();
+    let title = label(&record.intent.request);
+    let confirmed = saved
+        || matches!(
+            record.outcome,
+            Some(
+                tsumugi_protocol::MutationState::Result { .. }
+                    | tsumugi_protocol::MutationState::Rejected { .. }
+            )
+        );
+    let prompt_result = if saved {
+        Some(false)
+    } else {
+        crate::prompts::remote::confirmed(&record.outcome)
+    };
+    let saved_stamp = record.intent.stamp.clone();
+    let prompt_record = record.clone();
+    let kept_record = record.clone();
+    let kept_ui = ui.clone();
+    let stamp = record.intent.stamp.clone();
+    let query_stamp = stamp.clone();
+    let (draft_in, query_in, resolve_in, sent_in, kept_in) = (
+        environment.clone(),
+        environment.clone(),
+        environment.clone(),
+        environment.clone(),
+        environment,
+    );
+    rsx! {
+        div { class: "pending-change",
+            strong { "{title}" }
+            p { if saved { "A durable copy of this unsent draft is retained. Restoring it does not send it." } else if confirmed { "The outcome was confirmed. It has not been marked as handled." } else { "The outcome is unconfirmed and may still finish. This change has not been sent again." } }
+            if let Some(prompt) = &record.intent.prompt {
+                textarea { readonly: true, value: "{prompt.text}", aria_label: "Retained prompt" }
+            }
+            div { class: "dialog-actions",
+                if saved {
+                    Button { onclick: move |_| {
+                        let removing = app.remote_draft(&draft_in, saved_stamp.clone(), true, true);
+                        spawn(async move { if let Err(text) = removing.await { app.status(Some(text)); } });
+                    }, "Delete saved copy" }
+                }
+                if !confirmed {
+                    Button { onclick: move |_| app.query_remote(&query_in, query_stamp.clone()), "Check outcome" }
+                }
+                if record.intent.prompt.is_none() {
+                    Button { onclick: move |_| {
+                        let resolving = app.resolve_remote(&resolve_in, stamp.clone(), !confirmed);
+                        spawn(async move { if let Err(text) = resolving.await { app.status(Some(text)); } });
+                    }, if confirmed { "Done" } else { "I checked the work" } }
+                } else {
+                    if prompt_result != Some(false) {
+                        Button { onclick: move |_| {
+                            let (ui, record, sent_in) = (ui.clone(), prompt_record.clone(), sent_in.clone());
+                            spawn(async move { if let Err(text) = ui.handle_remote_prompt(&sent_in, record, true, !confirmed, false).await { app.status(Some(text)); } });
+                        }, if prompt_result == Some(true) { "Clear sent draft" } else { "I checked: it was sent" } }
+                    }
+                    if prompt_result != Some(true) {
+                        Button { onclick: move |_| {
+                            let (ui, record, kept_in) = (kept_ui.clone(), kept_record.clone(), kept_in.clone());
+                            spawn(async move { if let Err(text) = ui.handle_remote_prompt(&kept_in, record, false, !confirmed, true).await { app.status(Some(text)); } });
+                        }, if prompt_result == Some(false) { "Restore draft" } else { "I checked: restore unsent draft" } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The work machine an environment works on: where it is reached, and the
+/// fingerprint of the key it proves itself by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Machine {
+    pub(crate) address: String,
+    pub(crate) server: String,
+}
+
+/// The work machine `environment` works on, as the catalog keeps it now.
+pub(crate) fn work_machine(environment: &EnvironmentId) -> Option<Machine> {
+    machine_in(&Catalog::load(&Catalog::path()).ok()?, environment)
+}
+
+/// The work machine `environment` works on in `catalog`, none for one on
+/// this computer or one not kept.
+fn machine_in(catalog: &Catalog, environment: &EnvironmentId) -> Option<Machine> {
+    let kept = catalog
+        .environments
+        .iter()
+        .find(|e| EnvironmentId::new(&e.id) == *environment)?;
+    match &kept.target {
+        Target::Native { address, server } => Some(Machine {
+            address: address.clone(),
+            server: server.clone(),
+        }),
+        Target::Local => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tsumugi_connect::environments::Environment;
+
+    use super::*;
+
+    #[test]
+    fn only_an_environment_kept_on_a_work_machine_has_one_with_an_address_and_a_key() {
+        let machine = Environment::new(
+            "Box",
+            Target::Native {
+                address: "box.local:47130".into(),
+                server: "ab".repeat(32),
+            },
+        );
+        let here = Environment::new("Here", Target::Local);
+        let catalog = Catalog {
+            environments: vec![machine.clone(), here.clone()],
+            ..Catalog::default()
+        };
+        let kept = |e: &Environment| machine_in(&catalog, &EnvironmentId::new(&e.id));
+        assert_eq!(
+            kept(&machine),
+            Some(Machine {
+                address: "box.local:47130".into(),
+                server: "ab".repeat(32),
+            })
+        );
+        assert_eq!(kept(&here), None);
+        assert_eq!(machine_in(&catalog, &EnvironmentId::new("gone")), None);
+    }
+
+    fn remote(edit: impl FnOnce(&mut RemoteStatus)) -> RemoteStatus {
+        let mut status = RemoteStatus::connected("box");
+        edit(&mut status);
+        status
+    }
+
+    /// A change sent to the work machine whose outcome is not known.
+    fn sent() -> tsumugi_connect::journal::Record {
+        use tsumugi_connect::journal::{Intent, Record};
+        use tsumugi_protocol::{MutationStamp, Request};
+        Record {
+            intent: Intent {
+                stamp: MutationStamp {
+                    instance: "i".into(),
+                    work: "w".into(),
+                    terminal: "t".into(),
+                    epoch: 1,
+                    id: "1".into(),
+                },
+                request: Request::Snapshot,
+                prompt: None,
+            },
+            outcome: None,
+        }
+    }
+
+    fn ready() -> Link {
+        Link::Ready {
+            version: tsumugi_protocol::SPOKEN[0],
+        }
+    }
+
+    fn refused() -> Link {
+        Link::Refused {
+            versions: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_environment_on_this_computer_stands_as_its_host_link_does() {
+        // (host link, mark, note)
+        let cases = [
+            (Link::Opening, Mark::Reaching, Some(Note::Connecting)),
+            (ready(), Mark::Connected, None),
+            (refused(), Mark::Stopped, Some(Note::Incompatible)),
+        ];
+        for (link, mark, note) in cases {
+            let got = standing(&link, None, 0);
+            assert_eq!(
+                got,
+                Standing {
+                    kind: Kind::Local,
+                    mark,
+                    note
+                },
+                "{link:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_environment_on_a_work_machine_is_noted_only_while_something_needs_saying() {
+        let pending = Arc::new(vec![sent()]);
+        // (how the work machine's link stands, mark, note)
+        let cases = [
+            (remote(|_| {}), Mark::Connected, None),
+            (
+                remote(|s| s.phase = RemotePhase::Connecting),
+                Mark::Reaching,
+                Some(Note::Connecting),
+            ),
+            (
+                remote(|s| s.phase = RemotePhase::Reconnecting),
+                Mark::Reaching,
+                Some(Note::Reconnecting),
+            ),
+            (
+                remote(|s| s.writable = false),
+                Mark::Connected,
+                Some(Note::ReadOnly),
+            ),
+            (
+                remote(|s| {
+                    s.writable = false;
+                    s.pending = pending.clone();
+                }),
+                Mark::Connected,
+                Some(Note::SendUnconfirmed),
+            ),
+            (
+                remote(|s| s.phase = RemotePhase::Error),
+                Mark::Stopped,
+                Some(Note::Offline { age_ms: None }),
+            ),
+            (
+                remote(|s| {
+                    s.phase = RemotePhase::Error;
+                    s.last_work_ms = Some(4_000);
+                }),
+                Mark::Stopped,
+                Some(Note::Offline {
+                    age_ms: Some(12_000),
+                }),
+            ),
+        ];
+        for (status, mark, note) in cases {
+            let got = standing(&ready(), Some(&status), 16_000);
+            assert_eq!(
+                got,
+                Standing {
+                    kind: Kind::Remote,
+                    mark,
+                    note
+                },
+                "{status:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_work_machine_connected_whose_host_speaks_no_version_of_the_window_s_is_incompatible() {
+        let got = standing(&refused(), Some(&remote(|_| {})), 0);
+        assert_eq!(got.mark, Mark::Stopped);
+        assert_eq!(got.note, Some(Note::Incompatible));
+    }
+
+    #[test]
+    fn how_long_offline_is_said_in_its_largest_whole_unit() {
+        // (age in ms, the note)
+        let cases = [
+            (None, "Offline"),
+            (Some(12_000), "Offline · 12s"),
+            (Some(5 * 60_000 + 1), "Offline · 5m"),
+            (Some(2 * 3_600_000), "Offline · 2h"),
+            (Some(3 * 86_400_000), "Offline · 3d"),
+        ];
+        for (age_ms, want) in cases {
+            assert_eq!(Note::Offline { age_ms }.text(), want, "{age_ms:?}");
+        }
+    }
+
+    #[test]
+    fn only_a_read_only_note_carries_a_lock() {
+        assert_eq!(Note::ReadOnly.icon(), Some(Icon::Lock));
+        for note in [
+            Note::Connecting,
+            Note::Reconnecting,
+            Note::Offline { age_ms: None },
+            Note::SendUnconfirmed,
+            Note::Incompatible,
+        ] {
+            assert_eq!(note.icon(), None, "{note:?}");
+        }
+    }
+
+    #[test]
+    fn the_card_says_in_words_how_the_connection_stands() {
+        let words = |note| {
+            Standing {
+                kind: Kind::Remote,
+                mark: Mark::Connected,
+                note,
+            }
+            .words()
+        };
+        assert_eq!(words(None), "Connected");
+        assert_eq!(words(Some(Note::ReadOnly)), "Connected, read only");
+        assert_eq!(
+            words(Some(Note::Offline { age_ms: Some(1) })),
+            "Connection stopped"
+        );
+    }
+
+    #[test]
+    fn a_heading_s_menu_retries_a_work_machine_only_while_the_window_waits_to_try_it_again() {
+        assert_eq!(reach(None), Reach::Here);
+        assert_eq!(
+            reach(Some(&remote(|_| {}))),
+            Reach::Machine { retryable: false }
+        );
+        let waiting = |phase, retryable| {
+            reach(Some(&remote(|r| {
+                r.phase = phase;
+                r.retryable = retryable;
+            })))
+        };
+        assert_eq!(
+            waiting(RemotePhase::Error, true),
+            Reach::Machine { retryable: true }
+        );
+        assert_eq!(
+            waiting(RemotePhase::Reconnecting, true),
+            Reach::Machine { retryable: true }
+        );
+        assert_eq!(
+            waiting(RemotePhase::Error, false),
+            Reach::Machine { retryable: false }
+        );
+    }
+}

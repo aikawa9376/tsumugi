@@ -1,0 +1,262 @@
+# Keys
+
+Every key Tsumugi handles itself runs a named action. Tsumugi ships bindings of
+its own, and a file you write changes, adds to or takes away from them. The
+prompt's keys are Neovim's and are set up in Neovim, and attachment selection
+has keys of its own. What is drawn over the window answers to bindings too
+([over the window](#over-the-window)).
+`F1` shows every binding in force wherever the keys are.
+
+## In the menu bar
+
+The menu bar offers every action that is more than a key, beside macOS's own
+entries for the application, editing and windows. An entry runs its action
+where the keys are, as its key would, but not while the picker, a dialog or a
+name being typed holds the keys; from the Settings window, it runs in the
+main window and brings it forward, but for closing a tab or the window, which
+closes the Settings window.
+
+Each entry shows the Command key bound to its action in `global`, when that
+key runs it in every area. An action bound only to a sequence, to keys
+without Command, or to a Command key some area binds otherwise shows none,
+and so does a key the menu cannot show as it is typed, such as `Cmd+}`.
+The entries follow the file as it changes.
+
+## With the mouse
+
+What the keys do to a row of the tree or a tab of the content is also offered by
+right-clicking it, each entry with the keys bound to it. A tab closes with its
+`×`, a window takes the keys when clicked, a border between windows is dragged
+to resize them, a workspace's or worktree's row starts a session there with its `+`, and
+the buttons beside the tree's filter list every worktree and start a session.
+A click on the shade around what is drawn over the window, a picker, a
+question, the keys help or the sheet adding an environment, closes it as
+`overlay.close` does, answering a question no; so does a click outside a menu.
+
+A click on the console, live or read, reaches a program that reads the mouse,
+as Claude Code does, at the cell clicked; a program that does not read it is
+told nothing.
+
+## Over the window
+
+A picker, the list of past conversations, a menu opened by a right click, a
+question asked before ending something, the keys help and the sheet adding an
+environment hold the keys while they are open, and nothing behind them acts.
+They share the bindings of the `overlay` area: the same keys close each of
+them, move through what it lists and choose what is moved to. A question
+answers yes to what chooses and no to what closes, and to the keys of its own
+`confirm` area besides, `y` and `n`. The keys help scrolls by what moves. A
+menu closes on a key it does not take, and does nothing else. A text field
+over the window, such as the picker's query, types the keys that type and
+leaves the others to these bindings, so `j` and `k` type there. A picker,
+the keys help and a question name the keys bound now along their foot or on
+their buttons. The keys a picker takes besides, such as `Ctrl+f` for its file
+tree, are its own
+([the tree](tree.md#going-to-a-session-or-starting-one),
+[sessions](sessions.md#resuming-a-past-conversation)).
+
+## Where the keys go
+
+Keys go where the mode chip at the bottom left says, whatever in the window a
+click or macOS left focused, but for a text field being typed in that is
+shown: the filter, a name being typed, the picker's query. When the window is
+in front and its keys have strayed elsewhere, it takes them back by itself
+within a second, without a click.
+
+In a text field, the key that ends an input method's composition, as the
+Enter that commits it, only ends the composition: it does not also keep a
+name being typed or close the filter.
+
+An input method that stops answering keys, so that every key vanishes, is
+restarted after a few of them, as choosing an input source in the menu bar
+would: what it was composing is dropped and keys reach the window again. That
+is so when the keys reach the window as composing, when they reach it to be
+typed but type nothing, and when, held for an input method's answer that never
+comes, none of them reaches it at all, a second after the first. Each time, the
+window writes how many keys were lost to `keys.log` in its instance's state
+folder, and to its standard error, whether or not keys are traced.
+
+With `$TSUMUGI_DEBUG_KEYS` set to anything but empty, the window writes to its
+standard error, line by line, each key it receives, where focus moves and
+where each key goes.
+
+## Where the file is
+
+The file is on the computer the window runs on, and its bindings are in force
+for every environment the window shows, whichever machine the work runs on.
+A `keys.toml` on another work machine is not read by the window.
+
+- `$TSUMUGI_KEYS`, when set;
+- otherwise `keys.toml` in `$XDG_CONFIG_HOME/tsumugi/`, or in
+  `~/.config/tsumugi/` when `$XDG_CONFIG_HOME` is unset.
+
+A missing file keeps Tsumugi's own bindings. The window reads the file again
+when it changes; a mistake in it is reported at the bottom of the window, and
+the bindings in force stay as they were.
+
+## Changing them in the Settings window
+
+The Settings window lists the bindings in force in two ways, either filtered
+by keys, by an action's name or by what it does.
+
+By action, every action is listed under a heading, by what it does, with the
+keys that run it. Keys added to an action run it in every area it works in,
+or in those chosen; keys taken away or changed are so wherever they ran it. A
+key running it in only some of those areas says where. An action whose keys
+the file changed is marked, and goes back to Tsumugi's own keys alone.
+
+By area, the bindings are listed area by area, marking those the file
+changed, added or took away, and each is changed, added or deleted there.
+
+Either way, keys are typed or recorded as they are pressed, and keys they
+would collide with are pointed out, as is a key that types or moves bound in
+`global`. One binding put back, or every one at once, is the default again.
+Each change is written into the file at once, its comments and the rest of it
+left as they were; a file with a mistake in it is not changed there until it
+is fixed.
+
+## Format
+
+```toml
+[tree]
+"Ctrl+n" = "cursor.down"
+"Ctrl+p" = "cursor.up"
+"X" = "none"
+"Ctrl+x" = "session.stop"
+
+[console]
+"Ctrl+c" = "console.send Ctrl+c"
+
+[console.claude]
+"Tab" = "console.send"
+```
+
+Each table is an area of the window, and each entry binds a sequence of keys
+to an action. A binding for keys an area already binds replaces it; `"none"`
+takes the keys away, so they do nothing there.
+
+### Areas
+
+| Area | Holds the keys for |
+| --- | --- |
+| `global` | every area, after the area's own |
+| `tree` | the tree, and the details panel after its own |
+| `filer` | a file tree: the tree's, before its own while a file or a directory is selected, and the picker's |
+| `details` | the details panel |
+| `console` | the console while it shows a session |
+| `console.claude`, `console.codex`, `console.pi`, `console.opencode` | the console while it shows a session of that agent, live or read, before the console's own |
+| `prompt` | the prompt, before Neovim |
+| `draft` | before the area's bindings while a new session is shown, including the prompt in insert mode |
+| `viewer` | a viewer in the focused window |
+| `overlay` | what is drawn over the window: a picker, a menu, a question, the keys help, the sheet adding an environment |
+| `confirm` | a question to answer, before `overlay` |
+
+Tsumugi binds keys in an agent's area where that agent takes a key otherwise
+than the prompt beside it would: Tab in Claude Code's console writes in the
+prompt, where it takes the suggested prompt. `Ctrl+Enter`, which sends the
+prompt, is `Enter` in the console, live or read.
+
+A key that reaches a program in the console is sent as the program asked,
+as felis sends it: with the Kitty keyboard protocol once it asks for it, as
+xterm sends it otherwise.
+A shell's or Neovim's window takes every key that is not a `global` binding,
+and shows no prompt below it: a window move does not stop there, and the
+`prompt` actions do nothing. A
+session waiting on a permission prompt or a question does too, as its answer,
+from the prompt as well as the console; the prompt is Neovim's again once it
+is answered. So does a session showing a dialog of its agent's own in place
+of its input box, or above it while the agent works, such as the picker `/model`
+opens, until the dialog closes.
+The dialog is told from what the console shows, by the agent's
+[screen rules](screen-rules.md); one they do not recognise still takes
+`console.pass_every_key`.
+A session still starting, whose program has reported nothing and not yet
+drawn its input box, also takes every key, such as Claude Code asking whether
+to trust the folder. One that has drawn its input box is no longer starting,
+even when what its program reported was lost.
+The mouse wheel scrolls the console back in either case, and what is sent to
+it shows the bottom again.
+A key the `console` area does not bind, in a session's console, starts
+reading it: what the console holds, scrolled off and on screen, colours kept,
+is read in Neovim, with your own Vim keys for moving, scrolling, searching and
+selecting, and a yank copies to the clipboard. It follows what the session
+writes meanwhile. `q`, `Esc` or `G` in normal mode goes back to the console live,
+and `i`, `a` and `o` to the prompt; `Ctrl-q` sequences stay `global`, and
+one that ends no binding does nothing. `console.read` starts reading any
+console, from it or from a session's prompt below it: a shell's, or a
+session's that takes every key while it asks or shows a dialog, as one
+logging in does with the address to open. Read so, `i`, `a` and `o` go back
+to it live, as it has no prompt to write in. The reader is for reading only: `:`,
+Ex mode, quitting and Vim's window commands do nothing in it, and a window or
+a tab a mapping or a plugin opens in it closes at once.
+A program that scrolls what it shows itself, as Claude Code does on the
+alternate screen, leaves nothing scrolled off to read: moving or scrolling past the reader's
+first or last line scrolls the program instead, and the reader follows; `gg` scrolls it to its start. Leaving the reader
+for the live console, or moving to the prompt, returns the session to its
+latest output.
+The prompt's own keys are its Neovim's mappings
+([Neovim](settings.md#neovim)): `Ctrl+Enter` sends, `Ctrl+c` sends `Escape`
+to the agent, `Shift+Tab` is sent to it as it is, `Tab` on an empty prompt
+takes the prompt the agent suggests, and `Ctrl+p` and `Ctrl+n` recall the
+prompts sent, in insert and normal mode. `Tab`, `Shift+Tab`, `Ctrl+p` and
+`Ctrl+n` move through Neovim's completions while it shows them, and a key
+meant for the agent is Neovim's while the prompt has no session to send it
+to. `global` bindings apply only outside Neovim's insert mode, but for `Mod`
+and Command keys and the prefix.
+
+### Keys
+
+A key is written as its modifiers, then its name, joined by `+`: `Ctrl+q`,
+`Shift+Tab`, `Ctrl+Alt+x`, `Mod+p`. The modifiers are `Mod`, `Cmd`, `Ctrl`,
+`Alt` and `Shift`. `Mod` is Command on macOS and Ctrl with Shift elsewhere,
+so one binding serves every platform; the window writes it as the keys it is
+there. Off macOS, a character other than a letter keeps the Shift `Mod`
+holds: `Mod+]` is `Ctrl+Shift+]`. Command or `Mod` with `c`, `v`, `x`, `a`,
+`z`, `q`, `h` and `m` stays with the menu: editing, quitting, hiding and
+minimizing.
+A key held with `Mod` or Command reaches the `global` bindings wherever the
+keys are, the prompt's insert mode and a console passing its keys on
+included.
+A key is a single character, `Space`, `Plus`, `F1` to `F12`, or one of
+`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`,
+`PageUp`, `PageDown`, `ArrowUp`, `ArrowDown`, `ArrowLeft` and `ArrowRight`. A
+character carries its own case, so `G` is Shift and g, and `Shift+g` means the
+same. Any other character is written as the one Shift types, `!` rather than
+`Shift+1`.
+
+A sequence is keys separated by spaces, pressed one after another: `g g`,
+`Ctrl+q h`. When the keys pressed so far complete one binding and start
+another, the complete one runs.
+
+A key held with Ctrl that begins a `global` sequence, as `Ctrl+q` does, is a
+prefix: it reaches the `global` bindings wherever the keys are, as a Command
+key does. So does Ctrl with a key that is no character, such as `Ctrl+Tab`,
+bound alone in `global`; Ctrl with a character bound alone is Neovim's in
+the prompt's insert mode. In a sequence begun with Ctrl held, a later key held with Ctrl too
+means what it means without, as after Vim's `Ctrl-w`, unless the sequence is
+bound with it so: `Ctrl+q Ctrl+h` is `Ctrl+q h`. Tab is the exception;
+`Ctrl+q Ctrl+Tab` is nothing.
+
+### Repeating
+
+An action that steps through something, such as the tabs, the waiting
+sessions, the workspaces or a window's size, repeats: once a sequence bound
+to it runs, its last key alone runs it again, and so does another key that
+completes, after the same keys before it, a binding to an action that steps
+through the same. `Ctrl+q g t t t` shows the tab three after, and
+`Ctrl+q g t t T` one after. A key held with Ctrl repeats only as it is
+bound, so `Ctrl+q` pressed again begins a sequence. The mode chip says
+`REPEAT` meanwhile. Any other key, one stepping through something else
+included, or text typed, ends it and does what it does. The [key reference](reference/keys.md#actions)
+says which actions repeat.
+
+### Actions
+
+The [key reference](reference/keys.md#actions) lists every action a binding
+can name: what it does, what the menu bar calls it, and the keys Tsumugi binds
+it to.
+
+## Tsumugi's own bindings
+
+The [key reference](reference/keys.md#default-bindings) holds them, written
+as a file of bindings would write them.

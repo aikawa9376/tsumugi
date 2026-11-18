@@ -1,0 +1,1025 @@
+//! The sessions tsumugi runs in its daemon, as the window knows them: what
+//! each one's tags say it is.
+
+use std::path::PathBuf;
+
+use tsumugi_model::profile::ProfileId;
+use tsumugi_model::{Session, State, TerminalProgram, TerminalSession};
+use tsumugi_term::tags;
+
+use crate::delegation::launch::{CODE_TAG, PARENT_TAG, SESSION_TAG, SHOW_TAG};
+
+pub(crate) const KIND: &str = "tsumugi.kind";
+pub const NAME: &str = "tsumugi.name";
+/// The directory a session was started in, which the daemon does not list
+/// (felis-terminal/felis#7).
+pub(crate) const CWD: &str = "tsumugi.cwd";
+const STARTED: &str = "tsumugi.started";
+/// The file a Neovim was started on.
+const FILE: &str = "tsumugi.file";
+/// The resource a terminal stands for.
+const RESOURCE: &str = "tsumugi.resource";
+/// What a terminal runs.
+const PROGRAM: &str = "tsumugi.program";
+const COMMAND: &str = "tsumugi.command";
+/// How a command terminal's program ended, its exit status, set by the
+/// tsumugi that keeps the terminal once it has.
+pub(crate) const EXIT: &str = "tsumugi.exit";
+const LAST_INPUT: &str = "tsumugi.last-input";
+const PERMISSIONS: &str = "tsumugi.permissions";
+/// The conversation a session holds. The tag keeps its original spelling
+/// so sessions started by earlier versions still carry their conversation.
+const CONVERSATION: &str = "tsumugi.claude";
+/// The process Claude Code runs in, learned from its listing while the
+/// session still holds the conversation it was started with.
+const PID: &str = "tsumugi.pid";
+/// Present on a session started with tsumugi's editor as its external editor.
+const EDITOR: &str = "tsumugi.editor";
+/// The profile a session started from, and the folder of that profile's own
+/// it runs in, none for its agent's own environment; a session started before
+/// profiles carries neither and ran in its agent's own.
+const PROFILE: &str = "tsumugi.profile";
+pub(crate) const HOME: &str = "tsumugi.home";
+/// The connection a session started while profiles named connections ran in,
+/// which only its record tells the folder of.
+const CONNECTION: &str = "tsumugi.connection";
+/// The daemon id of the interrupted session or terminal this one was
+/// brought back for.
+const RESTORED: &str = "tsumugi.restored";
+
+/// A session the daemon holds, as what it runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Kept {
+    Agent(Session),
+    Terminal(TerminalSession),
+}
+
+pub use tsumugi_model::daemon::{hex, id_of};
+
+/// The tags that keep `conversation` on a daemon session.
+pub(crate) fn conversation_tags(conversation: &str) -> Vec<String> {
+    tags::tagged(CONVERSATION, conversation)
+}
+
+/// The conversation a daemon session is tagged as holding.
+pub(crate) fn conversation_of(session: &tsumugi_term::Session) -> Option<String> {
+    tags::value(&session.tags, CONVERSATION).filter(|c| !c.is_empty())
+}
+
+/// Keep the conversation reported by the agent's terminal title on its
+/// daemon session, including when the agent switches conversations.
+pub fn follow_title(session: &mut Session, title: &str) -> Option<(u128, &'static str, String)> {
+    let conversation = tsumugi_agents::adapter(session.agent).conversation_title(title)?;
+    let id = id_of(&session.id)?;
+    if conversation == session.session_id {
+        return None;
+    }
+    session.session_id = conversation.clone();
+    Some((id, CONVERSATION, conversation))
+}
+
+/// Keep newer user input on the daemon session so another window can recover it.
+pub fn note_input(session: &mut Session, at: u64) -> Option<(u128, &'static str, String)> {
+    let id = id_of(&session.id)?;
+    if at == 0 || session.last_input_ms.is_some_and(|held| held >= at) {
+        return None;
+    }
+    session.last_input_ms = Some(at);
+    Some((id, LAST_INPUT, at.to_string()))
+}
+
+/// What `session` is, by its tags; `None` for one tsumugi did not start, and
+/// for one whose program has exited, which is gone but for a moment.
+pub fn read(session: &tsumugi_term::Session) -> Option<Kept> {
+    if !crate::environment::owns(&session.tags) {
+        return None;
+    }
+    read_any_environment(session)
+}
+
+/// All environments are considered when protecting a login from deletion.
+pub fn read_any_environment(session: &tsumugi_term::Session) -> Option<Kept> {
+    if session.exited {
+        return None;
+    }
+    let t = &session.tags;
+    let name = tags::value(t, NAME).unwrap_or_default();
+    let cwd = PathBuf::from(tags::value(t, CWD)?);
+    let kind = tags::value(t, KIND)?;
+    match tsumugi_model::Agent::parse(&kind) {
+        Some(agent) => Some(Kept::Agent(Session {
+            delegation: tags::value(t, SESSION_TAG).and_then(|id| id.parse().ok()),
+            code: tags::value(t, CODE_TAG).and_then(|code| code.parse().ok()),
+            parent: tags::value(t, PARENT_TAG).and_then(|id| id.parse().ok()),
+            show: tags::value(t, SHOW_TAG).is_some(),
+            agent,
+            profile: match tags::value(t, PROFILE) {
+                Some(id) => id.parse().ok()?,
+                None => ProfileId::builtin(agent),
+            },
+            home: tags::value(t, HOME).map(PathBuf::from),
+            profile_name: String::new(),
+            id: hex(session.id),
+            session_id: tags::value(t, CONVERSATION).unwrap_or_default(),
+            pid: tags::value(t, PID).and_then(|p| p.parse().ok()),
+            name,
+            cwd,
+            state: session
+                .status
+                .as_ref()
+                .map(|s| State::reported(&s.state, s.kind.as_deref()))
+                .unwrap_or(State::Starting),
+            status_message: session.status.as_ref().and_then(|s| s.msg.clone()),
+            started_ms: tags::value(t, STARTED).and_then(|s| s.parse().ok()),
+            last_input_ms: tags::value(t, LAST_INPUT).and_then(|s| s.parse().ok()),
+            permissions: match tags::value(t, PERMISSIONS) {
+                Some(raw) => serde_json::from_str(&raw).ok()?,
+                None => tsumugi_model::AgentPermissions::Default,
+            },
+            tsumugi_editor: tags::value(t, EDITOR).is_some(),
+            restored_from: tags::value(t, RESTORED),
+        })),
+        None if kind == "terminal" => Some(Kept::Terminal(TerminalSession {
+            id: session.id,
+            resource_id: tags::value(t, RESOURCE)?.parse().ok()?,
+            name,
+            cwd,
+            program: program_of(&tags::value(t, PROGRAM)?)?,
+            file: tags::value(t, FILE).map(PathBuf::from),
+            command: match tags::value(t, COMMAND) {
+                Some(raw) => serde_json::from_str(&raw).ok()?,
+                None => Vec::new(),
+            },
+            state: session
+                .status
+                .as_ref()
+                .map(|s| State::reported(&s.state, s.kind.as_deref())),
+            opener: tags::value(t, PARENT_TAG).and_then(|id| id.parse().ok()),
+            show: tags::value(t, SHOW_TAG).is_some(),
+            exit: tags::value(t, EXIT).and_then(|code| code.parse().ok()),
+            restored_from: tags::value(t, RESTORED),
+        })),
+        None => None,
+    }
+}
+
+/// The agent sessions tsumugi started among `listed`.
+pub fn agents(listed: &[tsumugi_term::Session]) -> impl Iterator<Item = Session> + '_ {
+    listed
+        .iter()
+        .filter_map(read)
+        .filter_map(|kept| match kept {
+            Kept::Agent(session) => Some(session),
+            Kept::Terminal(_) => None,
+        })
+}
+
+/// The tag that keeps on its daemon session what a session `learned` from
+/// its agent's listing: the session's daemon id, the tag's key and its value.
+pub fn learned_tag((id, learned): (u128, tsumugi_agents::Learned)) -> (u128, &'static str, String) {
+    match learned {
+        tsumugi_agents::Learned::Conversation(conversation) => (id, CONVERSATION, conversation),
+        tsumugi_agents::Learned::Pid(pid) => (id, PID, pid.to_string()),
+    }
+}
+
+/// The tags a session of `agent` tsumugi starts or resumes carries, holding
+/// the conversation `conversation`, if it is known yet, from the moment it
+/// is spawned.
+pub fn agent_tags(
+    agent: tsumugi_model::Agent,
+    name: &str,
+    cwd: &std::path::Path,
+    conversation: &str,
+    permissions: &tsumugi_model::AgentPermissions,
+    started_ms: u64,
+) -> Vec<String> {
+    let mut out = tags::tagged(NAME, name);
+    out.extend(tags::tagged(CWD, &cwd.to_string_lossy()));
+    out.extend(tags::tagged(STARTED, &started_ms.to_string()));
+    if !conversation.is_empty() {
+        out.extend(conversation_tags(conversation));
+    }
+    out.extend(tags::tagged(
+        PERMISSIONS,
+        &serde_json::to_string(permissions).expect("serializable permissions"),
+    ));
+    out.extend(tags::tagged(KIND, agent.key()));
+    out
+}
+
+/// The tags naming the profile a session started from and the folder of its
+/// own it runs in, none for its agent's own environment.
+pub fn profile_tags(profile: &ProfileId, home: Option<&std::path::Path>) -> Vec<String> {
+    let mut out = tags::tagged(PROFILE, profile.as_str());
+    if let Some(home) = home {
+        out.extend(tags::tagged(HOME, &home.to_string_lossy()));
+    }
+    out
+}
+
+/// The connection of its own a session started while profiles named
+/// connections names, when it names no folder: the record of it, not the
+/// tag, tells which folder that was.
+pub fn earlier_connection(session: &tsumugi_term::Session) -> Option<String> {
+    let t = &session.tags;
+    if tags::value(t, HOME).is_some() {
+        return None;
+    }
+    tags::value(t, CONNECTION).filter(|id| tsumugi_model::Agent::parse(id).is_none())
+}
+
+/// The tag saying a session started with `env` runs with tsumugi's editor,
+/// if it does.
+pub fn editor_tags(env: &[(String, String)]) -> Vec<String> {
+    if crate::editor::runs_script(env, &crate::editor::current_script()) {
+        tags::tagged(EDITOR, "1")
+    } else {
+        Vec::new()
+    }
+}
+
+/// The tag saying a session was brought back for the interrupted session
+/// the daemon knew as `old`.
+pub fn restored_tags(old: &str) -> Vec<String> {
+    tags::tagged(RESTORED, old)
+}
+
+/// The tags a terminal tsumugi starts carries, saying what it runs.
+pub fn terminal_tags(terminal: &TerminalSession) -> Vec<String> {
+    let mut out = tags::tagged(KIND, "terminal");
+    out.extend(tags::tagged(NAME, &terminal.name));
+    out.extend(tags::tagged(CWD, &terminal.cwd.to_string_lossy()));
+    out.extend(tags::tagged(RESOURCE, &terminal.resource_id.to_string()));
+    out.extend(tags::tagged(PROGRAM, program_key(terminal.program)));
+    if let Some(file) = &terminal.file {
+        out.extend(tags::tagged(FILE, &file.to_string_lossy()));
+    }
+    if let Some(old) = &terminal.restored_from {
+        out.extend(tags::tagged(RESTORED, old));
+    }
+    if !terminal.command.is_empty() {
+        out.extend(tags::tagged(
+            COMMAND,
+            &serde_json::to_string(&terminal.command).expect("serializable command"),
+        ));
+    }
+    if let Some(opener) = terminal.opener {
+        out.extend(tags::tagged(PARENT_TAG, &opener.to_string()));
+    }
+    if terminal.show {
+        out.extend(tags::tagged(SHOW_TAG, "1"));
+    }
+    out
+}
+
+/// How `program` is spelled in a terminal's tag.
+fn program_key(program: TerminalProgram) -> &'static str {
+    match program {
+        TerminalProgram::Shell => "shell",
+        TerminalProgram::Neovim => "neovim",
+        TerminalProgram::Command => "command",
+    }
+}
+
+/// The program a terminal's tag spells as `key`.
+fn program_of(key: &str) -> Option<TerminalProgram> {
+    [
+        TerminalProgram::Shell,
+        TerminalProgram::Neovim,
+        TerminalProgram::Command,
+    ]
+    .into_iter()
+    .find(|program| program_key(*program) == key)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_session_launched_with_tsumugi_s_editor_is_known_to_hand_its_input_back() {
+        use crate::execution::{StartRequest, resolve};
+        let launched = |env: Vec<(String, String)>| {
+            let launch = resolve(
+                &crate::settings::Settings::default(),
+                StartRequest {
+                    cwd: "/repo".into(),
+                    env,
+                    ..Default::default()
+                },
+                std::path::Path::new("/tsumugi"),
+            )
+            .unwrap();
+            let Some(Kept::Agent(session)) = read(&kept(42, launch.spawn.tags)) else {
+                panic!("an agent session")
+            };
+            session
+        };
+        let script = crate::editor::current_script();
+        let with_editor = crate::editor::session_env(Some(&script), |_| None);
+        assert!(launched(with_editor).tsumugi_editor);
+        assert!(!launched(Vec::new()).tsumugi_editor);
+    }
+
+    #[test]
+    fn a_conversation_resumed_runs_its_agent_s_resume_and_keeps_its_id() {
+        use crate::execution::{StartRequest, resolve};
+        let id = "019f7a4b-fee9-74d3-9977-5bc9bb134d11";
+        for (agent, resume) in [
+            (tsumugi_model::Agent::Claude, ["--resume", id]),
+            (tsumugi_model::Agent::Codex, ["resume", id]),
+        ] {
+            let launch = resolve(
+                &crate::settings::Settings::default(),
+                StartRequest {
+                    agent,
+                    cwd: "/repo".into(),
+                    resume: Some(id.into()),
+                    ..Default::default()
+                },
+                std::path::Path::new("/tsumugi"),
+            )
+            .unwrap();
+            let args = &launch.spawn.args;
+            assert!(args.windows(2).any(|w| w == resume), "{agent:?}: {args:?}");
+            assert!(
+                !args.iter().any(|a| a == "--session-id"),
+                "{agent:?}: {args:?}"
+            );
+            assert_eq!(launch.conversation, id);
+            let Some(Kept::Agent(session)) = read(&kept(42, launch.spawn.tags)) else {
+                panic!("an agent session")
+            };
+            assert_eq!(session.session_id, id);
+        }
+    }
+
+    #[test]
+    fn a_session_whose_tags_do_not_say_how_it_was_launched_is_not_asked_for_its_input() {
+        let tags = [tags::tagged(KIND, "claude"), tags::tagged(CWD, "/tmp")].concat();
+        let Some(Kept::Agent(session)) = read(&kept(42, tags)) else {
+            panic!("an agent session")
+        };
+        assert!(!session.tsumugi_editor);
+    }
+
+    #[test]
+    fn user_input_times_are_kept_on_the_session_and_older_windows_cannot_replace_them() {
+        let mut session = session(hex(42)).build();
+        let tag = note_input(&mut session, 1000).unwrap();
+        assert_eq!(session.last_input_ms, Some(1000));
+        assert_eq!(tag, (42, LAST_INPUT, "1000".into()));
+        assert!(note_input(&mut session, 999).is_none());
+        assert!(note_input(&mut session, 1000).is_none());
+        let tags = [
+            tags::tagged(KIND, "claude"),
+            tags::tagged(CWD, "/tmp"),
+            tags::tagged(LAST_INPUT, "1000"),
+        ]
+        .concat();
+        let Some(Kept::Agent(restored)) = read(&kept(42, tags)) else {
+            panic!("an agent session")
+        };
+        assert_eq!(restored.last_input_ms, Some(1000));
+    }
+
+    #[test]
+    fn codex_titles_keep_separate_conversations_and_follow_switches() {
+        use tsumugi_model::Agent;
+        let first = "01234567-89ab-cdef-0123-456789abcdef";
+        let second = "11234567-89ab-cdef-0123-456789abcdef";
+        let mut session = session(super::hex(1)).agent(Agent::Codex).build();
+        assert_eq!(
+            super::follow_title(&mut session, &format!("Codex · {first}")),
+            Some((1, super::CONVERSATION, first.into()))
+        );
+        assert_eq!(
+            super::follow_title(&mut session, &format!("Codex · {first}")),
+            None
+        );
+        assert_eq!(super::follow_title(&mut session, "Codex · project"), None);
+        assert_eq!(session.session_id, first);
+        let mut other = session.clone();
+        other.id = super::hex(2);
+        assert_eq!(
+            super::follow_title(&mut other, &format!("Codex · {second}")),
+            Some((2, super::CONVERSATION, second.into()))
+        );
+        assert_eq!(session.session_id, first);
+        assert_eq!(
+            super::follow_title(&mut session, &format!("Codex · {second}")),
+            Some((1, super::CONVERSATION, second.into()))
+        );
+        session.agent = Agent::Claude;
+        assert_eq!(
+            super::follow_title(&mut session, &format!("Codex · {first}")),
+            None
+        );
+        assert_eq!(session.session_id, second);
+    }
+
+    use tsumugi_model::Wait;
+    use tsumugi_model::testing::{session, shell};
+    use tsumugi_term::Status;
+
+    use super::*;
+    use std::path::Path;
+    use tsumugi_model::Running;
+
+    /// The tags Claude Code called `fix` in `/api` is started with.
+    fn fix_tags(
+        conversation: &str,
+        permissions: &tsumugi_model::AgentPermissions,
+        started_ms: u64,
+    ) -> Vec<String> {
+        agent_tags(
+            tsumugi_model::Agent::Claude,
+            "fix",
+            std::path::Path::new("/api"),
+            conversation,
+            permissions,
+            started_ms,
+        )
+    }
+
+    fn kept(id: u128, tags: Vec<String>) -> tsumugi_term::Session {
+        tsumugi_term::Session {
+            id,
+            tags,
+            title: None,
+            exited: false,
+            status: None,
+            sequence: 1,
+        }
+    }
+
+    #[test]
+    fn the_agent_sessions_of_a_listing_leave_out_terminals_and_sessions_tsumugi_did_not_start() {
+        let listed = [
+            kept(
+                1,
+                fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0),
+            ),
+            kept(
+                2,
+                terminal_tags(&TerminalSession {
+                    name: "shell".into(),
+                    cwd: "/api".into(),
+                    ..TerminalSession::default()
+                }),
+            ),
+            kept(3, vec!["other=tag".into()]),
+        ];
+
+        let names: Vec<String> = agents(&listed).map(|s| s.name).collect();
+
+        assert_eq!(names, ["fix"]);
+    }
+
+    #[test]
+    fn every_terminal_program_is_read_back_from_its_tag_as_itself() {
+        for program in [
+            TerminalProgram::Shell,
+            TerminalProgram::Neovim,
+            TerminalProgram::Command,
+        ] {
+            assert_eq!(program_of(program_key(program)), Some(program));
+        }
+        assert_eq!(program_of("emacs"), None);
+    }
+
+    #[test]
+    fn the_tags_a_session_is_started_with_keep_their_spelling() {
+        let permissions =
+            serde_json::to_string(&tsumugi_model::AgentPermissions::ReadOnly).unwrap();
+        assert_eq!(
+            agent_tags(
+                tsumugi_model::Agent::Claude,
+                "fix",
+                std::path::Path::new("/api"),
+                "uuid",
+                &tsumugi_model::AgentPermissions::ReadOnly,
+                42,
+            ),
+            [
+                "tsumugi.name=fix".to_string(),
+                "tsumugi.cwd=/api".into(),
+                "tsumugi.started=42".into(),
+                "tsumugi.claude=uuid".into(),
+                format!("tsumugi.permissions={permissions}"),
+                "tsumugi.kind=claude".into(),
+            ]
+        );
+        assert_eq!(
+            agent_tags(
+                tsumugi_model::Agent::Codex,
+                "fix",
+                std::path::Path::new("/api"),
+                "",
+                &tsumugi_model::AgentPermissions::ReadOnly,
+                42,
+            ),
+            [
+                "tsumugi.name=fix".to_string(),
+                "tsumugi.cwd=/api".into(),
+                "tsumugi.started=42".into(),
+                format!("tsumugi.permissions={permissions}"),
+                "tsumugi.kind=codex".into(),
+            ]
+        );
+        let resource = tsumugi_model::TerminalResourceId::default();
+        assert_eq!(
+            terminal_tags(&TerminalSession {
+                resource_id: resource,
+                name: "shell".into(),
+                cwd: "/api".into(),
+                program: TerminalProgram::Neovim,
+                file: Some("/api/a.rs".into()),
+                ..TerminalSession::default()
+            }),
+            [
+                "tsumugi.kind=terminal".to_string(),
+                "tsumugi.name=shell".into(),
+                "tsumugi.cwd=/api".into(),
+                format!("tsumugi.resource={resource}"),
+                "tsumugi.program=neovim".into(),
+                "tsumugi.file=/api/a.rs".into(),
+            ]
+        );
+        assert_eq!(
+            learned_tag((7, tsumugi_agents::Learned::Pid(42))),
+            (7, "tsumugi.pid", "42".to_string())
+        );
+        assert_eq!(
+            learned_tag((7, tsumugi_agents::Learned::Conversation("c".into()))),
+            (7, "tsumugi.claude", "c".to_string())
+        );
+        assert_eq!(
+            note_input(&mut session(hex(7)).build(), 5),
+            Some((7, "tsumugi.last-input", "5".to_string()))
+        );
+    }
+
+    /// Claude Code's listing read against `own`, with what was learned as
+    /// the tags that keep it.
+    fn follow(own: &mut [Session], listed: Vec<Running>) -> Vec<(u128, &'static str, String)> {
+        let learned = tsumugi_agents::adapter(tsumugi_model::Agent::Claude).follow(own, listed);
+        learned.into_iter().map(learned_tag).collect()
+    }
+
+    #[test]
+    fn codex_keeps_its_agent_and_status_without_a_claude_conversation() {
+        let mut s = kept(
+            8,
+            agent_tags(
+                tsumugi_model::Agent::Codex,
+                "fix",
+                std::path::Path::new("/api"),
+                "",
+                &tsumugi_model::AgentPermissions::ReadOnly,
+                42,
+            ),
+        );
+        s.status = Some(Status {
+            state: "working".into(),
+            kind: None,
+            msg: None,
+        });
+        let Some(Kept::Agent(c)) = read(&s) else {
+            panic!("not a session")
+        };
+        assert_eq!(c.agent, tsumugi_model::Agent::Codex);
+        assert_eq!(c.state, State::Working);
+        assert!(c.reads_only());
+        assert!(c.session_id.is_empty());
+        let mut own = [c];
+        let learned = follow(&mut own, vec![listed("claude-uuid", 42)]);
+        assert!(learned.is_empty());
+    }
+
+    #[test]
+    fn a_claude_session_is_read_back_from_its_tags_and_status() {
+        let mut s = kept(
+            7,
+            fix_tags("uuid", &tsumugi_model::AgentPermissions::ReadOnly, 42),
+        );
+        s.status = Some(Status {
+            state: "blocked".into(),
+            kind: Some("permission".into()),
+            msg: None,
+        });
+        let Some(Kept::Agent(c)) = read(&s) else {
+            panic!("not a session");
+        };
+        assert_eq!(c.id, hex(7));
+        assert_eq!(id_of(&c.id), Some(7));
+        assert_eq!(c.name, "fix");
+        assert_eq!(c.cwd, PathBuf::from("/api"));
+        assert_eq!(c.session_id, "uuid");
+        assert_eq!(c.started_ms, Some(42));
+        assert!(c.reads_only());
+        assert_eq!(c.state, State::Waiting(Wait::Permission));
+    }
+
+    #[test]
+    fn what_a_program_says_with_its_report_is_kept_on_the_session() {
+        let mut s = kept(
+            7,
+            fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 42),
+        );
+        s.status = Some(Status {
+            state: "blocked".into(),
+            kind: Some("permission".into()),
+            msg: Some("Bash(rm -rf build)".into()),
+        });
+        let Some(Kept::Agent(c)) = read(&s) else {
+            panic!("not a session");
+        };
+        assert_eq!(c.status_message.as_deref(), Some("Bash(rm -rf build)"));
+        s.status = None;
+        let Some(Kept::Agent(c)) = read(&s) else {
+            panic!("not a session");
+        };
+        assert_eq!(c.status_message, None);
+    }
+
+    #[test]
+    fn a_session_is_read_back_with_its_profile_and_one_from_before_profiles_with_its_agent_s_own() {
+        let tags = fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0);
+        let read_as = |tags: Vec<String>| match read(&kept(7, tags)) {
+            Some(Kept::Agent(c)) => (c.profile.to_string(), c.home),
+            _ => panic!("not a session"),
+        };
+        assert_eq!(read_as(tags.clone()), ("claude".into(), None));
+        let started = profile_tags(&"claude-work".parse().unwrap(), Some(Path::new("/w")));
+        assert_eq!(started, ["tsumugi.profile=claude-work", "tsumugi.home=/w"]);
+        assert_eq!(
+            read_as([tags.clone(), started].concat()),
+            ("claude-work".into(), Some("/w".into()))
+        );
+        let own = profile_tags(&"claude".parse().unwrap(), None);
+        assert_eq!(own, ["tsumugi.profile=claude"]);
+        assert_eq!(read_as([tags, own].concat()), ("claude".into(), None));
+    }
+
+    #[test]
+    fn a_session_started_in_a_connection_of_its_own_is_told_by_it_until_it_names_its_folder() {
+        let tags = fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0);
+        let with = |more: &[&str]| {
+            kept(
+                7,
+                [tags.clone(), more.iter().map(|t| t.to_string()).collect()].concat(),
+            )
+        };
+        let earlier = with(&["tsumugi.profile=claude-work", "tsumugi.connection=work"]);
+        assert_eq!(earlier_connection(&earlier).as_deref(), Some("work"));
+        let Some(Kept::Agent(session)) = read(&earlier) else {
+            panic!("an agent session")
+        };
+        assert_eq!(session.home, None);
+        // Its agent's own environment, or a folder named since, is no question.
+        assert_eq!(
+            earlier_connection(&with(&["tsumugi.connection=claude"])),
+            None
+        );
+        assert_eq!(
+            earlier_connection(&with(&["tsumugi.connection=work", "tsumugi.home=/w"])),
+            None
+        );
+    }
+
+    #[test]
+    fn a_session_goes_by_its_conversation_before_it_reports_anything() {
+        let s = kept(
+            7,
+            fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0),
+        );
+        let Some(Kept::Agent(c)) = read(&s) else {
+            panic!("not a session");
+        };
+        assert_eq!(c.session_id, "uuid");
+        assert!(!c.reads_only());
+        assert_eq!(c.parent, None);
+    }
+
+    #[test]
+    fn an_opened_session_is_read_back_with_the_session_that_opened_it() {
+        let parent = tsumugi_model::SessionId::new();
+        let delegation = crate::delegation::launch::Delegation::new(
+            tsumugi_model::SessionId::new(),
+            Some(parent),
+            "/state".into(),
+            "token".into(),
+        );
+        let mut tags = fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0);
+        tags.extend(delegation.tags());
+        let Some(Kept::Agent(c)) = read(&kept(7, tags)) else {
+            panic!("not a session");
+        };
+        assert_eq!(c.delegation, Some(delegation.id));
+        assert_eq!(c.parent, Some(parent));
+        assert!(!c.show);
+    }
+
+    #[test]
+    fn a_session_is_read_back_with_its_code_and_one_from_before_codes_with_none() {
+        let mut delegation = crate::delegation::launch::Delegation::new(
+            tsumugi_model::SessionId::new(),
+            None,
+            "/state".into(),
+            "token".into(),
+        );
+        let before = {
+            let mut tags = fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0);
+            tags.extend(delegation.tags());
+            tags
+        };
+        delegation.code = Some("k7f3".parse().unwrap());
+        let mut tags = fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0);
+        tags.extend(delegation.tags());
+
+        let code = |tags| match read(&kept(7, tags)) {
+            Some(Kept::Agent(c)) => c.code,
+            _ => panic!("not a session"),
+        };
+        assert_eq!(code(tags), Some("k7f3".parse().unwrap()));
+        assert_eq!(code(before), None);
+    }
+
+    #[test]
+    fn a_session_asked_to_be_shown_is_read_back_so() {
+        let mut delegation = crate::delegation::launch::Delegation::new(
+            tsumugi_model::SessionId::new(),
+            Some(tsumugi_model::SessionId::new()),
+            "/state".into(),
+            "token".into(),
+        );
+        delegation.show = true;
+        let mut tags = fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0);
+        tags.extend(delegation.tags());
+        let Some(Kept::Agent(c)) = read(&kept(7, tags)) else {
+            panic!("not a session");
+        };
+        assert!(c.show);
+    }
+
+    #[test]
+    fn a_session_that_reported_nothing_is_starting() {
+        let s = kept(
+            7,
+            fix_tags("uuid", &tsumugi_model::AgentPermissions::Default, 0),
+        );
+        let Some(Kept::Agent(c)) = read(&s) else {
+            panic!("not a session");
+        };
+        assert_eq!(c.state, State::Starting);
+        assert!(!c.reads_only());
+    }
+
+    #[test]
+    fn a_terminal_keeps_its_resource_id_and_program() {
+        for (program, command) in [
+            (TerminalProgram::Shell, vec![]),
+            (TerminalProgram::Neovim, vec![]),
+            (
+                TerminalProgram::Command,
+                vec!["claude".into(), "--model".into(), "it's opus".into()],
+            ),
+        ] {
+            let terminal = TerminalSession {
+                id: 9,
+                resource_id: tsumugi_model::TerminalResourceId::new(),
+                name: "tool".into(),
+                cwd: "/api".into(),
+                program,
+                file: None,
+                command,
+                ..TerminalSession::default()
+            };
+            let s = kept(9, terminal_tags(&terminal));
+            assert_eq!(read(&s), Some(Kept::Terminal(terminal)));
+        }
+    }
+
+    #[test]
+    fn a_terminal_stands_as_its_program_reports_and_unmarked_when_it_reports_nothing() {
+        let terminal = tsumugi_model::testing::shell(9, "/api");
+        let mut s = kept(9, terminal_tags(&terminal));
+        let state = |s: &tsumugi_term::Session| match read(s) {
+            Some(Kept::Terminal(t)) => t.state,
+            other => panic!("not a terminal: {other:?}"),
+        };
+        assert_eq!(state(&s), None);
+        s.status = Some(Status {
+            state: "done".into(),
+            kind: None,
+            msg: None,
+        });
+        assert_eq!(state(&s), Some(State::Done));
+    }
+
+    #[test]
+    fn a_terminal_keeps_the_session_that_started_it_and_whether_to_show_it() {
+        let terminal = TerminalSession {
+            id: 9,
+            resource_id: tsumugi_model::TerminalResourceId::new(),
+            name: "sudo".into(),
+            cwd: "/api".into(),
+            program: TerminalProgram::Command,
+            command: vec!["sudo".into(), "true".into()],
+            opener: Some(tsumugi_model::SessionId::new()),
+            show: true,
+            ..TerminalSession::default()
+        };
+        let s = kept(9, terminal_tags(&terminal));
+        assert_eq!(read(&s), Some(Kept::Terminal(terminal)));
+    }
+
+    #[test]
+    fn a_command_terminal_whose_program_ended_says_how() {
+        let terminal = TerminalSession {
+            id: 9,
+            resource_id: tsumugi_model::TerminalResourceId::new(),
+            name: "make".into(),
+            cwd: "/api".into(),
+            program: TerminalProgram::Command,
+            command: vec!["make".into()],
+            ..TerminalSession::default()
+        };
+        let mut tags = terminal_tags(&terminal);
+        tags.extend(tags::tagged(EXIT, "3"));
+        let Some(Kept::Terminal(read)) = read(&kept(9, tags)) else {
+            panic!("a terminal")
+        };
+        assert_eq!(read.exit, Some(3));
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "starts a Unix shell as a login shell")]
+    fn a_command_runs_through_the_shell_with_what_a_shell_terminal_gets() {
+        use crate::execution::{TerminalStartRequest, resolve_terminal};
+        let mut settings = crate::settings::Settings::default();
+        settings.shell.env.insert("FROM_SHELL".into(), "1".into());
+        let launch = resolve_terminal(
+            &settings,
+            TerminalStartRequest {
+                name: "claude".into(),
+                cwd: "/api".into(),
+                program: TerminalProgram::Command,
+                command: vec!["claude".into(), "--debug".into()],
+                ..Default::default()
+            },
+            "/bin/zsh",
+        );
+        // Started by tsumugi, which keeps the terminal once the program ends.
+        assert_eq!(
+            launch.spawn.program,
+            crate::work_host::tsumugi_program().to_string_lossy()
+        );
+        assert_eq!(launch.spawn.args[..2], [crate::kept::KEEP, "/bin/zsh"]);
+        assert_eq!(
+            launch.spawn.args[launch.spawn.args.len() - 2..],
+            ["claude".to_string(), "--debug".to_string()]
+        );
+        for var in [("SHELL", "/bin/zsh"), ("FROM_SHELL", "1")] {
+            assert!(
+                launch
+                    .spawn
+                    .env
+                    .contains(&(var.0.to_string(), var.1.to_string())),
+                "{var:?}"
+            );
+        }
+        assert_eq!(launch.terminal.command, ["claude", "--debug"]);
+    }
+
+    #[test]
+    fn neovim_started_on_a_file_is_handed_the_file_and_keeps_it() {
+        use crate::execution::{TerminalStartRequest, resolve_terminal};
+        let launch = resolve_terminal(
+            &crate::settings::Settings::default(),
+            TerminalStartRequest {
+                name: "main.rs".into(),
+                cwd: "/api".into(),
+                program: TerminalProgram::Neovim,
+                file: Some("/api/src/main.rs".into()),
+                ..Default::default()
+            },
+            "/bin/sh",
+        );
+        assert_eq!(
+            launch.spawn.args.last().map(String::as_str),
+            Some("/api/src/main.rs")
+        );
+        let Some(Kept::Terminal(read)) = read(&kept(9, launch.spawn.tags)) else {
+            panic!("a terminal")
+        };
+        assert_eq!(read.file, Some("/api/src/main.rs".into()));
+        assert_eq!(
+            read,
+            TerminalSession {
+                id: 9,
+                ..launch.terminal
+            }
+        );
+    }
+
+    #[test]
+    fn a_session_tsumugi_did_not_start_or_one_that_exited_is_not_tsumugi_s() {
+        assert_eq!(read(&kept(1, vec!["other=1".into()])), None);
+        let mut s = kept(9, terminal_tags(&shell(1, "/api")));
+        s.exited = true;
+        assert_eq!(read(&s), None);
+    }
+
+    fn own(id: u128, conversation: &str, pid: Option<u32>) -> Session {
+        let mut tags = fix_tags(conversation, &tsumugi_model::AgentPermissions::Default, 0);
+        if let Some(pid) = pid {
+            tags.extend(tags::tagged(PID, &pid.to_string()));
+        }
+        let Some(Kept::Agent(c)) = read(&kept(id, tags)) else {
+            panic!("not a session");
+        };
+        c
+    }
+
+    fn listed(conversation: &str, pid: u32) -> Running {
+        Running {
+            session_id: conversation.into(),
+            pid,
+        }
+    }
+
+    #[test]
+    fn a_session_learns_the_process_holding_its_conversation() {
+        let mut ours = [own(7, "uuid", None)];
+
+        let learned = follow(&mut ours, vec![listed("uuid", 42), listed("other", 9)]);
+
+        assert_eq!(ours[0].pid, Some(42));
+        assert_eq!(learned, vec![(7, PID, "42".to_string())]);
+    }
+
+    #[test]
+    fn a_session_follows_its_process_to_the_conversation_it_moves_to() {
+        let mut ours = [own(7, "uuid", Some(42))];
+
+        let learned = follow(&mut ours, vec![listed("cleared", 42)]);
+
+        assert_eq!(ours[0].session_id, "cleared");
+        assert_eq!(learned, vec![(7, CONVERSATION, "cleared".to_string())]);
+    }
+
+    #[test]
+    fn a_session_whose_conversation_and_process_are_known_learns_nothing() {
+        let mut ours = [own(7, "uuid", Some(42))];
+
+        let learned = follow(&mut ours, vec![listed("uuid", 42)]);
+
+        assert_eq!(ours[0].session_id, "uuid");
+        assert!(learned.is_empty());
+    }
+
+    #[test]
+    fn the_process_a_session_runs_in_is_read_back_from_its_tags() {
+        assert_eq!(own(7, "uuid", Some(42)).pid, Some(42));
+        assert_eq!(own(7, "uuid", None).pid, None);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod gui_launch_tests {
+    use super::*;
+    #[test]
+    fn file_editors_listen_for_their_gui_without_replacing_the_users_configuration() {
+        use crate::execution::{TerminalStartRequest, resolve_terminal};
+        let launch = resolve_terminal(
+            &crate::settings::Settings::default(),
+            TerminalStartRequest {
+                program: TerminalProgram::Neovim,
+                cwd: "/repo".into(),
+                file: Some("/repo/日本語 file.txt".into()),
+                ..Default::default()
+            },
+            "/bin/zsh",
+        );
+        assert_eq!(launch.spawn.program, "nvim");
+        let socket =
+            tsumugi_model::paths::neovim_socket(tsumugi_sys::euid(), launch.terminal.resource_id);
+        assert_eq!(
+            launch.spawn.args,
+            [
+                "--listen",
+                &socket.to_string_lossy(),
+                "--",
+                "/repo/日本語 file.txt"
+            ]
+        );
+        assert!(
+            !launch
+                .spawn
+                .env
+                .iter()
+                .any(|(key, _)| key == "NVIM_APPNAME")
+        );
+    }
+}

@@ -1,0 +1,854 @@
+//! The gateway registered as the user's service, so it runs without a terminal
+//! and starts again with the machine. The gateway starts the instance's hosts
+//! itself when none runs.
+
+use std::path::{Path, PathBuf};
+
+/// One of the services an instance runs on a work machine.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    Terminal,
+    Work,
+    Gateway,
+}
+
+impl Role {
+    /// The roles an earlier release ran as services of their own. They are
+    /// still known so that enabling and disabling remove what is left of them.
+    const RETIRED: [Role; 2] = [Role::Terminal, Role::Work];
+
+    /// Its `tsumugi remote` subcommand.
+    fn subcommand(self) -> &'static str {
+        match self {
+            Role::Terminal => "daemon",
+            Role::Work => "host",
+            Role::Gateway => "gateway",
+        }
+    }
+
+    fn describe(self) -> &'static str {
+        match self {
+            Role::Terminal => "terminal host",
+            Role::Work => "work host",
+            Role::Gateway => "gateway",
+        }
+    }
+}
+
+/// What the services of one instance run, and with what.
+#[derive(Clone, Debug)]
+pub struct Plan {
+    pub program: PathBuf,
+    pub instance: String,
+    /// The PATH the services start with.
+    pub path: String,
+    pub listen: Option<String>,
+    /// Whether the gateway announces itself on the local network.
+    pub advertise: bool,
+    pub home: PathBuf,
+    /// Where each service writes what it reports.
+    pub logs: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Platform {
+    Launchd,
+    Systemd,
+}
+
+impl Platform {
+    pub fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Launchd
+        } else {
+            Self::Systemd
+        }
+    }
+}
+
+/// A service's definition and where it is written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unit {
+    pub role: Role,
+    pub name: String,
+    pub file: PathBuf,
+    pub text: String,
+}
+
+/// Runs the platform's service manager.
+pub trait Run {
+    fn run(&self, program: &str, args: &[String]) -> std::io::Result<String>;
+}
+
+fn arguments(plan: &Plan, role: Role) -> Vec<String> {
+    let mut arguments = vec![
+        plan.program.display().to_string(),
+        "remote".into(),
+        role.subcommand().into(),
+        "--instance".into(),
+        plan.instance.clone(),
+    ];
+    if let (Role::Gateway, Some(listen)) = (role, &plan.listen) {
+        arguments.extend(["--listen".into(), listen.clone()]);
+    }
+    if role == Role::Gateway && !plan.advertise {
+        arguments.push("--no-advertise".into());
+    }
+    arguments
+}
+
+fn unit(plan: &Plan, platform: Platform, role: Role) -> Unit {
+    match platform {
+        Platform::Launchd => launchd(plan, role),
+        Platform::Systemd => systemd(plan, role),
+    }
+}
+
+pub fn units(plan: &Plan, platform: Platform) -> Vec<Unit> {
+    vec![unit(plan, platform, Role::Gateway)]
+}
+
+/// The services an earlier release ran for the hosts, by the names and files
+/// it gave them.
+fn retired(plan: &Plan, platform: Platform) -> Vec<Unit> {
+    Role::RETIRED
+        .into_iter()
+        .map(|role| unit(plan, platform, role))
+        .collect()
+}
+
+fn launchd(plan: &Plan, role: Role) -> Unit {
+    let name = format!("app.tsumugi.{}.{}", plan.instance, role.subcommand());
+    let escape = |text: &str| {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
+    let arguments: String = arguments(plan, role)
+        .iter()
+        .map(|argument| format!("\t\t<string>{}</string>\n", escape(argument)))
+        .collect();
+    let log = plan.logs.join(format!("{}.log", role.subcommand()));
+    // launchd kills the agent's whole process group when it stops, which
+    // would take the hosts the gateway started with it.
+    let abandon = match role {
+        Role::Gateway => "\t<key>AbandonProcessGroup</key>\n\t<true/>\n",
+        _ => "",
+    };
+    let text = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+<plist version=\"1.0\">\n\
+<dict>\n\
+\t<key>Label</key>\n\
+\t<string>{name}</string>\n\
+\t<key>ProgramArguments</key>\n\
+\t<array>\n\
+{arguments}\
+\t</array>\n\
+\t<key>EnvironmentVariables</key>\n\
+\t<dict>\n\
+\t\t<key>PATH</key>\n\
+\t\t<string>{path}</string>\n\
+\t</dict>\n\
+\t<key>RunAtLoad</key>\n\
+\t<true/>\n\
+\t<key>KeepAlive</key>\n\
+\t<true/>\n\
+{abandon}\
+\t<key>StandardErrorPath</key>\n\
+\t<string>{log}</string>\n\
+</dict>\n\
+</plist>\n",
+        path = escape(&plan.path),
+        log = escape(&log.display().to_string()),
+    );
+    Unit {
+        role,
+        file: plan
+            .home
+            .join("Library/LaunchAgents")
+            .join(format!("{name}.plist")),
+        name,
+        text,
+    }
+}
+
+/// A word systemd reads as one argument, with nothing expanded.
+fn systemd_word(text: &str) -> String {
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%")
+        .replace('$', "$$");
+    format!("\"{escaped}\"")
+}
+
+fn systemd(plan: &Plan, role: Role) -> Unit {
+    let name = format!("tsumugi-{}-{}.service", plan.instance, role.subcommand());
+    // systemd kills every process of the unit's control group when it stops,
+    // which would take the hosts the gateway started with it.
+    let kill = match role {
+        Role::Gateway => "KillMode=process\n",
+        _ => "",
+    };
+    let command = arguments(plan, role)
+        .iter()
+        .map(|argument| systemd_word(argument))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text = format!(
+        "[Unit]\n\
+Description=Tsumugi {describe} ({instance})\n\
+\n\
+[Service]\n\
+ExecStart={command}\n\
+Environment={path}\n\
+Restart=always\n\
+RestartSec=2\n\
+{kill}\
+\n\
+[Install]\n\
+WantedBy=default.target\n",
+        describe = role.describe(),
+        instance = plan.instance,
+        path = systemd_word(&format!("PATH={}", plan.path)),
+    );
+    Unit {
+        role,
+        file: plan.home.join(".config/systemd/user").join(&name),
+        name,
+        text,
+    }
+}
+
+/// What writing a unit did to the file already there.
+#[derive(Clone, Copy, PartialEq)]
+enum Written {
+    Created,
+    Replaced,
+    Unchanged,
+}
+
+fn write(unit: &Unit) -> std::io::Result<Written> {
+    let written = match std::fs::read_to_string(&unit.file) {
+        Ok(text) if text == unit.text => return Ok(Written::Unchanged),
+        Ok(_) => Written::Replaced,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Written::Created,
+        Err(error) => return Err(error),
+    };
+    std::fs::create_dir_all(unit.file.parent().unwrap_or(Path::new("/")))?;
+    tsumugi_sys::fs::replace(&unit.file, &unit.text, 0o600)?;
+    Ok(written)
+}
+
+fn remove(unit: &Unit) -> std::io::Result<()> {
+    match std::fs::remove_file(&unit.file) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
+fn uid() -> u32 {
+    tsumugi_sys::uid()
+}
+
+/// Removes the services an earlier release left, writes the services and
+/// starts them; returns what the operator should still know, such as a step
+/// only they may take.
+pub fn enable(plan: &Plan, platform: Platform, run: &dyn Run) -> std::io::Result<Vec<String>> {
+    std::fs::create_dir_all(&plan.logs)?;
+    // Stopping the retired terminal host ends the sessions it held rather
+    // than leaving it beside the one the gateway starts for the instance.
+    let left: Vec<Unit> = retired(plan, platform)
+        .into_iter()
+        .filter(|unit| unit.file.exists())
+        .collect();
+    stop(&left, platform, run)?;
+    let units = units(plan, platform);
+    let written = units
+        .iter()
+        .map(write)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let mut notes = Vec::new();
+    match platform {
+        Platform::Launchd => {
+            for (unit, written) in units.iter().zip(written) {
+                let target = format!("gui/{}/{}", uid(), unit.name);
+                // Leaving an unchanged, running agent alone keeps the
+                // connections it serves. One loaded but stopped is loaded
+                // again: launchd does not start again an agent whose program
+                // was missing while the app was replaced.
+                if written == Written::Unchanged
+                    && run
+                        .run("launchctl", &["print".into(), target.clone()])
+                        .is_ok_and(|printed| printed.contains("state = running"))
+                {
+                    continue;
+                }
+                let _ = run.run("launchctl", &["bootout".into(), target]);
+                run.run(
+                    "launchctl",
+                    &[
+                        "bootstrap".into(),
+                        format!("gui/{}", uid()),
+                        unit.file.display().to_string(),
+                    ],
+                )?;
+            }
+        }
+        Platform::Systemd => {
+            run.run("systemctl", &["--user".into(), "daemon-reload".into()])?;
+            let mut enabling = vec!["--user".into(), "enable".into(), "--now".into()];
+            enabling.extend(units.iter().map(|unit| unit.name.clone()));
+            run.run("systemctl", &enabling)?;
+            // Enabling leaves a running unit as it was started.
+            let replaced: Vec<String> = units
+                .iter()
+                .zip(written)
+                .filter(|(_, written)| *written == Written::Replaced)
+                .map(|(unit, _)| unit.name.clone())
+                .collect();
+            if !replaced.is_empty() {
+                let mut restarting = vec!["--user".into(), "restart".into()];
+                restarting.extend(replaced);
+                run.run("systemctl", &restarting)?;
+            }
+            let linger = run.run(
+                "loginctl",
+                &[
+                    "show-user".into(),
+                    uid().to_string(),
+                    "--property=Linger".into(),
+                ],
+            );
+            if !linger.is_ok_and(|text| text.trim() == "Linger=yes") {
+                notes.push(
+                    "These services stop when you log out. To keep them running without a login, run: sudo loginctl enable-linger $USER".into(),
+                );
+            }
+        }
+    }
+    Ok(notes)
+}
+
+/// Stops the services, and any an earlier release left, and removes them.
+pub fn disable(plan: &Plan, platform: Platform, run: &dyn Run) -> std::io::Result<()> {
+    let mut units = units(plan, platform);
+    units.extend(retired(plan, platform));
+    stop(&units, platform, run)
+}
+
+fn stop(units: &[Unit], platform: Platform, run: &dyn Run) -> std::io::Result<()> {
+    match platform {
+        Platform::Launchd => {
+            for unit in units {
+                let _ = run.run(
+                    "launchctl",
+                    &["bootout".into(), format!("gui/{}/{}", uid(), unit.name)],
+                );
+            }
+            units.iter().try_for_each(remove)?;
+        }
+        Platform::Systemd => {
+            // systemctl refuses to disable a unit it has no file for.
+            let enabled: Vec<String> = units
+                .iter()
+                .filter(|unit| unit.file.exists())
+                .map(|unit| unit.name.clone())
+                .collect();
+            if enabled.is_empty() {
+                return Ok(());
+            }
+            let mut disabling = vec!["--user".into(), "disable".into(), "--now".into()];
+            disabling.extend(enabled);
+            let stopped = run.run("systemctl", &disabling);
+            units.iter().try_for_each(remove)?;
+            run.run("systemctl", &["--user".into(), "daemon-reload".into()])?;
+            stopped?;
+        }
+    }
+    Ok(())
+}
+
+/// Runs `tsumugi remote enable` or `disable` for the settled instance.
+pub fn cli(operation: crate::cli::RemoteCommand) -> i32 {
+    use crate::cli::RemoteCommand;
+    let done = (|| -> std::io::Result<()> {
+        let logs = crate::remote::root();
+        tsumugi_sys::fs::private_dir(&logs)?;
+        let path = crate::env::login_shell()
+            .and_then(|shell| crate::env::login_path(&shell))
+            .or_else(|| std::env::var("PATH").ok())
+            .unwrap_or_else(|| "/usr/bin:/bin".into());
+        let (listen, advertise) = match &operation {
+            RemoteCommand::Enable { listen, advertise } => (listen.clone(), *advertise),
+            _ => (None, true),
+        };
+        let plan = Plan {
+            program: tsumugi_sys::process::executable()?,
+            instance: crate::paths::instance(),
+            path,
+            listen,
+            advertise,
+            home: tsumugi_model::paths::home(),
+            logs,
+        };
+        let platform = Platform::current();
+        match operation {
+            RemoteCommand::Enable { .. } => {
+                for note in enable(&plan, platform, &System)? {
+                    println!("{note}");
+                }
+                for unit in units(&plan, platform) {
+                    println!("Started {} as {}", unit.role.describe(), unit.name);
+                }
+            }
+            _ => {
+                disable(&plan, platform, &System)?;
+                println!(
+                    "Stopped and removed the services of instance {}",
+                    plan.instance
+                );
+            }
+        }
+        Ok(())
+    })();
+    match done {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("tsumugi: {error}");
+            1
+        }
+    }
+}
+
+/// The service manager on this machine.
+pub struct System;
+
+impl Run for System {
+    fn run(&self, program: &str, args: &[String]) -> std::io::Result<String> {
+        let output = std::process::Command::new(program)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .output()?;
+        if !output.status.success() {
+            return Err(std::io::Error::other(format!(
+                "{program} {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    struct Recorded {
+        calls: RefCell<Vec<String>>,
+        linger: &'static str,
+        /// What `launchctl print` says of a loaded agent.
+        printed: &'static str,
+    }
+
+    impl Recorded {
+        fn new(linger: &'static str) -> Self {
+            Self {
+                calls: RefCell::new(Vec::new()),
+                linger,
+                printed: "\tstate = running\n",
+            }
+        }
+
+        /// Agents launchd has loaded but does not run, as it leaves one whose
+        /// program was missing when it was started.
+        fn stopped() -> Self {
+            Self {
+                printed: "\tstate = spawn scheduled\n\tlast exit code = 78: EX_CONFIG\n",
+                ..Self::new("yes")
+            }
+        }
+        fn calls(&self) -> Vec<String> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl Run for Recorded {
+        fn run(&self, program: &str, args: &[String]) -> std::io::Result<String> {
+            self.calls
+                .borrow_mut()
+                .push(format!("{program} {}", args.join(" ")));
+            Ok(match (program, args.first().map(String::as_str)) {
+                ("loginctl", _) => format!("Linger={}", self.linger),
+                ("launchctl", Some("print")) => self.printed.into(),
+                _ => String::new(),
+            })
+        }
+    }
+
+    fn plan(home: &Path) -> Plan {
+        Plan {
+            program: "/opt/Tsumugi & Co/bin/tsumugi".into(),
+            instance: "ai".into(),
+            path: "/opt/homebrew/bin:/usr/bin:/bin".into(),
+            listen: Some("10.0.0.2:47130".into()),
+            advertise: true,
+            home: home.into(),
+            logs: home.join("logs"),
+        }
+    }
+
+    #[test]
+    fn launchd_runs_only_the_gateway_as_an_agent() {
+        let units = units(&plan(Path::new("/Users/u")), Platform::Launchd);
+        let names: Vec<_> = units.iter().map(|u| u.name.as_str()).collect();
+        assert_eq!(names, ["app.tsumugi.ai.gateway"]);
+        let gateway = &units[0];
+        assert_eq!(gateway.role, Role::Gateway);
+        assert_eq!(
+            gateway.file,
+            Path::new("/Users/u/Library/LaunchAgents/app.tsumugi.ai.gateway.plist")
+        );
+        assert!(
+            gateway
+                .text
+                .contains("<string>/opt/Tsumugi &amp; Co/bin/tsumugi</string>")
+        );
+        assert!(
+            gateway
+                .text
+                .contains("<string>remote</string>\n\t\t<string>gateway</string>")
+        );
+        assert!(
+            gateway
+                .text
+                .contains("<string>--instance</string>\n\t\t<string>ai</string>")
+        );
+        assert!(gateway.text.contains("<key>KeepAlive</key>\n\t<true/>"));
+        assert!(
+            gateway
+                .text
+                .contains("<string>/opt/homebrew/bin:/usr/bin:/bin</string>")
+        );
+        assert!(
+            gateway
+                .text
+                .contains("<string>--listen</string>\n\t\t<string>10.0.0.2:47130</string>")
+        );
+        assert!(!gateway.text.contains("--no-advertise"));
+        let mut hidden = plan(Path::new("/Users/u"));
+        hidden.advertise = false;
+        assert!(
+            super::units(&hidden, Platform::Launchd)[0]
+                .text
+                .contains("<string>--no-advertise</string>")
+        );
+    }
+
+    #[test]
+    fn launchd_leaves_the_hosts_the_gateway_started_running_when_it_stops() {
+        let units = units(&plan(Path::new("/Users/u")), Platform::Launchd);
+        assert!(
+            units[0]
+                .text
+                .contains("<key>AbandonProcessGroup</key>\n\t<true/>")
+        );
+    }
+
+    #[test]
+    fn systemd_runs_only_the_gateway_as_a_unit() {
+        let units = units(&plan(Path::new("/home/u")), Platform::Systemd);
+        let names: Vec<_> = units.iter().map(|u| u.name.as_str()).collect();
+        assert_eq!(names, ["tsumugi-ai-gateway.service"]);
+        let gateway = &units[0];
+        assert_eq!(gateway.role, Role::Gateway);
+        assert_eq!(
+            gateway.file,
+            Path::new("/home/u/.config/systemd/user/tsumugi-ai-gateway.service")
+        );
+        assert!(!gateway.text.contains("After="));
+        assert!(gateway.text.contains(
+            "ExecStart=\"/opt/Tsumugi & Co/bin/tsumugi\" \"remote\" \"gateway\" \"--instance\" \"ai\" \"--listen\" \"10.0.0.2:47130\""
+        ));
+        assert!(
+            gateway
+                .text
+                .contains("Environment=\"PATH=/opt/homebrew/bin:/usr/bin:/bin\"")
+        );
+        assert!(gateway.text.contains("WantedBy=default.target"));
+    }
+
+    #[test]
+    fn systemd_leaves_the_hosts_the_gateway_started_running_when_it_stops() {
+        let units = units(&plan(Path::new("/home/u")), Platform::Systemd);
+        assert!(units[0].text.contains("[Service]\n"));
+        assert!(units[0].text.contains("\nKillMode=process\n"));
+    }
+
+    #[test]
+    fn systemd_quotes_what_it_would_otherwise_expand() {
+        let mut odd = plan(Path::new("/home/u"));
+        odd.program = "/opt/100%\"sure\"/tsumugi".into();
+        let units = units(&odd, Platform::Systemd);
+        assert!(
+            units[0]
+                .text
+                .contains("ExecStart=\"/opt/100%%\\\"sure\\\"/tsumugi\"")
+        );
+    }
+
+    #[test]
+    fn enabling_on_linux_writes_the_gateway_starts_it_and_asks_for_lingering() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        let run = Recorded::new("no");
+        let notes = enable(&plan, Platform::Systemd, &run).unwrap();
+        for unit in units(&plan, Platform::Systemd) {
+            assert_eq!(std::fs::read_to_string(&unit.file).unwrap(), unit.text);
+        }
+        let calls = run.calls();
+        assert!(calls.contains(&"systemctl --user daemon-reload".to_string()));
+        assert!(
+            calls.contains(&"systemctl --user enable --now tsumugi-ai-gateway.service".to_string())
+        );
+        assert!(
+            notes
+                .iter()
+                .any(|note| note.contains("loginctl enable-linger"))
+        );
+        let lingering = Recorded::new("yes");
+        assert!(
+            enable(&plan, Platform::Systemd, &lingering)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn disabling_on_linux_stops_the_gateway_and_removes_it() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        enable(&plan, Platform::Systemd, &Recorded::new("yes")).unwrap();
+        let run = Recorded::new("yes");
+        disable(&plan, Platform::Systemd, &run).unwrap();
+        assert!(
+            run.calls()
+                .contains(&"systemctl --user disable --now tsumugi-ai-gateway.service".to_string())
+        );
+        for unit in units(&plan, Platform::Systemd) {
+            assert!(!unit.file.exists());
+        }
+    }
+
+    #[test]
+    fn enabling_again_on_linux_restarts_the_gateway_only_when_it_changed() {
+        let home = tempfile::tempdir().unwrap();
+        let mut plan = plan(home.path());
+        enable(&plan, Platform::Systemd, &Recorded::new("yes")).unwrap();
+        let same = Recorded::new("yes");
+        enable(&plan, Platform::Systemd, &same).unwrap();
+        assert!(!same.calls().iter().any(|call| call.contains("restart")));
+        plan.advertise = false;
+        let changed = Recorded::new("yes");
+        enable(&plan, Platform::Systemd, &changed).unwrap();
+        let restarted: Vec<_> = changed
+            .calls()
+            .into_iter()
+            .filter(|call| call.contains("restart"))
+            .collect();
+        assert_eq!(
+            restarted,
+            ["systemctl --user restart tsumugi-ai-gateway.service"]
+        );
+    }
+
+    #[test]
+    fn disabling_on_linux_what_is_not_enabled_does_nothing() {
+        let home = tempfile::tempdir().unwrap();
+        let run = Recorded::new("yes");
+        disable(&plan(home.path()), Platform::Systemd, &run).unwrap();
+        assert!(!run.calls().iter().any(|call| call.contains("disable")));
+    }
+
+    #[test]
+    fn enabling_again_on_macos_reloads_the_gateway_only_when_it_changed() {
+        let home = tempfile::tempdir().unwrap();
+        let mut plan = plan(home.path());
+        enable(&plan, Platform::Launchd, &Recorded::new("yes")).unwrap();
+        let same = Recorded::new("yes");
+        enable(&plan, Platform::Launchd, &same).unwrap();
+        assert!(!same.calls().iter().any(|call| call.contains("bootout")));
+        plan.listen = None;
+        let changed = Recorded::new("yes");
+        enable(&plan, Platform::Launchd, &changed).unwrap();
+        let reloaded: Vec<_> = changed
+            .calls()
+            .into_iter()
+            .filter(|call| call.contains("bootout"))
+            .collect();
+        assert_eq!(reloaded.len(), 1);
+        assert!(reloaded[0].ends_with("/app.tsumugi.ai.gateway"));
+    }
+
+    #[test]
+    fn enabling_again_on_macos_loads_an_unchanged_agent_that_stopped() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        enable(&plan, Platform::Launchd, &Recorded::new("yes")).unwrap();
+        let stopped = Recorded::stopped();
+        enable(&plan, Platform::Launchd, &stopped).unwrap();
+        let bootstrapped = stopped
+            .calls()
+            .into_iter()
+            .filter(|call| call.contains("bootstrap"))
+            .count();
+        assert_eq!(bootstrapped, units(&plan, Platform::Launchd).len());
+    }
+
+    #[test]
+    fn enabling_on_macos_loads_the_gateway_and_disabling_unloads_it() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        let run = Recorded::new("yes");
+        assert!(enable(&plan, Platform::Launchd, &run).unwrap().is_empty());
+        let uid = tsumugi_sys::uid();
+        let units = units(&plan, Platform::Launchd);
+        for unit in &units {
+            assert_eq!(std::fs::read_to_string(&unit.file).unwrap(), unit.text);
+            assert!(run.calls().contains(&format!(
+                "launchctl bootstrap gui/{uid} {}",
+                unit.file.display()
+            )));
+        }
+        let run = Recorded::new("yes");
+        disable(&plan, Platform::Launchd, &run).unwrap();
+        for unit in &units {
+            assert!(
+                run.calls()
+                    .contains(&format!("launchctl bootout gui/{uid}/{}", unit.name))
+            );
+            assert!(!unit.file.exists());
+        }
+    }
+
+    /// The files an earlier release wrote for the terminal host and the work
+    /// host as services of their own.
+    fn leave_retired(home: &Path, platform: Platform) -> Vec<PathBuf> {
+        let files: Vec<PathBuf> = match platform {
+            Platform::Launchd => ["app.tsumugi.ai.daemon.plist", "app.tsumugi.ai.host.plist"]
+                .map(|file| home.join("Library/LaunchAgents").join(file))
+                .into(),
+            Platform::Systemd => ["tsumugi-ai-daemon.service", "tsumugi-ai-host.service"]
+                .map(|file| home.join(".config/systemd/user").join(file))
+                .into(),
+        };
+        for file in &files {
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, "left by an earlier release").unwrap();
+        }
+        files
+    }
+
+    fn position(calls: &[String], call: &str) -> usize {
+        calls
+            .iter()
+            .position(|made| made == call)
+            .unwrap_or_else(|| panic!("{call:?} was not run: {calls:#?}"))
+    }
+
+    #[test]
+    fn enabling_on_linux_stops_and_removes_the_hosts_an_earlier_release_ran_first() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        let retired = leave_retired(home.path(), Platform::Systemd);
+        let run = Recorded::new("yes");
+        enable(&plan, Platform::Systemd, &run).unwrap();
+        let calls = run.calls();
+        let stopped = position(
+            &calls,
+            "systemctl --user disable --now tsumugi-ai-daemon.service tsumugi-ai-host.service",
+        );
+        assert!(
+            stopped
+                < position(
+                    &calls,
+                    "systemctl --user enable --now tsumugi-ai-gateway.service"
+                )
+        );
+        for file in &retired {
+            assert!(!file.exists());
+        }
+    }
+
+    #[test]
+    fn enabling_on_linux_without_retired_hosts_disables_nothing() {
+        let home = tempfile::tempdir().unwrap();
+        let run = Recorded::new("yes");
+        enable(&plan(home.path()), Platform::Systemd, &run).unwrap();
+        assert!(!run.calls().iter().any(|call| call.contains("disable")));
+    }
+
+    #[test]
+    fn disabling_on_linux_stops_and_removes_the_hosts_an_earlier_release_ran() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        enable(&plan, Platform::Systemd, &Recorded::new("yes")).unwrap();
+        let retired = leave_retired(home.path(), Platform::Systemd);
+        let run = Recorded::new("yes");
+        disable(&plan, Platform::Systemd, &run).unwrap();
+        assert!(run.calls().contains(
+            &"systemctl --user disable --now tsumugi-ai-gateway.service tsumugi-ai-daemon.service tsumugi-ai-host.service".to_string()
+        ));
+        for file in &retired {
+            assert!(!file.exists());
+        }
+    }
+
+    #[test]
+    fn enabling_on_macos_unloads_and_removes_the_hosts_an_earlier_release_ran_first() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        let retired = leave_retired(home.path(), Platform::Launchd);
+        let run = Recorded::new("yes");
+        enable(&plan, Platform::Launchd, &run).unwrap();
+        let uid = tsumugi_sys::uid();
+        let calls = run.calls();
+        let loaded = position(
+            &calls,
+            &format!(
+                "launchctl bootstrap gui/{uid} {}",
+                units(&plan, Platform::Launchd)[0].file.display()
+            ),
+        );
+        for name in ["app.tsumugi.ai.daemon", "app.tsumugi.ai.host"] {
+            assert!(position(&calls, &format!("launchctl bootout gui/{uid}/{name}")) < loaded);
+        }
+        for file in &retired {
+            assert!(!file.exists());
+        }
+    }
+
+    #[test]
+    fn disabling_on_macos_unloads_and_removes_the_hosts_an_earlier_release_ran() {
+        let home = tempfile::tempdir().unwrap();
+        let plan = plan(home.path());
+        enable(&plan, Platform::Launchd, &Recorded::new("yes")).unwrap();
+        let retired = leave_retired(home.path(), Platform::Launchd);
+        let run = Recorded::new("yes");
+        disable(&plan, Platform::Launchd, &run).unwrap();
+        let uid = tsumugi_sys::uid();
+        for name in ["app.tsumugi.ai.daemon", "app.tsumugi.ai.host"] {
+            assert!(
+                run.calls()
+                    .contains(&format!("launchctl bootout gui/{uid}/{name}"))
+            );
+        }
+        for file in &retired {
+            assert!(!file.exists());
+        }
+    }
+}

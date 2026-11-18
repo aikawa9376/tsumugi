@@ -1,0 +1,981 @@
+//! The work host, `tsumugi host`: the process apart from the terminal host
+//! that holds the work, starts and lists the sessions, lets sessions start
+//! and message sessions and judges how each stands, so that it can be
+//! replaced without ending a session.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use tsumugi_protocol::client::{Connection, ask_stop, hello};
+use tsumugi_protocol::{Answer, Ask, Event, Hello, Request, SPOKEN, WorkHost, agree, judge};
+
+use crate::cli::HostCommand;
+use crate::serve::Served;
+use crate::standing::build;
+
+/// `$TSUMUGI_HOST`, or `host/host.sock` under the instance's state folder.
+pub fn socket() -> PathBuf {
+    crate::paths::work_host_socket()
+}
+
+/// The arguments that have tsumugi serve the work host at its socket.
+pub fn serve_args() -> Vec<String> {
+    vec!["host".into()]
+}
+
+/// What this build says first on every connection; to a paired client also
+/// the hosts it reaches, as they are now.
+pub fn hello_of_ours() -> Hello {
+    let remote = crate::remote::active();
+    Hello {
+        speaks: SPOKEN.to_vec(),
+        build: build(),
+        endpoint: remote.then(crate::remote::ours).flatten().cloned(),
+        terminal: remote.then(crate::remote::terminal).flatten(),
+        mutation_epoch: None,
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Term(#[from] tsumugi_term::Error),
+    #[error("a work host already serves at {0}")]
+    Taken(PathBuf),
+    #[error("the work host at {0} did not start")]
+    NotStarted(PathBuf),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// A work host's socket, bound and answering until asked to stop.
+pub struct WorkHostServer {
+    listener: tsumugi_sys::local::Listener,
+    socket: PathBuf,
+    _claim: std::fs::File,
+}
+
+impl Drop for WorkHostServer {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.socket);
+    }
+}
+
+impl WorkHostServer {
+    /// Listen at `socket`, in a folder open to no one else; refused where
+    /// another work host answers.
+    pub async fn bind(socket: impl AsRef<Path>) -> Result<Self> {
+        let socket = socket.as_ref();
+        tsumugi_term::own_dir(socket)?;
+        let mut claim_path = socket.as_os_str().to_os_string();
+        claim_path.push(".lock");
+        use tsumugi_sys::fs::OpenOptionsExt;
+        // Kept on disk: unlinking a lock file would let two owners lock
+        // different inodes while both believe they own this socket.
+        let claim = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(claim_path)?;
+        claim.try_lock().map_err(|error| match error {
+            std::fs::TryLockError::WouldBlock => Error::Taken(socket.to_path_buf()),
+            std::fs::TryLockError::Error(error) => Error::Io(error),
+        })?;
+        if tsumugi_sys::local::connect(socket).await.is_ok() {
+            return Err(Error::Taken(socket.to_path_buf()));
+        }
+        // What is left is a socket of a host gone before.
+        let listener = bind_private(socket)?;
+        Ok(Self {
+            listener,
+            socket: socket.to_path_buf(),
+            _claim: claim,
+        })
+    }
+
+    /// Say `hello` to everyone who connects here and answer them from
+    /// `served`, and so to paired clients with what they are told, until
+    /// one asks this host to stop. Paired clients reach it at a socket of
+    /// their own, so that what they ask is known as asked remotely, once it
+    /// could publish itself for them.
+    pub async fn serve(&self, hello: Hello, served: Served) {
+        let (stop, mut stopped) = tokio::sync::mpsc::channel::<()>(1);
+        let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+        // Polled across connections, so a publication waiting for the record
+        // is not begun again with every one.
+        let mut publishing = std::pin::pin!(published());
+        let for_paired: std::sync::OnceLock<(
+            tsumugi_sys::local::Listener,
+            crate::remote::Publication,
+        )> = std::sync::OnceLock::new();
+        let remote_accept = || async {
+            match for_paired.get() {
+                Some((listener, _)) => listener.accept().await,
+                None => std::future::pending().await,
+            }
+        };
+        loop {
+            let (stream, remote) = tokio::select! {
+                accepted = self.listener.accept() => match accepted {
+                    Ok(stream) => (stream, false),
+                    Err(_) => return,
+                },
+                accepted = remote_accept() => match accepted {
+                    Ok(stream) => (stream, true),
+                    Err(_) => continue,
+                },
+                published = &mut publishing, if for_paired.get().is_none() => {
+                    let _ = for_paired.set(published);
+                    continue;
+                }
+                _ = stopped.recv() => return,
+            };
+            let (hello, served, stop) = (hello.clone(), served.clone(), stop.clone());
+            let Ok(permit) = permits.clone().try_acquire_owned() else {
+                continue;
+            };
+            crate::environment::spawn(crate::environment::asked_remotely(remote, async move {
+                let _permit = permit;
+                let hello = if remote { hello_of_ours() } else { hello };
+                served.connection(stream, &hello, stop).await
+            }));
+        }
+    }
+}
+
+/// This host published for paired clients and listening where they reach it,
+/// once both could be done.
+async fn published() -> (tsumugi_sys::local::Listener, crate::remote::Publication) {
+    loop {
+        let published =
+            crate::remote::Publication::claim("work", None, crate::remote::CLAIM_AGAIN).await;
+        match bind_private(published.socket()) {
+            Ok(listener) => {
+                published.ours();
+                return (listener, published);
+            }
+            Err(error) => {
+                tracing::warn!(%error, "paired clients cannot reach this host");
+                drop(published);
+                tokio::time::sleep(crate::remote::CLAIM_AGAIN).await;
+            }
+        }
+    }
+}
+
+/// Listen at `socket` in place of whatever an earlier run left there, open
+/// to no one but this user.
+pub(crate) fn bind_private(socket: &Path) -> std::io::Result<tsumugi_sys::local::Listener> {
+    // A named pipe leaves nothing behind, and felis closes it to others.
+    #[cfg(unix)]
+    match std::fs::remove_file(socket) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    let listener = tsumugi_sys::local::Listener::bind(socket)?;
+    #[cfg(unix)]
+    tsumugi_sys::fs::set_mode(socket, 0o600)?;
+    Ok(listener)
+}
+
+/// How the work host at `socket` stands against this build.
+pub async fn standing(socket: &Path) -> WorkHost {
+    let said = hello(socket).await;
+    judge(said.as_ref().map(Option::as_ref), &build())
+}
+
+/// Stop the work host at `socket` and wait until it is gone; whether one was
+/// listening to stop. No session ends with it.
+pub async fn stop(socket: &Path) -> Result<bool> {
+    Ok(tsumugi_term::stop_listening(socket, || async { Ok(ask_stop(socket).await?) }).await?)
+}
+
+/// Start `program` with `args` apart from tsumugi as the work host at
+/// `socket`, and wait until it says hello. It is named the instance it
+/// serves, so that its routing and its instance agree and neither is set
+/// aside.
+pub async fn start(socket: &Path, program: &Path, args: &[String]) -> Result<()> {
+    tsumugi_term::own_dir(socket)?;
+    tsumugi_term::detached_with(
+        program,
+        args,
+        &[(
+            crate::paths::INSTANCE_ENV.into(),
+            Some(crate::paths::work_instance()),
+        )],
+    )?;
+    for _ in 0..100 {
+        if let Some(Some(_)) = hello(socket).await {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Err(Error::NotStarted(socket.to_path_buf()))
+}
+
+/// Make sure a work host of this build answers at `socket`: start one where
+/// none does, and replace one of another build, or one this build cannot
+/// work with, without asking; whether one was started.
+pub async fn ensure(socket: &Path, program: &Path, args: &[String]) -> Result<bool> {
+    match standing(socket).await {
+        WorkHost::Keep => return Ok(false),
+        WorkHost::Replace => {
+            stop(socket).await?;
+        }
+        WorkHost::Absent => {}
+    }
+    start(socket, program, args).await?;
+    Ok(true)
+}
+
+/// Run `tsumugi <args>` in the work host of the instance, started where none
+/// runs, with `input` on its standard input, and say what it wrote. Returns
+/// the process exit code.
+pub fn run_command(args: Vec<String>, input: Option<String>) -> i32 {
+    let ran = (|| {
+        let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+        crate::cli::block_on(asked(&socket(), Ask::Run { args, cwd, input }))
+            .map_err(|e| e.to_string())?
+    })();
+    match ran {
+        Ok(Answer::Ran {
+            stdout,
+            stderr,
+            code,
+        }) => {
+            if !stdout.is_empty() {
+                println!("{stdout}");
+            }
+            if !stderr.is_empty() {
+                eprintln!("tsumugi: {stderr}");
+            }
+            code
+        }
+        Ok(Answer::Failed { text }) | Err(text) => {
+            eprintln!("tsumugi: {text}");
+            1
+        }
+        Ok(answer) => {
+            eprintln!("tsumugi: the work host answered {answer:?}");
+            1
+        }
+    }
+}
+
+/// What the work host at `socket`, started where none runs, answers `ask`.
+/// One of another build is asked all the same when it shares a version
+/// with this one: a command is not to replace the host a window works with.
+async fn asked(socket: &Path, ask: Ask) -> std::result::Result<Answer, String> {
+    if crate::remote::active() {
+        let waits = match &ask {
+            Ask::Run { args, .. } => crate::terminals::waits_for(args),
+            _ => None,
+        };
+        let limit = Duration::from_secs(30) + waits.unwrap_or_default();
+        return tokio::time::timeout(limit, asked_inner(socket, ask))
+            .await
+            .map_err(|_| {
+                "the remote command timed out; its outcome is unknown and it was not retried"
+                    .to_string()
+            })?;
+    }
+    asked_inner(socket, ask).await
+}
+
+async fn asked_inner(socket: &Path, ask: Ask) -> std::result::Result<Answer, String> {
+    match hello(socket).await {
+        None if crate::remote::active() => return Err(
+            "the remote work host is unavailable; its service must be started on the work machine"
+                .into(),
+        ),
+        None => start(socket, &tsumugi_program(), &serve_args())
+            .await
+            .map_err(|e| e.to_string())?,
+        Some(Some(said)) if agree(SPOKEN, &said.speaks).is_some() => {}
+        Some(_) => return Err("the work host speaks no version this tsumugi does".into()),
+    }
+    let mut connection = Connection::open(socket)
+        .await
+        .map_err(|e| format!("cannot reach the work host: {e}"))?;
+    let gone = |e: std::io::Error| format!("the work host went away: {e}");
+    let ask = if crate::remote::active() {
+        connection
+            .requests
+            .send(&Request::Hello {
+                versions: SPOKEN.to_vec(),
+            })
+            .await
+            .map_err(gone)?;
+        loop {
+            match connection.events.next().await.map_err(gone)? {
+                Some(Event::Welcome { .. }) => break,
+                Some(Event::Refused { .. }) | None => {
+                    return Err("the remote work host refused the protocol".into());
+                }
+                _ => {}
+            }
+        }
+        let request = Request::Ask {
+            asked: 1,
+            ask: Box::new(ask),
+        };
+        if request.mutates() {
+            let work = connection
+                .hello
+                .endpoint
+                .as_ref()
+                .ok_or("missing remote work identity")?;
+            let terminal = connection
+                .hello
+                .terminal
+                .as_ref()
+                .ok_or("missing remote terminal identity")?;
+            let stamp = tsumugi_protocol::MutationStamp {
+                instance: work.instance.clone(),
+                work: work.generation.clone(),
+                terminal: terminal.generation.clone(),
+                epoch: connection
+                    .hello
+                    .mutation_epoch
+                    .ok_or("missing remote mutation epoch")?,
+                id: crate::remote::random().map_err(|e| e.to_string())?,
+            };
+            Ask::Apply {
+                stamp,
+                request: Box::new(request),
+            }
+        } else {
+            let Request::Ask { ask, .. } = request else {
+                unreachable!()
+            };
+            *ask
+        }
+    } else {
+        ask
+    };
+    connection
+        .requests
+        .send(&Request::Ask {
+            asked: 1,
+            ask: Box::new(ask),
+        })
+        .await
+        .map_err(gone)?;
+    while let Some(event) = connection.events.next().await.map_err(gone)? {
+        if let Event::Answer { asked: 1, answer } = event {
+            return match answer {
+                Answer::Mutation {
+                    status: tsumugi_protocol::MutationState::Result { answer },
+                } => Ok(*answer),
+                Answer::Mutation { status } => Err(format!(
+                    "remote command outcome is {status:?}; it was not retried"
+                )),
+                answer => Ok(answer),
+            };
+        }
+    }
+    Err("the work host went away before it answered".into())
+}
+
+/// This program, as the work host is started with.
+pub fn tsumugi_program() -> PathBuf {
+    tsumugi_sys::process::executable().unwrap_or_else(|_| "tsumugi".into())
+}
+
+/// How long the work host waits before trying again to take delegation over
+/// from a terminal host of a build that still serves it.
+const CLAIM_AGAIN: Duration = Duration::from_secs(2);
+
+/// Serve delegation and judge sessions, for as long as the future is polled;
+/// until the state can be claimed, try again now and then, as a terminal
+/// host of a build from before the work host still holds it.
+async fn delegation() {
+    let mut told = false;
+    let _service = loop {
+        match crate::delegation::service::Service::start(
+            &crate::delegation::app::root(),
+            crate::daemon::daemon(),
+            tsumugi_program(),
+            crate::settings::try_load,
+        )
+        .await
+        {
+            Ok(service) => break service,
+            Err(error) => {
+                if !told {
+                    tracing::warn!(%error, "sessions cannot start or message sessions yet");
+                    told = true;
+                }
+                tokio::time::sleep(CLAIM_AGAIN).await;
+            }
+        }
+    };
+    std::future::pending::<()>().await;
+}
+
+/// Serve as the work host at `socket` until asked to stop: the work, read
+/// from the configuration first and then kept read once the terminal host
+/// the sessions are listed from runs.
+async fn serve(socket: &Path) -> Result<()> {
+    let server = WorkHostServer::bind(socket).await?;
+    let host = crate::work::Host::new(crate::work::Work::configured(crate::config::read()));
+    let judged = std::sync::Arc::new(tokio::sync::watch::Sender::new(None));
+    let served = Served::new(host, |watched| crate::asks::asks(watched, judged.clone()));
+    let watched = served.watched();
+    crate::watch::start_config(watched.clone());
+    crate::environment::spawn(async move {
+        crate::terminal_host::start(&judged).await;
+        crate::watch::start(watched);
+    });
+    tokio::select! {
+        () = server.serve(hello_of_ours(), served) => {}
+        () = delegation() => {}
+    }
+    Ok(())
+}
+
+pub(crate) fn environment_served() -> Served {
+    let host = crate::work::Host::new(crate::work::Work::configured(crate::config::read()));
+    let judged = std::sync::Arc::new(tokio::sync::watch::Sender::new(None));
+    let served = Served::new(host, |watched| crate::asks::asks(watched, judged.clone()));
+    let watched = served.watched();
+    crate::watch::start_config(watched.clone());
+    crate::environment::spawn(async move {
+        crate::terminal_host::start(&judged).await;
+        crate::watch::start(watched);
+        delegation().await;
+    });
+    served
+}
+
+/// `tsumugi host`: serve as the work host at the socket until stopped, or
+/// stop or restart the work host serving there. Returns the process exit
+/// code.
+pub fn cli(asked: HostCommand) -> i32 {
+    let effect = match asked {
+        HostCommand::Stop { force: false } => {
+            Some("it would cut this session off from its work host, though no session ends")
+        }
+        HostCommand::Restart { force: false } => Some(
+            "it would cut this session off from its work host until another starts, though no session ends",
+        ),
+        _ => None,
+    };
+    if let Some(text) = effect.and_then(crate::cli::refusal) {
+        return crate::cli::failed(text, 1);
+    }
+    let rt = match crate::cli::serving_runtime() {
+        Ok(rt) => rt,
+        Err(e) => return crate::cli::failed(e, 1),
+    };
+    let socket = socket();
+    let done = rt.block_on(async {
+        match asked {
+            HostCommand::Serve => serve(&socket).await,
+            HostCommand::Stop { .. } => {
+                let stopped = stop(&socket).await?;
+                println!(
+                    "{}",
+                    if stopped {
+                        "stopped the work host"
+                    } else {
+                        "no work host was running"
+                    }
+                );
+                Ok(())
+            }
+            HostCommand::Restart { .. } => {
+                stop(&socket).await?;
+                start(&socket, &tsumugi_program(), &serve_args()).await?;
+                println!("restarted the work host");
+                Ok(())
+            }
+        }
+    });
+    // Tasks still running once the host has stopped serving are not waited
+    // for: the process is to end with it.
+    rt.shutdown_background();
+    match done {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("tsumugi: {e}");
+            1
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tsumugi_protocol::testing::patch;
+    use tsumugi_protocol::{
+        Answer, Ask, Change, Event, PromptChange, Request, Seq, Version, decode, encode,
+    };
+
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    use super::*;
+
+    /// A folder for a socket, whose path has to be short.
+    fn short_dir() -> tempfile::TempDir {
+        let dir = tempfile::Builder::new()
+            .prefix("tsumugi-")
+            .tempdir_in(tsumugi_sys::local::temp_dir())
+            .unwrap();
+        tsumugi_sys::fs::set_mode(dir.path(), 0o700).unwrap();
+        dir
+    }
+
+    /// A work host bound at `socket` once what this process let go of there
+    /// is gone. A child another test forks holds this process's sockets and
+    /// locks until it execs, and answers or locks for them meanwhile.
+    async fn bound_once_let_go(socket: &Path) -> WorkHostServer {
+        let until = tokio::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match WorkHostServer::bind(socket).await {
+                Err(Error::Taken(_)) if tokio::time::Instant::now() < until => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                bound => return bound.unwrap(),
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_private_socket_replaces_what_an_earlier_run_left_and_is_open_to_no_one_else() {
+        use tsumugi_sys::fs::PermissionsExt;
+        let dir = short_dir();
+        let socket = dir.path().join("s");
+        std::fs::write(&socket, "left").unwrap();
+
+        let _listener = bind_private(&socket).unwrap();
+
+        let metadata = std::fs::symlink_metadata(&socket).unwrap();
+        assert!(std::os::unix::fs::FileTypeExt::is_socket(
+            &metadata.file_type()
+        ));
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+    }
+
+    fn hello_of(build: &str, speaks: &[u32]) -> Hello {
+        Hello {
+            speaks: speaks.iter().copied().map(Version).collect(),
+            build: build.into(),
+            endpoint: None,
+            terminal: None,
+            mutation_epoch: None,
+        }
+    }
+
+    /// A host holding no work, answering every ask as done.
+    fn served() -> Served {
+        Served::new(crate::work::Host::default(), |_| {
+            std::sync::Arc::new(|_| Box::pin(async { Answer::Done }))
+        })
+    }
+
+    #[tokio::test]
+    async fn a_work_host_says_its_versions_and_build_before_it_is_asked_anything() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let server = WorkHostServer::bind(&socket).await.unwrap();
+        let said = hello_of("0.3.0", &[1, 2]);
+        let serving = {
+            let said = said.clone();
+            async move { server.serve(said, served()).await }
+        };
+        tokio::select! {
+            () = serving => panic!("the host stopped unasked"),
+            got = hello(&socket) => assert_eq!(got, Some(Some(said))),
+        }
+    }
+
+    #[tokio::test]
+    async fn where_no_work_host_listens_none_says_anything() {
+        let dir = short_dir();
+        assert_eq!(hello(&dir.path().join("h.sock")).await, None);
+        assert_eq!(standing(&dir.path().join("h.sock")).await, WorkHost::Absent);
+    }
+
+    #[tokio::test]
+    async fn a_work_host_of_this_build_is_kept_and_one_of_another_is_to_be_replaced() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let server = WorkHostServer::bind(&socket).await.unwrap();
+        let ours = hello_of_ours();
+        tokio::select! {
+            () = server.serve(ours.clone(), served()) => panic!("the host stopped unasked"),
+            got = standing(&socket) => assert_eq!(got, WorkHost::Keep),
+        }
+        let other = hello_of("0.0.1", &[1]);
+        tokio::select! {
+            () = server.serve(other.clone(), served()) => panic!("the host stopped unasked"),
+            got = standing(&socket) => assert_eq!(got, WorkHost::Replace),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_listener_that_says_nothing_is_a_work_host_to_replace() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let _mute = tsumugi_sys::local::Listener::bind(&socket).unwrap();
+        assert_eq!(standing(&socket).await, WorkHost::Replace);
+    }
+
+    #[tokio::test]
+    async fn a_work_host_asked_to_stop_stops_serving_and_leaves_no_socket() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let server = WorkHostServer::bind(&socket).await.unwrap();
+        let serving = crate::environment::spawn(async move {
+            server.serve(hello_of_ours(), served()).await;
+        });
+        let mut stream = tsumugi_sys::local::connect(&socket).await.unwrap();
+        stream.write_all(b"{\"op\":\"stop\"}\n").await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), serving)
+            .await
+            .expect("the host went on serving")
+            .unwrap();
+        assert!(!socket.exists());
+    }
+
+    #[tokio::test]
+    async fn a_work_host_asked_to_stop_by_one_who_hangs_up_at_once_still_stops() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let server = WorkHostServer::bind(&socket).await.unwrap();
+        let serving = crate::environment::spawn(async move {
+            server.serve(hello_of_ours(), served()).await;
+        });
+        {
+            let mut stream = tsumugi_sys::local::connect(&socket).await.unwrap();
+            stream.write_all(b"{\"op\":\"stop\"}\n").await.unwrap();
+        }
+        tokio::time::timeout(Duration::from_secs(5), serving)
+            .await
+            .expect("the host went on serving")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn asking_a_work_host_to_stop_returns_once_it_has_taken_the_request() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let server = WorkHostServer::bind(&socket).await.unwrap();
+        let serving = crate::environment::spawn(async move {
+            server.serve(hello_of_ours(), served()).await;
+        });
+        ask_stop(&socket).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), serving)
+            .await
+            .expect("the host went on serving")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_second_work_host_refuses_to_serve_where_one_answers() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let _first = WorkHostServer::bind(&socket).await.unwrap();
+        let second = WorkHostServer::bind(&socket).await;
+        assert!(matches!(second, Err(Error::Taken(_))));
+    }
+
+    #[tokio::test]
+    async fn a_host_start_waits_for_an_owner_that_has_not_bound_its_socket_yet() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let claim = std::fs::File::create(dir.path().join("h.sock.lock")).unwrap();
+        claim.try_lock().unwrap();
+        assert!(matches!(
+            WorkHostServer::bind(&socket).await,
+            Err(Error::Taken(_))
+        ));
+        assert!(!socket.exists());
+        drop(claim);
+        bound_once_let_go(&socket).await;
+    }
+
+    #[tokio::test]
+    async fn simultaneous_host_starts_leave_one_reachable_listener() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let mut starts = tokio::task::JoinSet::new();
+        for _ in 0..32 {
+            let socket = socket.clone();
+            starts.spawn(async move { WorkHostServer::bind(socket).await });
+        }
+        let mut owners = Vec::new();
+        while let Some(started) = starts.join_next().await {
+            match started.unwrap() {
+                Ok(owner) => owners.push(owner),
+                Err(Error::Taken(_)) => {}
+                Err(error) => panic!("{error}"),
+            }
+        }
+        assert_eq!(owners.len(), 1);
+        assert!(tsumugi_sys::local::connect(&socket).await.is_ok());
+        drop(owners);
+        assert!(!socket.exists());
+        bound_once_let_go(&socket).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_socket_left_by_a_work_host_gone_before_is_taken_over() {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        // Bound and never listening, as a listener closed here would still
+        // answer from a child another test forks until that child execs.
+        drop(std::os::unix::net::UnixDatagram::bind(&socket).unwrap());
+        assert!(socket.exists());
+        WorkHostServer::bind(&socket).await.unwrap();
+    }
+
+    /// One connected to a work host, as a window or a command is.
+    struct Peer {
+        lines: tokio::io::Lines<BufReader<tokio::io::ReadHalf<tsumugi_sys::local::Stream>>>,
+        write: tokio::io::WriteHalf<tsumugi_sys::local::Stream>,
+    }
+
+    impl Peer {
+        /// Connected to the host at `socket`, its hello read.
+        async fn to(socket: &Path) -> Self {
+            let stream = tsumugi_sys::local::connect(socket).await.unwrap();
+            let (read, write) = tokio::io::split(stream);
+            let mut peer = Self {
+                lines: BufReader::new(read).lines(),
+                write,
+            };
+            let hello: Hello = decode(peer.line().await).unwrap();
+            assert_eq!(hello, hello_of_ours());
+            peer
+        }
+
+        async fn line(&mut self) -> String {
+            tokio::time::timeout(Duration::from_secs(5), self.lines.next_line())
+                .await
+                .expect("the host said nothing")
+                .unwrap()
+                .expect("the host hung up")
+        }
+
+        async fn ask(&mut self, request: &Request) {
+            self.write
+                .write_all(encode(request).as_bytes())
+                .await
+                .unwrap();
+        }
+
+        async fn told(&mut self) -> Event {
+            decode(self.line().await).unwrap()
+        }
+    }
+
+    fn greeting() -> Request {
+        Request::Hello {
+            versions: SPOKEN.to_vec(),
+        }
+    }
+
+    /// A work host serving `served` at a socket of its own.
+    async fn serving(served: Served) -> (tempfile::TempDir, PathBuf) {
+        let dir = short_dir();
+        let socket = dir.path().join("h.sock");
+        let server = WorkHostServer::bind(&socket).await.unwrap();
+        crate::environment::spawn(async move { server.serve(hello_of_ours(), served).await });
+        (dir, socket)
+    }
+
+    fn composed(asked: u64) -> Vec<Change> {
+        vec![Change::Prompt(PromptChange::Composed {
+            composed: tsumugi_protocol::Composed {
+                asked,
+                ..Default::default()
+            },
+        })]
+    }
+
+    #[tokio::test]
+    async fn a_window_is_welcomed_with_the_work_and_then_told_each_change_in_order() {
+        let served = served();
+        let watched = served.watched();
+        let (_dir, socket) = serving(served).await;
+        let mut window = Peer::to(&socket).await;
+        window.ask(&greeting()).await;
+        assert_eq!(
+            window.told().await,
+            Event::Welcome {
+                version: *SPOKEN.iter().max().unwrap()
+            }
+        );
+        assert_eq!(window.told().await, Event::Snapshot(Box::default()));
+        watched.record(composed(1));
+        watched.record(composed(2));
+        for seq in 1..=2 {
+            assert_eq!(
+                window.told().await,
+                patch(seq).changes(composed(seq)).into()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_host_answers_a_window_on_its_connection_in_the_order_asked() {
+        let (_dir, socket) = serving(served()).await;
+        let mut window = Peer::to(&socket).await;
+        window.ask(&greeting()).await;
+        window.ask(&Request::Snapshot).await;
+        let mut got = Vec::new();
+        for _ in 0..3 {
+            got.push(window.told().await);
+        }
+        assert_eq!(
+            got,
+            vec![
+                Event::Welcome {
+                    version: *SPOKEN.iter().max().unwrap()
+                },
+                Event::Snapshot(Box::default()),
+                Event::Snapshot(Box::default()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_closed_window_does_not_stop_the_host() {
+        let served = served();
+        let watched = served.watched();
+        let (_dir, socket) = serving(served).await;
+        {
+            let mut gone = Peer::to(&socket).await;
+            gone.ask(&greeting()).await;
+            gone.told().await;
+        }
+        watched.record([tsumugi_protocol::TreeChange::Failing {
+            error: Some("no daemon".into()),
+        }]);
+        let mut window = Peer::to(&socket).await;
+        window.ask(&Request::Snapshot).await;
+        assert!(matches!(window.told().await, Event::Snapshot(s) if s.seq == Seq(1)));
+    }
+
+    #[tokio::test]
+    async fn each_window_is_sent_what_it_shows_and_every_window_what_all_are() {
+        use tsumugi_protocol::{DetailsChange, Sight, TreeChange};
+        let served = served();
+        let watched = served.watched();
+        let (_dir, socket) = serving(served).await;
+        let mut windows = Vec::new();
+        for session in ["a", "b"] {
+            let mut window = Peer::to(&socket).await;
+            window.ask(&greeting()).await;
+            window.told().await;
+            window.told().await;
+            window
+                .ask(&Request::Watch(Box::new(Sight {
+                    session: Some(session.into()),
+                    ..Default::default()
+                })))
+                .await;
+            // Answered once the watch is taken, as it comes after it.
+            window.ask(&Request::Snapshot).await;
+            window.told().await;
+            windows.push(window);
+        }
+        let links = DetailsChange::Links {
+            session: "a".into(),
+            links: Default::default(),
+        };
+        let failing = TreeChange::Failing {
+            error: Some("no daemon".into()),
+        };
+        watched.record([links.clone()]);
+        watched.record([failing.clone()]);
+        assert_eq!(windows[0].told().await, patch(1).change(links).into());
+        assert_eq!(
+            windows[0].told().await,
+            patch(2).change(failing.clone()).into()
+        );
+        assert_eq!(windows[1].told().await, patch(1).change(failing).into());
+    }
+
+    #[tokio::test]
+    async fn an_ask_is_answered_by_its_number_to_the_one_that_asked_alone() {
+        let served = Served::new(crate::work::Host::default(), |_| {
+            std::sync::Arc::new(|ask| {
+                Box::pin(async move {
+                    match ask {
+                        Ask::KeepImage { mime, .. } => Answer::Failed { text: mime },
+                        _ => Answer::Done,
+                    }
+                })
+            })
+        });
+        let (_dir, socket) = serving(served).await;
+        let mut other = Peer::to(&socket).await;
+        other.ask(&greeting()).await;
+        other.told().await;
+        other.told().await;
+        let mut asker = Peer::to(&socket).await;
+        asker
+            .ask(&Request::Ask {
+                asked: 7,
+                ask: Box::new(Ask::KeepImage {
+                    mime: "image/tiff".into(),
+                    data: String::new(),
+                }),
+            })
+            .await;
+        assert_eq!(
+            asker.told().await,
+            Event::Answer {
+                asked: 7,
+                answer: Answer::Failed {
+                    text: "image/tiff".into()
+                },
+            }
+        );
+        other.ask(&Request::Snapshot).await;
+        assert!(matches!(other.told().await, Event::Snapshot(_)));
+    }
+
+    #[tokio::test]
+    async fn a_wait_is_given_up_once_the_one_that_asked_hangs_up() {
+        let (waiting, given_up) = tokio::sync::oneshot::channel::<()>();
+        let waiting = std::sync::Mutex::new(Some(waiting));
+        let served = Served::new(crate::work::Host::default(), move |_| {
+            let waiting = std::sync::Arc::new(waiting);
+            std::sync::Arc::new(move |_| {
+                // Dropped with the answer that never comes.
+                let held = waiting.lock().unwrap().take();
+                Box::pin(async move {
+                    let _held = held;
+                    std::future::pending::<Answer>().await
+                })
+            })
+        });
+        let (_dir, socket) = serving(served).await;
+        let mut asker = Peer::to(&socket).await;
+        asker
+            .ask(&Request::Ask {
+                asked: 1,
+                ask: Box::new(Ask::LoginStanding {
+                    profile: "claude".parse().unwrap(),
+                    after: Some(7),
+                }),
+            })
+            .await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        drop(asker);
+        tokio::time::timeout(Duration::from_secs(5), given_up)
+            .await
+            .expect("the host went on waiting for one who hung up")
+            .unwrap_err();
+    }
+}

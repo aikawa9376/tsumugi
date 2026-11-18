@@ -1,0 +1,44 @@
+[package]
+name = "tsumugi-window"
+description = "The tsumugi window: the Dioxus UI that shows the work its hosts hold, its menu bar and its Settings window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tracing.workspace = true
+tsumugi-sys.workspace = true
+tsumugi-connect.workspace = true
+tsumugi-core.workspace = true
+tsumugi-model.workspace = true
+tsumugi-nvim.workspace = true
+tsumugi-protocol = { workspace = true, features = ["client"] }
+tsumugi-term.workspace = true
+arto-frontend = "0.46.0"
+arto-markdown = "0.46.0"
+dioxus = { version = "0.7.10", features = ["desktop"] }
+fontdb = "0.24.0"
+image.workspace = true
+resvg.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tokio.workspace = true
+ttf-parser = "0.25.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+objc2.workspace = true
+objc2-app-kit.workspace = true
+objc2-foundation.workspace = true
+objc2-pdf-kit.workspace = true
+
+[dev-dependencies]
+tsumugi-model = { workspace = true, features = ["testing"] }
+tsumugi-protocol = { workspace = true, features = ["testing"] }
+base64.workspace = true
+libc.workspace = true
+tempfile.workspace = true
+wuff = "0.2.9"

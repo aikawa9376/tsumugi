@@ -1,0 +1,61 @@
+.list-rows { overflow-y: auto; padding: 0 8px 8px; }
+.list-row { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: 6px; cursor: default; white-space: nowrap; overflow: hidden; }
+.list-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.list-row-meta { color: var(--text-3); font-size: 11.5px; }
+.agent-badge { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-2); font-size: 10px; line-height: 16px; }
+.list-row.selected { background: var(--select); }
+.list-row.shown { box-shadow: inset 3px 0 0 var(--run); background: var(--run-tint-soft); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.list-row.shown.selected { background: var(--select); }
+.list-row.shown .list-row-name { color: var(--text); font-weight: 600; }
+.app-panel.focused .list-row.selected.shown { box-shadow: inset 3px 0 0 var(--run), inset 0 0 0 1px var(--focus-line); }
+.app-panel.focused .list-row.selected { box-shadow: inset 0 0 0 1px var(--focus-line); }
+.list-row.head { font-weight: 500; }
+.list-row.vacant { opacity: 0.5; }
+.list-row.dim { color: var(--text-2); }
+.list-row.mono { font-family: var(--mono); font-size: 12px; }
+.list-rows.sidebar-inbox { flex: none; max-height: 40%; }
+.sidebar-inbox .list-row { height: auto; padding: 7px 10px; align-items: flex-start; }
+.sidebar-inbox-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.sidebar-inbox-sub { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-divider { height: 1px; background: var(--line); margin: 4px 16px; flex: none; }
+.state-glyph { flex: none; display: inline-flex; }
+.state-glyph.wait { color: var(--wait); }
+.state-glyph.run { color: var(--run); }
+.state-glyph.behind { color: var(--run); }
+.state-glyph.done { color: var(--done); }
+.state-glyph.idle { color: var(--text-3); }
+.state-glyph.fail { color: var(--fail); }
+.state-glyph.run .icon svg { animation: spin 1.8s linear infinite; }
+.state-glyph.behind .icon svg { animation: behind-pulse 1.4s ease-in-out infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes behind-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .state-glyph.run .icon svg, .state-glyph.behind .icon svg { animation: none; } }
+.reads-only-mark { flex: none; color: var(--text-3); display: inline-flex; }
+.shell-mark, .place-mark { flex: none; color: var(--text-3); display: inline-flex; }
+.list-row.head .place-mark { color: var(--text-2); }
+.list-row.shown .place-mark, .list-row.shown .shell-mark { color: var(--text-2); }
+.list-row.group { height: 24px; color: var(--text-3); font-size: 11.5px; font-weight: 500; }
+.list-row.group .place-mark { color: var(--text-3); }
+.tab-where { flex: none; padding: 0 5px; border-radius: 4px; background: var(--raised); color: var(--text-3); font-family: var(--mono); font-size: 10px; line-height: 16px; }
+.list-row.shown .tab-where { background: var(--run-tint); color: var(--run); }
+.sidebar-inbox .list-row-name .reads-only-mark { margin-left: 6px; vertical-align: -2px; }
+.list-row.environment { height: 30px; gap: 7px; }
+.list-row.environment:not(:first-child) { margin-top: 6px; }
+.list-row.environment .kind-mark { flex: none; display: inline-flex; color: var(--text-2); }
+.list-row.environment.dim .list-row-name { color: var(--text-2); }
+.standing-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.standing-dot.ok { background: var(--done); }
+.standing-dot.fail { background: var(--fail); }
+.standing-dot.busy { width: 9px; height: 9px; border: 1.5px solid var(--run); border-right-color: transparent; animation: spin 1.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .standing-dot.busy { animation: none; } }
+.standing-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 10.5px; font-weight: 500; }
+.standing-pill.busy { background: var(--run-tint); color: var(--run); }
+.standing-pill.fail { background: var(--fail-tint); color: var(--fail); }
+.standing-pill.quiet { background: var(--raised); color: var(--text-2); }
+.standing-pill.wait { background: var(--wait-tint); color: var(--wait); }
+.waiting-count { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--wait-tint); color: var(--wait); font: 600 10.5px/18px var(--mono); text-align: center; }
+/* The environments the tree is not at stand back, so the one at hand reads first. */
+.list-row.elsewhere { opacity: 0.55; }
+/* A pull request's or an issue's title gives way last: who opened it shrinks first. */
+.list-row.github-item .list-row-name { min-width: 4em; }
+.list-row.github-item .list-row-meta { flex: 0 1 auto; min-width: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,0 +1,73 @@
+//! Whether the session a window's console shows has a dialog of its
+//! agent's own open, such as the picker `/model` opens, which takes every key:
+//! judged by the agent's adapter from the session's screen, read again each
+//! time that window draws it anew, and told that window. An agent reports
+//! no status for a dialog it opens itself, so only its screen tells.
+
+use std::time::Duration;
+
+use tsumugi_model::Agent;
+use tsumugi_model::daemon::id_of;
+use tsumugi_protocol::{ConsoleChange, Dialog};
+
+use tokio::sync::mpsc::UnboundedReceiver;
+
+use super::Watched;
+use crate::work::Redrawn;
+
+/// How long the daemon is given to show a screen.
+const VISIBLE_WAIT: Duration = Duration::from_millis(300);
+
+pub(super) async fn watch(watched: Watched, mut redraws: UnboundedReceiver<Redrawn>) {
+    let daemon = crate::daemon::daemon();
+    while let Some(Redrawn {
+        window,
+        session,
+        agent,
+    }) = redraws.recv().await
+    {
+        let Some(id) = id_of(&session) else {
+            continue;
+        };
+        let Ok(Ok(lines)) = tokio::time::timeout(VISIBLE_WAIT, daemon.visible(id)).await else {
+            continue;
+        };
+        let open = dialog_open(agent, &lines);
+        watched.record_for(
+            window,
+            [ConsoleChange::Dialog {
+                dialog: Dialog { session, open },
+            }],
+        );
+    }
+}
+
+/// Whether `lines`, a screen of a session of `agent`, show a dialog of the
+/// agent's own.
+fn dialog_open(agent: Agent, lines: &[String]) -> bool {
+    tsumugi_agents::adapter(agent).dialog_open(lines)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn claude_screen(name: &str) -> Vec<String> {
+        let path = format!(
+            "{}/../agents/tests/screens/{name}.txt",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{path}: {e}"))
+            .lines()
+            .map(String::from)
+            .collect()
+    }
+
+    #[test]
+    fn a_screen_is_judged_by_the_adapter_of_the_agent_the_session_runs() {
+        assert!(dialog_open(Agent::Claude, &claude_screen("model")));
+        assert!(!dialog_open(Agent::Claude, &claude_screen("input")));
+        assert!(!dialog_open(Agent::Codex, &claude_screen("input")));
+    }
+}

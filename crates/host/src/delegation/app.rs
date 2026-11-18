@@ -1,0 +1,398 @@
+//! The window's and the command line's side of delegation: recording the
+//! sessions the user starts, which the work host then serves like any other.
+use std::path::{Path, PathBuf};
+
+use tsumugi_model::{Agent, SessionId};
+
+use super::{
+    Message, Result,
+    launch::Delegation,
+    store::{NewSession, Store},
+};
+use crate::{execution::StartRequest, settings::Settings};
+
+/// Where the work host keeps delegation state and listens for sessions.
+pub fn root() -> PathBuf {
+    crate::paths::instance_state().join("delegation")
+}
+
+pub fn database(root: &Path) -> PathBuf {
+    root.join("state.sqlite3")
+}
+
+pub(crate) async fn with_store<T: Send + 'static>(
+    root: &Path,
+    operation: impl FnOnce(&mut Store) -> Result<T> + Send + 'static,
+) -> Result<T> {
+    let path = database(root);
+    crate::environment::spawn_blocking(move || {
+        Store::open(&path).and_then(|mut store| operation(&mut store))
+    })
+    .await
+    .map_err(super::Error::storage)?
+}
+
+/// A session recorded before its program starts, to be told of its terminal.
+#[derive(Debug, Clone)]
+pub struct Recorded {
+    root: PathBuf,
+    pub id: SessionId,
+    pub code: tsumugi_model::SessionCode,
+}
+
+impl Recorded {
+    pub async fn attach(&self, terminal: u128) -> tsumugi_term::Result<()> {
+        let id = self.id;
+        let generation = crate::daemon::daemon().generation();
+        with_store(&self.root, move |store| {
+            store.attach(id, terminal, generation)
+        })
+        .await
+        .map_err(|error| tsumugi_term::Error::Protocol(error.to_string()))
+    }
+
+    /// Records that the program never started, so the session is not served.
+    pub async fn failed(&self) {
+        let id = self.id;
+        let _ = with_store(&self.root, move |store| store.end(id)).await;
+    }
+}
+
+/// Records the session `request` starts, started by `parent` or by the user,
+/// and gives the request what it needs to reach other sessions.
+async fn record(
+    root: &Path,
+    settings: &Settings,
+    request: &mut StartRequest,
+    parent: Option<SessionId>,
+) -> std::result::Result<Recorded, String> {
+    let context =
+        crate::programs::starting(settings, Some(request.agent), request.profile.as_ref())?;
+    request.profile = Some(context.profile.clone());
+    if request.agent == Agent::Codex {
+        request.developer_instructions = tsumugi_agents::adapter(request.agent)
+            .developer_instructions(context.clone(), request.cwd.clone())
+            .await?;
+    }
+    let new = NewSession {
+        parent,
+        agent: request.agent,
+        profile: context.profile,
+        home: context.home,
+        name: request.name.clone(),
+        cwd: request.cwd.clone(),
+        launch: settings.clone(),
+        model: request.model.clone(),
+        permissions: request.permissions.clone(),
+        started_ms: request.started_ms,
+        name_given: request.name_given,
+        code: request.code.clone(),
+    };
+    let resumes = request.resume.clone();
+    let (id, token, code) = with_store(root, move |store| {
+        let new = match (&new.code, &resumes) {
+            (None, Some(conversation)) => NewSession {
+                code: store.code_of_conversation(conversation)?,
+                ..new
+            },
+            _ => new,
+        };
+        let (id, token) = store.register(new)?;
+        Ok((id, token, store.known(id)?.code))
+    })
+    .await
+    .map_err(|error| error.to_string())?;
+    let mut delegation = Delegation::new(id, parent, root.to_path_buf(), token);
+    delegation.show = request.show;
+    delegation.code = Some(code.clone());
+    request.delegation = Some(delegation);
+    Ok(Recorded {
+        root: root.to_path_buf(),
+        id,
+        code,
+    })
+}
+
+/// Records that the user ended `id`.
+pub async fn ended(root: &Path, id: SessionId) -> Result<()> {
+    with_store(root, move |store| store.end(id)).await
+}
+
+/// The settings `id` was started with, as Tsumugi recorded them.
+pub async fn launch_of(root: &Path, id: SessionId) -> Result<Option<Settings>> {
+    with_store(root, move |store| store.launch(id)).await
+}
+
+/// The folder of its own the session `id` was recorded as running in, none
+/// for its agent's own environment; none at all for a session not recorded.
+pub async fn home_of(root: &Path, id: SessionId) -> Result<Option<Option<PathBuf>>> {
+    with_store(root, move |store| {
+        store.session(id).map(|s| s.map(|s| s.home))
+    })
+    .await
+}
+
+/// Every session Tsumugi keeps a record of, ended ones included.
+pub async fn sessions(root: &Path) -> Result<Vec<super::Session>> {
+    with_store(root, |store| store.sessions()).await
+}
+
+/// Records the session `request` starts and resolves how to launch it.
+pub async fn prepare(
+    root: &Path,
+    settings: &Settings,
+    mut request: StartRequest,
+    parent: Option<SessionId>,
+    program: &Path,
+) -> std::result::Result<(crate::execution::ResolvedLaunch, Recorded), String> {
+    // Refused before anything is recorded or asked of the agent, so a start
+    // that cannot run leaves nothing behind.
+    crate::execution::resolve(settings, request.clone(), program)?;
+    let context =
+        crate::programs::starting(settings, Some(request.agent), request.profile.as_ref())?;
+    crate::programs::ready(&context, &request.cwd, &request.env)?;
+    let asked = tsumugi_agents::AgentContext {
+        tsumugi: program.to_path_buf(),
+        ..context
+    };
+    if let Some(refused) = tsumugi_agents::adapter(request.agent)
+        .refusal(asked, request.cwd.clone())
+        .await
+    {
+        return Err(refused);
+    }
+    let recorded = record(root, settings, &mut request, parent).await?;
+    match crate::execution::resolve(settings, request, program) {
+        Ok(resolved) => {
+            // Known from the start for an agent whose conversation Tsumugi
+            // names, so a session the terminal host takes at once can still
+            // be brought back.
+            if !resolved.conversation.is_empty() {
+                let (id, conversation) = (recorded.id, resolved.conversation.clone());
+                with_store(root, move |store| {
+                    store.learn_conversation(id, &conversation)
+                })
+                .await
+                .map_err(|error| error.to_string())?;
+            }
+            Ok((resolved, recorded))
+        }
+        Err(error) => {
+            recorded.failed().await;
+            Err(error)
+        }
+    }
+}
+
+/// The sessions `record` messaged or heard from, the most recent first, by
+/// the names they go by in `sessions`.
+pub fn peers(
+    record: SessionId,
+    sessions: &[super::Session],
+    messages: &[Message],
+) -> Vec<tsumugi_agents::claude::links::Peer> {
+    let mut out: Vec<tsumugi_agents::claude::links::Peer> = Vec::new();
+    for message in messages {
+        let (other, sent) = if message.sender == record {
+            (message.recipient, true)
+        } else {
+            (message.sender, false)
+        };
+        let Some(name) = sessions
+            .iter()
+            .find(|s| s.id == other)
+            .map(|s| s.name.clone())
+        else {
+            continue;
+        };
+        let at = match out.iter().position(|p| p.name == name) {
+            Some(at) => at,
+            None => {
+                out.push(tsumugi_agents::claude::links::Peer {
+                    name,
+                    sent: false,
+                    received: false,
+                });
+                out.len() - 1
+            }
+        };
+        if sent {
+            out[at].sent = true;
+        } else {
+            out[at].received = true;
+        }
+    }
+    out
+}
+
+/// [`peers`] read from the record at `root`.
+pub async fn peers_at(root: &Path, record: SessionId) -> Vec<tsumugi_agents::claude::links::Peer> {
+    with_store(root, move |store| {
+        Ok(peers(
+            record,
+            &store.sessions()?,
+            &store.messages_of(record)?,
+        ))
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// What `record` sent and received, newest first, as the overview lists it.
+pub fn notes(
+    record: SessionId,
+    sessions: &[super::Session],
+    messages: &[Message],
+) -> Vec<crate::details::Note> {
+    let name = |id: SessionId| {
+        sessions
+            .iter()
+            .find(|s| s.id == id)
+            .map_or_else(|| id.to_string(), |s| s.name.clone())
+    };
+    messages
+        .iter()
+        .map(|message| {
+            let outgoing = message.sender == record;
+            crate::details::Note {
+                id: message.id.to_string(),
+                outgoing,
+                other: if outgoing {
+                    name(message.recipient)
+                } else {
+                    name(message.sender)
+                },
+                body: message.body.clone(),
+                sent_ms: message.sent_ms,
+            }
+        })
+        .collect()
+}
+
+/// [`notes`] read from the record at `root`.
+pub async fn notes_at(root: &Path, record: SessionId) -> Vec<crate::details::Note> {
+    with_store(root, move |store| {
+        Ok(notes(
+            record,
+            &store.sessions()?,
+            &store.messages_of(record)?,
+        ))
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// The journal of the session with `code`, oldest call first.
+pub async fn timeline_at(
+    root: &Path,
+    code: tsumugi_model::SessionCode,
+) -> Result<Vec<tsumugi_model::timeline::Entry>> {
+    with_store(root, move |store| store.timeline_of(&code)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::record as recorded;
+
+    /// Tsumugi's record of a session called `name` that has ended.
+    fn session(name: &str) -> super::super::Session {
+        recorded(name).ended().build()
+    }
+
+    /// A message delivered from `from` to `to`.
+    fn message(from: SessionId, to: SessionId) -> Message {
+        crate::testing::message(from, to).delivered().build()
+    }
+
+    #[test]
+    fn the_sessions_a_session_talked_with_are_named_once_each_newest_first_ended_ones_too() {
+        let (shown, api, web) = (session("fix"), session("api"), session("web"));
+        let all = [shown.clone(), api.clone(), web.clone()];
+        let newest_first = [
+            message(web.id, shown.id),
+            message(shown.id, api.id),
+            message(api.id, shown.id),
+        ];
+        let got = peers(shown.id, &all, &newest_first);
+        let got: Vec<_> = got
+            .iter()
+            .map(|p| (p.name.as_str(), p.sent, p.received))
+            .collect();
+        assert_eq!(got, [("web", false, true), ("api", true, true)]);
+    }
+
+    #[test]
+    fn a_message_is_listed_with_the_session_on_the_other_end() {
+        let (shown, api) = (session("fix"), session("api"));
+        let all = [shown.clone(), api.clone()];
+        let listed = notes(
+            shown.id,
+            &all,
+            &[message(shown.id, api.id), message(api.id, shown.id)],
+        );
+        let listed: Vec<_> = listed
+            .iter()
+            .map(|n| (n.outgoing, n.other.as_str()))
+            .collect();
+        assert_eq!(listed, [(true, "api"), (false, "api")]);
+    }
+
+    #[tokio::test]
+    async fn a_session_is_recorded_with_the_profile_it_starts_from_and_that_profile_s_login() {
+        let root = tempfile::tempdir().unwrap();
+        let settings =
+            Settings::parse("[[profiles]]\nid = \"mine\"\nagent = \"claude\"\n").unwrap();
+        let mut request = crate::execution::StartRequest {
+            agent: Agent::Claude,
+            name: "fix".into(),
+            cwd: "/repo".into(),
+            ..Default::default()
+        };
+
+        record(root.path(), &settings, &mut request, None)
+            .await
+            .unwrap();
+
+        let kept = sessions(root.path()).await.unwrap();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            (kept[0].profile.as_str(), kept[0].home.as_deref()),
+            ("mine", None)
+        );
+    }
+    #[tokio::test]
+    #[cfg_attr(windows, ignore = "fakes the agent with a shell script")]
+    async fn a_start_that_is_refused_records_nothing_and_runs_no_agent() {
+        let root = tempfile::tempdir().unwrap();
+        let ran = root.path().join("ran");
+        let script = root.path().join("codex.sh");
+        std::fs::write(&script, format!("touch '{}'\n", ran.display())).unwrap();
+        let settings = Settings::parse(&format!(
+            "[[profiles]]\nid = \"codex\"\nagent = \"codex\"\n[profiles.launch]\ncommand = [\"/bin/sh\", \"{}\"]\n\n[[profiles]]\nid = \"old\"\nagent = \"codex\"\narchived = true\n",
+            script.display()
+        ))
+        .unwrap();
+        for (profile, model, why) in [
+            ("gone", None, "profile `gone` is not defined"),
+            ("claude", None, "starts Claude Code, not Codex"),
+            ("old", None, "profile `old` is not defined"),
+            ("codex", Some(" "), "the model is empty"),
+        ] {
+            let request = crate::execution::StartRequest {
+                agent: Agent::Codex,
+                profile: Some(profile.parse().unwrap()),
+                model: model.map(String::from),
+                name: "fix".into(),
+                cwd: root.path().into(),
+                ..Default::default()
+            };
+            let error = prepare(root.path(), &settings, request, None, Path::new("/tsumugi"))
+                .await
+                .unwrap_err();
+            assert!(error.contains(why), "{error}");
+        }
+        assert!(sessions(root.path()).await.unwrap().is_empty());
+        assert!(!ran.exists(), "Codex was asked for its instructions");
+    }
+}

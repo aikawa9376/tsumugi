@@ -1,0 +1,443 @@
+//! What must hold across slices after every message: each rule brings one
+//! slice in line with the others, and runs in the order listed.
+
+use tsumugi_model::EnvironmentId;
+use tsumugi_model::config::UsageSettings;
+use tsumugi_protocol::{HostPath, Request, Sight};
+
+use crate::content::Tab;
+use crate::effect::Effect;
+use crate::state::ViewState;
+use crate::{chrome, config, console, content, details, overlay, picker, prompt, tree};
+
+type Rule = fn(&mut ViewState, &mut Vec<Effect>);
+
+const RULES: &[Rule] = &[
+    config_taken,
+    chrome_zoom,
+    content_listed,
+    content_place,
+    content_last_shown,
+    content_drafts,
+    content_kept,
+    content_panels,
+    content_focus,
+    content_spot,
+    prompt_shown,
+    console_area,
+    console_dialog,
+    console_listed,
+    console_live,
+    console_freed,
+    prompt_recalled,
+    prompt_composed,
+    prompt_images,
+    prompt_offered,
+    prompt_commands,
+    tree_failing,
+    tree_rows,
+    tree_kept,
+    tree_switched,
+    tree_completions,
+    tree_changes,
+    tree_filter_left,
+    overlay_rename,
+    overlay_naming,
+    details_shown,
+    details_told,
+    details_usage,
+    details_about,
+    details_refreshed,
+    details_gone,
+    picker_offered,
+    picker_kept,
+    picker_listed,
+    watched,
+];
+
+/// The configuration the host read is the one the window works by.
+fn config_taken(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(config::take_in(state));
+}
+
+/// The window is drawn at the zoom the settings name.
+fn chrome_zoom(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    let zoom = state.config.settings.zoom;
+    effects.extend(chrome::follow_setting(&mut state.chrome, zoom));
+}
+
+/// What a new listing means for the windows: they follow their sessions,
+/// give up those that ended, and bring back the tab kept from the last run.
+fn content_listed(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(content::listed(state));
+}
+
+/// The worktree in the middle follows what the focused window shows.
+fn content_place(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let work = state
+        .hosts
+        .work(state.hosts.environment_of(state.content.active()));
+    content::follow_place(&mut state.content, work);
+}
+
+/// The session shown is its workspace's last shown.
+fn content_last_shown(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let work = state
+        .hosts
+        .work(state.hosts.environment_of(state.content.active()));
+    content::remember_shown(&mut state.content, work);
+}
+
+/// A draft no window shows is given up.
+fn content_drafts(state: &mut ViewState, _: &mut Vec<Effect>) {
+    content::forget_drafts(&mut state.content);
+}
+
+/// The content is kept for the next run.
+fn content_kept(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(content::keep_content(&mut state.content));
+}
+
+/// Hiding the panel that has the keys gives them to the console.
+fn content_panels(state: &mut ViewState, _: &mut Vec<Effect>) {
+    content::follow_panels(&mut state.content, &state.chrome.panels.layout);
+}
+
+/// A shell shown takes the keys from a prompt that goes away with it.
+fn content_focus(state: &mut ViewState, _: &mut Vec<Effect>) {
+    content::settle_focus(&mut state.content);
+}
+
+/// Where the keys were is remembered as they move; coming into the prompt
+/// from elsewhere stops reading the console and asks the session there for
+/// what was typed into it.
+fn content_spot(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    if content::follow_spot(&mut state.content) {
+        effects.extend(console::prompt_entered(state));
+    }
+}
+
+/// The prompt shows what is written for what the focused window shows.
+fn prompt_shown(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(prompt::follow_shown(state));
+}
+
+/// Keys meant for one area do not carry over to another.
+fn console_area(state: &mut ViewState, _: &mut Vec<Effect>) {
+    console::keep_to_area(state);
+}
+
+/// The session shown has a dialog of its agent's own open as the host saw.
+fn console_dialog(state: &mut ViewState, _: &mut Vec<Effect>) {
+    console::follow_dialog(state);
+}
+
+/// A list of the sessions drops the inputs kept for those no longer listed.
+fn console_listed(state: &mut ViewState, _: &mut Vec<Effect>) {
+    console::keep_listed(state);
+}
+
+/// Another tab shown is shown live.
+fn console_live(state: &mut ViewState, _: &mut Vec<Effect>) {
+    console::live_when_shown(state);
+}
+
+/// What was typed into a session while every key went to it is asked for
+/// once the keys stop going there.
+fn console_freed(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(console::ask_when_freed(state));
+}
+
+/// The history the host read for a step through the prompts sent puts the
+/// prompt it steps to in the prompt.
+fn prompt_recalled(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(prompt::recalled(state));
+}
+
+/// A prompt the host composed goes where it was written for, or is put back.
+fn prompt_composed(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(prompt::send::composed(state));
+}
+
+/// Images attached or taken away leave none selected.
+fn prompt_images(state: &mut ViewState, _: &mut Vec<Effect>) {
+    prompt::keep_selection(&mut state.prompt);
+}
+
+/// The prompt's Neovim is offered after `@` what the window lists now.
+fn prompt_offered(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(prompt::offer(state));
+}
+
+/// The prompt's Neovim is offered after `/` the commands the host read for
+/// what is shown.
+fn prompt_commands(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    effects.extend(prompt::offer_commands(state));
+}
+
+/// The status line says why the sessions cannot be listed, while they
+/// cannot.
+fn tree_failing(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    let work = state.hosts.own().work.as_ref();
+    effects.extend(tree::tell_failing(
+        &mut state.tree,
+        &mut state.chrome.status,
+        work,
+    ));
+}
+
+/// The tree's rows are built from what the host listed.
+fn tree_rows(state: &mut ViewState, _: &mut Vec<Effect>) {
+    tree::build(&mut state.tree, &state.hosts);
+    tree::go_into(&mut state.tree);
+    tree::land(&mut state.tree);
+}
+
+/// A selected row that leaves the rows gives way to another.
+fn tree_kept(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let showing = state.content.showing();
+    let work = state
+        .hosts
+        .work(state.hosts.environment_of(showing.tab.as_ref()));
+    tree::keep_selection(&mut state.tree, &showing, work);
+}
+
+/// The selection follows the focused window to what it now shows.
+fn tree_switched(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let showing = state.content.showing();
+    let work = state
+        .hosts
+        .work(state.hosts.environment_of(showing.tab.as_ref()));
+    tree::follow_switch(&mut state.tree, &showing, work);
+}
+
+/// A finished session the user sees is no longer marked finished.
+fn tree_completions(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let shown = state.content.active().cloned();
+    let work = state.hosts.work(state.hosts.environment_of(shown.as_ref()));
+    tree::see_completions(&mut state.tree, shown.as_ref(), state.chrome.focused, work);
+}
+
+/// Every state each host lists is taken in, to tell which changed last.
+fn tree_changes(state: &mut ViewState, _: &mut Vec<Effect>) {
+    for (environment, host) in state.hosts.each() {
+        if host.work.is_some() {
+            state
+                .tree
+                .changes
+                .see(environment, tree::listed(host.work.as_ref()));
+        }
+    }
+}
+
+/// Leaving the sidebar, or opening a menu, stops typing into the filter.
+fn tree_filter_left(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    let left =
+        state.content.focus != crate::content::Area::Sidebar || state.overlays.menu.is_some();
+    effects.extend(tree::leave_filter(&mut state.tree, left));
+}
+
+/// A name being typed goes when its row or its tab is no longer shown.
+fn overlay_rename(state: &mut ViewState, _: &mut Vec<Effect>) {
+    overlay::keep_rename(state);
+}
+
+/// A new entry being named goes when its directory is no longer shown.
+fn overlay_naming(state: &mut ViewState, _: &mut Vec<Effect>) {
+    overlay::keep_naming(state);
+}
+
+/// The details panel reads by the session and the worktree the focused
+/// window shows.
+fn details_shown(state: &mut ViewState, _: &mut Vec<Effect>) {
+    details::follow(&mut state.details, &state.content.showing());
+}
+
+/// The details panel is open with its side panel and reads by the settings.
+fn details_told(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let open = state.chrome.panels.layout.show_details;
+    let settings = &state.config.settings;
+    details::follow_settings(&mut state.details, open, &settings.details, &settings.panel);
+    details::follow_selected(&mut state.details, state.tree.selected.as_ref());
+}
+
+/// The details panel shows the account usage of the agent the focused
+/// window's prompt goes to, while that agent has usage limits.
+fn details_usage(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let tab = state.content.active().cloned();
+    let agent = content::agent_of(state, tab.as_ref());
+    let account = tsumugi_protocol::Account {
+        agent,
+        home: content::home_of(state, tab.as_ref()),
+    };
+    let facts = state
+        .hosts
+        .work(&content::shown_environment(state))
+        .and_then(|w| w.agents.of(agent));
+    details::follow_usage(&mut state.details, tab.as_ref(), account, facts);
+}
+
+/// The overview's About tells of the session shown as the settings name its
+/// profile, and of the workspace and worktree it works in.
+fn details_about(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let work = state.hosts.work(&content::shown_environment(state));
+    let d = &state.details;
+    let about = details::shown_session(d, work)
+        .map(|s| {
+            let stats = details::stats(d, work).unwrap_or_default();
+            let worktree = d.shown.worktree.as_deref();
+            let workspace = worktree
+                .and_then(|w| tree::listed(work).workspace_of(w))
+                .map(|w| w.root.as_path());
+            details::about_facts(s, &stats, &state.config.settings, workspace, worktree)
+        })
+        .unwrap_or_default();
+    if state.details.shown.about != about {
+        state.details.shown.about = about;
+    }
+}
+
+/// What the host read again for the spot the details panel shows moves its
+/// selection along, or steps back from a row opened that is gone.
+fn details_refreshed(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let work = state.hosts.work(&content::shown_environment(state));
+    details::refresh(&mut state.details, work);
+}
+
+/// A subagent or process opened that the overview no longer lists is gone
+/// back from.
+fn details_gone(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let work = state
+        .hosts
+        .work(&content::shown_environment(state))
+        .map(|w| &w.details);
+    details::forget_gone(&mut state.details, work);
+}
+
+/// What the host offered the picker is taken into its list and its tree.
+fn picker_offered(state: &mut ViewState, _: &mut Vec<Effect>) {
+    picker::take_offers(&mut state.picker, &state.hosts);
+}
+
+/// The picker's cursor stays on its row while the rows move under it.
+fn picker_kept(state: &mut ViewState, _: &mut Vec<Effect>) {
+    picker::keep_cursor(&mut state.picker, &state.hosts, &state.tree);
+}
+
+/// A directory opened in the picker's tree before it was listed is moved
+/// into once it is.
+fn picker_listed(state: &mut ViewState, _: &mut Vec<Effect>) {
+    picker::take_listed(&mut state.picker, &state.hosts);
+}
+
+/// Each environment's host keeps read what the tree shows of it, what the
+/// picker offers from it, and the terminals shown of it; the host of the
+/// environment shown in the middle keeps read what the details panel and
+/// the prompt show too, and the worktree in the middle. Each is asked once
+/// each time what it keeps read changes.
+fn watched(state: &mut ViewState, effects: &mut Vec<Effect>) {
+    let environments: Vec<_> = state.hosts.each().map(|(e, _)| e.clone()).collect();
+    let sights: Vec<_> = environments
+        .iter()
+        .map(|environment| sight(state, environment))
+        .collect();
+    let mut sights = environments
+        .into_iter()
+        .zip(sights)
+        .collect::<std::collections::HashMap<_, _>>();
+    for (environment, host) in state.hosts.each_mut() {
+        let Some(sight) = sights.remove(environment) else {
+            continue;
+        };
+        if host.watched == sight {
+            continue;
+        }
+        host.watched = sight.clone();
+        effects.push(Effect::Host {
+            environment: environment.clone(),
+            request: Request::Watch(Box::new(sight)),
+        });
+    }
+}
+
+/// What the window shows that the host of `environment` keeps read.
+pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
+    let shown = content::shown_environment(state) == *environment;
+    let shown_part = if shown {
+        Sight {
+            commands: prompt::commands_sight(state),
+            ..details::sight(&state.details)
+        }
+    } else {
+        // The foot of the details tells the machine of the environment the
+        // tree is at, which its host samples while the details are read.
+        let at = state
+            .tree
+            .environment_at(&content::shown_environment(state))
+            == *environment;
+        Sight {
+            details: at && state.details.shown.open,
+            ..Sight::default()
+        }
+    };
+    // The profiles listed are of the environment whose heading is selected,
+    // or else of the one shown.
+    let profiled = match &state.tree.selected {
+        Some(tree::nav::Item::Environment(e)) => e == environment,
+        _ => shown,
+    };
+    Sight {
+        agents: profiled && details::lists_profiles(&state.details),
+        // A window that shows no meter says so, rather than leave the host
+        // to sample what its own settings name.
+        system: shown_part
+            .details
+            .then(|| details::meters(&state.details).unwrap_or(UsageSettings::NONE)),
+        tree: {
+            let mut tree = tree::sight(&state.tree, environment);
+            if shown
+                && let Some(root) =
+                    details::pulls_wanted(&state.details, state.hosts.work(environment))
+            {
+                tree.github
+                    .insert((root, tsumugi_model::github::Listing::Pulls));
+            }
+            tree
+        },
+        past: state.picker.past_sight(environment),
+        pick: state.picker.sight_in(environment),
+        place: state
+            .content
+            .place
+            .as_ref()
+            .filter(|p| p.environment == *environment)
+            .map(|p| HostPath::local(&p.worktree)),
+        // A Neovim a window hides behind its document's viewer is shown all
+        // the same, so the host does not ask it to quit.
+        terminals: state
+            .content
+            .windows
+            .shown()
+            .into_iter()
+            .filter_map(|tab| match tab {
+                Tab::Terminal(e, id) if e == environment => Some(*id),
+                _ => None,
+            })
+            .chain(content::hidden_terminals(
+                &state.content,
+                environment,
+                tree::terminals(state.hosts.work(environment)),
+            ))
+            .collect(),
+        ..shown_part
+    }
+}
+
+/// `state` with every rule applied once, and what the rules ask done.
+pub fn settle(state: &mut ViewState) -> Vec<Effect> {
+    let mut effects = Vec::new();
+    for rule in RULES {
+        rule(state, &mut effects);
+    }
+    effects
+}

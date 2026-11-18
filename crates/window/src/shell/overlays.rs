@@ -1,0 +1,323 @@
+//! What is drawn over the window: the keys help, a menu opened on a row, a
+//! tab or a link, a question to answer, and the banner about the sessions'
+//! daemon. They only draw: the view state holds them.
+
+use dioxus::prelude::*;
+use tsumugi_core::msg::Msg;
+use tsumugi_core::overlay::context_menu::{Reach, Target};
+use tsumugi_core::overlay::{self, MenuEntry, hints};
+
+use crate::bridge::AppCtx;
+use crate::components::{Button, Dialog, Keys, Spacer};
+use crate::icons::{Icon, IconView};
+use crate::keymap::Context;
+use crate::keys_help;
+use crate::keys_help_view::KeysHelpView;
+use crate::nav::Item;
+use tsumugi_protocol::TerminalHostStanding;
+
+/// The keys help for the areas the chrome holds it open for, with the
+/// bindings it holds.
+#[component]
+pub(crate) fn KeysHelp() -> Element {
+    let app = use_context::<AppCtx>();
+    let chrome = app.chrome.read();
+    let groups = chrome
+        .keys_help
+        .as_ref()
+        .map(|here| keys_help::groups(&chrome.keymap, here));
+    let hints = hints::keys_help(&chrome.keymap);
+    drop(chrome);
+    rsx! {
+        if let Some(groups) = groups {
+            KeysHelpView {
+                groups,
+                hints,
+                onclose: move |_| app.dispatch(Msg::KeysHelpClose),
+            }
+        }
+    }
+}
+
+/// The menu a right click opened, each entry with the keys that run it
+/// there.
+#[component]
+pub(crate) fn ContextMenu() -> Element {
+    let app = use_context::<AppCtx>();
+    let keymap = app.chrome.read().keymap.clone();
+    let Some(menu) = app.overlays.read().menu.clone() else {
+        return rsx! {};
+    };
+    let listed = overlay::menu_entries(&menu, &app.hosts.read());
+    let (x, y, target, cursor) = (menu.x, menu.y, menu.target, menu.cursor);
+    // The keys that work wherever the keys are come first.
+    let contexts: &[Context] = match target {
+        Target::Row(_) | Target::Start(_) => &[Context::Global, Context::Tree],
+        Target::Tab(_) => &[Context::Global, Context::Console, Context::Tree],
+        Target::Link { .. } => &[Context::Details, Context::Tree, Context::Global],
+    };
+    let entries: Vec<(MenuEntry, Option<String>)> = listed
+        .into_iter()
+        .map(|e| {
+            let keys = keymap.keys_in(contexts, &e.action);
+            (e, keys)
+        })
+        .collect();
+    rsx! {
+        div {
+            class: "context-menu-shade",
+            onclick: move |_| app.dispatch(Msg::MenuClose),
+            oncontextmenu: move |e: Event<MouseData>| {
+                e.prevent_default();
+                app.dispatch(Msg::MenuClose);
+            },
+            div {
+                class: "context-menu",
+                style: placed(x, y),
+                onclick: move |e| e.stop_propagation(),
+                for (i , (MenuEntry { action, label, apart }, keys)) in entries.into_iter().enumerate() {
+                    {
+                        let target = target.clone();
+                        let act = action.clone();
+                        rsx! {
+                            Fragment { key: "{action}",
+                                if apart {
+                                    div { class: "context-menu-sep" }
+                                }
+                                div {
+                                    class: if cursor == Some(i) { "context-menu-item selected" } else { "context-menu-item" },
+                                    onclick: move |_| app.dispatch(Msg::MenuRun { target: target.clone(), action: act.clone() }),
+                                    span { class: "context-menu-icon",
+                                        if let Some(icon) = action.icon() {
+                                            IconView { icon, size: 15 }
+                                        }
+                                    }
+                                    span { class: "context-menu-label", "{label}" }
+                                    if let Some(k) = keys {
+                                        span { class: "context-menu-keys", Keys { keys: k } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// What a right click on a row or a tab does: open the menu of `target`
+/// where the pointer is, in place of the page's own.
+pub(crate) fn menu_opener(app: AppCtx, target: Target) -> EventHandler<MouseEvent> {
+    EventHandler::new(move |e: MouseEvent| {
+        e.prevent_default();
+        let at = e.client_coordinates();
+        let reach = match &target {
+            Target::Row(Item::Environment(environment)) => {
+                crate::connection::reach_of(&app, environment)
+            }
+            _ => Reach::Here,
+        };
+        app.dispatch(Msg::MenuOpen {
+            x: at.x,
+            y: at.y,
+            target: target.clone(),
+            reach,
+        });
+    })
+}
+
+/// Where a menu opened at `x`, `y` is drawn: there, or moved back by as
+/// much of its own size as would pass the window's right or bottom edge.
+/// Its size is known only once it is laid out, so the move is a translate,
+/// whose percentages are of the menu itself.
+fn placed(x: f64, y: f64) -> String {
+    let dx = format!("min(0px, calc(100vw - {x}px - 100% - 4px))");
+    let dy = format!("max(calc(4px - {y}px), min(0px, calc(100vh - {y}px - 100% - 4px)))");
+    format!("left:{x}px;top:{y}px;translate:{dx} {dy}")
+}
+
+/// The question the window holds the keys for until it is answered.
+#[component]
+pub(crate) fn ConfirmDialog() -> Element {
+    let app = use_context::<AppCtx>();
+    let Some(ask) = app.overlays.read().confirm.clone() else {
+        return rsx! {};
+    };
+    let (icon, title, body, act) = ask.dialog();
+    let (no, yes) = hints::answers(&app.chrome.read().keymap);
+    rsx! {
+        Dialog { icon, title, onclose: move |_| app.dispatch(Msg::ConfirmAnswer(false)),
+            div { "{body}" }
+            div { class: "dialog-actions",
+                Button { onclick: move |_| app.dispatch(Msg::ConfirmAnswer(false)),
+                    if let Some(keys) = no {
+                        Keys { keys }
+                    }
+                    "Cancel"
+                }
+                Button { kind: if ask.destroys() { "danger" } else { "primary" },
+                    onclick: move |_| app.dispatch(Msg::ConfirmAnswer(true)),
+                    if let Some(keys) = yes {
+                        Keys { keys }
+                    }
+                    "{act}"
+                }
+            }
+        }
+    }
+}
+
+/// The banner offering to restart a daemon this window cannot work with,
+/// naming its environment when that is not the window's own.
+#[component]
+pub(crate) fn DaemonBanner() -> Element {
+    let app = use_context::<AppCtx>();
+    let shown = app
+        .overlays
+        .read()
+        .banner
+        .shown()
+        .map(|(environment, note)| (environment.clone(), note.to_string()));
+    let Some((environment, note)) = shown else {
+        return rsx! {};
+    };
+    let title = if environment == app.environment() {
+        "This window cannot work with the sessions' daemon".to_string()
+    } else {
+        format!(
+            "This window cannot work with the sessions' daemon of {}",
+            app.environment_name(&environment)
+        )
+    };
+    rsx! {
+        div { class: "daemon-banner",
+            IconView { icon: Icon::ServerBolt }
+            span { class: "daemon-banner-title", "{title}" }
+            span { class: "daemon-banner-note", title: "{note}", "{note} Restarting it ends every session it holds." }
+            Spacer {}
+            Button { onclick: move |_| app.dispatch(Msg::BannerClose), "Later" }
+            Button { kind: "danger",
+                onclick: move |_| app.dispatch(Msg::Confirm(Box::new(tsumugi_core::overlay::confirm::Ask::RestartDaemon(environment.clone())))),
+                "Restart…"
+            }
+        }
+    }
+}
+
+/// The banner offering to bring back what a sessions' daemon took with it
+/// when it went, naming its environment when that is not the window's own.
+#[component]
+pub(crate) fn InterruptedBanner() -> Element {
+    let app = use_context::<AppCtx>();
+    let shown = {
+        let config = app.config.read();
+        let hosts = app.hosts.read();
+        let overlays = app.overlays.read();
+        tsumugi_core::overlay::interrupted_banner(&config.settings, &hosts, &overlays.banner)
+            .map(|(environment, waiting)| (environment, interrupted_title(&waiting)))
+    };
+    let Some((environment, what)) = shown else {
+        return rsx! {};
+    };
+    let title = if environment == app.environment() {
+        format!("The sessions' daemon went, taking {what}")
+    } else {
+        format!(
+            "The sessions' daemon of {} went, taking {what}",
+            app.environment_name(&environment)
+        )
+    };
+    rsx! {
+        div { class: "daemon-banner",
+            IconView { icon: Icon::Restore }
+            span { class: "daemon-banner-title", "{title}" }
+            span { class: "daemon-banner-note", "Agents resume their conversations; shells open again where they ran." }
+            Spacer {}
+            Button { onclick: move |_| app.dispatch(Msg::InterruptedLater), "Later" }
+            Button { onclick: move |_| app.dispatch(Msg::LetGoAll), "Let Go" }
+            Button {
+                onclick: move |_| app.dispatch(Msg::InterruptedOpen(environment.clone())),
+                "Choose…"
+            }
+            Button { kind: "primary", onclick: move |_| app.dispatch(Msg::BringBackAll), "Bring Back" }
+        }
+    }
+}
+
+/// What the banner says a daemon took: its sessions and its shells, counted.
+fn interrupted_title(waiting: &[&tsumugi_model::Interrupted]) -> String {
+    let sessions = waiting.iter().filter(|i| i.is_session()).count();
+    let terminals = waiting.len() - sessions;
+    let counted = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(format!("1 {one}")),
+        n => Some(format!("{n} {many}")),
+    };
+    [
+        counted(sessions, "session", "sessions"),
+        counted(terminals, "terminal", "terminals"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" and ")
+}
+
+/// What the banner says of a daemon this window cannot work with, as
+/// `standing` has it; `None` while it can, or none answers.
+pub(crate) fn old_daemon_note(standing: &TerminalHostStanding) -> Option<String> {
+    match standing {
+        TerminalHostStanding::Old { build: Some(said) } => Some(format!(
+            "It runs tsumugi {said}, and this window tsumugi {}.",
+            crate::build::build()
+        )),
+        TerminalHostStanding::Old { build: None } => {
+            Some("It runs a build of tsumugi too old to say which.".into())
+        }
+        TerminalHostStanding::Absent | TerminalHostStanding::Works => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_menu_opened_near_an_edge_is_moved_back_inside_the_window_by_its_own_size() {
+        let style = placed(900.0, 700.0);
+        assert!(style.starts_with("left:900px;top:700px;"), "{style}");
+        // Shifted left and up by however much of its own width and height
+        // would pass the window's right and bottom edges, never past the
+        // top-left corner.
+        assert!(
+            style.contains("min(0px, calc(100vw - 900px - 100% - 4px))"),
+            "{style}"
+        );
+        assert!(
+            style.contains("max(calc(4px - 700px), min(0px, calc(100vh - 700px - 100% - 4px)))"),
+            "{style}"
+        );
+    }
+
+    #[test]
+    fn a_daemon_this_window_cannot_work_with_is_named_beside_this_window_s_build() {
+        let note = old_daemon_note(&TerminalHostStanding::Old {
+            build: Some("0.1.0 (v0.1.0-3-gabc)".into()),
+        })
+        .unwrap();
+        assert!(note.contains("0.1.0 (v0.1.0-3-gabc)"), "{note}");
+        assert!(note.contains(&crate::build::build()), "{note}");
+    }
+
+    #[test]
+    fn a_daemon_too_old_to_say_its_versions_is_shown_too() {
+        assert!(old_daemon_note(&TerminalHostStanding::Old { build: None }).is_some());
+    }
+
+    #[test]
+    fn a_daemon_this_window_can_work_with_or_none_at_all_shows_no_banner() {
+        assert_eq!(old_daemon_note(&TerminalHostStanding::Works), None);
+        assert_eq!(old_daemon_note(&TerminalHostStanding::Absent), None);
+    }
+}

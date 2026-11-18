@@ -1,0 +1,481 @@
+//! How the programs tsumugi runs are started, as settings.toml says: the
+//! shell a shell tab runs, and each agent and Neovim.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+/// How a shell tab's shell is started.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ShellLaunch {
+    /// The shell and its arguments; empty for your account's login shell,
+    /// started as a login shell.
+    pub command: Vec<String>,
+    /// Variables set for it.
+    pub env: BTreeMap<String, String>,
+}
+
+impl ShellLaunch {
+    /// The program and arguments a shell tab runs, `login` being the
+    /// account's login shell.
+    pub fn command_line(&self, login: &str) -> (String, Vec<String>) {
+        match self.command.split_first() {
+            Some((program, args)) => (program.clone(), args.to_vec()),
+            // Windows shells have no login mode.
+            None if cfg!(windows) => (login.to_string(), Vec::new()),
+            None => (login.to_string(), vec!["-l".into()]),
+        }
+    }
+
+    /// The shell itself, which a program started through the shell runs in.
+    pub fn program(&self, login: &str) -> String {
+        self.command_line(login).0
+    }
+}
+
+/// How a program other than the shell is started.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct Launch {
+    /// The program and the arguments it always gets, ahead of Tsumugi's own;
+    /// empty for the program it starts: the profile's agent's, or Neovim.
+    pub command: Vec<String>,
+    /// Whether your shell starts it, as an interactive login shell, so that what
+    /// its startup files set reaches it.
+    pub via_shell: bool,
+    /// Variables set for it.
+    pub env: BTreeMap<String, String>,
+}
+
+impl Launch {
+    /// The program and arguments that run `args` for this program, `fallback`
+    /// standing in for an empty command and `shell` being the shell it is
+    /// started through.
+    pub fn command_line(
+        &self,
+        fallback: &str,
+        args: &[String],
+        shell: &str,
+    ) -> (String, Vec<String>) {
+        let mut line: Vec<String> = if self.command.is_empty() {
+            vec![fallback.to_string()]
+        } else {
+            self.command.clone()
+        };
+        line.extend(args.iter().cloned());
+        // Windows shells read no startup files that set a program's
+        // environment; a program there gets the account's from the system.
+        if !self.via_shell || cfg!(windows) {
+            let program = line.remove(0);
+            return (program, line);
+        }
+        let fish = Path::new(shell).file_name().is_some_and(|n| n == "fish");
+        // Handed over as arguments rather than written into the script, the
+        // words need no quoting for the shell.
+        let mut through: Vec<String> = vec!["-l".into(), "-i".into(), "-c".into()];
+        if fish {
+            through.push("exec $argv".into());
+        } else {
+            through.push("exec \"$@\"".into());
+            through.push("tsumugi".into());
+        }
+        through.extend(line);
+        (shell.to_string(), through)
+    }
+}
+
+/// How sessions of one kind run: Claude Code's model, its permission mode and
+/// the tools denied; what is left empty is Claude Code's own choice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SessionOptions {
+    /// The model it starts with, as Claude Code's `--model` takes it.
+    pub model: String,
+    /// Its permission mode, one of `default`, `acceptEdits`, `plan` and
+    /// `bypassPermissions`.
+    pub permission_mode: String,
+    /// The tools denied it.
+    pub disallowed_tools: Vec<String>,
+    /// The directories a read-only session is kept from writing to; set for
+    /// one launch from its permission profile, never from the file.
+    #[serde(skip)]
+    pub read_only: Option<Vec<PathBuf>>,
+    /// Whether Tsumugi confirms, once a launch, Claude Code's warning about loading
+    /// development channels when it names Tsumugi's own channel and nothing else;
+    /// every other dialog is left to you. It applies to sessions launched while it
+    /// is on.
+    pub confirm_channel_warning: bool,
+}
+
+impl Default for SessionOptions {
+    fn default() -> Self {
+        Self {
+            model: String::new(),
+            permission_mode: String::new(),
+            disallowed_tools: Vec::new(),
+            read_only: None,
+            confirm_channel_warning: true,
+        }
+    }
+}
+
+/// How Codex sessions start, apart from Claude Code's options.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct CodexOptions {
+    /// Codex's model; empty for its own choice.
+    pub model: String,
+    /// Its reasoning effort, one the selected model and Codex version support;
+    /// empty for its own choice.
+    pub reasoning_effort: String,
+    /// When Codex asks before running a command: empty, `on-request` or `never`.
+    pub approval_policy: String,
+    /// Where its commands can write: empty, `read-only`, `workspace-write` or
+    /// `danger-full-access`.
+    pub sandbox_mode: String,
+}
+
+/// How Pi sessions start, in Pi's own terms: it asks before no tool call, so
+/// what a session may do is the tools it is given.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct PiOptions {
+    /// Pi's model as `provider/id`; empty for its own choice.
+    pub model: String,
+    /// Its thinking level: `off`, `minimal`, `low`, `medium`, `high`,
+    /// `xhigh` or `max`, as the model supports; empty for its own choice.
+    pub thinking: String,
+    /// The tools it may use, by Pi's names, such as `read`, `bash`, `edit`
+    /// and `write`; empty for Pi's own set.
+    pub tools: Vec<String>,
+}
+
+/// How OpenCode sessions start, in OpenCode's own terms: it has no sandbox,
+/// so what a session may do is the agent it runs as and the permission rules
+/// it runs under.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct OpenCodeOptions {
+    /// OpenCode's model as `provider/model`, with `#variant` for one of its
+    /// variants; empty for its own choice.
+    pub model: String,
+    /// The primary agent it starts as, such as `build` or `plan`; empty for
+    /// its own default.
+    pub agent: String,
+    /// Permission rules put after those of its login's own configuration, the last that matches a
+    /// tool call deciding whether it is allowed, asked about or denied.
+    pub permissions: Vec<OpenCodeRule>,
+    /// Whether every tool call no rule denies is allowed without asking, as
+    /// OpenCode's `--auto` does.
+    pub auto: bool,
+}
+
+/// One of OpenCode's permission rules.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct OpenCodeRule {
+    /// What a tool does, such as `edit`, `shell` or `webfetch`, or `*` for
+    /// anything.
+    pub action: String,
+    /// What it does it to, as a pattern: a path, a command, or `*`.
+    pub resource: String,
+    /// `allow`, `ask` or `deny`.
+    pub effect: String,
+}
+
+/// A command written as a shell would split it into words; `None` while a
+/// quote is left open.
+pub fn parse_command(text: &str) -> Option<Vec<String>> {
+    shell_words::split(text).ok()
+}
+
+/// `command` written as [`parse_command`] reads it.
+pub fn format_command(command: &[String]) -> String {
+    shell_words::join(command)
+}
+
+/// Variables written one a line as `NAME=value`; a line without `=`, a
+/// blank one or one starting with `#` says nothing.
+pub fn parse_env(text: &str) -> BTreeMap<String, String> {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+        .filter(|(k, _)| !k.is_empty())
+        .collect()
+}
+
+/// OpenCode's rules as written a line each: the effect, `allow`, `ask` or
+/// `deny`, the action, and the resource, `*` when left out. Lines that are
+/// empty, start with `#` or name no such effect are left out.
+pub fn parse_rules(text: &str) -> Vec<OpenCodeRule> {
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let (effect, rest) = l.split_once(char::is_whitespace)?;
+            if !matches!(effect, "allow" | "ask" | "deny") {
+                return None;
+            }
+            let rest = rest.trim();
+            let (action, resource) = rest.split_once(char::is_whitespace).unwrap_or((rest, "*"));
+            Some(OpenCodeRule {
+                action: action.into(),
+                resource: resource.trim().into(),
+                effect: effect.into(),
+            })
+        })
+        .filter(|r| !r.action.is_empty())
+        .collect()
+}
+
+/// `rules` written as [`parse_rules`] reads them.
+pub fn format_rules(rules: &[OpenCodeRule]) -> String {
+    rules
+        .iter()
+        .map(|r| format!("{} {} {}", r.effect, r.action, r.resource))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `env` written as [`parse_env`] reads it.
+pub fn format_env(env: &BTreeMap<String, String>) -> String {
+    env.iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Names written separated by commas; a blank one says nothing.
+pub fn parse_list(text: &str) -> Vec<String> {
+    text.split(',')
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect()
+}
+
+/// `list` written as [`parse_list`] reads it.
+pub fn format_list(list: &[String]) -> String {
+    list.join(", ")
+}
+
+/// The machine's resources the details show. The Settings window chooses them
+/// for every environment; a work host samples these for a window that does
+/// not say which it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct UsageSettings {
+    /// Show the whole machine's CPU use.
+    pub cpu: bool,
+    /// Show the GPU's use, when the system reports it.
+    pub gpu: bool,
+    /// Show the physical memory used, as a share of all of it.
+    pub memory: bool,
+    /// Show the capacity used on the startup volume.
+    pub storage: bool,
+}
+
+impl Default for UsageSettings {
+    fn default() -> Self {
+        Self {
+            cpu: true,
+            gpu: true,
+            memory: true,
+            storage: true,
+        }
+    }
+}
+
+impl UsageSettings {
+    /// None of them.
+    pub const NONE: Self = Self {
+        cpu: false,
+        gpu: false,
+        memory: false,
+        storage: false,
+    };
+
+    pub fn any(self) -> bool {
+        self.cpu || self.gpu || self.memory || self.storage
+    }
+
+    /// Every resource either shows.
+    pub fn or(self, other: Self) -> Self {
+        Self {
+            cpu: self.cpu || other.cpu,
+            gpu: self.gpu || other.gpu,
+            memory: self.memory || other.memory,
+            storage: self.storage || other.storage,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn words(w: &[&str]) -> Vec<String> {
+        w.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_list_is_names_between_commas_with_blank_ones_left_out() {
+        let list = parse_list(" read,bash , ,edit,");
+        assert_eq!(list, words(&["read", "bash", "edit"]));
+        assert_eq!(format_list(&list), "read, bash, edit");
+        assert_eq!(parse_list(""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn opencode_s_rules_are_written_a_line_each_as_effect_action_and_resource() {
+        let rule = |effect: &str, action: &str, resource: &str| OpenCodeRule {
+            action: action.into(),
+            resource: resource.into(),
+            effect: effect.into(),
+        };
+        let rules = parse_rules(
+            "allow shell git *\n\n# a note\ndeny edit\nask  webfetch  https://*  \nmaybe read *\nallow",
+        );
+        assert_eq!(
+            rules,
+            [
+                rule("allow", "shell", "git *"),
+                rule("deny", "edit", "*"),
+                rule("ask", "webfetch", "https://*"),
+            ]
+        );
+        assert_eq!(
+            format_rules(&rules),
+            "allow shell git *\ndeny edit *\nask webfetch https://*"
+        );
+        assert_eq!(parse_rules(&format_rules(&rules)), rules);
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "starts a Unix shell as a login shell")]
+    fn a_shell_tab_runs_the_login_shell_as_a_login_shell_unless_one_is_named() {
+        let own = ShellLaunch::default();
+        assert_eq!(
+            own.command_line("/bin/zsh"),
+            ("/bin/zsh".to_string(), words(&["-l"]))
+        );
+        let named = ShellLaunch {
+            command: words(&["/opt/homebrew/bin/fish", "--login"]),
+            ..ShellLaunch::default()
+        };
+        assert_eq!(
+            named.command_line("/bin/zsh"),
+            ("/opt/homebrew/bin/fish".to_string(), words(&["--login"]))
+        );
+        assert_eq!(named.program("/bin/zsh"), "/opt/homebrew/bin/fish");
+        assert_eq!(own.program("/bin/zsh"), "/bin/zsh");
+    }
+
+    #[test]
+    fn a_program_started_directly_runs_its_command_before_tsumugi_s_arguments() {
+        let claude = Launch {
+            command: words(&["/usr/local/bin/claude", "--model", "opus"]),
+            ..Launch::default()
+        };
+        assert_eq!(
+            claude.command_line("claude", &words(&["--name", "fix"]), "/bin/zsh"),
+            (
+                "/usr/local/bin/claude".to_string(),
+                words(&["--model", "opus", "--name", "fix"])
+            )
+        );
+        // With no command of its own, tsumugi's program runs.
+        assert_eq!(
+            Launch::default().command_line("claude", &words(&["--name", "fix"]), "/bin/zsh"),
+            ("claude".to_string(), words(&["--name", "fix"]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "starts a Unix shell as a login shell")]
+    fn a_program_started_through_the_shell_is_handed_over_as_the_shell_s_arguments() {
+        let claude = Launch {
+            via_shell: true,
+            ..Launch::default()
+        };
+        // An interactive login shell reads every startup file the user sets
+        // variables in; the program and its arguments go through untouched.
+        assert_eq!(
+            claude.command_line("claude", &words(&["--name", "it's"]), "/bin/zsh"),
+            (
+                "/bin/zsh".to_string(),
+                words(&[
+                    "-l",
+                    "-i",
+                    "-c",
+                    "exec \"$@\"",
+                    "tsumugi",
+                    "claude",
+                    "--name",
+                    "it's"
+                ])
+            )
+        );
+        // fish takes what follows its command as `$argv`, with no `$0`.
+        assert_eq!(
+            claude.command_line("claude", &words(&["-c"]), "/opt/homebrew/bin/fish"),
+            (
+                "/opt/homebrew/bin/fish".to_string(),
+                words(&["-l", "-i", "-c", "exec $argv", "claude", "-c"])
+            )
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_a_shell_tab_runs_the_shell_as_it_is() {
+        assert_eq!(
+            ShellLaunch::default().command_line("pwsh"),
+            ("pwsh".to_string(), Vec::new())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_a_program_set_to_start_through_the_shell_is_started_directly() {
+        let claude = Launch {
+            via_shell: true,
+            ..Launch::default()
+        };
+        assert_eq!(
+            claude.command_line("claude", &words(&["--name", "it's"]), "pwsh"),
+            ("claude".to_string(), words(&["--name", "it's"]))
+        );
+    }
+
+    #[test]
+    fn a_command_is_written_as_a_shell_would_split_it_and_read_back() {
+        let line = words(&["/Applications/My Shell.app/bin/sh", "-l", "it's"]);
+        let text = format_command(&line);
+        assert_eq!(parse_command(&text), Some(line));
+        assert_eq!(
+            parse_command("  claude   --model opus "),
+            Some(words(&["claude", "--model", "opus"]))
+        );
+        assert_eq!(parse_command(""), Some(vec![]));
+        // An open quote says nothing yet.
+        assert_eq!(parse_command("claude \"--model"), None);
+    }
+
+    #[test]
+    fn variables_are_written_one_a_line_and_read_back() {
+        let env = parse_env("FOO=bar\n\n  BAZ = a=b \n# a note\nbroken\n");
+        assert_eq!(
+            env,
+            BTreeMap::from([
+                ("BAZ".to_string(), "a=b".to_string()),
+                ("FOO".to_string(), "bar".to_string()),
+            ])
+        );
+        assert_eq!(format_env(&env), "BAZ=a=b\nFOO=bar");
+        assert_eq!(parse_env(&format_env(&env)), env);
+    }
+}
