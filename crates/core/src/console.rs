@@ -2,6 +2,8 @@
 //! on to the program or are read in the reader, and asking the session shown
 //! for what was typed into its own input.
 
+#[cfg(test)]
+mod input_tests;
 pub mod keys;
 pub mod reader;
 pub mod route;
@@ -108,6 +110,81 @@ pub struct ReaderAt {
     pub edge: Edge,
 }
 
+/// The kind of input destination offered to local keyboard integrations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InputTarget {
+    Gui,
+    Neovim,
+    Terminal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Receiver {
+    Gui,
+    Prompt,
+    Reader,
+    Program,
+}
+
+/// The ordinary keys' receiver, before bindings take individual keys. Both
+/// delivery and the public input context use this order.
+fn receiver(state: &ViewState, probe: &Probe) -> Receiver {
+    let area = state.content.focus;
+    let pane = probe.pane && matches!(area, Area::Console | Area::Prompt);
+    if pane && area == Area::Console && (state.console.direct || state.console.send_next) {
+        return Receiver::Program;
+    }
+    if area == Area::Console && state.console.reading && probe.reader.is_some() {
+        return Receiver::Reader;
+    }
+    let session = matches!(state.content.active(), Some(Tab::Session(_, _)));
+    if pane && route::passes(area, session, waits(state)) {
+        return Receiver::Program;
+    }
+    if area == Area::Prompt {
+        return Receiver::Prompt;
+    }
+    Receiver::Gui
+}
+
+/// Where ordinary keys go now. A reader merely alive behind live output,
+/// or an editor shown behind an overlay, does not hold the keyboard.
+pub fn input_target(state: &ViewState, probe: &Probe) -> InputTarget {
+    if !state.chrome.focused
+        || overlay::holder(state).is_some()
+        || !state.console.pending.is_empty()
+    {
+        return InputTarget::Gui;
+    }
+    match receiver(state, probe) {
+        Receiver::Reader => InputTarget::Neovim,
+        Receiver::Prompt if state.console.prompt_runs && state.prompt.selected.is_none() => {
+            InputTarget::Neovim
+        }
+        Receiver::Program => {
+            let neovim = match state.content.active() {
+                Some(Tab::Terminal(environment, id)) => {
+                    crate::tree::terminals(state.hosts.work(environment))
+                        .iter()
+                        .any(|t| {
+                            t.id == *id
+                                && t.program == tsumugi_model::TerminalProgram::Neovim
+                                && t.exit.is_none()
+                        })
+                }
+                _ => false,
+            };
+            if neovim {
+                InputTarget::Neovim
+            } else {
+                InputTarget::Terminal
+            }
+        }
+        Receiver::Gui | Receiver::Prompt => InputTarget::Gui,
+    }
+}
+
 /// Whether the session the console shows waits on a choice, which every key
 /// answers.
 pub fn waits(state: &ViewState) -> bool {
@@ -210,8 +287,7 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
     // console.
     let mut windowing = false;
     let agent = shown_agent(state);
-    if area == Area::Console
-        && state.console.reading
+    if receiver(state, &probe) == Receiver::Reader
         && let Some(reader) = probe.reader
     {
         let console = &state.console;
@@ -246,7 +322,7 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
     // A session waiting on a choice takes every key but the window's own as
     // its answer; a shell takes every key but those.
     let pane = pane || (probe.pane && area == Area::Prompt);
-    let passing = pane && route::passes(area, session, waits(state));
+    let passing = receiver(state, &probe) == Receiver::Program;
     let contexts = crate::sidebar::contexts(
         state.sidebar.panel,
         area,

@@ -109,6 +109,20 @@ const told = () => current() && dioxus.send({ kind: 'focused', on: document.hasF
 window.addEventListener('focus', told);
 window.addEventListener('blur', told);
 told();
+let routed;
+const tellRouting = () => {
+  if (!current()) return;
+  const on = document.hasFocus() && t.isConnected && document.activeElement === t;
+  if (on !== routed) {
+    routed = on;
+    dioxus.send({ kind: 'routing', on });
+  }
+};
+document.addEventListener('focusin', tellRouting);
+document.addEventListener('focusout', tellRouting);
+window.addEventListener('focus', tellRouting);
+window.addEventListener('blur', tellRouting);
+tellRouting();
 t.addEventListener('blur', keep);
 // Whether the keys go to a terminal grid, where a wide character takes two
 // cells rather than the width its font draws it in.

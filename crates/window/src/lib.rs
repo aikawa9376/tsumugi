@@ -26,6 +26,8 @@ mod feed;
 mod hosts;
 mod icons;
 mod input;
+#[cfg(target_os = "linux")]
+mod input_context;
 mod installed_fonts;
 pub use tsumugi_core::keymap;
 mod keys;

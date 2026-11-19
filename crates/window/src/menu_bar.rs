@@ -350,6 +350,8 @@ pub(crate) fn popup() {
         use dioxus::desktop::muda::ContextMenu;
         use dioxus::desktop::tao::platform::unix::WindowExtUnix;
         let desktop = dioxus::desktop::window();
+        let _input = dioxus::prelude::try_consume_context::<crate::input_context::Publisher>()
+            .map(|publisher| publisher.suspend());
         BAR.with(|stored| {
             if let Some(bar) = stored.borrow().as_ref() {
                 // Without a position Muda anchors to the screen's root window,

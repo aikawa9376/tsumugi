@@ -754,6 +754,25 @@ impl AppCtx {
         )
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn input_target(
+        &self,
+        probe: &tsumugi_core::console::Probe,
+    ) -> tsumugi_core::console::InputTarget {
+        // Subscribe to the slices the pure routing policy reads. `view` is
+        // kept in a CopyValue and does not itself notify reactive readers.
+        let _ = (
+            self.chrome.read(),
+            self.content.read(),
+            self.console.read(),
+            self.overlays.read(),
+            self.picker.read(),
+            self.prompt.read(),
+            self.hosts.read(),
+        );
+        tsumugi_core::console::input_target(&self.view.peek(), probe)
+    }
+
     fn run(&self, effects: Vec<Effect>) {
         // Taken out, as a request run may show another environment.
         let links = self.links.peek().clone();

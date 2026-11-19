@@ -48,6 +48,10 @@ pub enum Message {
     Focused {
         on: bool,
     },
+    /// The page's routing field has focus rather than a native control.
+    Routing {
+        on: bool,
+    },
     /// A key left to the input method, dropped as composing or to be typed,
     /// and whether it answered within a moment.
     Dropped {

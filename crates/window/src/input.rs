@@ -44,7 +44,7 @@ const INPUT: &str = include_str!("../assets/js/input.js");
 impl Ui {
     /// What the window knows of its programs now, which the view state
     /// routes a key and runs an action by.
-    fn probe(&self) -> Probe {
+    pub(crate) fn probe(&self) -> Probe {
         let pane = self.active_pane();
         let reader = self.consoles.reader.peek().clone().map(|r| {
             let screen = r.state().screen();
@@ -133,6 +133,9 @@ pub(crate) fn use_input(ui: &Ui) {
     // there, as it last told.
     let page_focused = use_hook(|| Rc::new(Cell::new(true)));
     let composing = use_hook(|| Rc::new(Cell::new(false)));
+    let input_focused = use_signal(|| false);
+    #[cfg(target_os = "linux")]
+    crate::input_context::use_input_context(ui, input_focused);
     // The keys macOS gave the window that the page has not told of.
     let unreached = use_hook(|| Rc::new(RefCell::new(keys::Unreached::default())));
     #[cfg(target_os = "macos")]
@@ -169,7 +172,13 @@ pub(crate) fn use_input(ui: &Ui) {
         let page_focused = page_focused.clone();
         let unreached = unreached.clone();
         move || {
-            spawn(listen(ui, page_focused, composing, unreached));
+            spawn(listen(
+                ui,
+                page_focused,
+                composing,
+                unreached,
+                input_focused,
+            ));
         }
     });
     // A window that has the keys while its page has not, past a moment, gives
@@ -209,6 +218,7 @@ async fn listen(
     page_focused: Rc<Cell<bool>>,
     composing: Rc<Cell<bool>>,
     unreached: Rc<RefCell<keys::Unreached>>,
+    mut input_focused: Signal<bool>,
 ) {
     let app = ui.app;
     let run = || {
@@ -228,6 +238,7 @@ async fn listen(
                 continue;
             }
             keys::Next::Restart => {
+                input_focused.set(false);
                 keys::trace(|| "the keys were lost: running the script again");
                 // A script that cannot keep its channel is not run again at
                 // once, over and over.
@@ -247,6 +258,7 @@ async fn listen(
         match message {
             keys::Message::Trace { text } => keys::trace(|| format!("js {text}")),
             keys::Message::Focused { on } => page_focused.set(on),
+            keys::Message::Routing { on } => input_focused.set(on),
             keys::Message::Composing { on } => composing.set(on),
             keys::Message::Dropped { answered } => match unanswered.dropped(answered) {
                 keys::Lost::Nothing => {
