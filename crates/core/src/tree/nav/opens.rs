@@ -11,6 +11,7 @@ use crate::tree::Place;
 /// What opening a row of the tree comes to, whichever key says where.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Opens {
+    LocalIssue(Place, String),
     /// The row folds or unfolds.
     Fold,
     /// A window shows this, of this worktree.
@@ -45,6 +46,9 @@ pub fn unfolds(item: &Item, folds: &Folds) -> bool {
 /// it is text and nowhere when it is not.
 pub fn opens(item: &Item, tree: &Tree, terminals: &[TerminalSession], local: bool) -> Opens {
     match item {
+        Item::LocalIssue(environment, dir, id) => {
+            Opens::LocalIssue(Place::at(environment, dir), id.clone())
+        }
         Item::Environment(_)
         | Item::Workspace(_, _)
         | Item::Across(..)
@@ -170,6 +174,7 @@ pub fn copied(item: &Item, tree: &Tree, terminals: &[TerminalSession]) -> Option
         | Item::Heading(..)
         | Item::GitHub(..)
         | Item::GitHubItem(..)
+        | Item::LocalIssue(..)
         | Item::GitHubFailed(..) => None,
     }
 }

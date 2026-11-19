@@ -1,8 +1,8 @@
 .list-rows { overflow-y: auto; padding: 0 8px 8px; }
-.list-row { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: 6px; cursor: default; white-space: nowrap; overflow: hidden; }
+.list-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 6px; cursor: default; white-space: nowrap; overflow: hidden; }
 .list-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.list-row-meta { color: var(--text-3); font-size: 11.5px; }
-.agent-badge { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-2); font-size: 10px; line-height: 16px; }
+.list-row-meta { color: var(--text-3); font-size: var(--ui-font-small); }
+.agent-badge { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-2); font-size: var(--ui-font-tiny); line-height: 18px; }
 .list-row.selected { background: var(--select); }
 .list-row.shown { box-shadow: inset 3px 0 0 var(--run); background: var(--run-tint-soft); border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .list-row.shown.selected { background: var(--select); }
@@ -12,11 +12,11 @@
 .list-row.head { font-weight: 500; }
 .list-row.vacant { opacity: 0.5; }
 .list-row.dim { color: var(--text-2); }
-.list-row.mono { font-family: var(--mono); font-size: 12px; }
+.list-row.mono { font-family: var(--mono); font-size: var(--ui-font-small); }
 .list-rows.sidebar-inbox { flex: none; max-height: 40%; }
 .sidebar-inbox .list-row { height: auto; padding: 7px 10px; align-items: flex-start; }
 .sidebar-inbox-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.sidebar-inbox-sub { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-inbox-sub { color: var(--text-2); font-size: var(--ui-font-small); overflow: hidden; text-overflow: ellipsis; }
 .sidebar-divider { height: 1px; background: var(--line); margin: 4px 16px; flex: none; }
 .state-glyph { flex: none; display: inline-flex; }
 .state-glyph.wait { color: var(--wait); }
@@ -34,12 +34,12 @@
 .shell-mark, .place-mark { flex: none; color: var(--text-3); display: inline-flex; }
 .list-row.head .place-mark { color: var(--text-2); }
 .list-row.shown .place-mark, .list-row.shown .shell-mark { color: var(--text-2); }
-.list-row.group { height: 24px; color: var(--text-3); font-size: 11.5px; font-weight: 500; }
+.list-row.group { height: 30px; color: var(--text-3); font-size: var(--ui-font-small); font-weight: 500; }
 .list-row.group .place-mark { color: var(--text-3); }
-.tab-where { flex: none; padding: 0 5px; border-radius: 4px; background: var(--raised); color: var(--text-3); font-family: var(--mono); font-size: 10px; line-height: 16px; }
+.tab-where { flex: none; padding: 0 5px; border-radius: 4px; background: var(--raised); color: var(--text-3); font-family: var(--mono); font-size: var(--ui-font-tiny); line-height: 18px; }
 .list-row.shown .tab-where { background: var(--run-tint); color: var(--run); }
 .sidebar-inbox .list-row-name .reads-only-mark { margin-left: 6px; vertical-align: -2px; }
-.list-row.environment { height: 30px; gap: 7px; }
+.list-row.environment { height: 36px; gap: 7px; }
 .list-row.environment:not(:first-child) { margin-top: 6px; }
 .list-row.environment .kind-mark { flex: none; display: inline-flex; color: var(--text-2); }
 .list-row.environment.dim .list-row-name { color: var(--text-2); }
@@ -48,12 +48,21 @@
 .standing-dot.fail { background: var(--fail); }
 .standing-dot.busy { width: 9px; height: 9px; border: 1.5px solid var(--run); border-right-color: transparent; animation: spin 1.2s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .standing-dot.busy { animation: none; } }
-.standing-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 10.5px; font-weight: 500; }
+.standing-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 9px; font-size: var(--ui-font-tiny); font-weight: 500; }
 .standing-pill.busy { background: var(--run-tint); color: var(--run); }
 .standing-pill.fail { background: var(--fail-tint); color: var(--fail); }
 .standing-pill.quiet { background: var(--raised); color: var(--text-2); }
 .standing-pill.wait { background: var(--wait-tint); color: var(--wait); }
-.waiting-count { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--wait-tint); color: var(--wait); font: 600 10.5px/18px var(--mono); text-align: center; }
+.list-row.with-summary { height: auto; min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+.list-row.environment.with-summary { min-height: 36px; }
+.list-row.with-summary .list-row-name { min-width: 4em; }
+.tree-summary { display: inline-flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; max-width: 65%; min-width: 0; }
+.tree-count { display: inline-flex; flex: none; align-items: center; gap: 3px; padding: 0 4px; border-radius: 4px; font: 500 var(--ui-font-tiny)/20px var(--mono); }
+.tree-total { color: var(--text-2); background: var(--raised); }
+.tree-count.wait { background: var(--wait-tint); }
+.tree-count.fail { background: var(--fail-tint); }
+.tree-count.run, .tree-count.behind { background: var(--run-tint-soft); }
+.tree-count.done { background: var(--done-tint); }
 /* The environments the tree is not at stand back, so the one at hand reads first. */
 .list-row.elsewhere { opacity: 0.55; }
 /* A pull request's or an issue's title gives way last: who opened it shrinks first. */

@@ -2,9 +2,14 @@
 
 Local issues keep work to do in an environment, without a GitHub account.
 Open Local Issues from a `+` menu, choose the working directory, and write a
-title and a description. Queuing an issue authorizes the environment's
+title and a description. Local issues also appear in the workspace's Issues
+list alongside GitHub issues, marked as local. Saving an issue leaves it open;
+its Start button queues it for work. Queuing authorizes the environment's
 default agent profile to start a session and work on that request with its
 normal permissions.
+
+Agents can save local issues from a conversation, including research findings
+and follow-up work. These issues also wait for the user to start them.
 
 The work host keeps the queue and starts one issue at a time in each working
 directory. Different directories can make progress independently. Closing a

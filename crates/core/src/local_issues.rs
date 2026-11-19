@@ -28,6 +28,9 @@ pub(crate) fn open(state: &mut ViewState) -> Vec<Effect> {
             Place::at(&environment, home)
         });
     state.overlays.menu = None;
-    state.overlays.local_issues = Some(place);
+    state.overlays.local_issues = Some(crate::overlay::LocalIssues {
+        place,
+        selected: None,
+    });
     Vec::new()
 }

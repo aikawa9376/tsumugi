@@ -21,8 +21,21 @@ pub fn items(
     read: &dyn Fn(&Path) -> Vec<Entry>,
     github: &BTreeMap<PathBuf, Repository>,
 ) -> Vec<Item> {
+    items_with_issues(environment, tree, folds, read, github, &[])
+}
+
+/// The same tree with local issues alongside the repository's GitHub issues.
+pub fn items_with_issues(
+    environment: &EnvironmentId,
+    tree: &Tree,
+    folds: &Folds,
+    read: &dyn Fn(&Path) -> Vec<Entry>,
+    github: &BTreeMap<PathBuf, Repository>,
+    issues: &[tsumugi_model::LocalIssue],
+) -> Vec<Item> {
     let mut out = Vec::new();
     for ws in &tree.workspaces {
+        let local = issues_in(tree, &ws.root, issues);
         let wi = Item::Workspace(environment.clone(), ws.root.clone());
         let ws_open = folds.is_open(&wi);
         out.push(wi);
@@ -33,12 +46,12 @@ pub fn items(
             for w in &ws.worktrees {
                 out.extend(headed(environment, w, folds, read));
             }
-            if ws.git {
-                out.extend(on_github(environment, &ws.root, github, folds));
+            if ws.git || !local.is_empty() {
+                out.extend(on_github(environment, &ws.root, github, folds, &local));
             }
             continue;
         }
-        for heading in [Heading::Sessions, Heading::Terminals] {
+        for heading in [Heading::Sessions, Heading::Terminals, Heading::Neovim] {
             let hi = Item::Across(environment.clone(), ws.root.clone(), heading);
             let open = folds.is_open(&hi);
             out.push(hi);
@@ -51,7 +64,7 @@ pub fn items(
                 );
             }
         }
-        out.extend(on_github(environment, &ws.root, github, folds));
+        out.extend(on_github(environment, &ws.root, github, folds, &local));
         for w in &ws.worktrees {
             let ti = Item::Worktree(environment.clone(), w.worktree.path.clone());
             let t_open = folds.is_open(&ti);
@@ -64,20 +77,44 @@ pub fn items(
     out
 }
 
-/// The headings of what is open on GitHub of the repository at `root`, each
-/// followed by its rows while it is open: what was last read, or why it
-/// could not be. None for a repository not on GitHub.
+/// Local issues belong to the workspace with the nearest containing checkout.
+pub fn issues_in<'a>(
+    tree: &Tree,
+    root: &Path,
+    issues: &'a [tsumugi_model::LocalIssue],
+) -> Vec<&'a tsumugi_model::LocalIssue> {
+    issues
+        .iter()
+        .filter(|issue| {
+            tree.workspaces
+                .iter()
+                .flat_map(|workspace| {
+                    workspace
+                        .worktrees
+                        .iter()
+                        .map(move |w| (&workspace.root, &w.worktree.path))
+                })
+                .filter(|(_, path)| issue.dir.starts_with(path))
+                .max_by_key(|(_, path)| path.components().count())
+                .is_some_and(|(owner, _)| owner == root)
+        })
+        .collect()
+}
+
+/// GitHub listings and local issues share the workspace's issue heading.
 fn on_github(
     environment: &EnvironmentId,
     root: &Path,
     github: &BTreeMap<PathBuf, Repository>,
     folds: &Folds,
+    local: &[&tsumugi_model::LocalIssue],
 ) -> Vec<Item> {
-    let Some(repository) = github.get(root) else {
-        return Vec::new();
-    };
+    let repository = github.get(root);
     let mut out = Vec::new();
     for listing in Listing::ALL {
+        if repository.is_none() && (listing != Listing::Issues || local.is_empty()) {
+            continue;
+        }
         let heading = Item::GitHub(environment.clone(), root.to_path_buf(), listing);
         let open = folds.is_open(&heading);
         out.push(heading);
@@ -85,7 +122,12 @@ fn on_github(
             continue;
         }
         let root = root.to_path_buf();
-        match repository.read(listing) {
+        if listing == Listing::Issues {
+            out.extend(local.iter().map(|issue| {
+                Item::LocalIssue(environment.clone(), issue.dir.clone(), issue.id.clone())
+            }));
+        }
+        match repository.and_then(|repository| repository.read(listing)) {
             None => {}
             Some(Ok(items)) => {
                 out.extend(items.iter().map(|i| {
@@ -149,12 +191,14 @@ fn files_in(
     }
 }
 
-/// The heading `terminal` is listed under: every program run in a terminal
-/// beside the shells, save a Neovim started on a file, which the file's own
-/// row stands for.
+/// The heading `terminal` is listed under. A Neovim started on a file is
+/// represented by that file's own row instead.
 pub(super) fn listed_under(terminal: &TerminalSession) -> Option<Heading> {
-    (terminal.program != TerminalProgram::Neovim || terminal.file.is_none())
-        .then_some(Heading::Terminals)
+    match terminal.program {
+        TerminalProgram::Neovim if terminal.file.is_some() => None,
+        TerminalProgram::Neovim => Some(Heading::Neovim),
+        TerminalProgram::Shell | TerminalProgram::Command => Some(Heading::Terminals),
+    }
 }
 
 /// What runs in a worktree of `environment`, under one of its headings;
@@ -166,7 +210,7 @@ pub fn under(environment: &EnvironmentId, w: &WorktreeNode, heading: Heading) ->
             .iter()
             .map(|s| Item::Session(environment.clone(), s.id.clone()))
             .collect(),
-        Heading::Terminals => w
+        Heading::Terminals | Heading::Neovim => w
             .terminals
             .iter()
             .filter(|t| listed_under(t) == Some(heading))
@@ -186,7 +230,7 @@ pub fn depth(tree: &Tree, item: &Item) -> usize {
     match item {
         Item::Environment(_) | Item::Workspace(_, _) | Item::Waiting(_, _) => 0,
         Item::Worktree(_, _) | Item::Across(..) | Item::GitHub(..) => 1,
-        Item::GitHubItem(..) | Item::GitHubFailed(..) => 2,
+        Item::GitHubItem(..) | Item::LocalIssue(..) | Item::GitHubFailed(..) => 2,
         Item::Gathered(_) => 2,
         Item::Heading(_, path, _) => heading_at(path),
         Item::Session(_, id) => tree

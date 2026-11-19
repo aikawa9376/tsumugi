@@ -13,6 +13,7 @@ use tsumugi_model::github::{Listing, Standing};
 use tsumugi_model::{EnvironmentId, InboxItem, TerminalSession, Tree};
 
 use super::signals::use_row_focus;
+use super::summary::{WorkSummary, summarize};
 use crate::bridge::AppCtx;
 use crate::completion::Completions;
 use crate::components::{
@@ -52,6 +53,9 @@ pub(crate) fn row_tip(item: &Item) -> &'static str {
             "A directory of the worktree. l goes into it, h folds it or the one it is in, Enter folds or unfolds it"
         }
         Item::File { .. } => "A file of the worktree",
+        Item::GitHub(_, _, Listing::Issues) => {
+            "Local issues and issues open on GitHub. Enter folds it"
+        }
         Item::GitHub(..) => {
             "What is open on GitHub of the repository, as gh sees it there. Enter folds it"
         }
@@ -61,6 +65,7 @@ pub(crate) fn row_tip(item: &Item) -> &'static str {
         Item::GitHubItem(..) => {
             "An issue open on GitHub. Enter shows it with its comments, g x opens it in the browser; n starts a session on it"
         }
+        Item::LocalIssue(..) => "A local issue. Enter shows its description; ▶ starts work on it",
         Item::GitHubFailed(..) => "Why gh could not say what is open on GitHub",
     }
 }
@@ -219,13 +224,18 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             }
         };
     }
+    let summary = summarize(
+        if matches!(it, Item::Environment(_)) {
+            t
+        } else {
+            view.narrowed(it.environment())
+        },
+        &context.completions.read(),
+        &it,
+    );
+    let has_summary = summary.as_ref().is_some_and(|s| !s.is_empty());
     if let Item::Environment(environment) = &it {
         let standing = connection::standing_of(&app, environment);
-        let waiting = if open {
-            0
-        } else {
-            view.waiting_in(environment)
-        };
         let kind = match (standing.mark == connection::Mark::Stopped, elsewhere) {
             (true, true) => "head environment dim elsewhere",
             (true, false) => "head environment dim",
@@ -233,6 +243,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             (false, false) => "head environment",
         };
         let here = it.clone();
+        let kind = if has_summary {
+            format!("{kind} with-summary")
+        } else {
+            kind.to_owned()
+        };
         return rsx! {
             ListRow {
                 kind,
@@ -252,8 +267,8 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 if let Some(note) = standing.note {
                     connection::StandingPill { note }
                 }
-                if waiting > 0 {
-                    span { class: "waiting-count", title: "Sessions waiting on you", "{waiting}" }
+                if let Some(summary) = summary {
+                    WorkSummary { summary }
                 }
                 IconButton {
                     icon: Icon::Plus,
@@ -290,34 +305,8 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 None,
             )
         }
-        Item::Heading(_, path, heading) => {
-            let shown = view.narrowed(it.environment());
-            let count = shown
-                .worktrees()
-                .find(|w| &w.worktree.path == path)
-                .map_or(0, |w| nav::under(it.environment(), w, *heading).len());
-            let count = if count > 0 {
-                count.to_string()
-            } else {
-                String::new()
-            };
-            ("group", heading.name().to_string(), count, None)
-        }
-        Item::Across(_, root, heading) => {
-            let shown = view.narrowed(it.environment());
-            let count: usize = shown
-                .workspaces
-                .iter()
-                .filter(|ws| &ws.root == root)
-                .flat_map(|ws| ws.worktrees.iter())
-                .map(|w| nav::under(it.environment(), w, *heading).len())
-                .sum();
-            let count = if count > 0 {
-                count.to_string()
-            } else {
-                String::new()
-            };
-            ("group", heading.name().to_string(), count, None)
+        Item::Heading(_, _, heading) | Item::Across(_, _, heading) => {
+            ("group", heading.name().to_string(), String::new(), None)
         }
         Item::Session(_, id) => {
             let s = nav::find(t, id).map(|(_, s)| s.clone());
@@ -343,9 +332,19 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
         Item::GitHub(_, root, listing) => {
             let count = tree::github(work, root)
                 .and_then(|r| r.count(*listing))
-                .filter(|n| *n > 0)
-                .map(|n| n.to_string())
-                .unwrap_or_default();
+                .unwrap_or_default()
+                + if *listing == Listing::Issues {
+                    work.map_or(0, |work| {
+                        nav::issues_in(t, root, &work.tree.local_issues).len() as u64
+                    })
+                } else {
+                    0
+                };
+            let count = if count > 0 {
+                count.to_string()
+            } else {
+                String::new()
+            };
             ("group", listing.name().to_string(), count, None)
         }
         Item::GitHubItem(_, root, listing, number) => {
@@ -362,6 +361,19 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                     .and_then(|i| i.pull.as_ref())
                     .and_then(|p| p.checks.standing())
                     .map(checks_glyph),
+            )
+        }
+        Item::LocalIssue(_, _, id) => {
+            let issue =
+                work.and_then(|work| work.tree.local_issues.iter().find(|issue| &issue.id == id));
+            (
+                "local-issue-row",
+                issue.map_or_else(|| id.clone(), |issue| issue.title.clone()),
+                issue.map_or_else(
+                    || "Local".into(),
+                    |issue| format!("Local · {}", issue.state.word()),
+                ),
+                None,
             )
         }
         Item::GitHubFailed(_, root, listing) => {
@@ -426,6 +438,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     } else {
         kind
     };
+    let kind = if has_summary {
+        format!("{kind} with-summary")
+    } else {
+        kind
+    };
     let target = Target::Row(it.clone());
     // Where a session can start, a button starts one there.
     let starts = matches!(it, Item::Workspace(_, _) | Item::Worktree(_, _));
@@ -453,6 +470,12 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     let badge = row_badge(t, &app.config.read().settings, &own);
     let here = it.clone();
     let close = it.clone();
+    let local_issue = if let Item::LocalIssue(_, _, id) = &it {
+        work.and_then(|work| work.tree.local_issues.iter().find(|issue| &issue.id == id))
+            .cloned()
+    } else {
+        None
+    };
     rsx! {
         ListRow {
             kind,
@@ -481,7 +504,12 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             if has_draft {
                 DraftMark {}
             }
-            span { class: "list-row-meta", "{meta}" }
+            if let Some(summary) = summary {
+                WorkSummary { summary }
+            }
+            if !meta.is_empty() {
+                span { class: "list-row-meta", "{meta}" }
+            }
             if !chips.is_empty() {
                 span { class: "tab-where", title: "The tabs showing it", "{chips}" }
             }
@@ -495,6 +523,9 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                     title: "Start work here: a session, a local issue, a shell, or Neovim",
                     onclick: start_menu(app, it.clone()),
                 }
+            }
+            if let Some(issue) = local_issue {
+                crate::local_issues::StartIssue { environment: it.environment().clone(), issue }
             }
             if let Some(tip) = closes {
                 IconButton {

@@ -48,10 +48,16 @@ pub struct Overlays {
     /// The sheet adding an environment is open.
     pub adding: bool,
     /// Local issues are opened on this environment and directory.
-    pub local_issues: Option<crate::tree::Place>,
+    pub local_issues: Option<LocalIssues>,
     /// A session's images looked at one at a time.
     pub lightbox: Option<Lightbox>,
     pub banner: Banner,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalIssues {
+    pub place: crate::tree::Place,
+    pub selected: Option<String>,
 }
 
 /// A menu a right click opened, where it was clicked and on what.

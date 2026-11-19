@@ -413,8 +413,35 @@ pub(crate) fn open_file(
             focus: true,
         })],
         nav::Opens::Unavailable => vec![Effect::Notice(super::REMOTE_PREVIEW.into())],
-        nav::Opens::Fold | nav::Opens::Draft(_) => Vec::new(),
+        nav::Opens::Fold | nav::Opens::Draft(_) | nav::Opens::LocalIssue(..) => Vec::new(),
     }
+}
+
+/// Show a cursor's session or terminal, or a file already open, leaving
+/// the sidebar's keys and both of its cursors where they are.
+pub(crate) fn preview_row(state: &mut ViewState, item: &Item) -> Vec<Effect> {
+    let work = state.hosts.work(item.environment());
+    let tabs = nav::stands_for(item, tree::terminals(work));
+    let tab = tabs
+        .iter()
+        .find(|tab| state.content.windows.shows_anywhere(tab))
+        .or_else(|| {
+            tabs.iter()
+                .find(|tab| matches!(tab, Tab::Session(..) | Tab::Terminal(..)))
+        });
+    let Some(tab) = tab.cloned() else {
+        return Vec::new();
+    };
+    let place = tree::place_of_tab(tree::listed(work), tree::terminals(work), &tab);
+    let effects = super::show(
+        &mut state.content,
+        tab.clone(),
+        place,
+        Some(Opening::Existing),
+        state.hosts.is_local(item.environment()),
+    );
+    tree::keep_cursor(&mut state.tree, tab);
+    effects
 }
 
 /// Open a row where `how` says, or as anything else opens a thing when it
@@ -447,6 +474,13 @@ pub(crate) fn open_row(
     };
     let mut effects = Vec::new();
     match opens {
+        nav::Opens::LocalIssue(place, id) => {
+            state.overlays.local_issues = Some(crate::overlay::LocalIssues {
+                place,
+                selected: Some(id),
+            });
+            return Vec::new();
+        }
         nav::Opens::Fold if in_place => view.folds.toggle(&item),
         nav::Opens::Fold => {}
         nav::Opens::Shows(thing, p) => {

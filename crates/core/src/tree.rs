@@ -341,12 +341,13 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts) {
                 }
                 entries
             };
-            rows.extend(nav::items(
+            rows.extend(nav::items_with_issues(
                 environment,
                 &narrowed,
                 &view.folds,
                 &read as &dyn Fn(&Path) -> Vec<Entry>,
                 &facts.github,
+                &facts.local_issues,
             ));
         }
         view.built.narrowed.insert(environment.clone(), narrowed);

@@ -9,18 +9,52 @@ use crate::bridge::AppCtx;
 use crate::components::{Button, Dialog};
 
 #[component]
-pub(crate) fn LocalIssues() -> Element {
+pub(crate) fn StartIssue(environment: tsumugi_model::EnvironmentId, issue: LocalIssue) -> Element {
     let app = use_context::<AppCtx>();
-    let place = app.overlays.read().local_issues.clone();
+    let mut busy = use_signal(|| false);
+    let ask = match issue.state {
+        LocalIssueState::Open => Ask::StartLocalIssue { id: issue.id },
+        LocalIssueState::Failed | LocalIssueState::Cancelled => {
+            Ask::RetryLocalIssue { id: issue.id }
+        }
+        _ => return rsx! {},
+    };
     rsx! {
-        if let Some(place) = place {
-            IssueSheet { key: "{place.environment}:{place.worktree.display()}", place }
+        button {
+            r#type: "button", class: "icon-button local-issue-start",
+            title: "Start local issue", aria_label: "Start local issue", disabled: busy(),
+            onmousedown: move |event| event.prevent_default(),
+            onclick: move |event| {
+                event.stop_propagation();
+                if busy() { return; }
+                busy.set(true);
+                let answer = app.ask_in(&environment, ask.clone());
+                spawn(async move {
+                    match answer.await {
+                        Answer::Done => {},
+                        Answer::Failed { text } | Answer::Unconfirmed { text } => app.dispatch(Msg::Notice(text)),
+                        _ => app.dispatch(Msg::Notice("The work host did not confirm the issue start".into())),
+                    }
+                    busy.set(false);
+                });
+            }, "▶"
         }
     }
 }
 
 #[component]
-fn IssueSheet(place: Place) -> Element {
+pub(crate) fn LocalIssues() -> Element {
+    let app = use_context::<AppCtx>();
+    let sheet = app.overlays.read().local_issues.clone();
+    rsx! {
+        if let Some(sheet) = sheet {
+            IssueSheet { key: "{sheet.place.environment}:{sheet.place.worktree.display()}:{sheet.selected:?}", place: sheet.place, selected: sheet.selected }
+        }
+    }
+}
+
+#[component]
+fn IssueSheet(place: Place, selected: Option<String>) -> Element {
     let app = use_context::<AppCtx>();
     let mut id = use_signal(|| SessionId::new().to_string());
     let mut dir = use_signal(|| place.worktree.to_string_lossy().into_owned());
@@ -42,7 +76,7 @@ fn IssueSheet(place: Place) -> Element {
         }
         busy.set(true);
         error.set(None);
-        let create = matches!(ask, Ask::QueueLocalIssue(_));
+        let create = matches!(ask, Ask::CreateLocalIssue(_));
         let answer = app.ask_in(&environment, ask);
         spawn(async move {
             match answer.await {
@@ -71,14 +105,19 @@ fn IssueSheet(place: Place) -> Element {
     rsx! {
         Dialog { kind: "local-issues-dialog", title: "Local Issues · {name}", escapes: true, onclose: move |_| close(),
             div { class: "local-issues-body",
-                p { class: "adding-note", "Queued issues start automatically with this environment's default agent. One issue runs at a time in each working directory." }
+                if selected.is_none() {
+                    p { class: "adding-note", "Save issues for later, then press ▶ to start with this environment's default agent. One issue runs at a time in each working directory." }
+                }
                 div { class: "local-issues-list",
                     if issues.is_empty() { p { class: "adding-note", "No local issues yet." } }
                     for issue in issues {
-                        IssueRow { key: "{issue.id}", environment: place.environment.clone(), issue, busy: busy(), mutate }
+                        if selected.as_ref().is_none_or(|id| *id == issue.id) {
+                            IssueRow { key: "{issue.id}", environment: place.environment.clone(), issue, busy: busy(), mutate }
+                        }
                     }
                 }
-                div { class: "local-issue-form",
+                if selected.is_none() {
+                  div { class: "local-issue-form",
                     label { r#for: "local-issue-dir", "Working directory" }
                     input { id: "local-issue-dir", class: "adding-input", value: "{dir}", disabled: busy(),
                         onkeydown: field_key, oninput: move |e| dir.set(e.value()) }
@@ -93,12 +132,16 @@ fn IssueSheet(place: Place) -> Element {
                     div { class: "local-issue-actions",
                         Button { onclick: move |_| close(), "Close" }
                         Button { kind: "primary", disabled: busy() || title().trim().is_empty() || dir().trim().is_empty(),
-                            onclick: move |_| mutate.call(Ask::QueueLocalIssue(NewLocalIssue {
+                            onclick: move |_| mutate.call(Ask::CreateLocalIssue(NewLocalIssue {
                                 id: id(), dir: dir().into(), title: title(), body: body(),
                             })),
-                            if busy() { "Saving…" } else { "Queue issue" }
+                            if busy() { "Saving…" } else { "Save issue" }
                         }
                     }
+                  }
+                } else {
+                    if let Some(text) = error() { p { class: "adding-error", role: "alert", "{text}" } }
+                    Button { onclick: move |_| close(), "Close" }
                 }
             }
         }
@@ -116,9 +159,10 @@ fn IssueRow(
     let state = issue.state.word();
     let cancel_id = issue.id.clone();
     let retry_id = issue.id.clone();
+    let start_id = issue.id.clone();
     rsx! {
         div { class: "local-issue",
-            details {
+            details { open: true,
                 summary {
                     span { class: "local-issue-title", "{issue.title}" }
                     span { class: "local-issue-state {state}", "{state}" }
@@ -134,7 +178,11 @@ fn IssueRow(
                         app.dispatch(Msg::ShowSession(environment.clone(), session.clone()));
                     }, "Open session" }
                 }
-                if issue.state == LocalIssueState::Queued {
+                if issue.state == LocalIssueState::Open {
+                    Button { title: "Start issue", aria_label: "Start issue", disabled: busy,
+                        onclick: move |_| mutate.call(Ask::StartLocalIssue { id: start_id.clone() }), "▶ Start" }
+                }
+                if matches!(issue.state, LocalIssueState::Open | LocalIssueState::Queued) {
                     Button { disabled: busy, onclick: move |_| mutate.call(Ask::CancelLocalIssue { id: cancel_id.clone() }), "Cancel" }
                 }
                 if matches!(issue.state, LocalIssueState::Failed | LocalIssueState::Cancelled) {

@@ -28,22 +28,23 @@ A workspace where no session or terminal runs starts folded; once you fold or
 unfold it, it stays as you left it.
 
 A worktree's files sit under its Files heading, and what runs in it under
-Sessions and Terminals: Terminals holds every program Tsumugi runs in a
-terminal there, shells and Neovim alike, each marked by what it runs, save a
-Neovim started on a file, which that file's row stands for. A terminal whose
-program reports how it stands, as a session's does
+Sessions, Terminals and Neovim: agent sessions, shells and commands, and
+Neovim are listed and counted separately. A Neovim started on a file is
+represented by that file's row. A terminal whose program reports how it
+stands, as a session's does
 ([how a session stands](sessions.md#how-a-session-stands)), is marked with
 that state as a session is, done until it is viewed; one whose program
 reports nothing carries no such mark. A heading folds, and the row of one for
-what runs counts what it holds. Where a workspace has no worktree row, the
-headings are its checkout's.
+what runs counts what it holds and shows how that work stands, folded too.
+Workspace and worktree rows summarize the work they hold without opening them.
+Where a workspace has no worktree row, the headings are its checkout's.
 
-A workspace with worktree rows lists, above them, its own Sessions and
-Terminals: every session and terminal of all its worktrees, so what runs in
-the repository is seen without opening each worktree. The worktree rows start
-folded, each still holding its own Files, Sessions and Terminals. The row of
-what a window shows is the one under the workspace's heading, or, while that
-is folded, the one under its worktree's.
+A workspace with worktree rows lists, above them, its own Sessions,
+Terminals and Neovim: every session and terminal of all its worktrees, so
+what runs in the repository is seen without opening each worktree. The
+worktree rows start folded, each still holding its own Files, Sessions,
+Terminals and Neovim. The row of what a window shows is the one under the
+workspace's heading, or, while that is folded, the one under its worktree's.
 
 ```text
 api                        ← a git repository with sessions in two worktrees
@@ -126,6 +127,9 @@ overwritten. What is made is selected once it is listed.
 
 A row of a session, a shell or a Neovim shows the numbers of the content's tabs
 it is shown in, and the row of what the focused window shows stands out.
+Moving the cursor to one of these rows shows its tab while the keys stay in
+Tree. A file already open in a tab follows the cursor too; moving through
+files does not start an editor.
 
 A session opened by another session is listed by the directory it runs in,
 like any other; the session it came from is told in its details
@@ -171,7 +175,9 @@ shows, however many there are. The same directory in two environments is two
 rows. Each heading says how its environment's connection stands: a mark alone
 while it is connected, and in words while it is being reached, cannot be
 reached, with how old its work is, reads only, or holds a change sent there
-that needs you. A folded heading counts the sessions waiting on you inside it.
+that needs you. The heading also summarizes its sessions, terminals and
+Neovims and how they stand, whether folded or open, across all its work even
+while the tree is filtered.
 The rows of every environment but the one of the selected row, or else of what
 is shown, are drawn dimmer, all but the sessions waiting on you.
 Selecting a heading shows its environment in the details: how its connection

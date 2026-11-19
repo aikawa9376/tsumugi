@@ -56,6 +56,8 @@ pub enum Item {
     GitHub(EnvironmentId, PathBuf, Listing),
     /// A pull request or an issue open on GitHub, by its number.
     GitHubItem(EnvironmentId, PathBuf, Listing, u64),
+    /// A local issue, by its working directory and identity.
+    LocalIssue(EnvironmentId, PathBuf, String),
     /// Why what is open on GitHub could not be read.
     GitHubFailed(EnvironmentId, PathBuf, Listing),
 }
@@ -66,16 +68,23 @@ pub enum Heading {
     Files,
     Sessions,
     Terminals,
+    Neovim,
 }
 
 impl Heading {
-    pub const ALL: [Heading; 3] = [Heading::Files, Heading::Sessions, Heading::Terminals];
+    pub const ALL: [Heading; 4] = [
+        Heading::Files,
+        Heading::Sessions,
+        Heading::Terminals,
+        Heading::Neovim,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Heading::Files => "Files",
             Heading::Sessions => "Sessions",
             Heading::Terminals => "Terminals",
+            Heading::Neovim => "Neovim",
         }
     }
 }
@@ -94,6 +103,7 @@ impl Item {
             | Item::File { environment, .. }
             | Item::GitHub(environment, ..)
             | Item::GitHubItem(environment, ..)
+            | Item::LocalIssue(environment, ..)
             | Item::GitHubFailed(environment, ..) => environment,
             Item::Gathered(own) => own.environment(),
         }

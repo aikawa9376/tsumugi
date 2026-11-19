@@ -35,6 +35,78 @@ fn the_same_session_in_two_environments_is_two_rows() {
 
 const OAUTH: &str = "/api/.claude/worktrees/oauth";
 
+#[test]
+fn local_issues_share_the_issues_toggle_at_the_same_depth_as_github_issues() {
+    use tsumugi_model::{LocalIssue, LocalIssueState};
+    let tree = tree();
+    let issue = LocalIssue {
+        id: "local-one".into(),
+        dir: OAUTH.into(),
+        title: "Compare Orca".into(),
+        body: "Research findings".into(),
+        state: LocalIssueState::Open,
+        record: None,
+        session: None,
+        error: None,
+    };
+    let row = Item::LocalIssue(here(), issue.dir.clone(), issue.id.clone());
+    let heading = on_github("/api", Listing::Issues);
+    let mut folds = Folds::default();
+    let closed = items_with_issues(
+        &here(),
+        &tree,
+        &folds,
+        &|_| vec![],
+        &BTreeMap::new(),
+        std::slice::from_ref(&issue),
+    );
+    assert!(closed.contains(&heading));
+    assert!(!closed.contains(&row));
+    folds.set(&heading, true);
+    let rows = items_with_issues(
+        &here(),
+        &tree,
+        &folds,
+        &|_| vec![],
+        &BTreeMap::new(),
+        &[issue],
+    );
+    assert_eq!(
+        parent(&rows, |item| depth(&tree, item), &row),
+        Some(heading)
+    );
+    assert_eq!(depth(&tree, &row), 2);
+    assert_eq!(place_of(&tree, &row), Some(at(OAUTH)));
+    assert_eq!(rows.iter().filter(|item| **item == row).count(), 1);
+    let mut github = github();
+    github.get_mut(Path::new("/api")).unwrap().issues =
+        Some(Ok(vec![tsumugi_model::github::Item {
+            number: 42,
+            title: "Remote issue".into(),
+            ..Default::default()
+        }]));
+    let issues = [tsumugi_model::LocalIssue {
+        id: "local-one".into(),
+        dir: OAUTH.into(),
+        title: "Compare Orca".into(),
+        body: String::new(),
+        state: LocalIssueState::Open,
+        record: None,
+        session: None,
+        error: None,
+    }];
+    let rows = items_with_issues(&here(), &tree, &folds, &|_| vec![], &github, &issues);
+    let remote = Item::GitHubItem(here(), "/api".into(), Listing::Issues, 42);
+    assert_eq!(
+        parent(&rows, |item| depth(&tree, item), &row),
+        parent(&rows, |item| depth(&tree, item), &remote)
+    );
+    assert_eq!(
+        opens(&row, &tree, &[], true),
+        Opens::LocalIssue(at(OAUTH), "local-one".into())
+    );
+}
+
 /// `api` is a repository with sessions in its main checkout and in a
 /// worktree; `web` one with sessions only in its main checkout; `tmp` is
 /// outside git.
@@ -99,6 +171,7 @@ fn gathered(root: &str, sessions: &[&str], shells: &[u128]) -> Vec<Item> {
             .iter()
             .map(|&id| Item::Gathered(Box::new(Item::Terminal(here(), id))))
             .collect(),
+        vec![across(root, Heading::Neovim)],
     ]
     .concat()
 }
@@ -111,7 +184,7 @@ fn a_repository_s_worktrees_start_folded_and_unfold_to_their_own_headings() {
     let got = rows(&t, &folds);
     let at = got.iter().position(|i| *i == worktree(OAUTH)).unwrap();
     assert_eq!(got[at - 1], worktree("/api"));
-    assert_eq!(got[at + 1..at + 5], group(OAUTH, &[session("o")], &[])[..]);
+    assert_eq!(got[at + 1..at + 6], group(OAUTH, &[session("o")], &[])[..]);
     assert_eq!(depth(&t, &across("/api", Heading::Sessions)), 1);
     assert_eq!(depth(&t, &gathered_session("o")), 2);
     assert_eq!(depth(&t, &sessions_of(OAUTH)), 2);
@@ -206,6 +279,7 @@ fn group(path: &str, sessions: &[Item], shells: &[Item]) -> Vec<Item> {
         sessions,
         &[shells_of(path)],
         shells,
+        &[Item::Heading(here(), path.into(), Heading::Neovim)],
     ]
     .concat()
 }
@@ -279,7 +353,7 @@ fn a_repository_on_github_lists_its_listings_folded_after_what_runs_before_its_w
         .iter()
         .position(|i| *i == on_github("/api", Listing::Pulls))
         .unwrap();
-    assert_eq!(got[at - 1], across("/api", Heading::Terminals));
+    assert_eq!(got[at - 1], across("/api", Heading::Neovim));
     assert_eq!(
         got[at + 1..at + 3],
         [on_github("/api", Listing::Issues), worktree("/api")]
@@ -295,7 +369,10 @@ fn a_flat_repository_lists_its_listings_after_its_checkout_s_headings() {
         .iter()
         .position(|i| *i == on_github("/web", Listing::Pulls))
         .unwrap();
-    assert_eq!(got[at - 1], shells_of("/web"));
+    assert_eq!(
+        got[at - 1],
+        Item::Heading(here(), "/web".into(), Heading::Neovim)
+    );
     assert_eq!(depth(&t, &on_github("/web", Listing::Pulls)), 1);
 }
 
@@ -1062,7 +1139,7 @@ fn a_shell_opens_the_directory_it_runs_in() {
 }
 
 #[test]
-fn a_neovim_on_no_file_sits_under_shells_and_one_on_a_file_has_no_row_of_its_own() {
+fn a_neovim_on_no_file_has_its_own_heading_and_one_on_a_file_has_no_row_of_its_own() {
     let mut nvim = sh(6, "nvim", DEV);
     nvim.program = TerminalProgram::Neovim;
     let on_file = TerminalSession {
@@ -1072,10 +1149,32 @@ fn a_neovim_on_no_file_sits_under_shells_and_one_on_a_file_has_no_row_of_its_own
     let t = shelled().with_terminals(&[sh(2, "shell", DEV), nvim, on_file]);
     let w = t.worktrees().find(|w| w.worktree.path == Path::new(DEV));
     let w = w.unwrap();
-    assert_eq!(under(&here(), w, Heading::Terminals), [shell(2), shell(6)]);
+    assert_eq!(under(&here(), w, Heading::Terminals), [shell(2)]);
+    let editors = Heading::Neovim;
+    assert_eq!(under(&here(), w, editors), [shell(6)]);
     let list = rows(&t, &unfolded());
-    assert_eq!(row_above(&list, &shell(6)), Some(shell(2)));
+    assert_eq!(
+        row_above(&list, &shell(6)),
+        Some(Item::Heading(here(), DEV.into(), editors))
+    );
     assert!(!list.contains(&shell(7)));
+    assert!(list.contains(&Item::Gathered(Box::new(shell(6)))));
+    let mut folds = unfolded();
+    folds.set(&across("/api", editors), false);
+    folds.set(&Item::Heading(here(), DEV.into(), editors), false);
+    let folded = rows(&t, &folds);
+    assert!(!folded.contains(&shell(6)));
+    assert!(folded.contains(&shell(2)));
+    assert_eq!(
+        row_of(
+            &folded,
+            &t,
+            &here(),
+            Some(&Tab::Terminal(here(), 6)),
+            &at(DEV)
+        ),
+        Some(across("/api", editors))
+    );
 }
 
 #[test]

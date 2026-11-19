@@ -33,12 +33,25 @@ fn local_issues_open_in_the_selected_environment_and_keep_that_place() {
             key: None,
             probe: Box::default(),
         });
-    let place = run.state().overlays.local_issues.as_ref().unwrap();
+    let place = &run.state().overlays.local_issues.as_ref().unwrap().place;
     assert_eq!(place.environment, there());
     assert_eq!(place.worktree, std::path::PathBuf::from("/r/other"));
     assert_eq!(held_by(&run), (Some(Holder::LocalIssues), true, true));
     let closed = run.send(held("Escape"));
     assert!(closed.state().overlays.local_issues.is_none());
+}
+
+#[test]
+fn opening_a_local_issue_shows_that_issue_without_starting_a_session() {
+    let run = window().send(Msg::OpenRow {
+        item: Item::LocalIssue(here(), "/r/a".into(), "research".into()),
+        how: None,
+        take_keys: true,
+    });
+    let sheet = run.state().overlays.local_issues.as_ref().unwrap();
+    assert_eq!(sheet.place, crate::tree::Place::at(&here(), "/r/a"));
+    assert_eq!(sheet.selected.as_deref(), Some("research"));
+    assert!(run.last_effects().is_empty());
 }
 
 fn held(name: &str) -> Msg {

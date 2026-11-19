@@ -238,6 +238,38 @@ fn every_class_and_id_a_stylesheet_rules_is_written_by_a_source() {
 }
 
 #[test]
+fn interface_text_sizes_share_one_scale_instead_of_fixed_pixels_in_each_component() {
+    let mut sheets = Vec::new();
+    files(&root().join("assets/css"), &["css"], &mut sheets);
+    let mut fixed = Vec::new();
+    for sheet in sheets {
+        let name = sheet.file_name().unwrap().to_str().unwrap();
+        // Documents own their typography separately from the workspace chrome.
+        if matches!(name, "tokens.css" | "github-thread.css") {
+            continue;
+        }
+        let css = uncommented(&fs::read_to_string(&sheet).unwrap());
+        for declaration in css.split(['{', ';', '}']) {
+            let Some((property, value)) = declaration.trim().split_once(':') else {
+                continue;
+            };
+            let size = match property.trim() {
+                "font-size" => value,
+                "font" => value.split('/').next().unwrap(),
+                _ => continue,
+            };
+            if size.contains("px") {
+                fixed.push(format!("{name}: {}", declaration.trim()));
+            }
+        }
+    }
+    assert!(
+        fixed.is_empty(),
+        "text bypasses the shared UI scale: {fixed:#?}"
+    );
+}
+
+#[test]
 fn selectors_name_their_classes_and_ids_but_not_what_brackets_or_quotes_hold() {
     assert_eq!(
         named(".a > .b-c:hover, #d_e [data-x=\".no\"] .f::after"),

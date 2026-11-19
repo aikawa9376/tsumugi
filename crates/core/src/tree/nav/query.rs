@@ -74,6 +74,7 @@ pub fn place_of(tree: &Tree, item: &Item) -> Option<Place> {
     match item {
         Item::Waiting(_, id) | Item::Session(_, id) => find(tree, id).map(|(p, _)| at(p)),
         Item::Terminal(_, id) => tree.terminal(*id).map(|(_, _, s)| at(&s.cwd)),
+        Item::LocalIssue(_, dir, _) => Some(at(dir)),
         Item::Worktree(_, path) | Item::Heading(_, path, _) | Item::File { worktree: path, .. } => {
             Some(at(path))
         }

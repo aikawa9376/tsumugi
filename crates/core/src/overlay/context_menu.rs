@@ -137,7 +137,7 @@ pub fn entries(
                 .chain(here)
                 .collect()
         }
-        Target::Row(Item::GitHubFailed(..)) => here.into_iter().collect(),
+        Target::Row(Item::GitHubFailed(..) | Item::LocalIssue(..)) => here.into_iter().collect(),
         Target::Row(Item::Environment(environment)) => {
             let machine = matches!(reach, Reach::Machine { .. });
             let retry = matches!(reach, Reach::Machine { retryable: true });
