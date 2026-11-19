@@ -75,8 +75,8 @@ ci-windows: fmt-check lint stamp-check
 
 # The executable for a work machine, with no desktop runtime linked.
 test-headless:
-    cargo clippy -p tsumugi --all-targets --no-default-features -- -D warnings
-    cargo test -p tsumugi --no-default-features --test headless --test hosts --test remote --test gateway
+    CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/headless" cargo clippy -p tsumugi --all-targets --no-default-features -- -D warnings
+    CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/headless" cargo test -p tsumugi --no-default-features --test headless --test hosts --test remote --test gateway
 
 # Run the tests in the Neovim at `nvim`, as a Neovim release is checked
 # before assets/neovim/update.sh pins it for the app to carry.

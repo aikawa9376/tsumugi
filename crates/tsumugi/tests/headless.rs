@@ -12,6 +12,63 @@ mod support {
 use support::isolated::isolated;
 
 #[test]
+fn headless_checks_leave_the_desktop_executable_untouched() {
+    for configured_target in [None, Some(""), Some("build artifacts")] {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let cargo = bin.join("cargo");
+        std::fs::write(
+            &cargo,
+            "#!/bin/sh\nset -eu\nout=\"${CARGO_TARGET_DIR:-target}/debug\"\nmkdir -p \"$out\"\nprintf '%s\\n' \"$1\" >> \"$out/tsumugi\"\n",
+        )
+        .unwrap();
+        tsumugi_sys::fs::set_mode(&cargo, 0o755).unwrap();
+        std::fs::copy(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../justfile"),
+            dir.path().join("justfile"),
+        )
+        .unwrap();
+        let target = dir.path().join(
+            configured_target
+                .filter(|path| !path.is_empty())
+                .unwrap_or("target"),
+        );
+        let desktop = target.join("debug/tsumugi");
+        std::fs::create_dir_all(desktop.parent().unwrap()).unwrap();
+        std::fs::write(&desktop, "desktop executable").unwrap();
+        let path = std::env::join_paths(
+            std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+        )
+        .unwrap();
+        let mut command = Command::new("just");
+        command
+            .current_dir(dir.path())
+            .env("PATH", path)
+            .env_remove("CARGO_TARGET_DIR")
+            .arg("test-headless");
+        if let Some(target) = configured_target {
+            command.env("CARGO_TARGET_DIR", target);
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            std::fs::read_to_string(&desktop).unwrap(),
+            "desktop executable",
+            "CARGO_TARGET_DIR={configured_target:?}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(target.join("headless/debug/tsumugi")).unwrap(),
+            "clippy\ntest\n"
+        );
+    }
+}
+
+#[test]
 fn a_headless_build_does_not_link_the_window_or_its_desktop_runtime() {
     let output = Command::new(env!("CARGO"))
         .args([
