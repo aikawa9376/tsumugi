@@ -14,7 +14,7 @@ write prompts in a real Neovim, and move between them with familiar keys.
 This is an independent hobby project. Expect changes, rough edges and
 limited platform coverage; issues and small, focused contributions are welcome.
 
-[Japanese guide](docs/guide.ja.md) · [Concept](docs/concept.md) ·
+[Japanese guide](docs/guide.ja.md) · [Key bindings (日本語)](docs/keybindings.ja.md) · [Concept](docs/concept.md) ·
 [Specifications](docs/spec/README.md) · [Building and releases](docs/building.md)
 
 ## Work in your own tools
