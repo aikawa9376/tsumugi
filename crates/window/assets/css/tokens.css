@@ -41,6 +41,15 @@
   /* The console's font and line height, set from the settings. */
   --term-font: var(--mono); --term-size: 13px; --term-weight: 400; --cell-h: 17px;
   --sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --ui-font-size: 15px;
+  --ui-font-small: calc(var(--ui-font-size) - 1px);
+  --ui-font-caption: calc(var(--ui-font-size) - 2px);
+  --ui-font-tiny: calc(var(--ui-font-size) - 3px);
+  --ui-font-large: calc(var(--ui-font-size) + 1px);
+  --ui-font-heading: calc(var(--ui-font-size) + 3px);
+  --ui-font-title: calc(var(--ui-font-size) + 5px);
+  --ui-font-display: calc(var(--ui-font-size) + 7px);
+  --ui-font-brand: calc(var(--ui-font-size) + 11px);
   --kbd-text: #9b9ea2;
   --on-run: #fff;
   --shadow: rgba(0,0,0,0.45);
@@ -48,4 +57,4 @@
 * { box-sizing: border-box; }
 .icon { display: inline-flex; flex: none; align-items: center; justify-content: center; }
 /* As thick as icons::STROKE, which the menu bar's icons are drawn with. */
-.icon svg { width: var(--icon, 14px); height: var(--icon, 14px); stroke-width: 1.75; }
+.icon svg { width: var(--icon, 16px); height: var(--icon, 16px); stroke-width: 1.75; }

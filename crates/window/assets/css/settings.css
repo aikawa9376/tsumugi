@@ -1,8 +1,8 @@
 html, body { margin: 0; height: 100%; background: var(--ground); color: var(--text);
-  font-family: var(--sans); font-size: 13px; overflow: hidden; user-select: none; cursor: default; }
+  font-family: var(--sans); font-size: var(--ui-font-size); overflow: hidden; user-select: none; cursor: default; line-height: 1.45; }
 #main { height: 100%; }
 .settings { height: 100%; display: flex; }
-.settings-nav { flex: none; width: 188px; overflow-y: auto; padding: 16px 10px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.settings-nav { flex: none; width: 208px; overflow-y: auto; padding: 16px 10px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .settings-nav-item { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 6px; color: var(--text-2); }
 .settings-nav-item .icon { color: var(--text-3); }
 .settings-nav-item.on .icon { color: var(--text-2); }
@@ -11,18 +11,18 @@ html, body { margin: 0; height: 100%; background: var(--ground); color: var(--te
 button.settings-nav-item { width: 100%; text-align: left; background: transparent; border: 0; flex: none; }
 button.settings-nav-item:hover { background: var(--raised); }
 button.settings-nav-item.on { background: var(--select); }
-.settings-agent { padding-left: 35px; font-size: 12px; gap: 6px; }
+.settings-agent { padding-left: 35px; font-size: var(--ui-font-small); gap: 6px; line-height: 1.45; }
 .settings-nav-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-nav-mark { flex: none; display: inline-flex; margin-left: auto; color: var(--wait); }
 .settings-nav-item.on .settings-nav-mark .icon { color: var(--wait); }
 .settings-nav-mark .icon { color: var(--wait); }
-.settings-agent-note { color: var(--text-3); font-size: 12px; line-height: 1.5; margin: 12px 0 18px; }
+.settings-agent-note { color: var(--text-3); font-size: var(--ui-font-small); line-height: 1.5; margin: 12px 0 18px; }
 /* The page about tsumugi is not a page of settings, so it sits apart at the foot. */
 .settings-nav-spacer { flex: 1; min-height: 12px; }
 .settings-pane { flex: 1; min-width: 0; overflow-y: auto; padding: 0 32px 32px; }
 .settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 /* Addresses and keys are typed or compared on another machine, so they can be selected. */
-.serving-detail { color: var(--text-2); font-size: 12px; user-select: text; overflow-wrap: anywhere; }
+.serving-detail { color: var(--text-2); font-size: var(--ui-font-small); user-select: text; overflow-wrap: anywhere; }
 /* One address a line: joined in a line, the row grew past the pane and cut the last ones off. */
 .serving-addresses { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 /* Prose set the width of a wide window is not read, so the column stops and centres. */
@@ -32,11 +32,11 @@ button.settings-nav-item.on { background: var(--select); }
 .settings-pane-head { position: sticky; top: 0; z-index: 1; padding: 22px 0 12px; background: var(--ground);
   border-bottom: 1px solid var(--line); }
 .settings-pane-head + .settings-measure { padding-top: 16px; }
-.settings-pane-head h1 { margin: 0; font-size: 20px; }
-h1 { font-size: 18px; font-weight: 600; }
-h2 { font-size: 12px; font-weight: 500; color: var(--text-2); margin: 0 0 4px; padding: 0 14px; }
+.settings-pane-head h1 { margin: 0; font-size: var(--ui-font-display); }
+h1 { font-size: var(--ui-font-title); font-weight: 600; }
+h2 { font-size: var(--ui-font-small); font-weight: 500; color: var(--text-2); margin: 0 0 4px; padding: 0 14px; }
 .settings-section { margin-bottom: 22px; }
-.settings-section-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 8px; padding: 0 2px; }
+.settings-section-title { font-size: var(--ui-font-size); font-weight: 600; color: var(--text); margin: 0 0 8px; padding: 0 2px; }
 .settings-group { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 2px 0; margin-bottom: 18px; }
 .settings-section .settings-group { margin-bottom: 0; }
 .settings-group h2 { padding-top: 8px; }
@@ -44,14 +44,14 @@ h2 { font-size: 12px; font-weight: 500; color: var(--text-2); margin: 0 0 4px; p
 .settings-row + .settings-row { border-top: 1px solid var(--line); }
 /* A wide control wraps below the label instead of squeezing it into a column a few letters wide. */
 .settings-row-label { flex: 1 1 220px; min-width: 0; }
-.settings-hint { color: var(--text-3); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
-.settings-mono { font-family: var(--mono); font-size: 12px; }
+.settings-hint { color: var(--text-3); font-size: var(--ui-font-small); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
+.settings-mono { font-family: var(--mono); font-size: var(--ui-font-small); }
 .settings-row-control { flex: none; display: flex; gap: 8px; align-items: center; margin-left: auto; }
-select, input, button, textarea { font: inherit; font-size: 13px; color: var(--text); background: var(--ground);
+select, input, button, textarea { font: inherit; font-size: var(--ui-font-size); color: var(--text); background: var(--ground);
   border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 8px; outline: none; }
 input[type=number] { width: 72px; }
-input.settings-command { width: 260px; font-family: var(--mono); font-size: 12px; }
-textarea.settings-env { width: 260px; height: 64px; resize: vertical; font-family: var(--mono); font-size: 12px; }
+input.settings-command { width: 260px; font-family: var(--mono); font-size: var(--ui-font-small); }
+textarea.settings-env { width: 260px; height: 64px; resize: vertical; font-family: var(--mono); font-size: var(--ui-font-small); }
 input[type=checkbox] { width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--run); }
 select:focus, input:focus, textarea:focus { border-color: var(--input-focus); }
 button { background: var(--select); border-color: transparent; padding: 5px 12px; }
@@ -76,7 +76,7 @@ kbd { margin-right: 3px; }
 .binding:hover { background: var(--raised); }
 .binding-keys { flex: 0 0 200px; }
 .binding-action { flex: 1; min-width: 0; color: var(--text); }
-.binding-mark { font-size: 11px; color: var(--wait); background: var(--wait-tint-soft); border-radius: 4px; padding: 1px 6px; }
+.binding-mark { font-size: var(--ui-font-caption); color: var(--wait); background: var(--wait-tint-soft); border-radius: 4px; padding: 1px 6px; }
 .binding.gone .binding-action, .binding.gone .binding-keys { opacity: 0.5; text-decoration: line-through; }
 .binding.gone .binding-mark { color: var(--text-3); background: var(--raised); }
 button.settings-link { background: none; border: none; color: var(--run); padding: 2px 4px; }
@@ -87,13 +87,13 @@ button:disabled { opacity: 0.45; }
 .binding-fields { display: flex; gap: 8px; align-items: center; }
 .binding-fields .binding-recorder { flex: 1; min-width: 0; }
 .binding-recorder.recording { border-color: var(--wait); box-shadow: 0 0 0 2px var(--wait-tint); }
-.binding-note { font-size: 12px; color: var(--text-3); }
+.binding-note { font-size: var(--ui-font-small); color: var(--text-3); }
 .binding-note.warn { color: var(--wait); }
 .binding-note.bad { color: var(--fail); }
 .binding-actions { display: flex; gap: 8px; align-items: center; }
 .binding-actions-spacer { flex: 1; }
-.keys-lead { color: var(--text-3); font-size: 12px; line-height: 1.5; margin: 0 2px 14px; }
-.binding-name { color: var(--text-3); margin-left: 8px; font-size: 11px; }
+.keys-lead { color: var(--text-3); font-size: var(--ui-font-small); line-height: 1.5; margin: 0 2px 14px; }
+.binding-name { color: var(--text-3); margin-left: 8px; font-size: var(--ui-font-caption); }
 .action-row { padding: 8px 14px; border-top: 1px solid var(--line); }
 .action-row.open { background: var(--raised); }
 .action-row .binding-form { border-top: 0; background: transparent; padding: 10px 0 2px; }
@@ -107,13 +107,13 @@ button:disabled { opacity: 0.45; }
 .key-chip button { background: transparent; border: 0; border-radius: 0; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px; }
 .key-chip button:hover { background: var(--select); }
 .key-chip kbd { margin-right: 0; }
-.chip-where { font-size: 10.5px; color: var(--text-3); }
+.chip-where { font-size: var(--ui-font-tiny); color: var(--text-3); }
 .chip-remove { width: auto; height: auto; color: var(--text-3); border-left: 1px solid var(--line) !important; }
 .chip-remove:hover { color: var(--fail); }
 button.chip-add { display: inline-flex; align-items: center; padding: 3px 6px; background: transparent; border: 1px dashed var(--line-strong); color: var(--text-3); }
 button.chip-add:hover { color: var(--text); background: var(--select); }
-.action-none { color: var(--text-3); font-size: 12px; }
-.binding-areas { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; }
+.action-none { color: var(--text-3); font-size: var(--ui-font-small); }
+.binding-areas { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: var(--ui-font-small); }
 .binding-areas-label { color: var(--text-3); }
 .binding-area { display: inline-flex; align-items: center; gap: 5px; }
 .binding-fields button { display: inline-flex; align-items: center; gap: 5px; }
@@ -122,9 +122,9 @@ button.chip-add:hover { color: var(--text); background: var(--select); }
 .segmented button { height: 24px; padding: 0 12px; border: 0; border-radius: 5px; background: transparent; color: var(--text-2); }
 .segmented button:hover { background: transparent; color: var(--text); }
 .segmented button.on { background: var(--wait-tint); color: var(--wait); font-weight: 500; }
-.action-row-label button.settings-link { font-size: 12px; padding: 0 2px; }
+.action-row-label button.settings-link { font-size: var(--ui-font-small); padding: 0 2px; }
 .settings-row-control button, .settings-page-actions button { display: inline-flex; align-items: center; gap: 4px; }
-.login-standing { font-size: 11px; color: var(--text-3); background: var(--raised); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.login-standing { font-size: var(--ui-font-caption); color: var(--text-3); background: var(--raised); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .login-standing.in { color: var(--done); }
 .login-standing.out { color: var(--wait); background: var(--wait-tint-soft); }
 .login-standing.missing { color: var(--fail); background: var(--fail-tint); }
@@ -140,7 +140,7 @@ button.chip-add:hover { color: var(--text); background: var(--select); }
 .settings-confirm-choice { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; overflow-wrap: anywhere; }
 .settings-confirm code { user-select: text; }
 details.settings-advanced > summary { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 8px 12px;
-  color: var(--text-2); font-size: 13px; line-height: 1.4; list-style: none; cursor: pointer;
+  color: var(--text-2); font-size: var(--ui-font-size); line-height: 1.4; list-style: none; cursor: pointer;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
 details.settings-advanced > summary::-webkit-details-marker { display: none; }
 details.settings-advanced > summary::before { content: ""; flex: none; width: 6px; height: 6px;
@@ -160,8 +160,8 @@ input.switch:focus-visible { outline: 2px solid var(--run); outline-offset: 2px;
 .about { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 28px 0 26px; }
 .about-icon { width: 88px; height: 88px; margin-bottom: 14px; filter: drop-shadow(0 6px 16px var(--shadow)); }
 .about-icon svg { width: 100%; height: 100%; display: block; }
-.about-name { font-size: 24px; font-weight: 600; margin: 0; }
-.about-version { margin: 4px 0 0; color: var(--text-3); font-family: var(--mono); font-size: 12px; user-select: text; cursor: text; }
+.about-name { font-size: var(--ui-font-brand); font-weight: 600; margin: 0; }
+.about-version { margin: 4px 0 0; color: var(--text-3); font-family: var(--mono); font-size: var(--ui-font-small); user-select: text; cursor: text; }
 .about-tagline { margin: 14px 0 0; max-width: 440px; color: var(--text-2); line-height: 1.6; }
 .about-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 22px; }
 button.about-link { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left;
@@ -170,9 +170,9 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .about-link .icon { color: var(--text-2); }
 .about-link-text { display: flex; flex-direction: column; min-width: 0; }
 .about-link-text .settings-hint { margin-top: 1px; }
-.about-credit { margin: 0; text-align: center; color: var(--text-3); font-size: 11px; }
+.about-credit { margin: 0; text-align: center; color: var(--text-3); font-size: var(--ui-font-caption); }
 
-.settings-nav-heading { margin: 16px 10px 6px; color: var(--text-3); font-size: 11px; overflow-wrap: anywhere; }
+.settings-nav-heading { margin: 16px 10px 6px; color: var(--text-3); font-size: var(--ui-font-caption); overflow-wrap: anywhere; }
 .settings-nav-heading:first-child { margin-top: 2px; }
 
 /* The details panel's arrangement: a picture of the panel, drawn by the panel's own styles, beside what edits it. */
@@ -191,7 +191,7 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .dl-area { position: relative; }
 .dl-area.details-scroll { min-height: 80px; }
 .dl-area.details-foot { min-height: 44px; border-top: 1px dashed var(--line-strong); }
-.dl-foot-mark { position: absolute; top: -9px; right: 10px; padding: 0 6px; font-size: 10px; color: var(--text-3); background: var(--panel); z-index: 1; }
+.dl-foot-mark { position: absolute; top: -9px; right: 10px; padding: 0 6px; font-size: var(--ui-font-tiny); color: var(--text-3); background: var(--panel); z-index: 1; }
 .dl-slot { position: relative; min-width: 0; cursor: grab; }
 .dl-slot::after { content: ""; position: absolute; inset: 1px; border: 1px solid transparent; border-radius: 6px; pointer-events: none; }
 .dl-slot:hover::after { border-color: var(--line-strong); }
@@ -202,7 +202,7 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .dl-slot.drop-above::before { position: absolute; left: 0; right: 0; top: -1px; margin: 0 8px; z-index: 2; }
 .dl-slot.drop-beside::before { content: ""; position: absolute; top: 6px; bottom: 6px; right: -2px; width: 2px; border-radius: 1px; background: var(--run); z-index: 2; }
 .dl-slot-bar { position: absolute; top: 4px; right: 6px; z-index: 3; display: none; align-items: center; gap: 1px; padding: 1px 2px 1px 6px;
-  background: var(--ground); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: var(--shadow); font-size: 11px; color: var(--text-2); }
+  background: var(--ground); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: var(--shadow); font-size: var(--ui-font-caption); color: var(--text-2); }
 .dl-slot:hover > .dl-slot-bar { display: inline-flex; }
 .dl-pane.dragging .dl-slot-bar { display: none !important; }
 .dl-slot-name { margin: 0 4px 0 3px; white-space: nowrap; }
@@ -212,10 +212,10 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .dl-zone.beside { top: 0; bottom: 0; right: 0; width: 30%; }
 .dl-rest { flex: 1; min-height: 16px; }
 .dl-rest.empty { display: flex; align-items: center; justify-content: center; min-height: 64px; margin: 8px 12px; border: 1px dashed var(--line-strong);
-  border-radius: 8px; color: var(--text-3); font-size: 12px; text-align: center; padding: 8px; }
+  border-radius: 8px; color: var(--text-3); font-size: var(--ui-font-small); text-align: center; padding: 8px; }
 .dl-area.target > .dl-rest.empty { border-color: var(--run); }
 .dl-ghost { position: fixed; z-index: 50; pointer-events: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
-  background: var(--ground); border: 1px solid var(--run); border-radius: 6px; box-shadow: var(--shadow); font-size: 12px; }
+  background: var(--ground); border: 1px solid var(--run); border-radius: 6px; box-shadow: var(--shadow); font-size: var(--ui-font-small); }
 .dl-tool { display: inline-flex; align-items: center; justify-content: center; padding: 3px; min-width: 22px; height: 22px;
   background: transparent; color: var(--text-3); border-radius: 5px; }
 .dl-slot-bar .dl-tool { min-width: 18px; height: 18px; padding: 2px; }
@@ -226,17 +226,17 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 /* As tall as the picture, the list scrolling inside, so a component is dragged from it onto any place of the picture. */
 .dl-side { flex: 0 0 280px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .dl-card-box { flex: none; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
-.dl-placeholder { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--text-3); font-size: 12px; line-height: 1.4; }
+.dl-placeholder { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--text-3); font-size: var(--ui-font-small); line-height: 1.4; }
 .dl-placeholder .icon { flex: none; margin-top: 1px; }
 .dl-about { margin: -4px 0 0; }
-.dl-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.dl-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--ui-font-small); }
 .dl-option input[type=number] { width: 56px; }
 .dl-box-head { display: flex; align-items: center; gap: 8px; }
 .dl-box-title { font-weight: 600; }
 .dl-box-tools { margin-left: auto; display: inline-flex; gap: 2px; }
 .dl-tab-fields { display: flex; align-items: center; gap: 6px; }
 .dl-tab-name { flex: 1; min-width: 0; }
-.dl-tab-name input { width: 100%; box-sizing: border-box; font-family: var(--sans); font-size: 13px; }
+.dl-tab-name input { width: 100%; box-sizing: border-box; font-family: var(--sans); font-size: var(--ui-font-size); }
 .dl-icon-pick { display: inline-flex; align-items: center; gap: 3px; padding: 4px 6px; background: var(--ground); border: 1px solid var(--line-strong); }
 .dl-icon-pick.on { border-color: var(--run); }
 .dl-no-icon { display: inline-flex; width: 15px; justify-content: center; font-weight: 600; }
@@ -252,7 +252,7 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .dl-palette { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .dl-palette-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
 .dl-kind { display: flex; flex-direction: column; gap: 4px; }
-.dl-kind-title { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; padding: 0 2px; }
+.dl-kind-title { font-size: var(--ui-font-caption); font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; padding: 0 2px; }
 .dl-card { display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 8px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; cursor: grab; }
 .dl-card:hover { border-color: var(--line-strong); background: var(--raised); }
@@ -260,7 +260,7 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .dl-card-text { flex: 1; min-width: 0; }
 .dl-card-title { display: flex; align-items: center; gap: 5px; font-weight: 500; }
 .dl-card-mark { display: inline-flex; color: var(--done); }
-.dl-card-about { color: var(--text-3); font-size: 11px; line-height: 1.35; margin-top: 1px; }
+.dl-card-about { color: var(--text-3); font-size: var(--ui-font-caption); line-height: 1.35; margin-top: 1px; }
 .dl-card.placed .dl-card-title { color: var(--text-2); }
 /* The pane needs the room of a picture and the list beside it. */
 /* The arrangement fills the height the pane has left, so nothing but the list inside it scrolls. */
@@ -272,7 +272,7 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 /* The picture is drawn with the panel's styles, some of which let text be selected; here it is dragged instead. */
 .dl-pane, .dl-pane * { -webkit-user-select: none !important; user-select: none !important; }
 
-.settings-part-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 6px 0 12px; padding: 0 2px; }
+.settings-part-title { font-size: var(--ui-font-heading); font-weight: 600; color: var(--text); margin: 6px 0 12px; padding: 0 2px; }
 .settings-part-title ~ .settings-part-title { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
 /* In the picture each component sits in a slot of its own; a button keeps its whole label there as in the panel. */
 .dl-preview .details-line.beside:has(> .dl-slot > .details-button) { gap: 8px; padding: 0 16px; }
@@ -281,7 +281,7 @@ button.about-link:hover { background: var(--raised); border-color: var(--line-st
 .dl-icon-picker { position: relative; display: inline-flex; }
 .dl-icon-picker .dl-icon-pop { top: calc(100% + 4px); left: auto; right: 0; }
 .dl-tones { display: inline-flex; padding: 2px; gap: 2px; background: var(--ground); border: 1px solid var(--line); border-radius: 7px; }
-.dl-tone { padding: 2px 8px; background: transparent; color: var(--text-2); font-size: 12px; border-radius: 5px; }
+.dl-tone { padding: 2px 8px; background: transparent; color: var(--text-2); font-size: var(--ui-font-small); border-radius: 5px; }
 .dl-tone.on { background: var(--select); color: var(--text); font-weight: 500; }
 .dl-option input[type=text] { width: 150px; font-family: var(--sans); }
 .details-button.icon-only .button { padding: 0 8px; }

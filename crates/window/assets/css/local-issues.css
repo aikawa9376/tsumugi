@@ -4,15 +4,15 @@
 .local-issue { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
 .local-issue summary { cursor: pointer; }
 .local-issue-title { font-weight: 500; overflow-wrap: anywhere; }
-.local-issue-state { float: right; margin-left: 12px; color: var(--text-3); font-size: 11px; }
+.local-issue-state { float: right; margin-left: 12px; color: var(--text-3); font-size: var(--ui-font-caption); }
 .local-issue-state.running, .local-issue-state.starting { color: var(--run); }
 .local-issue-state.waiting { color: var(--wait); }
 .local-issue-state.done { color: var(--done); }
 .local-issue-state.failed { color: var(--fail); }
 .local-issue-request { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
-.local-issue-directory { color: var(--text-3); font: 11px var(--mono); margin: 6px 0; overflow-wrap: anywhere; }
+.local-issue-directory { color: var(--text-3); font: var(--ui-font-caption) var(--mono); margin: 6px 0; overflow-wrap: anywhere; }
 .local-issue-form { display: flex; flex-direction: column; gap: 8px; }
-.local-issue-form label { color: var(--text-2); font-size: 12px; }
+.local-issue-form label { color: var(--text-2); font-size: var(--ui-font-small); }
 .local-issue-description { resize: vertical; min-height: 96px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--raised); color: var(--text); font: inherit; outline: none; }
 .local-issue-description:focus { border-color: var(--input-focus); }
 .local-issue-actions { display: flex; justify-content: flex-end; gap: 8px; }

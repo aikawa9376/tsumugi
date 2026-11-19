@@ -1,13 +1,13 @@
 /* The controls every window draws alike: buttons, key caps, and the marks of focus. */
-.button { display: inline-flex; border: 0; font: inherit; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 7px; background: var(--select); color: var(--text); cursor: default; }
+.button { display: inline-flex; border: 0; font: inherit; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 7px; background: var(--select); color: var(--text); cursor: default; }
 .button:hover { background: var(--line-strong); }
 .button.primary { background: var(--wait-tint); color: var(--wait); font-weight: 500; }
 .button.danger { color: var(--fail); background: var(--fail-tint); }
 .button:disabled { opacity: 0.5; }
 button:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; }
-kbd { font-family: var(--mono); font-size: 10.5px; color: var(--kbd-text); background: var(--raised); border: 1px solid var(--line-strong);
-  border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; line-height: 16px; display: inline-block; }
-.icon-button { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px;
+kbd { font-family: var(--mono); font-size: var(--ui-font-tiny); color: var(--kbd-text); background: var(--raised); border: 1px solid var(--line-strong);
+  border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; line-height: 20px; display: inline-block; }
+.icon-button { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px;
   background: transparent; color: var(--text-3); font: inherit; cursor: default; }
 .icon-button:hover { background: var(--line-strong); color: var(--text); }
 /* What came of reading the settings, told over a window. */

@@ -16,7 +16,7 @@
 }
 .desktop-brand-mark { display: inline-flex; width: 23px; height: 23px; }
 .desktop-brand-mark svg { width: 100%; height: 100%; }
-.desktop-brand-name { font-size: 12px; font-weight: 650; letter-spacing: .035em; }
+.desktop-brand-name { font-size: var(--ui-font-small); font-weight: 650; letter-spacing: .035em; }
 .desktop-brand > .icon { color: var(--text-3); margin-left: 2px; }
 .desktop-divider { height: 16px; width: 1px; flex: none; background: var(--line); margin: 0 2px; }
 .desktop-drag-space { flex: 1; align-self: stretch; min-width: 24px; }
