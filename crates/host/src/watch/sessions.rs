@@ -26,10 +26,17 @@ pub(super) async fn watch(mut watched: Watched) {
     loop {
         match read_sessions(&daemon, &watched.inputs()).await {
             Ok((sessions, terminals)) => {
-                if let Err(error) = crate::local_issues::advance(&watched, &sessions).await {
-                    tracing::warn!(%error, "cannot process local issues");
-                }
-                let kept = kept_workspaces();
+                let issue_dirs = match crate::local_issues::advance(&watched, &sessions).await {
+                    Ok(dirs) => dirs,
+                    Err(error) => {
+                        tracing::warn!(%error, "cannot process local issues");
+                        Vec::new()
+                    }
+                };
+                let mut kept = kept_workspaces();
+                kept.extend(issue_dirs.into_iter().filter(|dir| dir.is_dir()));
+                kept.sort();
+                kept.dedup();
                 let found = inspect(&sessions, &terminals, &kept, &mut cache).await;
                 let scratch = crate::paths::scratch_dir();
                 let tree = |listed: &[Worktree]| {

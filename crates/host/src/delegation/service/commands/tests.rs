@@ -10,6 +10,48 @@ use crate::delegation::service::fixtures::conversation_watch;
 use crate::settings::Settings;
 use crate::testing::record;
 
+#[tokio::test]
+async fn research_can_be_saved_as_a_local_issue_in_the_callers_directory_without_starting() {
+    let (dir, context, caller, _) = conversation_watch("research");
+    let result = create_local_issue(
+        &context,
+        &caller,
+        protocol::CreateLocalIssue {
+            title: "Compare Orca".into(),
+            body: "Findings and proposed follow-up".into(),
+            dir: None,
+        },
+    )
+    .await
+    .unwrap();
+    let saved: tsumugi_model::LocalIssue = serde_json::from_value(result).unwrap();
+    assert_eq!(
+        saved.dir,
+        tsumugi_sys::fs::canonicalize(dir.path()).unwrap()
+    );
+    assert_eq!(saved.title, "Compare Orca");
+    assert_eq!(saved.body, "Findings and proposed follow-up");
+    assert_eq!(saved.state, tsumugi_model::LocalIssueState::Open);
+    assert!(saved.session.is_none());
+    assert!(
+        context
+            .store
+            .lock()
+            .unwrap()
+            .claim_local_issues()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        Command::CreateLocalIssue(protocol::CreateLocalIssue {
+            title: "Follow-up".into(),
+            body: String::new(),
+            dir: None,
+        })
+        .acts()
+    );
+}
+
 /// A terminal host serving in `dir`, and a terminal running there.
 async fn serving(dir: &Path) -> (Daemon, u128) {
     let socket = dir.join("daemon.sock");

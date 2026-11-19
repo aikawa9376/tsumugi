@@ -68,6 +68,8 @@ mod tests {
         let ask = Ask::QueueLocalIssue(new.clone());
         assert!(ask.mutates());
         round_trips(ask);
+        round_trips(Ask::CreateLocalIssue(new.clone()));
+        round_trips(Ask::StartLocalIssue { id: new.id.clone() });
         round_trips(Ask::CancelLocalIssue { id: new.id.clone() });
         round_trips(Ask::RetryLocalIssue { id: new.id.clone() });
         round_trips(TreeChange::LocalIssues {

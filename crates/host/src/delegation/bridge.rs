@@ -69,6 +69,11 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(Start),
         ),
         tool(
+            "create_local_issue",
+            "Save a local issue with a title and description in this environment, for example research findings and follow-up work. It stays open until the user presses Start in Issues; creating it never starts a session. When asked to research and file a local issue, do the research first and include the findings in the body.",
+            schemars::schema_for!(super::protocol::CreateLocalIssue),
+        ),
+        tool(
             "send",
             "Send a message to another session by its code: what it should know, or a question about what it knows; never work for it to do. It reaches that session between its turns and costs it a turn: send only what it has to act on or answer, and plan nothing on a reply coming.",
             schemars::schema_for!(Send),
@@ -150,6 +155,9 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
             Command::StartSession(serde_json::from_value(arguments).map_err(parsed)?)
         }
         "send" => Command::Send(serde_json::from_value(arguments).map_err(parsed)?),
+        "create_local_issue" => {
+            Command::CreateLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
+        }
         "sessions" => Command::Sessions(serde_json::from_value(arguments).map_err(parsed)?),
         "models" => Command::Models,
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
@@ -557,6 +565,7 @@ mod tests {
             names(&out[1]),
             [
                 "start_session",
+                "create_local_issue",
                 "send",
                 "sessions",
                 "rename_session",

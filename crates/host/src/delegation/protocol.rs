@@ -55,6 +55,7 @@ pub struct Response {
 pub enum Command {
     Context,
     StartSession(Start),
+    CreateLocalIssue(CreateLocalIssue),
     Send(Send),
     Sessions(Sessions),
     Models,
@@ -85,9 +86,25 @@ impl Command {
     pub fn acts(&self) -> bool {
         matches!(
             self,
-            Self::StartSession(_) | Self::Send(_) | Self::Rename(_) | Self::Close
+            Self::StartSession(_)
+                | Self::CreateLocalIssue(_)
+                | Self::Send(_)
+                | Self::Rename(_)
+                | Self::Close
         )
     }
+}
+
+/// Save work or research findings for the user to start later.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateLocalIssue {
+    pub title: String,
+    /// The research findings, context and work to do when this issue is started.
+    pub body: String,
+    /// The working directory on this work machine; the caller's when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
 }
 
 /// Open a session beside you with a first prompt.

@@ -82,6 +82,9 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
             })
         }
         Command::StartSession(start) => self::start(context, &caller, start).await,
+        Command::CreateLocalIssue(issue) => {
+            super::commands::create_local_issue(context, &caller, issue).await
+        }
         Command::Rename(asked) => rename(context, &caller, asked).await,
         Command::Close => close(context, &caller).await,
         Command::Prompted { cleared } => prompted(context, &caller, cleared).await,

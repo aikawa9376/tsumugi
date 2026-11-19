@@ -5,12 +5,27 @@ use tsumugi_protocol::{Answer, TreeChange};
 use crate::delegation::app::{root, with_store};
 use crate::watch::Watched;
 
-pub(crate) async fn queue(watched: &Watched, mut issue: NewLocalIssue) -> Result<Answer, String> {
+pub(crate) async fn create(watched: &Watched, mut issue: NewLocalIssue) -> Result<Answer, String> {
     issue.dir = tsumugi_sys::fs::canonicalize(&issue.dir)
         .ok()
         .filter(|dir| dir.is_dir())
         .ok_or_else(|| "Choose an existing working directory on the work machine".to_owned())?;
     with_store(&root(), move |store| store.add_local_issue(issue))
+        .await
+        .map_err(|e| e.to_string())?;
+    publish(watched).await?;
+    watched.relist();
+    Ok(Answer::Done)
+}
+
+pub(crate) async fn queue(watched: &Watched, issue: NewLocalIssue) -> Result<Answer, String> {
+    let id = issue.id.clone();
+    create(watched, issue).await?;
+    start_saved(watched, id).await
+}
+
+pub(crate) async fn start_saved(watched: &Watched, id: String) -> Result<Answer, String> {
+    with_store(&root(), move |store| store.start_local_issue(&id))
         .await
         .map_err(|e| e.to_string())?;
     publish(watched).await?;
@@ -42,7 +57,10 @@ async fn publish(watched: &Watched) -> Result<(), String> {
 }
 
 /// A successful listing reconciles old sessions before anything new is claimed.
-pub(crate) async fn advance(watched: &Watched, sessions: &[Session]) -> Result<(), String> {
+pub(crate) async fn advance(
+    watched: &Watched,
+    sessions: &[Session],
+) -> Result<Vec<std::path::PathBuf>, String> {
     let sessions = sessions.to_vec();
     let claimed = with_store(&root(), move |store| {
         store.follow_local_issues(&sessions)?;
@@ -60,7 +78,16 @@ pub(crate) async fn advance(watched: &Watched, sessions: &[Session]) -> Result<(
             .map_err(|e| e.to_string())?;
         }
     }
-    publish(watched).await
+    publish(watched).await?;
+    with_store(&root(), |store| {
+        Ok(store
+            .local_issues()?
+            .into_iter()
+            .map(|issue| issue.dir)
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 async fn start(issue: &tsumugi_model::LocalIssue) -> Result<(), String> {

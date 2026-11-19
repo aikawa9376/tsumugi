@@ -13,7 +13,7 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 9;
+const SCHEMA_VERSION: i64 = 10;
 
 mod issues;
 
@@ -121,6 +121,8 @@ const MIGRATIONS: &[&str] = &[
          error TEXT
      );
      CREATE INDEX local_issues_by_directory ON local_issues(dir, state, seq);",
+    // Older hosts cannot read issues saved in the new open state.
+    "",
 ];
 
 /// What the window or the work host knows of a session before its program starts.

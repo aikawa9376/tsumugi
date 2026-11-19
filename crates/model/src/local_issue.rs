@@ -29,6 +29,7 @@ pub struct LocalIssue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalIssueState {
+    Open,
     Queued,
     Starting,
     Running,
@@ -41,6 +42,7 @@ pub enum LocalIssueState {
 impl LocalIssueState {
     pub fn word(self) -> &'static str {
         match self {
+            Self::Open => "open",
             Self::Queued => "queued",
             Self::Starting => "starting",
             Self::Running => "running",

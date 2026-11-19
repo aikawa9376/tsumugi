@@ -11,6 +11,46 @@ use super::serve::answer;
 use crate::delegation::{Code, Error, Result, Session, protocol};
 use crate::starting::Stage;
 
+pub(super) async fn create_local_issue(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::CreateLocalIssue,
+) -> Result<Value> {
+    let dir = asked.dir.unwrap_or_else(|| caller.cwd.clone());
+    let dir = if dir.is_absolute() {
+        dir
+    } else {
+        caller.cwd.join(dir)
+    };
+    let dir = tsumugi_sys::fs::canonicalize(&dir)
+        .ok()
+        .filter(|dir| dir.is_dir())
+        .ok_or_else(|| {
+            Error::new(
+                Code::Invalid,
+                "Choose an existing working directory on the work machine",
+            )
+        })?;
+    let issue = tsumugi_model::NewLocalIssue {
+        id: tsumugi_model::SessionId::new().to_string(),
+        dir,
+        title: asked.title,
+        body: asked.body,
+    };
+    let saved = context
+        .call(move |store| {
+            let id = issue.id.clone();
+            store.add_local_issue(issue)?;
+            store
+                .local_issues()?
+                .into_iter()
+                .find(|issue| issue.id == id)
+                .ok_or_else(|| Error::new(Code::Storage, "The saved issue could not be read"))
+        })
+        .await?;
+    answer(saved)
+}
+
 /// Make the changes the caller's agent asks of its timeline and journal
 /// them; the trees as they now stand, with each change that could not be
 /// made. A call none of whose changes could be made is refused and left out

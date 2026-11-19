@@ -45,7 +45,7 @@ impl Store {
             return Ok(());
         }
         transaction.execute(
-            "INSERT INTO local_issues (id, dir, title, body, state) VALUES (?1, ?2, ?3, ?4, 'queued')",
+            "INSERT INTO local_issues (id, dir, title, body, state) VALUES (?1, ?2, ?3, ?4, 'open')",
             params![new.id, dir, new.title.trim(), new.body],
         )?;
         transaction.commit()?;
@@ -137,7 +137,11 @@ impl Store {
     }
 
     pub fn cancel_local_issue(&mut self, id: &str) -> Result<()> {
-        self.change_local_issue(id, "cancelled", "state = 'queued'")
+        self.change_local_issue(id, "cancelled", "state IN ('open', 'queued')")
+    }
+
+    pub fn start_local_issue(&mut self, id: &str) -> Result<()> {
+        self.change_local_issue(id, "queued", "state = 'open'")
     }
 
     pub fn retry_local_issue(&mut self, id: &str) -> Result<()> {
@@ -215,6 +219,56 @@ mod tests {
         }
     }
 
+    fn queue(store: &mut Store, new: NewLocalIssue) {
+        let id = new.id.clone();
+        store.add_local_issue(new).unwrap();
+        store.start_local_issue(&id).unwrap();
+    }
+
+    #[test]
+    fn saved_issues_wait_for_start_even_after_reopening_and_do_not_block_selected_work() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.sqlite3");
+        let mut store = Store::open(&path).unwrap();
+        let first = issue("/project", "research notes");
+        let second = issue("/project", "selected work");
+        store.add_local_issue(first.clone()).unwrap();
+        store.add_local_issue(second.clone()).unwrap();
+        assert!(store.claim_local_issues().unwrap().is_empty());
+        drop(store);
+        let mut store = Store::open(&path).unwrap();
+        assert_eq!(store.local_issues().unwrap()[0].state, State::Open);
+        store.start_local_issue(&second.id).unwrap();
+        assert!(store.start_local_issue(&second.id).is_err());
+        assert_eq!(store.claim_local_issues().unwrap()[0].id, second.id);
+        assert_eq!(store.local_issues().unwrap()[0].state, State::Open);
+        assert!(store.start_local_issue(&second.id).is_err());
+        store.cancel_local_issue(&first.id).unwrap();
+        store.retry_local_issue(&first.id).unwrap();
+    }
+
+    #[test]
+    fn upgrading_keeps_previously_authorized_queued_issues_and_new_issues_wait_for_start() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.sqlite3");
+        let mut store = Store::open(&path).unwrap();
+        let old = issue("/project", "already queued");
+        queue(&mut store, old.clone());
+        store
+            .connection
+            .pragma_update(None, "user_version", 9)
+            .unwrap();
+        drop(store);
+        let mut store = Store::open(&path).unwrap();
+        store
+            .add_local_issue(issue("/project", "new request"))
+            .unwrap();
+        let all = store.local_issues().unwrap();
+        assert_eq!(all[0].state, State::Queued);
+        assert_eq!(all[1].state, State::Open);
+        assert_eq!(store.claim_local_issues().unwrap()[0].id, old.id);
+    }
+
     #[test]
     fn an_issue_survives_reopening_and_duplicate_submission_is_idempotent() {
         let directory = tempfile::tempdir().unwrap();
@@ -230,7 +284,7 @@ mod tests {
         let all = Store::open(&path).unwrap().local_issues().unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].title, "日本語の依頼");
-        assert_eq!(all[0].state, State::Queued);
+        assert_eq!(all[0].state, State::Open);
     }
 
     #[test]
@@ -241,7 +295,7 @@ mod tests {
         let second = issue("/project", "second");
         let other = issue("/other", "other");
         for new in [first.clone(), second.clone(), other.clone()] {
-            store.add_local_issue(new).unwrap();
+            queue(&mut store, new);
         }
         let claimed = store.claim_local_issues().unwrap();
         assert_eq!(
@@ -261,7 +315,7 @@ mod tests {
         let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
         assert!(store.add_local_issue(issue("/project", " \n ")).is_err());
         let queued = issue("/project", "queued");
-        store.add_local_issue(queued.clone()).unwrap();
+        queue(&mut store, queued.clone());
         store.cancel_local_issue(&queued.id).unwrap();
         assert!(store.claim_local_issues().unwrap().is_empty());
         store.retry_local_issue(&queued.id).unwrap();
@@ -276,7 +330,7 @@ mod tests {
         let path = directory.path().join("state.sqlite3");
         let mut store = Store::open(&path).unwrap();
         let new = issue("/project", "interrupted");
-        store.add_local_issue(new.clone()).unwrap();
+        queue(&mut store, new.clone());
         store.claim_local_issues().unwrap();
         drop(store);
         let mut store = Store::open(&path).unwrap();
@@ -293,8 +347,8 @@ mod tests {
         let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
         let first = issue("/project", "first");
         let second = issue("/project", "second");
-        store.add_local_issue(first.clone()).unwrap();
-        store.add_local_issue(second.clone()).unwrap();
+        queue(&mut store, first.clone());
+        queue(&mut store, second.clone());
         store.claim_local_issues().unwrap();
         let record = store
             .register(NewSession {
@@ -340,11 +394,11 @@ mod tests {
         let path = directory.path().join("one.sqlite3");
         let mut one = Store::open(&path).unwrap();
         let mut also_one = Store::open(&path).unwrap();
-        one.add_local_issue(issue("/project", "one")).unwrap();
+        queue(&mut one, issue("/project", "one"));
         assert_eq!(one.claim_local_issues().unwrap().len(), 1);
         assert!(also_one.claim_local_issues().unwrap().is_empty());
         let mut other = Store::open(&directory.path().join("other.sqlite3")).unwrap();
-        other.add_local_issue(issue("/project", "other")).unwrap();
+        queue(&mut other, issue("/project", "other"));
         assert_eq!(other.claim_local_issues().unwrap().len(), 1);
     }
 
@@ -386,7 +440,7 @@ mod tests {
         let path = directory.path().join("state.sqlite3");
         let mut store = Store::open(&path).unwrap();
         let new = issue("/project", "screen agent");
-        store.add_local_issue(new.clone()).unwrap();
+        queue(&mut store, new.clone());
         store.claim_local_issues().unwrap();
         let record = store
             .register(NewSession {

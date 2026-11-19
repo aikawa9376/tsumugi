@@ -92,7 +92,7 @@ fn waiting_for(
 }
 
 #[test]
-fn queued_issues_start_the_default_profile_in_order_and_survive_a_work_host_restart() {
+fn saved_issues_wait_for_start_then_run_in_order_and_survive_a_work_host_restart() {
     let hosts = Hosts::new();
     let root = hosts.0.path();
     let agent = root.join("agent.sh");
@@ -120,6 +120,7 @@ fn queued_issues_start_the_default_profile_in_order_and_survive_a_work_host_rest
     )).unwrap();
     hosts.run(&["terminal", "list", "--json"]);
     let mut connection = link(root);
+    let mut ids = Vec::new();
     for title in ["first request", "second request"] {
         let issue = NewLocalIssue {
             id: SessionId::new().to_string(),
@@ -127,8 +128,22 @@ fn queued_issues_start_the_default_profile_in_order_and_survive_a_work_host_rest
             title: title.into(),
             body: "Do the requested work.".into(),
         };
+        ids.push(issue.id.clone());
         assert_eq!(
-            ask(&mut connection, Ask::QueueLocalIssue(issue)),
+            ask(&mut connection, Ask::CreateLocalIssue(issue)),
+            Answer::Done
+        );
+    }
+    let saved = waiting_for(&mut connection, |issues| issues.len() == 2);
+    assert!(
+        saved
+            .iter()
+            .all(|issue| issue.state == LocalIssueState::Open && issue.session.is_none())
+    );
+    assert!(!runs.exists());
+    for id in ids {
+        assert_eq!(
+            ask(&mut connection, Ask::StartLocalIssue { id }),
             Answer::Done
         );
     }
