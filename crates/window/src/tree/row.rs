@@ -65,7 +65,7 @@ pub(crate) fn row_tip(item: &Item) -> &'static str {
         Item::GitHubItem(..) => {
             "An issue open on GitHub. Enter shows it with its comments, g x opens it in the browser; n starts a session on it"
         }
-        Item::LocalIssue(..) => "A local issue. Enter shows its description; ▶ starts work on it",
+        Item::LocalIssue(..) => "A local issue. Enter shows its description; ▸ starts work on it",
         Item::GitHubFailed(..) => "Why gh could not say what is open on GitHub",
     }
 }
@@ -525,7 +525,8 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 }
             }
             if let Some(issue) = local_issue {
-                crate::local_issues::StartIssue { environment: it.environment().clone(), issue }
+                crate::local_issues::StartIssue { environment: it.environment().clone(), issue: issue.clone() }
+                crate::local_issues::DeleteIssue { environment: it.environment().clone(), issue }
             }
             if let Some(tip) = closes {
                 IconButton {

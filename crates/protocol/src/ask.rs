@@ -23,6 +23,15 @@ pub enum Ask {
     RetryLocalIssue {
         id: String,
     },
+    CloseLocalIssue {
+        id: String,
+    },
+    ReopenLocalIssue {
+        id: String,
+    },
+    DeleteLocalIssue {
+        id: String,
+    },
     PathEntries {
         root: Option<HostPath>,
         typed: String,

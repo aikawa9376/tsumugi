@@ -72,6 +72,9 @@ mod tests {
         round_trips(Ask::StartLocalIssue { id: new.id.clone() });
         round_trips(Ask::CancelLocalIssue { id: new.id.clone() });
         round_trips(Ask::RetryLocalIssue { id: new.id.clone() });
+        round_trips(Ask::CloseLocalIssue { id: new.id.clone() });
+        round_trips(Ask::ReopenLocalIssue { id: new.id.clone() });
+        round_trips(Ask::DeleteLocalIssue { id: new.id.clone() });
         round_trips(TreeChange::LocalIssues {
             issues: vec![LocalIssue {
                 id: new.id,

@@ -177,9 +177,76 @@ fn saved_issues_wait_for_start_then_run_in_order_and_survive_a_work_host_restart
         issues.len() == 2 && issues.iter().all(|i| i.state == LocalIssueState::Done)
     });
     assert_ne!(done[0].session, done[1].session);
-    let launches = std::fs::read_to_string(runs).unwrap();
+    let launches = std::fs::read_to_string(&runs).unwrap();
     let launches: Vec<_> = launches.lines().collect();
     assert_eq!(launches.len(), 2);
     assert!(launches[0].contains("first request"));
     assert!(launches[1].contains("second request"));
+
+    let id = done[0].id.clone();
+    assert_eq!(
+        ask(&mut connection, Ask::ReopenLocalIssue { id: id.clone() }),
+        Answer::Done
+    );
+    let reopened = waiting_for(&mut connection, |issues| {
+        issues[0].state == LocalIssueState::Open
+    });
+    assert!(reopened[0].session.is_none());
+    assert_eq!(std::fs::read_to_string(&runs).unwrap().lines().count(), 2);
+    assert_eq!(
+        ask(&mut connection, Ask::CloseLocalIssue { id: id.clone() }),
+        Answer::Done
+    );
+    waiting_for(&mut connection, |issues| {
+        issues[0].state == LocalIssueState::Closed
+    });
+    assert_eq!(
+        ask(&mut connection, Ask::DeleteLocalIssue { id }),
+        Answer::Done
+    );
+    waiting_for(&mut connection, |issues| {
+        issues.len() == 1 && issues[0].id == done[1].id
+    });
+    assert_eq!(
+        ask(
+            &mut connection,
+            Ask::DeleteLocalIssue {
+                id: done[1].id.clone()
+            }
+        ),
+        Answer::Done
+    );
+    waiting_for(&mut connection, |issues| issues.is_empty());
+    drop(connection);
+    let restarted = isolated(root).args(["host", "restart"]).output().unwrap();
+    assert!(restarted.status.success());
+    let mut connection = link(root);
+    waiting_for(&mut connection, |issues| issues.is_empty());
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        connection
+            .get_mut()
+            .write_all(encode(&Request::Snapshot).as_bytes())
+            .unwrap();
+        let work = loop {
+            if let Event::Snapshot(work) = event(&mut connection) {
+                break work;
+            }
+        };
+        if work.tree.listed.as_ref().is_some_and(|listed| {
+            done.iter().all(|issue| {
+                listed
+                    .sessions
+                    .iter()
+                    .any(|session| Some(&session.id) == issue.session.as_ref())
+            })
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "deleting issues must leave their sessions intact"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }

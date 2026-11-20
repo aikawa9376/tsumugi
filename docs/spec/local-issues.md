@@ -21,6 +21,13 @@ An agent finishing its turn marks its issue done; this records the agent's
 completion, not a human review. A failed issue retains its request and error
 and can be retried explicitly. Queued issues can be cancelled.
 
+Closing an issue preserves its request so it can be reopened later.
+Completed or closed issues can be reopened for another round of work; reopening
+leaves them saved until Start is pressed. The details offer these actions and
+deletion. The list also offers deletion with its X button. Deleting an issue
+removes the saved request but leaves its session intact; active work must finish
+before its issue can be closed or deleted.
+
 Restarting the work host retains issues and follows sessions already started.
 A start interrupted before it can be confirmed is not silently repeated.
 An environment begins processing its saved queue when its host serves it

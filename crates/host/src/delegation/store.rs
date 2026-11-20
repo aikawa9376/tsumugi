@@ -13,7 +13,7 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 
 mod issues;
 
@@ -122,6 +122,8 @@ const MIGRATIONS: &[&str] = &[
      );
      CREATE INDEX local_issues_by_directory ON local_issues(dir, state, seq);",
     // Older hosts cannot read issues saved in the new open state.
+    "",
+    // Older hosts cannot read issues explicitly closed by the user.
     "",
 ];
 

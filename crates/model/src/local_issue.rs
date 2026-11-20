@@ -35,6 +35,7 @@ pub enum LocalIssueState {
     Running,
     Waiting,
     Done,
+    Closed,
     Failed,
     Cancelled,
 }
@@ -48,8 +49,27 @@ impl LocalIssueState {
             Self::Running => "running",
             Self::Waiting => "waiting",
             Self::Done => "done",
+            Self::Closed => "closed",
             Self::Failed => "failed",
             Self::Cancelled => "cancelled",
         }
+    }
+
+    pub fn can_close(self) -> bool {
+        matches!(
+            self,
+            Self::Open | Self::Queued | Self::Failed | Self::Cancelled
+        )
+    }
+
+    pub fn can_reopen(self) -> bool {
+        matches!(
+            self,
+            Self::Done | Self::Closed | Self::Failed | Self::Cancelled
+        )
+    }
+
+    pub fn can_delete(self) -> bool {
+        !matches!(self, Self::Starting | Self::Running | Self::Waiting)
     }
 }

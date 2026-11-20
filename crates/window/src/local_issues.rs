@@ -7,11 +7,10 @@ use tsumugi_protocol::{Answer, Ask};
 
 use crate::bridge::AppCtx;
 use crate::components::{Button, Dialog};
+use crate::icons::{Icon, IconView};
 
 #[component]
 pub(crate) fn StartIssue(environment: tsumugi_model::EnvironmentId, issue: LocalIssue) -> Element {
-    let app = use_context::<AppCtx>();
-    let mut busy = use_signal(|| false);
     let ask = match issue.state {
         LocalIssueState::Open => Ask::StartLocalIssue { id: issue.id },
         LocalIssueState::Failed | LocalIssueState::Cancelled => {
@@ -19,10 +18,34 @@ pub(crate) fn StartIssue(environment: tsumugi_model::EnvironmentId, issue: Local
         }
         _ => return rsx! {},
     };
+    rsx! { IssueAction { environment, ask, title: "Start local issue", "▸" } }
+}
+
+#[component]
+pub(crate) fn DeleteIssue(environment: tsumugi_model::EnvironmentId, issue: LocalIssue) -> Element {
+    if !issue.state.can_delete() {
+        return rsx! {};
+    }
+    rsx! {
+        IssueAction { environment, ask: Ask::DeleteLocalIssue { id: issue.id }, title: "Delete local issue",
+            IconView { icon: Icon::X, size: 12 }
+        }
+    }
+}
+
+#[component]
+fn IssueAction(
+    environment: tsumugi_model::EnvironmentId,
+    ask: Ask,
+    title: String,
+    children: Element,
+) -> Element {
+    let app = use_context::<AppCtx>();
+    let mut busy = use_signal(|| false);
     rsx! {
         button {
-            r#type: "button", class: "icon-button local-issue-start",
-            title: "Start local issue", aria_label: "Start local issue", disabled: busy(),
+            r#type: "button", class: "icon-button local-issue-action",
+            title: title.clone(), aria_label: title, disabled: busy(),
             onmousedown: move |event| event.prevent_default(),
             onclick: move |event| {
                 event.stop_propagation();
@@ -33,11 +56,11 @@ pub(crate) fn StartIssue(environment: tsumugi_model::EnvironmentId, issue: Local
                     match answer.await {
                         Answer::Done => {},
                         Answer::Failed { text } | Answer::Unconfirmed { text } => app.dispatch(Msg::Notice(text)),
-                        _ => app.dispatch(Msg::Notice("The work host did not confirm the issue start".into())),
+                        _ => app.dispatch(Msg::Notice("The work host did not confirm the issue change".into())),
                     }
                     busy.set(false);
                 });
-            }, "▶"
+            }, {children}
         }
     }
 }
@@ -70,6 +93,7 @@ fn IssueSheet(place: Place, selected: Option<String>) -> Element {
         .map(|work| work.tree.local_issues.clone())
         .unwrap_or_default();
     let name = app.environment_name(&environment);
+    let selected_id = selected.clone();
     let mutate = EventHandler::new(move |ask: Ask| {
         if busy() {
             return;
@@ -77,10 +101,15 @@ fn IssueSheet(place: Place, selected: Option<String>) -> Element {
         busy.set(true);
         error.set(None);
         let create = matches!(ask, Ask::CreateLocalIssue(_));
+        let deleting_selected =
+            matches!(&ask, Ask::DeleteLocalIssue { id } if selected_id.as_ref() == Some(id));
         let answer = app.ask_in(&environment, ask);
         spawn(async move {
             match answer.await {
                 Answer::Done => {
+                    if deleting_selected {
+                        app.dispatch(Msg::LocalIssuesClose);
+                    }
                     if create {
                         id.set(SessionId::new().to_string());
                         title.set(String::new());
@@ -106,7 +135,7 @@ fn IssueSheet(place: Place, selected: Option<String>) -> Element {
         Dialog { kind: "local-issues-dialog", title: "Local Issues · {name}", escapes: true, onclose: move |_| close(),
             div { class: "local-issues-body",
                 if selected.is_none() {
-                    p { class: "adding-note", "Save issues for later, then press ▶ to start with this environment's default agent. One issue runs at a time in each working directory." }
+                    p { class: "adding-note", "Save issues for later, then press ▸ to start with this environment's default agent. One issue runs at a time in each working directory." }
                 }
                 div { class: "local-issues-list",
                     if issues.is_empty() { p { class: "adding-note", "No local issues yet." } }
@@ -160,6 +189,9 @@ fn IssueRow(
     let cancel_id = issue.id.clone();
     let retry_id = issue.id.clone();
     let start_id = issue.id.clone();
+    let close_id = issue.id.clone();
+    let reopen_id = issue.id.clone();
+    let delete_id = issue.id.clone();
     rsx! {
         div { class: "local-issue",
             details { open: true,
@@ -180,13 +212,22 @@ fn IssueRow(
                 }
                 if issue.state == LocalIssueState::Open {
                     Button { title: "Start issue", aria_label: "Start issue", disabled: busy,
-                        onclick: move |_| mutate.call(Ask::StartLocalIssue { id: start_id.clone() }), "▶ Start" }
+                        onclick: move |_| mutate.call(Ask::StartLocalIssue { id: start_id.clone() }), "▸ Start" }
                 }
                 if matches!(issue.state, LocalIssueState::Open | LocalIssueState::Queued) {
                     Button { disabled: busy, onclick: move |_| mutate.call(Ask::CancelLocalIssue { id: cancel_id.clone() }), "Cancel" }
                 }
                 if matches!(issue.state, LocalIssueState::Failed | LocalIssueState::Cancelled) {
                     Button { disabled: busy, onclick: move |_| mutate.call(Ask::RetryLocalIssue { id: retry_id.clone() }), "Retry" }
+                }
+                if issue.state.can_close() {
+                    Button { disabled: busy, onclick: move |_| mutate.call(Ask::CloseLocalIssue { id: close_id.clone() }), "Close issue" }
+                }
+                if issue.state.can_reopen() {
+                    Button { disabled: busy, onclick: move |_| mutate.call(Ask::ReopenLocalIssue { id: reopen_id.clone() }), "Reopen" }
+                }
+                if issue.state.can_delete() {
+                    Button { kind: "danger", disabled: busy, onclick: move |_| mutate.call(Ask::DeleteLocalIssue { id: delete_id.clone() }), "Delete issue" }
                 }
             }
         }

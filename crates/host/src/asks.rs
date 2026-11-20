@@ -61,6 +61,9 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::StartLocalIssue { id } => crate::local_issues::start_saved(watched, id).await,
         Ask::CancelLocalIssue { id } => crate::local_issues::change(watched, id, false).await,
         Ask::RetryLocalIssue { id } => crate::local_issues::change(watched, id, true).await,
+        Ask::CloseLocalIssue { id } => crate::local_issues::close(watched, id).await,
+        Ask::ReopenLocalIssue { id } => crate::local_issues::reopen(watched, id).await,
+        Ask::DeleteLocalIssue { id } => crate::local_issues::delete(watched, id).await,
         Ask::PathEntries { root, typed } => crate::completion::read(root, typed)
             .await
             .map(|entries| Answer::PathEntries { entries }),

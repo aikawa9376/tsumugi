@@ -148,6 +148,42 @@ impl Store {
         self.change_local_issue(id, "queued", "state IN ('failed', 'cancelled')")
     }
 
+    pub fn close_local_issue(&mut self, id: &str) -> Result<()> {
+        let changed = self.connection.execute(
+            "UPDATE local_issues SET state = 'closed' WHERE id = ?1 AND state IN ('open', 'queued', 'failed', 'cancelled')",
+            [id],
+        )?;
+        if changed != 1 {
+            return Err(Error::new(
+                Code::Refused,
+                "The issue cannot be closed in its current state",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn reopen_local_issue(&mut self, id: &str) -> Result<()> {
+        self.change_local_issue(
+            id,
+            "open",
+            "state IN ('done', 'closed', 'failed', 'cancelled')",
+        )
+    }
+
+    pub fn delete_local_issue(&mut self, id: &str) -> Result<()> {
+        let changed = self.connection.execute(
+            "DELETE FROM local_issues WHERE id = ?1 AND state NOT IN ('starting', 'running', 'waiting')",
+            [id],
+        )?;
+        if changed != 1 {
+            return Err(Error::new(
+                Code::Refused,
+                "The issue cannot be deleted while it is active or absent",
+            ));
+        }
+        Ok(())
+    }
+
     fn change_local_issue(&mut self, id: &str, state: &str, allowed: &str) -> Result<()> {
         let changed = self.connection.execute(
             &format!("UPDATE local_issues SET state = ?2, session = NULL, error = NULL, worked = 0 WHERE id = ?1 AND {allowed}"),
@@ -156,7 +192,7 @@ impl Store {
         if changed != 1 {
             return Err(Error::new(
                 Code::Refused,
-                "The issue cannot be changed while it is active or completed",
+                "The issue cannot be changed in its current state",
             ));
         }
         Ok(())
@@ -223,6 +259,83 @@ mod tests {
         let id = new.id.clone();
         store.add_local_issue(new).unwrap();
         store.start_local_issue(&id).unwrap();
+    }
+
+    #[test]
+    fn close_reopen_and_delete_respect_issue_states_and_never_start_work() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        for state in [
+            "open",
+            "queued",
+            "starting",
+            "running",
+            "waiting",
+            "done",
+            "failed",
+            "cancelled",
+            "closed",
+        ] {
+            for action in ["close", "reopen", "delete"] {
+                let new = issue("/project", "kept request");
+                store.add_local_issue(new.clone()).unwrap();
+                store.connection.execute(
+                    "UPDATE local_issues SET state = ?2, error = 'old error', worked = 1 WHERE id = ?1",
+                    params![new.id, state],
+                ).unwrap();
+                let allowed = match action {
+                    "close" => matches!(state, "open" | "queued" | "failed" | "cancelled"),
+                    "reopen" => matches!(state, "done" | "failed" | "cancelled" | "closed"),
+                    _ => !matches!(state, "starting" | "running" | "waiting"),
+                };
+                let value: State = serde_json::from_value(serde_json::json!(state)).unwrap();
+                let offered = match action {
+                    "close" => value.can_close(),
+                    "reopen" => value.can_reopen(),
+                    _ => value.can_delete(),
+                };
+                assert_eq!(offered, allowed, "{action} offered from {state}");
+                let result = match action {
+                    "close" => store.close_local_issue(&new.id),
+                    "reopen" => store.reopen_local_issue(&new.id),
+                    _ => store.delete_local_issue(&new.id),
+                };
+                assert_eq!(result.is_ok(), allowed, "{action} from {state}");
+                let found = store
+                    .local_issues()
+                    .unwrap()
+                    .into_iter()
+                    .find(|i| i.id == new.id);
+                if allowed && action == "delete" {
+                    assert!(found.is_none());
+                } else {
+                    let found = found.unwrap();
+                    assert_eq!(found.title, new.title);
+                    assert_eq!(found.body, new.body);
+                    assert_eq!(found.dir, new.dir);
+                    let expected = if !allowed {
+                        state
+                    } else if action == "close" {
+                        "closed"
+                    } else {
+                        "open"
+                    };
+                    assert_eq!(found.state.word(), expected);
+                    if allowed && action == "reopen" {
+                        assert!(found.error.is_none());
+                        assert!(found.record.is_none());
+                    }
+                }
+                store
+                    .connection
+                    .execute("DELETE FROM local_issues WHERE id = ?1", [&new.id])
+                    .unwrap();
+            }
+        }
+        assert!(store.claim_local_issues().unwrap().is_empty());
+        assert!(store.close_local_issue("missing").is_err());
+        assert!(store.reopen_local_issue("missing").is_err());
+        assert!(store.delete_local_issue("missing").is_err());
     }
 
     #[test]
@@ -383,9 +496,23 @@ mod tests {
         assert!(store.claim_local_issues().unwrap().is_empty());
         assert!(store.retry_local_issue(&first.id).is_err());
         session.state = tsumugi_model::State::Done;
-        store.follow_local_issues(&[session]).unwrap();
+        store.follow_local_issues(&[session.clone()]).unwrap();
         assert_eq!(store.local_issues().unwrap()[0].state, State::Done);
         assert_eq!(store.claim_local_issues().unwrap()[0].id, second.id);
+        store.reopen_local_issue(&first.id).unwrap();
+        store.follow_local_issues(&[session]).unwrap();
+        let reopened = &store.local_issues().unwrap()[0];
+        assert_eq!(reopened.state, State::Open);
+        assert!(reopened.record.is_none());
+        assert!(reopened.session.is_none());
+        assert!(store.known(record).is_ok());
+        assert!(store.claim_local_issues().unwrap().is_empty());
+        store.close_local_issue(&first.id).unwrap();
+        store.delete_local_issue(&first.id).unwrap();
+        assert!(store.known(record).is_ok());
+        store.fail_local_issue(&second.id, "finished").unwrap();
+        store.delete_local_issue(&second.id).unwrap();
+        assert!(store.local_issues().unwrap().is_empty());
     }
 
     #[test]

@@ -25,16 +25,11 @@ pub(crate) async fn queue(watched: &Watched, issue: NewLocalIssue) -> Result<Ans
 }
 
 pub(crate) async fn start_saved(watched: &Watched, id: String) -> Result<Answer, String> {
-    with_store(&root(), move |store| store.start_local_issue(&id))
-        .await
-        .map_err(|e| e.to_string())?;
-    publish(watched).await?;
-    watched.relist();
-    Ok(Answer::Done)
+    edit(watched, move |store| store.start_local_issue(&id)).await
 }
 
 pub(crate) async fn change(watched: &Watched, id: String, retry: bool) -> Result<Answer, String> {
-    with_store(&root(), move |store| {
+    edit(watched, move |store| {
         if retry {
             store.retry_local_issue(&id)
         } else {
@@ -42,7 +37,29 @@ pub(crate) async fn change(watched: &Watched, id: String, retry: bool) -> Result
         }
     })
     .await
-    .map_err(|e| e.to_string())?;
+}
+
+pub(crate) async fn close(watched: &Watched, id: String) -> Result<Answer, String> {
+    edit(watched, move |store| store.close_local_issue(&id)).await
+}
+
+pub(crate) async fn reopen(watched: &Watched, id: String) -> Result<Answer, String> {
+    edit(watched, move |store| store.reopen_local_issue(&id)).await
+}
+
+pub(crate) async fn delete(watched: &Watched, id: String) -> Result<Answer, String> {
+    edit(watched, move |store| store.delete_local_issue(&id)).await
+}
+
+async fn edit(
+    watched: &Watched,
+    change: impl FnOnce(&mut crate::delegation::store::Store) -> crate::delegation::Result<()>
+    + Send
+    + 'static,
+) -> Result<Answer, String> {
+    with_store(&root(), change)
+        .await
+        .map_err(|e| e.to_string())?;
     publish(watched).await?;
     watched.relist();
     Ok(Answer::Done)
