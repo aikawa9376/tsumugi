@@ -6162,6 +6162,7 @@ dependencies = [
  "block2",
  "dioxus",
  "fontdb",
+ "gtk",
  "image",
  "libc",
  "objc2",

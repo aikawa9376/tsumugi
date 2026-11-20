@@ -7,6 +7,51 @@ pub(crate) fn written_and_read(settings: &Settings) -> Settings {
 }
 
 #[test]
+fn retired_terminal_display_settings_do_not_break_files_or_recorded_session_launches() {
+    let settings = Settings::parse(
+        "[console]\ndisplay = \"kitty\"\nexternal_command = [\"kitty\"]\ncursor_blink = true\n",
+    )
+    .unwrap();
+    assert!(settings.console.cursor_blink);
+    let mut launch = serde_json::to_value(&settings).unwrap();
+    launch["console"]["display"] = "custom".into();
+    launch["console"]["external_command"] = serde_json::json!(["kitty"]);
+    assert_eq!(
+        serde_json::from_value::<Settings>(launch).unwrap(),
+        settings
+    );
+    assert!(Settings::parse("[console]\nnonsense = true\n").is_err());
+}
+
+#[test]
+fn the_terminal_renderer_is_saved_without_changing_recorded_launches_or_other_console_settings() {
+    use super::TerminalRenderer;
+    assert_eq!(
+        Settings::parse("").unwrap().console.renderer,
+        TerminalRenderer::Builtin
+    );
+    let chosen = Settings::parse("[console]\nrenderer = 'vte'\ncursor_blink = true\n").unwrap();
+    assert_eq!(chosen.console.renderer, TerminalRenderer::Vte);
+    assert!(written_and_read(&chosen).console.cursor_blink);
+    assert_eq!(
+        written_and_read(&chosen).console.renderer,
+        TerminalRenderer::Vte
+    );
+    let launch = serde_json::to_value(&chosen).unwrap();
+    assert_eq!(serde_json::from_value::<Settings>(launch).unwrap(), chosen);
+    assert!(Settings::parse("[console]\nrenderer = 'unknown'\n").is_err());
+}
+
+#[test]
+fn kitty_can_be_selected_and_saved_as_the_terminal_display() {
+    let chosen = Settings::parse("[console]\nrenderer = 'kitty'\n").unwrap();
+    assert_eq!(chosen.console.renderer.name(), "kitty");
+    assert_eq!(written_and_read(&chosen), chosen);
+    let launch = serde_json::to_value(&chosen).unwrap();
+    assert_eq!(serde_json::from_value::<Settings>(launch).unwrap(), chosen);
+}
+
+#[test]
 fn successful_commands_close_by_default_and_the_choice_survives_saving() {
     let defaults = toml::Value::try_from(Settings::parse("").unwrap()).unwrap();
     assert_eq!(
@@ -377,6 +422,7 @@ fn settings_written_read_back_the_same() {
         console: ConsoleSettings {
             option_as_alt: OptionAsAlt::Right,
             cursor_blink: true,
+            renderer: TerminalRenderer::Vte,
         },
         usage: UsageSettings::default(),
         details: DetailsSettings {

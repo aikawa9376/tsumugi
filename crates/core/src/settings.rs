@@ -117,15 +117,53 @@ impl Default for DetailsSettings {
     }
 }
 
-/// How the console takes keys and draws its cursor.
+/// The display used for focused consoles.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalRenderer {
+    #[default]
+    Builtin,
+    Vte,
+    Kitty,
+}
+
+impl TerminalRenderer {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Builtin => "builtin",
+            Self::Vte => "vte",
+            Self::Kitty => "kitty",
+        }
+    }
+}
+
+/// How the console is drawn and takes keys.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ConsoleSettings {
+    /// Console display: `builtin`, `vte` for Linux terminal tabs with GTK3 VTE,
+    /// or `kitty` for Linux session and terminal consoles with kitty and an
+    /// X11/XWayland window.
+    /// The built-in display is used when the chosen display is unavailable,
+    /// while images are shown, and for Neovim GUI terminals.
+    pub renderer: TerminalRenderer,
     /// Which Option keys send Alt to what runs there, `both`, `left`, `right` or
     /// `none`, the others typing what macOS makes of the key.
     pub option_as_alt: OptionAsAlt,
     /// Whether the cursor blinks when the program lets it.
     pub cursor_blink: bool,
+}
+
+/// Remove retired external-display preferences from work settings, recorded
+/// launches and local window preferences without discarding other console keys.
+pub fn remove_retired_console_settings(table: &mut toml::Table) {
+    if let Some(console) = table.get_mut("console").and_then(toml::Value::as_table_mut) {
+        for key in ["display", "external_command"] {
+            console.remove(key);
+        }
+    }
 }
 
 // `remote = "Self"` turns the derives into the inherent `Settings::serialize`

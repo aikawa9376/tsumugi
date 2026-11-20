@@ -103,8 +103,8 @@ impl crate::shell::Local {
     /// while another tab is shown: a session sized for a terminal shown
     /// meanwhile would lay its screen out under the prompt card.
     pub(crate) fn console_size_for(&self, tab: &Tab) -> Size {
-        self.measured()
-            .fitted(Some(tab))
+        crate::native_terminal::size_for(tab)
+            .or_else(|| self.measured().fitted(Some(tab)))
             .unwrap_or_else(|| *self.console_size.peek())
     }
 }
@@ -140,7 +140,12 @@ pub(crate) fn use_console_sizes(ui: &Ui) {
     let face = use_memo(move || {
         let config = app.config.read();
         let s = &config.settings;
-        (s.font_family.clone(), s.font_size, s.font_weight)
+        (
+            s.font_family.clone(),
+            s.font_size,
+            s.font_weight,
+            s.console.renderer,
+        )
     });
     let zoomed = use_memo(move || app.chrome.read().zoom);
     let active = use_memo(move || app.content.read().active().cloned());
@@ -196,7 +201,12 @@ pub(crate) fn use_console_sizes(ui: &Ui) {
     // in cells of the measured width; all of it when no card is shown.
     use_effect(move || {
         let _ = face();
-        let Some(next) = measured().fitted(active().as_ref()) else {
+        let tab = active();
+        let Some(next) = tab
+            .as_ref()
+            .and_then(crate::native_terminal::size_for)
+            .or_else(|| measured().fitted(tab.as_ref()))
+        else {
             return;
         };
         if *console_size.peek() != next {
@@ -257,9 +267,11 @@ pub(crate) fn use_console_sizes(ui: &Ui) {
         move || {
             let Some(tab) = active() else { return };
             let _ = face();
-            let size = measured()
-                .fitted(Some(&tab))
-                .unwrap_or_else(|| *console_size.read());
+            let size = crate::native_terminal::size_for(&tab).unwrap_or_else(|| {
+                measured()
+                    .fitted(Some(&tab))
+                    .unwrap_or_else(|| *console_size.read())
+            });
             // Read, so a session listed only now is attached to once it is,
             // and one attached is sized to the console as it is by then.
             let _ = (tree.read(), attached(), retry());

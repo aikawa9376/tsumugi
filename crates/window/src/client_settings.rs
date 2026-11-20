@@ -108,6 +108,7 @@ impl Preferences {
         table
             .entry("auto_scale")
             .or_insert(toml::Value::Boolean(true));
+        tsumugi_core::settings::remove_retired_console_settings(&mut table);
         // A panel this version cannot read, as one another version wrote,
         // leaves Tsumugi's in its place rather than every preference unread
         // and unwritable.
@@ -219,6 +220,27 @@ impl Written {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retired_external_terminal_preferences_leave_the_other_console_preferences_usable() {
+        let mut file = toml::Table::try_from(Preferences::of(&Settings::default())).unwrap();
+        let console = file.get_mut("console").unwrap().as_table_mut().unwrap();
+        console.insert("display".into(), "kitty".into());
+        console.insert(
+            "external_command".into(),
+            toml::Value::Array(vec!["kitty".into()]),
+        );
+        console.insert("cursor_blink".into(), true.into());
+        let read = Preferences::read(&toml::to_string(&file).unwrap(), || {
+            panic!("all preferences saved")
+        })
+        .unwrap();
+        assert!(read.console.cursor_blink);
+        let saved = toml::Table::try_from(&read).unwrap();
+        let console = saved.get("console").unwrap().as_table().unwrap();
+        assert!(!console.contains_key("display"));
+        assert!(!console.contains_key("external_command"));
+    }
 
     fn settings_file(text: &str) -> ConfigFile {
         ConfigFile {

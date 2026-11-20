@@ -150,6 +150,7 @@ pub(crate) fn FocusedBody(
         move |tab: Option<Tab>, profile| app.dispatch(Msg::DraftProfile { tab, profile });
     rsx! {
         div {
+            id: "focused-console",
             class: "console",
             style: "--composer:{composer_room}px;--console-bg:{console_background};background:{console_background}",
             onresize: move |e: Event<ResizeData>| {
@@ -195,7 +196,7 @@ pub(crate) fn FocusedBody(
                     ReaderScreen { reader, reader_frame, cell_width: cw, focused: area == Area::Console, pictures: reader_pictures, onscroll: scroll_reader, onclick: click_reader }
                 },
                 (Some(tab), true) => rsx! {
-                    ConsoleScreen { tab: tab.clone(), frame, cell_width: cw, focused: area == Area::Console }
+                    ConsoleScreen { tab: tab.clone(), frame, cell_width: cw, focused: area == Area::Console, active_view: true }
                 },
                 (Some(tab), false) => rsx! {
                     Starting { tab: tab.clone() }

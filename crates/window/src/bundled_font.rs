@@ -68,6 +68,102 @@ pub fn use_bundled_font() {
     });
 }
 
+/// A private Pango font map containing the bundled faces and system fonts.
+/// Fontconfig reopens font paths lazily, so the anonymous files live as long
+/// as the map; no font is installed in the user's directories or global config.
+#[cfg(target_os = "linux")]
+pub(crate) fn native_map() -> Result<gtk::pango::FontMap, String> {
+    use gtk::glib::translate::from_glib_full;
+    use std::cell::OnceCell;
+    use std::ffi::{CString, c_void};
+    use std::io::Write;
+    use std::os::fd::{AsRawFd, FromRawFd};
+
+    #[link(name = "fontconfig")]
+    unsafe extern "C" {
+        fn FcInitLoadConfigAndFonts() -> *mut c_void;
+        fn FcConfigDestroy(config: *mut c_void);
+        fn FcConfigAppFontAddFile(config: *mut c_void, file: *const u8) -> i32;
+    }
+    #[link(name = "pangocairo-1.0")]
+    unsafe extern "C" {
+        fn pango_cairo_font_map_new() -> *mut gtk::pango::ffi::PangoFontMap;
+    }
+    #[link(name = "pangoft2-1.0")]
+    unsafe extern "C" {
+        fn pango_fc_font_map_set_config(
+            map: *mut gtk::pango::ffi::PangoFontMap,
+            config: *mut c_void,
+        );
+    }
+    struct Config(*mut c_void);
+    impl Drop for Config {
+        fn drop(&mut self) {
+            // SAFETY: this owns the reference returned by Fontconfig.
+            unsafe {
+                FcConfigDestroy(self.0);
+            }
+        }
+    }
+    struct Fonts {
+        map: gtk::pango::FontMap,
+        _files: Vec<std::fs::File>,
+    }
+    thread_local! {
+        static FONTS: OnceCell<Result<Fonts, String>> = const { OnceCell::new() };
+    }
+    FONTS.with(|fonts| {
+        fonts
+            .get_or_init(|| {
+                // SAFETY: creates a private configuration with system fonts.
+                let config = Config(unsafe { FcInitLoadConfigAndFonts() });
+                if config.0.is_null() {
+                    return Err("Cannot load native font configuration".into());
+                }
+                let mut files = Vec::new();
+                for style in &STYLES {
+                    // SAFETY: the static name is NUL-terminated. CLOEXEC keeps the
+                    // font descriptors out of programs the window starts.
+                    let fd =
+                        unsafe { libc::memfd_create(c"tsumugi-font".as_ptr(), libc::MFD_CLOEXEC) };
+                    if fd < 0 {
+                        return Err(std::io::Error::last_os_error().to_string());
+                    }
+                    // SAFETY: memfd_create returned a new descriptor owned here.
+                    let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+                    // Pango filters WOFF2 faces even when Fontconfig/FreeType can
+                    // read them. Present the bundled face as its TrueType data.
+                    let ttf = wuff::decompress_woff2(style.data).map_err(|e| format!("{e:?}"))?;
+                    file.write_all(&ttf).map_err(|e| e.to_string())?;
+                    let path = CString::new(format!("/proc/self/fd/{}", file.as_raw_fd())).unwrap();
+                    // SAFETY: the private config and NUL-terminated path are valid;
+                    // the file remains open in Fonts.
+                    if unsafe { FcConfigAppFontAddFile(config.0, path.as_ptr().cast()) } == 0 {
+                        return Err(format!(
+                            "Cannot register bundled font {} with Fontconfig",
+                            style.file
+                        ));
+                    }
+                    files.push(file);
+                }
+                // SAFETY: Cairo returns an owned PangoFontMap backed by Fontconfig
+                // on Linux. set_config retains its own configuration reference.
+                let map = unsafe {
+                    let pointer = pango_cairo_font_map_new();
+                    if pointer.is_null() {
+                        return Err("Cannot create native font map".into());
+                    }
+                    pango_fc_font_map_set_config(pointer, config.0);
+                    from_glib_full(pointer)
+                };
+                Ok(Fonts { map, _files: files })
+            })
+            .as_ref()
+            .map(|fonts| fonts.map.clone())
+            .map_err(Clone::clone)
+    })
+}
+
 fn answer(path: &str) -> Response<Vec<u8>> {
     let mut r = Response::new(Vec::new());
     let file = path

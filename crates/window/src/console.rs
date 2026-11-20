@@ -181,7 +181,13 @@ pub fn mode_of(state: &UiState) -> (&'static str, &'static str) {
 
 /// What the pane of `tab` shows, redrawn whenever `frame` moves.
 #[component]
-pub fn ConsoleScreen(tab: Tab, frame: Signal<u64>, cell_width: f64, focused: bool) -> Element {
+pub fn ConsoleScreen(
+    tab: Tab,
+    frame: Signal<u64>,
+    cell_width: f64,
+    focused: bool,
+    #[props(default)] active_view: bool,
+) -> Element {
     let ch = use_cell_height();
     let _ = frame();
     let hub = use_context::<Hub>();
@@ -204,6 +210,11 @@ pub fn ConsoleScreen(tab: Tab, frame: Signal<u64>, cell_width: f64, focused: boo
     let (screen, pictures) = (pane.screen(), pane.pictures());
     let background = screen.background.hex();
     let rows = screen.rows as f64;
+    let native = active_view
+        .then(|| crate::native_terminal::size_for(&tab))
+        .flatten();
+    let hit_width = native.map_or(cell_width, |s| s.cell_width);
+    let hit_height = native.map_or(ch, |s| s.cell_height);
     let mut frame = frame;
     let mut rest = use_signal(|| 0.0);
     // An image the session drew is looked at whole rather than clicked
@@ -230,7 +241,7 @@ pub fn ConsoleScreen(tab: Tab, frame: Signal<u64>, cell_width: f64, focused: boo
         let pane = pane.clone();
         move |e: WheelEvent| {
             let by = match e.delta() {
-                WheelDelta::Pixels(v) => v.y / ch,
+                WheelDelta::Pixels(v) => v.y / hit_height,
                 WheelDelta::Lines(v) => v.y,
                 WheelDelta::Pages(v) => v.y * rows,
             };
@@ -238,7 +249,7 @@ pub fn ConsoleScreen(tab: Tab, frame: Signal<u64>, cell_width: f64, focused: boo
             rest.set(left);
             if lines != 0 {
                 let at = e.element_coordinates();
-                let (col, row) = cell_at(at.x, at.y, cell_width, ch);
+                let (col, row) = cell_at(at.x - 12.0, at.y - 10.0, hit_width, hit_height);
                 #[cfg(unix)]
                 if let Some(gui) = gui.clone() {
                     spawn(async move {
@@ -252,9 +263,9 @@ pub fn ConsoleScreen(tab: Tab, frame: Signal<u64>, cell_width: f64, focused: boo
         }
     };
     rsx! {
-        div { class: "console-screen", style: "background:{background}", onwheel,
+        div { class: "console-screen", "data-native-pane": "{pane.id()}", style: "background:{background}", onwheel,
             ScreenView { screen, cell_width, show_cursor: focused, pictures }
-            Clicks { cell_width, onclick }
+            Clicks { cell_width: hit_width, cell_height: Some(hit_height), onclick }
         }
         if if remote { pane.program_exited() } else { pane.exited() } {
             EmptyState { kind: "detached", title: "Ended",
@@ -355,8 +366,12 @@ fn cell_at(x: f64, y: f64, cell_width: f64, cell_height: f64) -> (usize, usize) 
 
 /// A layer over the grid that tells `onclick` of the cell clicked.
 #[component]
-fn Clicks(cell_width: f64, onclick: EventHandler<(usize, usize)>) -> Element {
-    let ch = use_cell_height();
+fn Clicks(
+    cell_width: f64,
+    cell_height: Option<f64>,
+    onclick: EventHandler<(usize, usize)>,
+) -> Element {
+    let ch = cell_height.unwrap_or(use_cell_height());
     rsx! {
         div {
             class: "console-clicks",

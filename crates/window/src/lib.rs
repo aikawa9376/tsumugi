@@ -41,6 +41,11 @@ mod link;
 mod local_issues;
 mod logins;
 pub mod menu_bar;
+mod native_terminal;
+#[cfg(target_os = "linux")]
+pub fn kitty_display(args: &[String]) -> i32 {
+    native_terminal::kitty_display(args)
+}
 mod picker;
 pub use tsumugi_core::tree::nav;
 use tsumugi_model::paths;

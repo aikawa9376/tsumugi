@@ -1,7 +1,7 @@
 //! The window reaches the work, the agents and the repositories only through
 //! the work host's socket: neither it nor the view state and protocol it is
 //! built on depend, however deep, on the crates that hold the work, ask
-//! agents or run git and jj.
+//! agents or run Git.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

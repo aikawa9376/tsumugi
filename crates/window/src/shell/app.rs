@@ -60,6 +60,8 @@ fn App() -> Element {
     use_hosts(&ui);
     use_window_socket(&ui);
     use_shown_images(&ui);
+    #[cfg(target_os = "linux")]
+    crate::native_terminal::use_native_layer(&ui);
     use_console_sizes(&ui);
     use_redraws_told(app, local);
     use_scroll_into_view(app);

@@ -47,6 +47,7 @@ impl File {
     /// holds without those retired.
     pub(super) fn split(self) -> Result<(Profiles, toml::Table), String> {
         let mut rest = self.rest;
+        super::remove_retired_console_settings(&mut rest);
         for key in RETIRED {
             rest.remove(*key);
         }

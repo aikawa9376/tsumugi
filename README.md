@@ -54,6 +54,17 @@ Choose a directory with `Ctrl+Shift+p`, select an agent profile, write a prompt
 and press `Ctrl+Enter`. `F1` shows the keys. Settings → Agents manages profiles;
 Settings → Programs chooses your shell and file editor.
 
+On Linux, Settings → Console → Terminal display can use VTE inside the focused
+terminal tab. Install GTK3 VTE (`vte3` on Arch Linux or `libvte-2.91-0` on
+Debian/Ubuntu) before starting Tsumugi. Without it the built-in display remains
+available.
+
+The same setting can use kitty itself on Linux. Install `kitty` and start
+Tsumugi with `GDK_BACKEND=x11` (XWayland works on a Wayland desktop). kitty
+draws agent session consoles and terminal tabs using its own font configuration;
+Tsumugi keeps running programs, history and input routing. Native Wayland windows use the built-in display
+when kitty is selected.
+
 Configuration and state use the `tsumugi` directory beneath the corresponding
 XDG roots. Advanced controls use `TSUMUGI_*`. `--instance playground` separates
 workspace state while preserving your shell and editor environment.

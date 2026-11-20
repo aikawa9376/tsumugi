@@ -37,6 +37,21 @@ in the details panel, and a work host samples only what a window shows; the
 `[usage]` table of a work machine's `settings.toml` is what it samples for a
 window that does not say.
 
+## Terminal display
+
+Console settings choose the display of the focused console on this computer.
+On Linux, kitty itself can draw agent session consoles and terminal tabs inside
+an X11/XWayland Tsumugi window. GTK3 VTE can draw terminal tabs, also in native
+Wayland windows. Switching displays keeps the running program and scrollback.
+All displays use Tsumugi's input routing. The built-in display and VTE use
+Tsumugi's console font and theme; kitty reads its own font configuration and
+draws the screen with the colours supplied by Tsumugi.
+
+The built-in display remains available when the selected display cannot
+start or the platform does not support it. It also draws terminal images and
+terminals using Neovim's GUI. Conversation views, the prompt, the console reader
+and unfocused splits keep their existing displays.
+
 ## settings.toml
 
 The settings are kept in `settings.toml`, in `$XDG_CONFIG_HOME/tsumugi/`, or in

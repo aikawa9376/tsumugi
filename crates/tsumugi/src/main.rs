@@ -3,6 +3,10 @@ mod log;
 fn main() {
     log::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(all(target_os = "linux", feature = "desktop"))]
+    if args.first().is_some_and(|arg| arg == "__kitty_display") {
+        std::process::exit(tsumugi_window::kitty_display(&args[1..]));
+    }
     if args.first().is_some_and(|arg| arg == "__startup_lease") {
         std::process::exit(tsumugi_host::startup_lease(&args[1..]));
     }

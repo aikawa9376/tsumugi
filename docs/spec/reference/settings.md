@@ -36,6 +36,7 @@ How the console takes keys and draws its cursor.
 | --- | --- | --- | --- |
 | `console.cursor_blink` | boolean | `false` | Whether the cursor blinks when the program lets it. |
 | `console.option_as_alt` | one of `both`, `left`, `right`, `none` | `"both"` | Which Option keys send Alt to what runs there, `both`, `left`, `right` or `none`, the others typing what macOS makes of the key. |
+| `console.renderer` | one of `builtin`, `vte`, `kitty` | `"builtin"` | Console display: `builtin`, `vte` for Linux terminal tabs with GTK3 VTE, or `kitty` for Linux session and terminal consoles with kitty and an X11/XWayland window. The built-in display is used when the chosen display is unavailable, while images are shown, and for Neovim GUI terminals. |
 
 ## `[delegation]`
 

@@ -25,7 +25,7 @@ use crate::icons::{Icon, IconView};
 use crate::keys_pane::KeysPane;
 use crate::link::{Link, failure};
 use crate::paths::home;
-use crate::settings::{Appearance, OptionAsAlt, Settings, ThemeKind};
+use crate::settings::{Appearance, OptionAsAlt, Settings, TerminalRenderer, ThemeKind};
 use crate::style::SETTINGS_CSS;
 use crate::zoom::LEVELS;
 
@@ -656,6 +656,8 @@ fn ConsolePanelPane(now: Settings, change: Callback<Change>) -> Element {
 
 #[component]
 fn ConsolePane(now: Settings, change: Callback<Change>) -> Element {
+    let vte = use_hook(crate::native_terminal::available);
+    let kitty = use_hook(crate::native_terminal::kitty_available);
     let installed = use_resource(|| async {
         tokio::task::spawn_blocking(crate::installed_fonts::installed)
             .await
@@ -663,6 +665,32 @@ fn ConsolePane(now: Settings, change: Callback<Change>) -> Element {
     });
     rsx! {
         SettingGroup {
+            SettingRow { label: "Terminal display", hint: "kitty draws the focused session or terminal console; VTE draws terminal tabs. Switching keeps the running program. Images and Neovim GUI tabs use the built-in display.",
+                Select {
+                    label: "Terminal display",
+                    value: now.console.renderer.name(),
+                    choices: choices_of([("builtin", "Built-in"), ("vte", "VTE (Linux)"), ("kitty", "kitty (Linux, X11)")]),
+                    onchange: move |value: String| {
+                        let renderer = match value.as_str() {
+                            "vte" => TerminalRenderer::Vte,
+                            "kitty" => TerminalRenderer::Kitty,
+                            _ => TerminalRenderer::Builtin,
+                        };
+                        change(Box::new(move |s: &mut Settings| s.console.renderer = renderer));
+                    },
+                }
+            }
+            if now.console.renderer == TerminalRenderer::Vte {
+                if let Err(error) = &vte {
+                    p { role: "status", "{error}" }
+                }
+            }
+            if now.console.renderer == TerminalRenderer::Kitty {
+                p { "kitty reads its own font settings. Tsumugi keeps input routing, running programs and history." }
+                if let Err(error) = &kitty {
+                    p { role: "status", "{error}" }
+                }
+            }
             SettingRow { label: "Font", hint: "The family the console and the prompt are drawn in, among the monospace ones installed and tsumugi's own, which stands behind any other for Nerd Font glyphs.",
                 Select {
                     label: "Font",

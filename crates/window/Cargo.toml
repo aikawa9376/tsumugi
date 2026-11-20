@@ -28,6 +28,12 @@ toml.workspace = true
 tokio.workspace = true
 ttf-parser = "0.25.1"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# GTK 0.19 uses a different GLib ABI crate; match Tao/Wry's GTK types.
+gtk = "0.18.2"
+libc.workspace = true
+wuff = "0.2.10"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
 objc2.workspace = true
@@ -41,4 +47,4 @@ tsumugi-protocol = { workspace = true, features = ["testing"] }
 base64.workspace = true
 libc.workspace = true
 tempfile.workspace = true
-wuff = "0.2.9"
+wuff = "0.2.10"
