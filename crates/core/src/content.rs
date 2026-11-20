@@ -438,19 +438,29 @@ pub(crate) fn shell_closed(
     work: Option<&WorkSnapshot>,
     id: u128,
 ) -> Vec<Effect> {
-    let shell = Tab::Terminal(environment.clone(), id);
-    if !view.windows.shows_anywhere(&shell) {
+    terminals_closed(view, environment, work, &[id])
+}
+
+fn terminals_closed(
+    view: &mut ContentView,
+    environment: &EnvironmentId,
+    work: Option<&WorkSnapshot>,
+    ids: &[u128],
+) -> Vec<Effect> {
+    let closes =
+        |tab: &Tab| matches!(tab, Tab::Terminal(e, id) if e == environment && ids.contains(id));
+    if !view.windows.shown().into_iter().any(closes) {
         return Vec::new();
     }
     let next = view.place.as_ref().and_then(|p| {
         let left: Vec<u128> = crate::tree::terminals(work)
             .iter()
-            .filter(|s| s.id != id && s.cwd == p.worktree)
+            .filter(|s| !ids.contains(&s.id) && s.cwd == p.worktree)
             .map(|s| s.id)
             .collect();
         crate::tree::nav::tab_after_closing(environment, crate::tree::listed(work), p, &left)
     });
-    if close_showing(view, |t| *t == shell, next) {
+    if close_showing(view, closes, next) {
         return vec![Effect::PromptClose(view.active().cloned())];
     }
     Vec::new()

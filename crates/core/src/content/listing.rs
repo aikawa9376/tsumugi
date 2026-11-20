@@ -277,8 +277,29 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
         let gone = Tab::Session(environment.clone(), id.clone());
         close_showing(view, |t| *t == gone, after);
     }
-    // A stopped terminal may have no attached pane to report its exit.
-    let ended_shells: Vec<u128> = view
+    // A stopped terminal may have no attached pane to report its exit. A
+    // command's kept program never exits, so auto-close uses its recorded
+    // status once; opening its output again leaves it open.
+    let close_successful_commands = if *environment == state.hosts.environment {
+        state.config.settings.close_successful_commands
+    } else {
+        crate::config::Config::of_work(&work.config)
+            .settings
+            .close_successful_commands
+    };
+    let succeeded: Vec<u128> = kept_shells
+        .iter()
+        .filter(|t| {
+            close_successful_commands
+                && t.program == tsumugi_model::TerminalProgram::Command
+                && t.exit == Some(0)
+                && was
+                    .terminal(t.id)
+                    .is_none_or(|(_, _, old)| old.exit != Some(0))
+        })
+        .map(|t| t.id)
+        .collect();
+    let mut ended_shells: Vec<u128> = view
         .windows
         .shown()
         .into_iter()
@@ -293,9 +314,13 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
             _ => None,
         })
         .collect();
-    for id in ended_shells {
-        effects.extend(super::shell_closed(view, environment, Some(work), id));
-    }
+    ended_shells.extend(succeeded);
+    effects.extend(super::terminals_closed(
+        view,
+        environment,
+        Some(work),
+        &ended_shells,
+    ));
     // A session no longer listed has nothing to show; its pane is closed,
     // and the images its console drew are not kept. Looked at only when the
     // host lists anew, so a pane started since the listing stays.

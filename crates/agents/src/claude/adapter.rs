@@ -202,6 +202,9 @@ impl AgentAdapter for Claude {
 struct ClaudeConversation(super::transcript::Transcript);
 
 impl ConversationReader for ClaudeConversation {
+    fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        self.0.messages()
+    }
     fn stats(&self) -> tsumugi_model::ConversationStats {
         self.0.stats()
     }

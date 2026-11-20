@@ -481,6 +481,14 @@ fn General(now: Settings, change: Callback<Change>) -> Element {
             }
 
         }
+        SettingGroup { title: "Terminals",
+            SettingRow { label: "Close successful commands", hint: "Close tabs and splits when a command finishes successfully. Its output stays available from the tree. Turn off to keep its windows open.",
+                Toggle {
+                    checked: now.close_successful_commands,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.close_successful_commands = on)),
+                }
+            }
+        }
         SettingGroup { title: "Starting sessions",
             SettingRow { label: "Scratch folder", hint: "Where scratch sessions run, each in a folder of its own; empty for tsumugi's own.",
                 TextField {

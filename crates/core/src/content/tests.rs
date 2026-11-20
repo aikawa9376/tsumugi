@@ -844,7 +844,7 @@ fn a_terminal_missing_after_reconnect_gives_its_windows_to_its_worktree() {
 }
 
 #[test]
-fn a_finished_command_keeps_its_tab_until_the_terminal_is_stopped() {
+fn a_successful_command_closes_its_windows_and_keeps_its_output_available() {
     let mut command = shell(7, "/r");
     command.program = TerminalProgram::Command;
     let run = Scenario::new()
@@ -852,10 +852,203 @@ fn a_finished_command_keeps_its_tab_until_the_terminal_is_stopped() {
         .event(snapshot().listed(listed().terminal(command.clone())))
         .send(show(Tab::Terminal(here(), 7)));
     command.exit = Some(0);
-    let run = run.event(patch(2).listed(listed().terminal(command)));
-    assert_eq!(shown(&run), [Tab::Terminal(here(), 7)]);
-    let run = run.event(patch(3).listed(listed()));
+    let run = run.event(patch(2).listed(listed().terminal(command.clone())));
     assert!(shown(&run).is_empty());
+    assert!(
+        run.state()
+            .hosts
+            .work(&here())
+            .unwrap()
+            .tree
+            .listed
+            .as_ref()
+            .unwrap()
+            .terminals
+            .iter()
+            .any(|t| t.id == 7 && t.exit == Some(0))
+    );
+    assert!(!run.last_effects().iter().any(|e| matches!(
+        e,
+        Effect::Host {
+            request: Request::EndTerminal { .. } | Request::TerminalClosed { .. },
+            ..
+        }
+    )));
+    let run = run
+        .send(show(Tab::Terminal(here(), 7)))
+        .event(patch(3).listed(listed().terminal(command)));
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 7)]);
+    let run = run.event(patch(4).listed(listed()));
+    assert!(shown(&run).is_empty());
+}
+
+#[test]
+fn successful_commands_keep_their_background_tabs_and_splits_when_auto_close_is_off() {
+    let mut command = shell(7, "/r");
+    command.program = TerminalProgram::Command;
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(
+            snapshot()
+                .listed(listed().terminal(command.clone()))
+                .with(|w| {
+                    w.config.settings = Some(crate::config::testing::settings_file(
+                        "close_successful_commands = false\n",
+                    ));
+                }),
+        )
+        .send(show(Tab::Terminal(here(), 7)))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(Msg::Show {
+            thing: Tab::draft(here(), "/r"),
+            place: None,
+            how: Some(Opening::Tab),
+        });
+    let before = run.state().content.windows.clone();
+    command.exit = Some(0);
+    let run = run.event(patch(2).listed(listed().terminal(command)));
+    assert_eq!(run.state().content.windows, before);
+    assert!(!run.last_effects().iter().any(|e| matches!(
+        e,
+        Effect::Host {
+            request: Request::EndTerminal { .. } | Request::TerminalClosed { .. },
+            ..
+        }
+    )));
+    let run = run.event(patch(3).listed(listed()));
+    assert!(!shown(&run).contains(&Tab::Terminal(here(), 7)));
+}
+
+#[test]
+fn each_environments_commands_follow_its_own_auto_close_setting() {
+    for keep_in in [here(), there()] {
+        let mut command = shell(7, "/r");
+        command.program = TerminalProgram::Command;
+        let mut run = Scenario::new().send(opened(None));
+        for environment in [here(), there()] {
+            let on = environment != keep_in;
+            run = run
+                .event_from(
+                    environment.clone(),
+                    snapshot()
+                        .listed(listed().terminal(command.clone()))
+                        .with(|w| {
+                            w.config.settings = Some(crate::config::testing::settings_file(
+                                &format!("close_successful_commands = {on}\n"),
+                            ));
+                        }),
+                )
+                .send(Msg::Show {
+                    thing: Tab::Terminal(environment, 7),
+                    place: None,
+                    how: Some(Opening::Tab),
+                });
+        }
+        command.exit = Some(0);
+        for environment in [here(), there()] {
+            run = run.event_from(
+                environment,
+                patch(2).listed(listed().terminal(command.clone())),
+            );
+        }
+        assert_eq!(shown(&run), [Tab::Terminal(keep_in, 7)]);
+    }
+}
+
+#[test]
+fn a_failed_command_keeps_its_tab_until_the_terminal_is_stopped() {
+    for code in [1, 3, 143] {
+        let mut command = shell(7, "/r");
+        command.program = TerminalProgram::Command;
+        let run = Scenario::new()
+            .send(opened(None))
+            .event(snapshot().listed(listed().terminal(command.clone())))
+            .send(show(Tab::Terminal(here(), 7)));
+        command.exit = Some(code);
+        let run = run.event(patch(2).listed(listed().terminal(command)));
+        assert_eq!(shown(&run), [Tab::Terminal(here(), 7)]);
+        let run = run.event(patch(3).listed(listed()));
+        assert!(shown(&run).is_empty());
+    }
+}
+
+#[test]
+fn successful_commands_close_background_tabs_and_splits_only_in_their_environment() {
+    let mut command = shell(7, "/r");
+    command.program = TerminalProgram::Command;
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(snapshot().listed(listed().terminal(command.clone())))
+        .event_from(
+            there(),
+            snapshot().listed(listed().terminal(command.clone())),
+        )
+        .send(show(Tab::Terminal(here(), 7)))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(Msg::Show {
+            thing: Tab::Terminal(there(), 7),
+            place: None,
+            how: Some(Opening::Tab),
+        });
+    command.exit = Some(0);
+    let run = run.event(patch(2).listed(listed().terminal(command)));
+    assert_eq!(shown(&run), [Tab::Terminal(there(), 7)]);
+    assert_eq!(active(&run), Some(Tab::Terminal(there(), 7)));
+}
+
+#[test]
+fn commands_finishing_together_do_not_reopen_each_other_as_fallbacks() {
+    for show_second in [false, true] {
+        let mut first = shell(7, "/r");
+        first.program = TerminalProgram::Command;
+        let mut second = shell(8, "/r");
+        second.program = TerminalProgram::Command;
+        let run = Scenario::new()
+            .send(opened(None))
+            .event(snapshot().listed(listed().terminals([first.clone(), second.clone()])))
+            .send(Msg::Show {
+                thing: Tab::Terminal(here(), 7),
+                place: place("/r"),
+                how: None,
+            });
+        let run = if show_second {
+            run.send(Msg::Show {
+                thing: Tab::Terminal(here(), 8),
+                place: place("/r"),
+                how: Some(Opening::Tab),
+            })
+        } else {
+            run
+        };
+        first.exit = Some(0);
+        second.exit = Some(0);
+        let run = run.event(patch(2).listed(listed().terminals([first, second])));
+        assert!(shown(&run).is_empty());
+    }
+}
+
+#[test]
+fn a_successful_command_returns_to_the_session_in_its_worktree() {
+    let mut command = shell(7, "/r");
+    command.program = TerminalProgram::Command;
+    let run = Scenario::new()
+        .send(opened(None))
+        .event(
+            snapshot().listed(
+                listed()
+                    .session(session("a").cwd("/r"))
+                    .terminal(command.clone()),
+            ),
+        )
+        .send(Msg::Show {
+            thing: Tab::Terminal(here(), 7),
+            place: place("/r"),
+            how: None,
+        });
+    command.exit = Some(0);
+    let run =
+        run.event(patch(2).listed(listed().session(session("a").cwd("/r")).terminal(command)));
+    assert_eq!(shown(&run), [session_tab("a")]);
 }
 
 #[test]

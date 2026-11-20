@@ -308,11 +308,52 @@ mod shown {
     }
 
     #[test]
-    fn a_terminal_asked_to_be_shown_opens_with_the_keys_while_its_opener_is_looked_at() {
+    fn a_terminal_asked_to_be_shown_switches_the_tab_without_taking_the_keys() {
         let id = SessionId::new();
         let run = terminal_appears("opener", vec![opener(id)], shown_terminal(7, id));
         assert_eq!(focused(&run), Some(Tab::Terminal(here(), 7)));
-        assert_eq!(run.state().content.focus, Area::Console);
+        assert_eq!(run.state().content.focus, Area::Sidebar);
+    }
+
+    #[test]
+    fn a_terminal_appearing_while_the_input_has_focus_opens_behind_the_shown_tab() {
+        let id = SessionId::new();
+        let run = Scenario::new()
+            .event_from(here(), listing(vec![opener(id)]).seq(1))
+            .send(testing::show(Tab::Session(here(), "opener".into())))
+            .send(Msg::Focus(Area::Prompt))
+            .event_from(
+                here(),
+                testing::patch(2).listed(
+                    tsumugi_protocol::testing::listed()
+                        .sessions([opener(id)])
+                        .terminal(shown_terminal(7, id)),
+                ),
+            );
+        assert_eq!(focused(&run), Some(Tab::Session(here(), "opener".into())));
+        assert_eq!(run.state().content.focus, Area::Prompt);
+        assert!(opened(&run, &Tab::Terminal(here(), 7)));
+    }
+
+    #[test]
+    fn a_terminal_appearing_keeps_the_focus_of_each_non_input_area() {
+        for area in [Area::Sidebar, Area::Details, Area::Console] {
+            let id = SessionId::new();
+            let run = Scenario::new()
+                .event_from(here(), listing(vec![opener(id)]).seq(1))
+                .send(testing::show(Tab::Session(here(), "opener".into())))
+                .send(Msg::Focus(area))
+                .event_from(
+                    here(),
+                    testing::patch(2).listed(
+                        tsumugi_protocol::testing::listed()
+                            .sessions([opener(id)])
+                            .terminal(shown_terminal(7, id)),
+                    ),
+                );
+            assert_eq!(focused(&run), Some(Tab::Terminal(here(), 7)));
+            assert_eq!(run.state().content.focus, area);
+        }
     }
 
     #[test]

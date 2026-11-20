@@ -100,6 +100,11 @@ terminal is stopped; a shell or Neovim terminal ends with its program. The
 Neovims of the prompt and the console's reader are part of the window, not
 terminals.
 
+When a command finishes successfully, its tabs and splits close automatically.
+Settings lets each environment keep those windows open instead. Its output
+remains available by opening the terminal from the tree. A failed command
+keeps its windows open.
+
 Closing a terminal's windows hides it and leaves its program running, save a
 Neovim started on a file ([closing](#closing)); its row in the tree opens it
 again, and closing the window leaves it running too. Stop
@@ -135,10 +140,10 @@ resource is addressed by ID, not by a name or the caller's directory.
 directory when omitted. A command terminal takes its program and arguments
 after `--`, and only it does.
 
-A terminal `start` makes opens in the window as a session another opens does
-([opening sessions](opening-sessions.md)): with the keys while the user is
-looking at the session Tsumugi runs that started it, and otherwise behind the
-tab shown. `start --background` keeps it to the tree.
+A terminal `start` makes opens in the window without moving keyboard focus.
+While the user is looking at the session that started it, its tab is shown,
+unless the input area has focus; otherwise it opens behind the shown tab.
+`start --background` keeps it to the tree.
 
 `input` sends what it is given to the terminal's program, in the order given,
 and returns once the terminal has taken it. `--text` is typed as it is, so a

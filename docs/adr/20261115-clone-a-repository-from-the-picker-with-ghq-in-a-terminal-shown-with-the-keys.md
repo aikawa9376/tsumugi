@@ -14,7 +14,7 @@ work machine, which may not be the computer the window is on.
 
 A repository named in the picker's query is offered to clone. Choosing it has
 the work host of the environment it is offered in run `ghq get` in a terminal
-the window shows with the keys, as it shows any terminal, and kept once the
+the window shows with the keys, and kept once the
 command ends. Once it ends having cloned the repository, the window does with
 the repository's directory what choosing that directory would have done.
 

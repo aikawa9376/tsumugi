@@ -206,6 +206,9 @@ pub struct Settings {
     /// restarted, crashed or went with the machine, come back: offered by the
     /// window to bring back, at once, or never.
     pub restore_sessions: RestoreSessions,
+    /// Close a command's tabs and splits when it finishes successfully; its
+    /// output stays available from the tree. Off, its windows stay open too.
+    pub close_successful_commands: bool,
     /// How a shell tab's shell starts.
     pub shell: ShellLaunch,
     /// How a Neovim tab's Neovim starts, as an agent does; an empty command
@@ -283,6 +286,7 @@ impl Default for Settings {
             notify_waiting: false,
             rename_sessions: true,
             restore_sessions: RestoreSessions::Ask,
+            close_successful_commands: true,
             shell: ShellLaunch::default(),
             neovim: Launch::default(),
             scratch_dir: String::new(),

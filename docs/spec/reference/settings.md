@@ -12,6 +12,7 @@ when the file does not name it, and what it does
 | --- | --- | --- | --- |
 | `appearance` | one of `system`, `light`, `dark` | `"system"` | Which of the two themes colours the console and the window: `system` follows macOS as it switches between light and dark, `light` and `dark` keep to one. The Settings window chooses it, and the two themes, once for every environment and writes them here. |
 | `auto_scale` | boolean | `true` | Adapt window scale to the current display. |
+| `close_successful_commands` | boolean | `true` | Close a command's tabs and splits when it finishes successfully; its output stays available from the tree. Off, its windows stay open too. |
 | `dark_theme` | string | `"Solarized Dark"` | The theme drawn while the appearance is dark, named as the light one is. |
 | `font_family` | string | `""` | The font the console and the prompt are drawn in, as the system names its family; empty for Tsumugi's own, JetBrainsMono Nerd Font Mono. Tsumugi's own stands behind any other, so Nerd Font glyphs draw whatever font is chosen, and a Japanese font behind that. A line is as tall as the font asks, as in a terminal. |
 | `font_size` | number | `13.0` | The font's size, in points, from 8 to 32. |

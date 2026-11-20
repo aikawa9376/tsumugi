@@ -7,6 +7,20 @@ pub(crate) fn written_and_read(settings: &Settings) -> Settings {
 }
 
 #[test]
+fn successful_commands_close_by_default_and_the_choice_survives_saving() {
+    let defaults = toml::Value::try_from(Settings::parse("").unwrap()).unwrap();
+    assert_eq!(
+        defaults.get("close_successful_commands"),
+        Some(&true.into())
+    );
+    for on in [false, true] {
+        let chosen = Settings::parse(&format!("close_successful_commands = {on}\n")).unwrap();
+        let saved = toml::Value::try_from(written_and_read(&chosen)).unwrap();
+        assert_eq!(saved.get("close_successful_commands"), Some(&on.into()));
+    }
+}
+
+#[test]
 fn a_file_missing_reads_as_designed_and_one_that_cannot_be_had_names_itself() {
     use tsumugi_protocol::{ConfigFile, FileText};
     let file = |text| ConfigFile {
@@ -334,6 +348,7 @@ fn settings_written_read_back_the_same() {
         notify_waiting: true,
         rename_sessions: true,
         restore_sessions: RestoreSessions::Always,
+        close_successful_commands: false,
         shell: ShellLaunch {
             command: vec!["/bin/bash".into(), "-l".into()],
             env: BTreeMap::from([("LANG".into(), "C".into())]),
@@ -964,7 +979,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `rename_sessions`, `restore_sessions`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),

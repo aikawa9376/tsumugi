@@ -93,6 +93,7 @@ no one can answer it. Run it yourself in a terminal shown to the user:
 @TSUMUGI@ terminal start --program command --json -- sudo <command> [args...]
 ```
 
-The terminal opens with the keys while the user is looking at you; otherwise it
-opens behind the tab they are in. Tell the user to type there, read
+The terminal's tab is shown while the user is looking at you, unless the input
+area has focus; otherwise it opens behind the tab they are in. Keyboard focus
+stays where it is. Tell the user to select the terminal and type there, read
 `screen --json` until `exit` is set, then stop the terminal.

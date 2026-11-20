@@ -296,10 +296,9 @@ fn listed_ids(hosts: &Hosts, environment: &EnvironmentId) -> Listed {
 }
 
 /// Open each session or terminal of `environment` not among `before` that was
-/// not started in the background: the first one the session in the focused
-/// window opened is shown with the keys, and every other is opened behind
-/// the shown tab, so the user sees it appear without losing what they type
-/// into.
+/// not started in the background. A session may take the keys from its
+/// opener; a terminal only changes the tab, and waits behind it while the
+/// input has focus.
 fn show_asked(state: &mut ViewState, environment: &EnvironmentId, before: &Listed) -> Vec<Effect> {
     let Some(work) = state.hosts.work(environment) else {
         return Vec::new();
@@ -333,16 +332,19 @@ fn show_asked(state: &mut ViewState, environment: &EnvironmentId, before: &Liste
         )
         .collect();
     let mut effects = Vec::new();
-    let mut keys_taken = false;
+    let mut tab_shown = false;
     for (tab, opener, cwd) in appeared {
-        if keys_taken || looked_at.is_none() || opener != looked_at {
+        let writing =
+            matches!(tab, Tab::Terminal(..)) && state.content.focus == crate::content::Area::Prompt;
+        if tab_shown || writing || looked_at.is_none() || opener != looked_at {
             state.content.windows.open_behind(tab);
             continue;
         }
-        keys_taken = true;
+        tab_shown = true;
         match (tab, cwd) {
             (Tab::Session(_, id), _) => {
                 effects.extend(crate::content::show_session(state, environment.clone(), id));
+                state.content.focus = crate::content::Area::Console;
             }
             (tab, cwd) => {
                 let content = &mut state.content;
@@ -350,9 +352,6 @@ fn show_asked(state: &mut ViewState, environment: &EnvironmentId, before: &Liste
                 content.windows.open(tab);
             }
         }
-    }
-    if keys_taken {
-        state.content.focus = crate::content::Area::Console;
     }
     effects
 }

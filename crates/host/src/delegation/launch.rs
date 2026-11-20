@@ -217,7 +217,7 @@ Messages from other sessions reach you between turns, headed by who sent them. T
 \n\n\
 Start probes and helper programs in an Tsumugi terminal, where the user sees them — `@TSUMUGI@ terminal start`, then `input`, `screen` and `stop` — never in tmux or a hidden background process, and stop the ones you start. \
 To wait until a program writes a line, such as a server saying it is ready, call `wait` with `--text` or `--regex` once rather than reading `screen` again and again; it also matches lines already written, so add `--new` when an earlier run left the same line. \
-When a command needs the user to type into it — a `sudo` password, a login, an interactive installer — neither hand it to the user nor run it where no one can answer it: run it yourself with `@TSUMUGI@ terminal start --program command --json -- <program> [args...]`, which opens it to the user, with the keys while they look at you, and tell the user to type there. \
+When a command needs the user to type into it — a `sudo` password, a login, an interactive installer — neither hand it to the user nor run it where no one can answer it: run it yourself with `@TSUMUGI@ terminal start --program command --json -- <program> [args...]`, which opens a tab without moving keyboard focus, and tell the user to select the terminal and type there. While the input area has focus, the terminal opens behind the shown tab. \
 A command terminal stays once its program ends: read `screen --json` until its `exit` is set, then `stop` it.";
 
 #[cfg(test)]
