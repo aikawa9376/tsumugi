@@ -13,6 +13,7 @@ use crate::details::{Drill, Listing, View};
 
 fn diff_class(kind: DiffKind) -> &'static str {
     match kind {
+        DiffKind::Difft => "diff-structural",
         DiffKind::File => "diff-file",
         DiffKind::Hunk => "diff-hunk",
         DiffKind::Added => "diff-add",
@@ -21,7 +22,7 @@ fn diff_class(kind: DiffKind) -> &'static str {
     }
 }
 
-/// What a worktree is: none shown, outside git and jj, or a repository.
+/// What a worktree is: none shown, outside Git, or a repository.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Worktree {
     None,
@@ -67,7 +68,7 @@ pub(super) fn Repository(
             }
             match (worktree, listing) {
                 (Worktree::None, _) => rsx! { ListRow { kind: "dim", "Open a worktree to see it here" } },
-                (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a git or jj repository" } },
+                (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a Git repository" } },
                 (_, None) => rsx! { ListRow { kind: "dim", "Reading…" } },
                 (_, Some(Listing::Error(e))) => rsx! { div { class: "git-error", "{e}" } },
                 (_, Some(Listing::Files(files))) if files.is_empty() => rsx! { ListRow { kind: "dim", "No changes" } },
@@ -85,14 +86,47 @@ pub(super) fn Repository(
                 (_, Some(Listing::Log(commits))) => rsx! { LogRows { commits, selected, base: None } },
                 (_, Some(Listing::Diff(lines))) if lines.is_empty() => rsx! { ListRow { kind: "dim", "No changes" } },
                 (_, Some(Listing::Diff(lines))) => rsx! {
-                    div { class: "diff",
-                        for (i , d) in lines.iter().enumerate() {
-                            div { key: "{i}", class: "{diff_class(d.kind)}", "{d.text}" }
-                        }
-                    }
+                    DiffRows { lines }
                 },
                 (_, Some(Listing::Entries(_))) => rsx! {},
             }
         }
     }
+}
+
+#[component]
+pub(crate) fn DiffRows(lines: Vec<tsumugi_model::repository::DiffLine>) -> Element {
+    rsx! { div { class: "diff",
+        if lines.is_empty() { div { "No changes" } }
+        for (i, line) in lines.iter().enumerate() {
+            div { key: "{i}", class: "{diff_class(line.kind)}",
+                if line.kind == DiffKind::Difft {
+                    for (style, text) in super::diff_text::spans(&line.text) { span { style, "{text}" } }
+                } else { "{line.text}" }
+            }
+        }
+    } }
+}
+
+#[component]
+pub(crate) fn ReviewActions(
+    environment: tsumugi_model::EnvironmentId,
+    worktree: std::path::PathBuf,
+    spot: tsumugi_model::repository::Spot,
+    #[props(default = true)] tab: bool,
+) -> Element {
+    let app = use_context::<AppCtx>();
+    let open = move |neovim| {
+        app.dispatch(Msg::OpenDiff {
+            environment: environment.clone(),
+            worktree: worktree.clone(),
+            spot: spot.clone(),
+            neovim,
+        })
+    };
+    let open_tab = open.clone();
+    rsx! { div { class: "review-actions",
+        button { onclick: { let open = open.clone(); move |_| open(true) }, "Open in Neovim" }
+        if tab { button { onclick: move |_| open_tab(false), "Open in Tab" } }
+    } }
 }

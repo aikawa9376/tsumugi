@@ -635,6 +635,7 @@ pub fn place_of_tab(tree: &Tree, terminals: &[TerminalSession], tab: &Tab) -> Op
         }
         Tab::Drawn { session, .. } => nav::find(tree, session).map(|(p, _)| at(p)),
         Tab::GitHub { repository, .. } => Some(at(repository)),
+        Tab::Diff { worktree, .. } => Some(at(worktree)),
     }
 }
 
@@ -671,6 +672,7 @@ pub fn crumbs(showing: &Showing, work: Option<&WorkSnapshot>) -> Option<Crumbs> 
             .map(|s| s.name.clone())
             .unwrap_or_default(),
         Tab::Draft { .. } => "new session".into(),
+        Tab::Diff { .. } => crate::content::thing_name(tree, terminals(work), tab),
         Tab::Viewer(_, path) => path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())

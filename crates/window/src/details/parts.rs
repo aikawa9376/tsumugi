@@ -181,7 +181,7 @@ pub(super) fn PartView(
                 }
                 match (kind, commits.is_empty()) {
                     (Worktree::None, _) => rsx! { ListRow { kind: "dim", "Open a worktree to see it here" } },
-                    (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a git or jj repository" } },
+                    (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a Git repository" } },
                     (_, true) => rsx! {},
                     (_, false) => rsx! {
                         div { class: "list-rows details-git",
@@ -333,7 +333,7 @@ fn Changed(
             }
             match (kind, listing) {
                 (Worktree::None, _) => rsx! { ListRow { kind: "dim", "Open a worktree to see it here" } },
-                (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a git or jj repository" } },
+                (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a Git repository" } },
                 (_, None) => rsx! { ListRow { kind: "dim", "Reading…" } },
                 (_, Some(Listing::Error(e))) => rsx! { div { class: "git-error", "{e}" } },
                 (_, Some(Listing::Files(files))) if files.is_empty() => rsx! { ListRow { kind: "dim", "No changes" } },

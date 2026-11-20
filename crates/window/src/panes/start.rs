@@ -103,6 +103,14 @@ impl Ui {
     /// its place is in, named apart from those in its worktree, and show it
     /// where it was asked for.
     pub(crate) fn start_terminal(&self, ask: TerminalAsk) {
+        self.start_terminal_review(ask, None);
+    }
+
+    pub(crate) fn start_terminal_review(
+        &self,
+        ask: TerminalAsk,
+        diff: Option<tsumugi_model::repository::Spot>,
+    ) {
         let app = self.app;
         let TerminalAsk {
             place: p,
@@ -132,6 +140,7 @@ impl Ui {
             cwd: HostPath::local(&p.worktree),
             program: runs,
             file,
+            diff,
             cols: size.cols,
             rows: size.rows,
         };

@@ -93,6 +93,8 @@ pub struct TerminalStartRequest {
     pub cwd: PathBuf,
     pub program: TerminalProgram,
     pub env: Vec<(String, String)>,
+    /// The repository review to open after startup.
+    pub diff: Option<tsumugi_model::repository::Spot>,
     /// The file to start Neovim on; a shell is started on none.
     pub file: Option<PathBuf>,
     /// The program and its arguments a command terminal runs.
@@ -149,6 +151,12 @@ pub fn resolve_terminal(
                 let socket = tsumugi_model::paths::neovim_socket(tsumugi_sys::euid(), resource_id);
                 file.extend(["--listen".into(), socket.to_string_lossy().into_owned()]);
             }
+            if request.diff.is_some() {
+                file.extend([
+                    "-c".into(),
+                    format!("lua {}", include_str!("../nvim/review.lua")),
+                ]);
+            }
             if let Some(path) = &request.file {
                 file.extend(["--".into(), path.to_string_lossy().into_owned()]);
             }
@@ -182,6 +190,13 @@ pub fn resolve_terminal(
         exit: None,
         restored_from: request.restored_from,
     };
+    let mut env = env;
+    if let Some(spot) = request.diff {
+        env.push((
+            "TSUMUGI_REVIEW".into(),
+            serde_json::to_string(&spot).expect("a repository spot serializes"),
+        ));
+    }
     let mut tags = sessions::terminal_tags(&terminal);
     tags.extend(crate::environment::tags());
     ResolvedTerminalLaunch {

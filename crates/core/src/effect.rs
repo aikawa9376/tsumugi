@@ -79,6 +79,11 @@ pub enum Effect {
     // The content.
     /// Start a shell or a Neovim as asked.
     StartTerminal(TerminalAsk),
+    /// Start a normally configured editor on the work machine for this diff.
+    StartDiffEditor {
+        place: crate::tree::Place,
+        spot: tsumugi_model::repository::Spot,
+    },
     /// Make a worktree of the repository at `repository` of `environment`
     /// that starts at the head of its pull request `number`,
     /// then open a draft there with `prompt` written in it.

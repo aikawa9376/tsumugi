@@ -65,3 +65,6 @@ pub use tsumugi_term::gate::run as startup_lease;
 #[cfg(windows)]
 pub use tsumugi_term::{HOLD, hold};
 pub use work_host::cli as host_cli;
+
+#[cfg(test)]
+mod review_tests;

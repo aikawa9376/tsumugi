@@ -27,6 +27,15 @@ pub fn thing_name(tree: &Tree, terminals: &[TerminalSession], thing: &Tab) -> St
             .map(|s| s.name.clone())
             .unwrap_or_default(),
         Tab::Draft { .. } => "new session".into(),
+        Tab::Diff { worktree, spot, .. } => {
+            use tsumugi_model::repository::{Rev, Spot};
+            let name = match spot.as_ref() {
+                Spot::Diff(_, change) => change.shown(),
+                Spot::Files(Rev::Commit(id)) => id.chars().take(8).collect(),
+                _ => file_name(worktree),
+            };
+            format!("Diff: {name}")
+        }
         Tab::Viewer(_, path) => file_name(path),
         Tab::Drawn { width, height, .. } => format!("Image {width} × {height}"),
         Tab::GitHub { number, .. } => format!("#{number}"),

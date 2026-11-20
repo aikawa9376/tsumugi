@@ -21,6 +21,12 @@ pub enum Tab {
         worktree: PathBuf,
         id: DraftId,
     },
+    /// A repository review, read by its work host independently of the panel.
+    Diff {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        spot: Box<tsumugi_model::repository::Spot>,
+    },
     /// A file shown in the viewer of its kind.
     Viewer(EnvironmentId, PathBuf),
     /// A pull request or an issue `number` of `listing` in the repository at
@@ -48,7 +54,13 @@ pub enum Tab {
 pub fn shows_prompt(tab: Option<&Tab>) -> bool {
     !matches!(
         tab,
-        Some(Tab::Terminal(..) | Tab::Viewer(..) | Tab::Drawn { .. } | Tab::GitHub { .. })
+        Some(
+            Tab::Terminal(..)
+                | Tab::Viewer(..)
+                | Tab::Drawn { .. }
+                | Tab::GitHub { .. }
+                | Tab::Diff { .. }
+        )
     )
 }
 
@@ -85,7 +97,8 @@ impl Tab {
             | Tab::Viewer(environment, _)
             | Tab::Draft { environment, .. }
             | Tab::Drawn { environment, .. }
-            | Tab::GitHub { environment, .. } => environment,
+            | Tab::GitHub { environment, .. }
+            | Tab::Diff { environment, .. } => environment,
         }
     }
 }
@@ -358,7 +371,11 @@ pub fn kept_name(tab: &Tab) -> Option<String> {
     let name = match tab {
         Tab::Session(_, id) => format!("session:{id}"),
         Tab::Terminal(_, id) => format!("terminal:{id:x}"),
-        Tab::Draft { .. } | Tab::Viewer(..) | Tab::Drawn { .. } | Tab::GitHub { .. } => {
+        Tab::Draft { .. }
+        | Tab::Viewer(..)
+        | Tab::Drawn { .. }
+        | Tab::GitHub { .. }
+        | Tab::Diff { .. } => {
             return None;
         }
     };

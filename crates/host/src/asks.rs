@@ -346,6 +346,7 @@ async fn start_terminal(watched: &Watched, start: TerminalStart) -> Result<Answe
             // Not `agent_env`: a shell or Neovim keeps the user's own editor.
             env: daemon::terminal_env(),
             file: start.file,
+            diff: start.diff,
             command: Vec::new(),
             opener: None,
             show: false,

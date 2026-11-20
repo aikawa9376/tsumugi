@@ -211,6 +211,9 @@ pub struct TerminalStart {
     pub name: String,
     pub cwd: HostPath,
     pub program: TerminalProgram,
+    /// A repository review opened after the user's Neovim configuration loads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<tsumugi_model::repository::Spot>,
     /// The file Neovim starts on.
     pub file: Option<PathBuf>,
     pub cols: u16,

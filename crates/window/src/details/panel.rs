@@ -95,6 +95,20 @@ pub(crate) fn DetailsPanel(
         .into_iter()
         .partition(|r| !r.first().and_then(|l| l.first()).is_some_and(|p| p.foot));
     let opened_row = details.drill.shows_row();
+    let review = tabs.get(now).is_some_and(|tab| {
+        tab.components.iter().any(|p| {
+            matches!(
+                p.component,
+                crate::details::Component::Changes | crate::details::Component::Log
+            )
+        })
+    }) && shown_kind == Worktree::Repository;
+    let review_spot = details
+        .drill
+        .spot()
+        .unwrap_or(tsumugi_model::repository::Spot::Files(
+            tsumugi_model::repository::Rev::WorkingCopy,
+        ));
     rsx! {
         if tabs.len() > 1 {
             div { class: "panel-tabs",
@@ -136,6 +150,13 @@ pub(crate) fn DetailsPanel(
                         on_kill,
                         on_menu,
                     }
+                }
+            }
+        }
+        if review {
+            if let Some(worktree) = worktree.clone() {
+                div { class: "details-foot",
+                    super::changes::ReviewActions { environment: environment.clone(), worktree, spot: review_spot }
                 }
             }
         }

@@ -298,7 +298,16 @@ a leaf task is in progress or completed; and not started otherwise.
 
 ## In a git repository
 
+The Code tab can open working-tree changes, or an opened commit or file,
+in a dedicated application tab or a normally configured Neovim on the work
+machine. Neovim uses the user's diffview.nvim when available, including
+command-loaded plugins, and otherwise opens a built-in diff without installing
+plugins.
 
+Inline diffs and dedicated diff tabs use difft on the work machine when it
+is available, falling back to Git's unified diff when it cannot be used.
+The dedicated tab keeps reading its repository independently of the details
+panel and can open each changed file.
 
 - Changes lists the files changed in the worktree against its last commit,
   staged or not, and each untracked file. An untracked file's diff shows all

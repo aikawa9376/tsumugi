@@ -9,6 +9,7 @@ mod discover;
 pub mod ghq;
 pub mod git;
 pub mod github;
+mod review;
 mod view;
 pub mod worktree;
 
@@ -116,18 +117,27 @@ async fn run_head(
     max_lines: usize,
     max_bytes: usize,
 ) -> Result<String, Error> {
+    let mut command = Command::new(program);
+    command.args(args);
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    run_command_head(command, program, max_lines, max_bytes).await
+}
+
+async fn run_command_head(
+    mut cmd: Command,
+    program: &str,
+    max_lines: usize,
+    max_bytes: usize,
+) -> Result<String, Error> {
     use std::process::Stdio;
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
     let spawn_error = |source| Error::Spawn {
         program: program.into(),
         source,
     };
-    let mut cmd = Command::new(program);
-    if let Some(cwd) = cwd {
-        cmd.current_dir(cwd);
-    }
     let mut child = cmd
-        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -275,3 +285,6 @@ mod tests {
         ));
     }
 }
+
+#[cfg(all(test, unix))]
+mod review_tests;

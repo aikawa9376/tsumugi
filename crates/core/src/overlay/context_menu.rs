@@ -169,7 +169,9 @@ pub fn entries(
             .collect(),
         Target::Tab(Tab::Terminal(_, _)) => vec![close_tab, stop_terminal],
         Target::Tab(Tab::Draft { .. }) => Vec::new(),
-        Target::Tab(Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. }) => vec![close_tab],
+        Target::Tab(
+            Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. } | Tab::Diff { .. },
+        ) => vec![close_tab],
         Target::Link { file, .. } => [Action::CursorGo, Action::CursorCopy]
             .map(offer)
             .into_iter()

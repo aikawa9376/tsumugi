@@ -1911,3 +1911,64 @@ fn only_a_document_and_a_neovim_on_one_switch() {
         .send(edit());
     assert_eq!(active(&session), Some(session_tab("a")));
 }
+
+#[test]
+fn a_diff_tab_keeps_its_work_machine_and_repository_watched_without_a_prompt() {
+    use tsumugi_model::repository::{Rev, Spot as RepositorySpot};
+    let spot = RepositorySpot::Files(Rev::WorkingCopy);
+    let run = Scenario::new().send(Msg::OpenDiff {
+        environment: there(),
+        worktree: "/remote/repo".into(),
+        spot: spot.clone(),
+        neovim: false,
+    });
+    let tab = Tab::Diff {
+        environment: there(),
+        worktree: "/remote/repo".into(),
+        spot: Box::new(spot.clone()),
+    };
+    assert_eq!(run.state().content.active(), Some(&tab));
+    assert!(!shows_prompt(Some(&tab)));
+    assert_eq!(
+        crate::tree::place_of_tab(&Default::default(), &[], &tab)
+            .unwrap()
+            .worktree,
+        PathBuf::from("/remote/repo")
+    );
+    assert_eq!(
+        crate::settle::sight(run.state(), &there()).repositories,
+        [tsumugi_protocol::RepositorySight {
+            worktree: "/remote/repo".into(),
+            spot
+        }]
+    );
+    assert!(
+        crate::settle::sight(run.state(), &here())
+            .repositories
+            .is_empty()
+    );
+}
+
+#[test]
+fn opening_a_diff_in_neovim_targets_the_work_machine_and_the_opened_commit_file() {
+    use tsumugi_model::repository::{Change, Rev, Spot as RepositorySpot};
+    let spot = RepositorySpot::Diff(
+        Rev::Commit("abc123".into()),
+        Change {
+            status: "R".into(),
+            path: "new name.rs".into(),
+            from: Some("old name.rs".into()),
+        },
+    );
+    let run = Scenario::new().send(Msg::OpenDiff {
+        environment: there(),
+        worktree: "/remote/repo".into(),
+        spot: spot.clone(),
+        neovim: true,
+    });
+    assert!(run.effects().iter().any(|effect| matches!(effect,
+        Effect::StartDiffEditor { place, spot: target }
+        if place.environment == there() && place.worktree == std::path::Path::new("/remote/repo") && target == &spot
+    )));
+    assert!(run.state().content.active().is_none());
+}

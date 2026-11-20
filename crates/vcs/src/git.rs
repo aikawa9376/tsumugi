@@ -253,7 +253,7 @@ pub async fn file_diff(
         Some(rev) => args.extend(["show", "--format=", rev]),
         None => args.extend(["diff", "HEAD"]),
     }
-    args.extend(["--no-color", "--no-ext-diff", "--"]);
+    args.extend(["--no-color", "--no-ext-diff", "--no-textconv", "--"]);
     args.extend(change.paths());
     let out = run_head("git", &args, None, lines, DIFF_BYTES).await?;
     Ok(parse_diff(&out, lines))

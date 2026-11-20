@@ -117,6 +117,9 @@ pub(crate) fn FocusedBody(
             .map(|s| s.name.clone())
             .unwrap_or_default(),
         Some(Tab::Draft { .. }) => "new session".into(),
+        Some(tab @ Tab::Diff { .. }) => {
+            tsumugi_core::content::thing_name(tree, tree_view::terminals(work), tab)
+        }
         Some(Tab::Viewer(_, path)) => file_name(path),
         Some(Tab::Drawn { width, height, .. }) => format!("Image {width} × {height}"),
         Some(tab @ Tab::GitHub { number, .. }) => {

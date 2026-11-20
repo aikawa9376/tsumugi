@@ -61,7 +61,8 @@ pub(super) fn TabsBar(
                     Tab::Terminal(_, _)
                     | Tab::Viewer(_, _)
                     | Tab::Drawn { .. }
-                    | Tab::GitHub { .. } => (None, None),
+                    | Tab::GitHub { .. }
+                    | Tab::Diff { .. } => (None, None),
                 };
                 let name = tree_view::github_title(work, &shows)
                     .unwrap_or_else(|| thing_name(t, terms, &shows));

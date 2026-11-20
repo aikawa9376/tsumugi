@@ -423,6 +423,7 @@ async fn execute(
                     env: crate::daemon::terminal_env(),
                     file: None,
                     command,
+                    diff: None,
                     opener,
                     show: !background,
                     restored_from: None,

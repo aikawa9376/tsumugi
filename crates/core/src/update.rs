@@ -134,6 +134,26 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         } => content::draft_written(state, environment, worktree, prompt),
         Msg::EditFile(environment, path) => content::edit_file(state, environment, path),
         Msg::OpenFile(environment, path) => content::open_file(state, environment, path),
+        Msg::OpenDiff {
+            environment,
+            worktree,
+            spot,
+            neovim,
+        } => {
+            let place = crate::tree::Place::at(&environment, &worktree);
+            if neovim {
+                vec![Effect::StartDiffEditor { place, spot }]
+            } else {
+                state.content.windows.open_tab(content::Tab::Diff {
+                    environment,
+                    worktree,
+                    spot: Box::new(spot),
+                });
+                state.content.place = Some(place);
+                state.content.focus = content::Area::Console;
+                Vec::new()
+            }
+        }
         Msg::RowClicked(item) => content::click_row(state, item),
         Msg::Window(action) => content::act(state, action),
         Msg::WindowFocus(id) => content::focus_window(state, id),

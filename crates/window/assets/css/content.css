@@ -1,6 +1,10 @@
 /* One line however many tabs there are, so the console keeps its height; the rest scrolls sideways. */
 .tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; align-items: center; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex: none; }
 .tabs::-webkit-scrollbar { display: none; }
+.conversation-screen { position: absolute; inset: 0 0 var(--composer, 0px); display: flex; flex-direction: column; background: var(--ground); }
+.conversation-heading { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: var(--ui-font-small); color: var(--text); }
+.conversation-hint { flex: 1; color: var(--text-3); }
+.conversation-heading button { padding: 3px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: 5px; color: var(--text-2); cursor: pointer; font: inherit; }
 .tabs > * { flex: none; }
 .tab { white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 7px; color: var(--text-2); cursor: default; }
 .tab.active { background: var(--select); color: var(--text); font-weight: 500; }
@@ -40,3 +44,12 @@
 .tab.ghost { opacity: 0.55; outline: 1px dashed var(--focus-border); outline-offset: -1px; }
 /* What is dragged, by its name, following the pointer. */
 .drag-ghost { position: fixed; z-index: 50; pointer-events: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--focus-border); border-radius: 7px; background: var(--raised); color: var(--text); font-size: var(--ui-font-small); white-space: nowrap; box-shadow: 0 4px 14px var(--shadow); opacity: 0.92; }
+
+.review-actions { display: flex; gap: 8px; padding: 8px; flex-wrap: wrap; }
+.review-actions button, .diff-review-toolbar button { cursor: pointer; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; }
+.diff-review { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.diff-review-toolbar { display: flex; align-items: center; flex-shrink: 0; border-bottom: 1px solid var(--line); }
+.diff-review-scroll { flex: 1; overflow: auto; padding: 12px; }
+.diff-review-file { display: flex; width: 100%; gap: 10px; padding: 5px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; font: inherit; }
+.diff-review-file:hover { background: var(--select); }
+.diff-structural { white-space: pre; min-height: 1em; }

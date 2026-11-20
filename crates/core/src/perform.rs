@@ -66,7 +66,7 @@ pub(crate) fn perform(
         && let Some(tab) = &thing
         && (matches!(
             tab,
-            Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. }
+            Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. } | Tab::Diff { .. }
         ) || state.content.conversation(tab))
         && let Some(action) = ViewerAction::of(&action)
         && let Some(window) = state.content.windows.focused_window()

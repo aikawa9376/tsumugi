@@ -29,7 +29,7 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
                 Rev::WorkingCopy => None,
                 Rev::Commit(id) => Some(id.as_str()),
             };
-            git::file_diff(worktree, revision, change, limits.diff_lines)
+            crate::review::file_diff(worktree, revision, change, limits.diff_lines)
                 .await
                 .map(Listing::Diff)
         }

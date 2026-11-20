@@ -1,7 +1,8 @@
 //! The details panel as the window draws it: its tabs, the components of
 //! the tab shown and of its foot, and the rows opened from them.
 
-mod changes;
+pub(crate) mod changes;
+mod diff_text;
 mod github;
 mod log;
 mod message;

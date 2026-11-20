@@ -390,6 +390,7 @@ async fn reopen(
         program: kept.terminal.program,
         env: crate::daemon::terminal_env(),
         file: kept.terminal.file.clone(),
+        diff: None,
         command: kept.terminal.command.clone(),
         restored_from: Some(crate::sessions::hex(old)),
         opener: None,

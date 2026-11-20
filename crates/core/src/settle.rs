@@ -369,7 +369,7 @@ fn watched(state: &mut ViewState, effects: &mut Vec<Effect>) {
 /// What the window shows that the host of `environment` keeps read.
 pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
     let shown = content::shown_environment(state) == *environment;
-    let shown_part = if shown {
+    let mut shown_part = if shown {
         Sight {
             commands: prompt::commands_sight(state),
             ..details::sight(&state.details)
@@ -386,6 +386,23 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
             ..Sight::default()
         }
     };
+    for tab in state.content.windows.shown() {
+        if let Tab::Diff {
+            environment: e,
+            worktree,
+            spot,
+        } = tab
+            && e == environment
+        {
+            let read = tsumugi_protocol::RepositorySight {
+                worktree: worktree.clone(),
+                spot: spot.as_ref().clone(),
+            };
+            if !shown_part.repositories.contains(&read) {
+                shown_part.repositories.push(read);
+            }
+        }
+    }
     // The profiles listed are of the environment whose heading is selected,
     // or else of the one shown.
     let profiled = match &state.tree.selected {

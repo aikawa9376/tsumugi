@@ -941,6 +941,7 @@ impl AppCtx {
             | Effect::Palette(_)
             | Effect::PromptRoot(_)
             | Effect::StartTerminal(_)
+            | Effect::StartDiffEditor { .. }
             | Effect::OpenLogin { .. }
             | Effect::Clone { .. }
             | Effect::PromptClose(_)

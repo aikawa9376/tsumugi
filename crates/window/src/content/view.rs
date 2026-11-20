@@ -12,7 +12,8 @@ use tsumugi_core::msg::Msg;
 use tsumugi_core::tree as tree_view;
 
 use super::bodies::{
-    ConversationScreen, DrawnWindow, FocusedBody, GitHubWindow, UnfocusedBody, ViewerWindow,
+    ConversationScreen, DiffWindow, DrawnWindow, FocusedBody, GitHubWindow, UnfocusedBody,
+    ViewerWindow,
 };
 use super::tabs_bar::TabsBar;
 use super::window::{ContentWindow, WindowBorder, WindowDrop, window_strip};
@@ -122,6 +123,13 @@ pub(crate) fn ContentPanel(
                             },
                         }
                     }
+                } else if let Tab::Diff {
+                    environment,
+                    worktree,
+                    spot,
+                } = &shows
+                {
+                    rsx! { DiffWindow { key: "{id}", window: id, environment: environment.clone(), worktree: worktree.clone(), spot: spot.as_ref().clone(), commands: viewer_command } }
                 } else if let Tab::GitHub {
                     environment,
                     repository,

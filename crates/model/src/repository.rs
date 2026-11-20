@@ -8,7 +8,7 @@ pub use marks::*;
 use serde::{Deserialize, Serialize};
 
 /// A file a change touches.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Change {
     /// How it changed: git's two letters for the worktree, index then
     /// worktree (`M `, ` M`, `??`, …), and one for a commit (`M`, `A`, `D`,
@@ -70,6 +70,8 @@ pub struct Revision {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiffKind {
+    /// Structural diff text with SGR colors; never parsed as a unified patch.
+    Difft,
     File,
     Hunk,
     Added,
@@ -84,7 +86,7 @@ pub struct DiffLine {
 }
 
 /// Where changes are read from.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Rev {
     /// What is being worked on: Git's worktree.
     WorkingCopy,
@@ -93,7 +95,7 @@ pub enum Rev {
 }
 
 /// What a level of a sheet shows.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Spot {
     Files(Rev),
     Diff(Rev, Change),

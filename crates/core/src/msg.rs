@@ -178,6 +178,13 @@ pub enum Msg {
     /// opens, in the worktree it lies in or else its own folder: a document
     /// shown links to it.
     OpenFile(EnvironmentId, PathBuf),
+    /// Review this repository spot in a dedicated tab or the user's Neovim.
+    OpenDiff {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        spot: tsumugi_model::repository::Spot,
+        neovim: bool,
+    },
     /// A row was clicked: it opens as `cursor.go` opens it.
     RowClicked(Item),
     /// A key or a menu asked the content to do this.
