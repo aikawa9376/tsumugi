@@ -198,7 +198,9 @@ The prompt's own keys are its Neovim's mappings
 ([Neovim](settings.md#neovim)): `Ctrl+Enter` sends, `Ctrl+c` sends `Escape`
 to the agent, `Shift+Tab` is sent to it as it is, `Tab` on an empty prompt
 takes the prompt the agent suggests, and `Ctrl+p` and `Ctrl+n` recall the
-prompts sent, in insert and normal mode. `Tab`, `Shift+Tab`, `Ctrl+p` and
+prompts sent in normal mode. Insert mode uses Control-key cursor movement
+and deletion, and Alt-key word movement; the command line likewise offers
+Control-key editing. `Tab`, `Shift+Tab`, `Ctrl+p` and
 `Ctrl+n` move through Neovim's completions while it shows them, and a key
 meant for the agent is Neovim's while the prompt has no session to send it
 to. `global` bindings apply only outside Neovim's insert mode, but for `Mod`

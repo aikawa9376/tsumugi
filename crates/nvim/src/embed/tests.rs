@@ -801,14 +801,63 @@ async fn the_prompt_s_keys_ask_the_window_for_tsumugi_s_actions() {
         ("<Tab>", "prompt.take_suggestion"),
         ("<S-Tab>", "console.send Shift+Tab"),
         ("<C-c>", "console.send Escape"),
-        ("<C-p>", "prompt.history_prev"),
-        ("<C-n>", "prompt.history_next"),
+        ("<Esc><C-p>", "prompt.history_prev"),
+        ("<Esc><C-n>", "prompt.history_next"),
         ("<Esc><C-CR>", "prompt.send"),
     ] {
         let (e, mut rx) = start().await;
         e.input(keys).await.unwrap();
         wait(&mut rx, |ev| asks(ev, action)).await;
     }
+}
+
+#[tokio::test]
+async fn insert_mode_uses_control_keys_to_edit_without_typing_control_characters() {
+    for (keys, text) in [
+        ("abc<C-b>X", "abXc"),
+        ("abc<C-a>X", "Xabc"),
+        ("abc<C-a><C-f>X", "aXbc"),
+        ("abc<C-a><C-e>X", "abcX"),
+        ("abc<C-h>X", "abX"),
+        ("abc<C-b><C-d>X", "abX"),
+        ("abc<C-a><C-f><C-k>X", "aX"),
+        ("abc<C-u>X", "X"),
+        ("one two<C-w>X", "one X"),
+        ("one two<M-b>X", "one Xtwo"),
+        ("one two<C-a><M-f>X", "one Xtwo"),
+        ("abc<CR>def<C-a><C-p>X", "Xabc\ndef"),
+        ("abc<CR>def<C-a><C-p><C-n>X", "abc\nXdef"),
+    ] {
+        let (e, mut rx) = start().await;
+        e.input(keys).await.unwrap();
+        assert!(
+            e.settles("join(getline(1, '$'), \"\\n\")", Value::from(text))
+                .await,
+            "{keys}: {:?}",
+            e.eval("getline(1, '$')").await
+        );
+        while let Ok(event) = rx.try_recv() {
+            assert!(!matches!(event, Event::Action(_)), "{keys}: {event:?}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn moving_left_and_right_with_control_keeps_the_insertions_in_one_undo_step() {
+    let (e, _rx) = start().await;
+    e.input("abc<C-b><C-f><C-b>X").await.unwrap();
+    assert!(e.settles("getline(1)", Value::from("abXc")).await);
+    e.input("<Esc>u").await.unwrap();
+    assert!(e.settles("getline(1)", Value::from("")).await);
+}
+
+#[tokio::test]
+async fn command_line_uses_control_keys_for_cursor_movement_and_deletion() {
+    let (e, _rx) = start().await;
+    e.input("<Esc>:abc<C-b>X<C-f>Y<C-a>Z<C-e>W<C-b><C-d>")
+        .await
+        .unwrap();
+    assert!(e.settles("getcmdline()", Value::from("ZabXcY")).await);
 }
 
 #[tokio::test]

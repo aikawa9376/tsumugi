@@ -77,7 +77,12 @@ macOS のコピー・貼り付け・終了など、メニューバーが扱う C
 | `Ctrl+c` | エージェントへ **Escape** を送る。Ctrl+c 自体の送信ではない |
 | `Shift+Tab` | エージェントへ Shift+Tab を送る |
 | `Tab` | 空の入力欄ではエージェントの提案を取り込む。内容がある場合は Neovim へ Tab を渡す |
-| `Ctrl+p` / `Ctrl+n` | 送信したプロンプトの前 / 次の履歴を取り込む |
+| `Ctrl+p` / `Ctrl+n` | Insert: move up / down. Normal: recall the previous / next sent prompt |
+| `Ctrl+b` / `Ctrl+f` | Insert and command line: move left / right |
+| `Ctrl+a` / `Ctrl+e` | Insert and command line: move to the start / end of the line |
+| `Ctrl+h` / `Ctrl+d` | Insert: delete before / under the cursor |
+| `Ctrl+k` / `Ctrl+u` / `Ctrl+w` | Insert: delete to line end / line start / previous word |
+| `Alt+b` / `Alt+f` | Insert: move one word back / forward |
 | `Mod+i` | 添付画像を選択する。画像選択中のキーは後述 |
 | `Ctrl+g p` / `Ctrl+g P` | **送信前の下書きのみ**：次 / 前のエージェントプロファイルへ切り替え。挿入モードでも使える |
 

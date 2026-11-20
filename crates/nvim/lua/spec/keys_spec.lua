@@ -18,9 +18,9 @@ describe("tsumugi's actions in the prompt", function()
     eq({ { 7, "tsumugi_action", "console.send Escape" } }, seen)
   end)
 
-  it("are put on their keys in insert and normal mode", function()
+  it("are put on their keys in the modes that use them", function()
     for _, k in ipairs(keys.KEYS) do
-      for _, mode in ipairs({ "i", "n" }) do
+      for _, mode in ipairs(k[5] or { "i", "n" }) do
         local m = vim.fn.maparg(k[1], mode, false, true)
         eq(false, vim.tbl_isempty(m), mode .. " " .. k[1])
         eq(k[4], m.desc, mode .. " " .. k[1])
