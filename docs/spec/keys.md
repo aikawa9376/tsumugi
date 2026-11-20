@@ -57,6 +57,13 @@ tree, are its own
 
 ## Where the keys go
 
+Outside the left sidebar, two consecutive Escapes focus the file tree,
+showing the sidebar if it was hidden. The first Escape keeps its ordinary
+meaning in the prompt, console or viewer. Other input or moving to another
+area or window breaks the pair. Overlays keep their own Escape behaviour.
+An input-source switch between the Escapes does not break the pair, including
+one sent by a keyboard's custom Escape key.
+
 Keys go where the mode chip at the bottom left says, whatever in the window a
 click or macOS left focused, but for a text field being typed in that is
 shown: the filter, a name being typed, the picker's query. When the window is

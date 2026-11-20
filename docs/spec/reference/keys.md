@@ -124,6 +124,7 @@ changes them ([keys](../keys.md)).
 | `zoom.out` | Zoom Out | draw the window a step smaller | `global`: `Mod+-` |
 | `zoom.reset` | Actual Size | draw the window at the zoom the settings give | `global`: `Mod+0` |
 | `tree.toggle` | Toggle Tree | show or hide the tree | `global`: `Mod+b` |
+| `tree.focus` |  | show and focus the file tree; from outside the sidebar, two Escapes run it while the first Escape keeps its usual meaning ([keys](../keys.md#where-the-keys-go)) | `details`: `Escape Escape`<br>`console`: `Escape Escape`<br>`prompt`: `Escape Escape`<br>`viewer`: `Escape Escape` |
 | `sidebar.next` |  | focus the other sidebar section, giving its list more room ([agents](../agents-panel.md)) | `tree`: `Tab`, `Shift+Tab`<br>`agents`: `Tab`, `Shift+Tab` |
 | `agents.expand` |  | expand the selected agent family or move to its first child | `agents`: `l`, `ArrowRight` |
 | `agents.collapse` |  | fold the selected agent family or move to its parent | `agents`: `h`, `ArrowLeft` |
@@ -348,6 +349,7 @@ changes them ([keys](../keys.md)).
 "!" = "filer.hidden"
 
 [details]
+"Escape Escape" = "tree.focus"
 "Tab" = "tab.next"
 "Shift+Tab" = "tab.prev"
 "j" = "cursor.down"
@@ -372,6 +374,7 @@ changes them ([keys](../keys.md)).
 "Ctrl+u" = "scroll.half_up"
 
 [console]
+"Escape Escape" = "tree.focus"
 "Enter" = "console.send"
 "Ctrl+Enter" = "console.send Enter"
 "ArrowUp" = "prompt.history_prev"
@@ -405,10 +408,12 @@ changes them ([keys](../keys.md)).
 "Tab" = "prompt.write"
 
 [prompt]
+"Escape Escape" = "tree.focus"
 "Mod+i" = "prompt.images"
 "F1" = "keys.help"
 
 [viewer]
+"Escape Escape" = "tree.focus"
 "j" = "scroll.down"
 "ArrowDown" = "scroll.down"
 "k" = "scroll.up"

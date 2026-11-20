@@ -2,6 +2,7 @@
 //! on to the program or are read in the reader, and asking the session shown
 //! for what was typed into its own input.
 
+mod escape;
 #[cfg(test)]
 mod input_tests;
 pub mod keys;
@@ -48,6 +49,8 @@ pub struct Repeat {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ConsoleView {
+    /// Where an Escape was just pressed, before its ordinary effect ran.
+    pub(crate) escaped_from: Option<(crate::content::Spot, Option<Tab>)>,
     /// The keys pressed so far of a binding not complete yet.
     pub pending: Vec<Key>,
     /// The repeating a repeating binding just run began, until another key.
@@ -266,7 +269,11 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
         probe
     };
     if overlay::holder(state).is_some() {
+        state.console.escaped_from = None;
         return overlay::press(state, key);
+    }
+    if let Some(effects) = escape::press(state, &key, &probe) {
+        return effects;
     }
     if let Some(effects) = crate::prompt::image_key(state, &key) {
         return effects;
@@ -317,9 +324,10 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
         && let Some(reader) = probe.reader
     {
         let console = &state.console;
+        let global = state.chrome.keymap.resolve(&[Context::Global], &[], &key);
         windowing = !console.pending.is_empty()
             || route::app_key(&key)
-            || state.chrome.keymap.resolve(&[Context::Global], &[], &key) != Step::Nothing
+            || (global != Step::Nothing && !(global == Step::Wait && escape::plain(&key)))
             || repeated(state, &[Context::Global], repeat.as_ref(), &key).is_some();
         // The agent's own bindings hold in its console read as live; they
         // are looked up below with the console's.
@@ -378,7 +386,17 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
         state.console.repeat = repeat;
         return vec![Effect::PerformKey(action, key)];
     }
-    let action = match state.chrome.keymap.resolve(&contexts, &seq, &key) {
+    let resolved = state.chrome.keymap.resolve(&contexts, &seq, &key);
+    // Escape still leaves insert mode or cancels an operation immediately;
+    // waiting for the second one here would swallow that first use.
+    let resolved =
+        if resolved == Step::Wait && seq.is_empty() && escape::plain(&key) && area != Area::Sidebar
+        {
+            Step::Nothing
+        } else {
+            resolved
+        };
+    let action = match resolved {
         Step::Wait => {
             state.console.pending = seq.into_iter().chain(Some(key)).collect();
             return Vec::new();
@@ -471,6 +489,7 @@ fn leave_reading(console: &mut ConsoleView) -> Vec<Effect> {
 /// Text typed, or pasted, where the keys are now; it breaks off a sequence
 /// of keys begun.
 pub(crate) fn text(state: &mut ViewState, text: String, pasted: bool) -> Vec<Effect> {
+    state.console.escaped_from = None;
     state.console.pending.clear();
     state.console.repeat = None;
     match text_goes(state) {
@@ -494,6 +513,7 @@ pub(crate) fn text(state: &mut ViewState, text: String, pasted: bool) -> Vec<Eff
 /// hands on an image paste, for it to read the image off the clipboard
 /// itself.
 pub(crate) fn image(state: &mut ViewState, mime: String, data: String) -> Vec<Effect> {
+    state.console.escaped_from = None;
     state.console.pending.clear();
     state.console.repeat = None;
     match text_goes(state) {
@@ -514,6 +534,7 @@ pub(crate) fn image(state: &mut ViewState, mime: String, data: String) -> Vec<Ef
 /// image is. A program in the console gets nothing: it has no clipboard to
 /// read them off.
 pub(crate) fn dropped(state: &mut ViewState, paths: Vec<PathBuf>) -> Vec<Effect> {
+    state.console.escaped_from = None;
     let images: Vec<PathBuf> = paths
         .into_iter()
         .filter(|path| crate::prompt::images::is_image(path))
@@ -607,6 +628,7 @@ fn set(console: &mut ConsoleView, msg: Msg) -> Vec<Effect> {
             }
         }
         Msg::SequenceDropped => {
+            console.escaped_from = None;
             console.pending.clear();
             console.repeat = None;
         }
@@ -629,7 +651,15 @@ fn set(console: &mut ConsoleView, msg: Msg) -> Vec<Effect> {
 /// click there.
 pub(crate) fn keep_to_area(state: &mut ViewState) {
     let now = (state.content.focus, state.content.active().cloned());
+    let spot = crate::content::spot_of(state.content.focus, &state.content.windows);
     let console = &mut state.console;
+    if console
+        .escaped_from
+        .as_ref()
+        .is_some_and(|(from, tab)| from != &spot || tab != &now.1)
+    {
+        console.escaped_from = None;
+    }
     if console.seen.as_ref() == Some(&now) {
         return;
     }
@@ -643,6 +673,7 @@ pub(crate) fn keep_to_area(state: &mut ViewState) {
     console.pending.clear();
     console.send_next = false;
     console.seen = Some(now);
+    console.escaped_from = None;
 }
 
 /// A list of the sessions drops the inputs kept for those no longer listed.

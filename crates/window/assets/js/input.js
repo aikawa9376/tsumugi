@@ -131,6 +131,11 @@ let gridCursor = null;
 // A key pressed on the text area, or `astray` on whatever else focus was on.
 const onKey = (e, astray) => {
   if (!current()) return;
+  // Input-source selectors belong to the IME. A custom Escape may send one
+  // before each Escape; routing it as a command would break the pair.
+  if (['Alphanumeric', 'Eisu', 'NonConvert', 'Convert', 'KanaMode', 'KanjiMode',
+    'Hiragana', 'Katakana', 'HiraganaKatakana', 'Romaji', 'Hankaku', 'Zenkaku',
+    'ZenkakuHankaku', 'ModeChange'].includes(e.key)) return;
   // WebKit sends the key that ends a composition after `compositionend`,
   // no longer composing but still with key code 229.
   // Command with a key the menu does not hold is the window's own; the

@@ -30,12 +30,13 @@ const document = {
   addEventListener() {},
   hasFocus: () => true,
 };
+const sent = [];
 const context = {
   document, Element, HTMLInputElement, HTMLTextAreaElement, HTMLSelectElement,
   MutationObserver: class { observe() {} },
   requestAnimationFrame() {},
   setTimeout() {},
-  dioxus: { send() {} },
+  dioxus: { send(message) { sent.push(message); } },
   addEventListener() {},
 };
 context.window = context;
@@ -70,3 +71,25 @@ assert.equal(document.activeElement, hidden, 'a disabled field returns focus');
 document.activeElement = new Element();
 take();
 assert.equal(document.activeElement, hidden, 'ordinary page chrome returns focus');
+
+// MC_ESC taps Control, selects the Latin input source, then sends Escape.
+// The input-source key must reach the IME without breaking an app sequence.
+const key = (name, code = name, ctrl = false) => {
+  const event = {
+    key: name, code, ctrlKey: ctrl, altKey: false, shiftKey: false, metaKey: false,
+    preventDefault() { this.defaultPrevented = true; },
+  };
+  context.event = event;
+  vm.runInContext('onKey(event, false)', context);
+  return event;
+};
+for (const selector of ['NonConvert', 'Eisu', 'Alphanumeric']) {
+  sent.length = 0;
+  for (let tap = 0; tap < 2; tap++) {
+    key('Control', 'ControlLeft', true);
+    assert.equal(key(selector).defaultPrevented, undefined, selector + ' stays with the input method');
+    key('Escape');
+  }
+  assert.deepEqual(sent.filter(m => m.kind === 'key' && m.key !== 'Control').map(m => m.key),
+    ['Escape', 'Escape'], selector + ' does not interrupt consecutive Escapes');
+}

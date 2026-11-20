@@ -577,6 +577,7 @@ pub(crate) fn perform(
             _ => Vec::new(),
         },
         Action::TreeToggle => step(state, Msg::PanelToggle(Side::Sidebar)),
+        Action::TreeFocus => crate::sidebar::switch(state, crate::sidebar::Panel::Tree),
         Action::DetailsToggle => step(state, Msg::PanelToggle(Side::Details)),
         Action::ZoomIn => step(state, Msg::Zoom(zoom::Step::In)),
         Action::ZoomOut => step(state, Msg::Zoom(zoom::Step::Out)),

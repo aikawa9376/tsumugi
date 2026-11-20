@@ -54,7 +54,12 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             state.hosts.on_work_machine(&environment);
             Vec::new()
         }
-        Msg::WindowFocused(on) => chrome::window_focused(&mut state.chrome, on),
+        Msg::WindowFocused(on) => {
+            if !on {
+                state.console.escaped_from = None;
+            }
+            chrome::window_focused(&mut state.chrome, on)
+        }
         Msg::Zoom(step) => chrome::step(&mut state.chrome, step),
         Msg::KeysRead(file) => crate::config::keys_read(state, file),
         Msg::PanelChosen(panel) => crate::config::panel_chosen(&mut state.config, panel),
@@ -282,7 +287,10 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
 
         Msg::Perform { action, key, probe } => crate::perform::perform(state, action, key, &probe),
 
-        Msg::HeldKey(key) => overlay::press(state, key),
+        Msg::HeldKey(key) => {
+            state.console.escaped_from = None;
+            overlay::press(state, key)
+        }
         Msg::MenuOpen {
             x,
             y,

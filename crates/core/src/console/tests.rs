@@ -91,6 +91,213 @@ fn reading(normal: bool, line: usize, scrolls_itself: bool) -> Probe {
 }
 
 #[test]
+fn two_escapes_focus_and_show_the_file_tree_from_every_other_area() {
+    use crate::chrome::panels::layout::Side;
+    for area in [Area::Prompt, Area::Console, Area::Details] {
+        let run = window().send_all([
+            Msg::SidebarPanel(crate::sidebar::Panel::Agents),
+            Msg::PanelToggle(Side::Sidebar),
+            Msg::Focus(area),
+        ]);
+        let run = run.send(key("Escape"));
+        assert_eq!(
+            run.state().content.focus,
+            area,
+            "one Escape keeps the current area"
+        );
+        let run = run.send(key("Escape"));
+        assert_eq!(run.state().content.focus, Area::Sidebar, "{area:?}");
+        assert_eq!(run.state().sidebar.panel, crate::sidebar::Panel::Tree);
+        assert!(run.state().chrome.panels.layout.show_sidebar);
+    }
+}
+
+#[test]
+fn the_first_escape_reaches_insert_mode_and_a_shell_but_the_second_leaves_them() {
+    let run = window().send(Msg::Focus(Area::Prompt)).send(press(
+        Key::new("Escape"),
+        Probe {
+            inserting: true,
+            ..with_pane()
+        },
+    ));
+    assert!(
+        run.last_effects()
+            .contains(&Effect::PromptKey(Key::new("Escape")))
+    );
+    let run = run.send(press(
+        Key::new("Escape"),
+        Probe {
+            inserting: false,
+            ..with_pane()
+        },
+    ));
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+    assert!(
+        !run.last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::PromptKey(_) | Effect::PaneKey(_)))
+    );
+
+    let run = window()
+        .send(show(Tab::Terminal(here(), 1)))
+        .send(key("Escape"));
+    assert!(
+        run.last_effects()
+            .contains(&Effect::PaneKey(Key::new("Escape")))
+    );
+    let run = run.send(key("Escape"));
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+    assert!(
+        !run.last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::PaneKey(_)))
+    );
+}
+
+#[test]
+fn two_escapes_leave_a_reader_a_conversation_or_direct_console_input() {
+    let reader = window()
+        .send(Msg::ReadingStarted)
+        .send(press(Key::new("Escape"), reading(true, 1, false)));
+    assert!(!reader.state().console.reading);
+    let reader = reader.send(key("Escape"));
+    assert_eq!(reader.state().content.focus, Area::Sidebar);
+    let conversation = window()
+        .send(Msg::SessionConversation {
+            tab: tab("a"),
+            shown: true,
+        })
+        .send_all([key("Escape"), key("Escape")]);
+    assert_eq!(conversation.state().content.focus, Area::Sidebar);
+    let direct = window().send(Msg::ConsolePassEveryKey).send(key("Escape"));
+    assert!(!direct.state().console.direct);
+    let direct = direct.send(key("Escape"));
+    assert_eq!(direct.state().content.focus, Area::Sidebar);
+}
+
+#[test]
+fn escape_pairs_do_not_cross_other_input_focus_changes_or_window_blur() {
+    for reset in [
+        key("x"),
+        press(Key::new("Escape").shift(), with_pane()),
+        Msg::Text {
+            text: "pasted".into(),
+            pasted: true,
+        },
+        Msg::Focus(Area::Details),
+        Msg::ShowSession(here(), "b".into()),
+        Msg::WindowFocused(false),
+    ] {
+        let run = window()
+            .send(Msg::Focus(Area::Prompt))
+            .send(key("Escape"))
+            .send(reset.clone())
+            .send(key("Escape"));
+        assert_ne!(run.state().content.focus, Area::Sidebar, "{reset:?}");
+    }
+}
+
+#[test]
+fn escapes_in_the_left_panel_keep_its_section_selected() {
+    let run = window()
+        .send(Msg::SidebarPanel(crate::sidebar::Panel::Agents))
+        .send_all([key("Escape"), key("Escape")]);
+    assert_eq!(run.state().sidebar.panel, crate::sidebar::Panel::Agents);
+}
+
+#[test]
+fn the_double_escape_binding_can_be_disabled_without_delaying_the_first_escape() {
+    let run = window()
+        .send(Msg::Focus(Area::Prompt))
+        .send(Msg::KeysRead(crate::config::testing::keys_file(
+            "[prompt]\n\"Escape Escape\" = \"none\"\n",
+        )))
+        .send(key("Escape"));
+    assert!(
+        run.last_effects()
+            .contains(&Effect::PromptKey(Key::new("Escape")))
+    );
+    let run = run.send(key("Escape"));
+    assert_eq!(run.state().content.focus, Area::Prompt);
+}
+
+#[test]
+fn two_escapes_leave_viewers_and_file_editors_with_their_tabs_still_open() {
+    let viewer = window()
+        .send(show(Tab::Viewer(here(), "/r/a/readme.md".into())))
+        .send_all([key("Escape"), key("Escape")]);
+    assert_eq!(viewer.state().content.focus, Area::Sidebar);
+    assert!(matches!(
+        viewer.state().content.active(),
+        Some(Tab::Viewer(..))
+    ));
+    let editor = window()
+        .event(patch(2).listed(
+            listing([session("a")]).terminal(tsumugi_model::TerminalSession {
+                program: tsumugi_model::TerminalProgram::Neovim,
+                ..shell(2, "/r/a")
+            }),
+        ))
+        .send(show(Tab::Terminal(here(), 2)))
+        .send_all([key("Escape"), key("Escape")]);
+    assert_eq!(editor.state().content.focus, Area::Sidebar);
+    assert_eq!(
+        editor.state().content.active(),
+        Some(&Tab::Terminal(here(), 2))
+    );
+}
+
+#[test]
+fn escape_pairs_do_not_survive_moving_between_splits_of_the_same_session() {
+    let run = window().send(Msg::Window(Action::WindowSplit));
+    let first = run.state().content.windows.focused_window().unwrap();
+    let other = run
+        .state()
+        .content
+        .windows
+        .current()
+        .unwrap()
+        .windows()
+        .into_iter()
+        .find(|w| w.id != first)
+        .unwrap()
+        .id;
+    let run = run
+        .send(key("Escape"))
+        .send(Msg::WindowFocus(other))
+        .send(Msg::WindowFocus(first))
+        .send(key("Escape"));
+    assert_eq!(run.state().content.focus, Area::Console);
+}
+
+#[test]
+fn custom_escape_sequences_still_run_after_the_first_escape_keeps_its_meaning() {
+    let run = window()
+        .send(Msg::Focus(Area::Prompt))
+        .send(Msg::KeysRead(crate::config::testing::keys_file(
+            "[prompt]\n\"Escape j\" = \"tree.focus\"\n\"Escape a b\" = \"tree.focus\"\n",
+        )))
+        .send(key("Escape"));
+    assert!(
+        run.last_effects()
+            .contains(&Effect::PromptKey(Key::new("Escape")))
+    );
+    let short = run.send(key("j"));
+    assert_eq!(short.state().content.focus, Area::Sidebar);
+    let long = window()
+        .send(Msg::Focus(Area::Prompt))
+        .send(Msg::KeysRead(crate::config::testing::keys_file(
+            "[prompt]\n\"Escape a b\" = \"tree.focus\"\n",
+        )))
+        .send_all([key("Escape"), key("a"), key("b")]);
+    assert!(
+        long.last_effects()
+            .contains(&Effect::PerformKey(Action::TreeFocus, Key::new("b")))
+    );
+}
+
+#[test]
 fn passing_every_key_sends_them_as_they_are_until_escape() {
     let run = window().send_all([Msg::ConsolePassEveryKey, key("x")]);
     assert_eq!(run.last_effects(), [Effect::PaneKey(Key::new("x"))]);

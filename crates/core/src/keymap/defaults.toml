@@ -187,6 +187,7 @@
 "!" = "filer.hidden"
 
 [details]
+"Escape Escape" = "tree.focus"
 "Tab" = "tab.next"
 "Shift+Tab" = "tab.prev"
 "j" = "cursor.down"
@@ -211,6 +212,7 @@
 "Ctrl+u" = "scroll.half_up"
 
 [console]
+"Escape Escape" = "tree.focus"
 "Enter" = "console.send"
 "Ctrl+Enter" = "console.send Enter"
 "ArrowUp" = "prompt.history_prev"
@@ -244,10 +246,12 @@
 "Tab" = "prompt.write"
 
 [prompt]
+"Escape Escape" = "tree.focus"
 "Mod+i" = "prompt.images"
 "F1" = "keys.help"
 
 [viewer]
+"Escape Escape" = "tree.focus"
 "j" = "scroll.down"
 "ArrowDown" = "scroll.down"
 "k" = "scroll.up"

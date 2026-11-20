@@ -743,8 +743,9 @@ fn in_the_console_the_keys_claude_code_s_controls_use_are_sent() {
 }
 
 #[test]
-fn in_the_console_escape_is_kept_and_ctrl_c_sends_it() {
-    assert_eq!(console(&[], "Escape"), Step::Nothing);
+fn the_console_binds_two_escapes_to_the_tree_and_ctrl_c_to_the_agent() {
+    assert_eq!(console(&[], "Escape"), Step::Wait);
+    assert_eq!(console(&["Escape"], "Escape"), Step::Run(Action::TreeFocus));
     assert_eq!(
         console(&[], "Ctrl+c"),
         Step::Run(Action::ConsoleSend(Some(Chord::parse("Escape").unwrap())))

@@ -1,6 +1,6 @@
-//! The page must retain dialog controls while following the terminal cursor.
+//! The page must retain native controls and input-method keys.
 #[test]
-fn dialog_controls_keep_the_keys_until_the_dialog_is_gone() {
+fn dialog_controls_and_input_method_selectors_keep_their_keys() {
     let output = std::process::Command::new("node")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
