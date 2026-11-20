@@ -39,7 +39,7 @@ impl Kind {
     }
 }
 
-/// The dot before an environment's name.
+/// How an environment's connection stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mark {
     /// The window and the environment's host work together.
@@ -51,11 +51,11 @@ pub(crate) enum Mark {
 }
 
 impl Mark {
-    pub(crate) fn class(self) -> &'static str {
+    pub(crate) fn class(self) -> Option<&'static str> {
         match self {
-            Mark::Connected => "ok",
-            Mark::Reaching => "busy",
-            Mark::Stopped => "fail",
+            Mark::Connected => None,
+            Mark::Reaching => Some("busy"),
+            Mark::Stopped => Some("fail"),
         }
     }
 }
@@ -213,7 +213,9 @@ pub(crate) fn reach(remote: Option<&RemoteStatus>) -> Reach {
 #[component]
 pub(crate) fn StandingDot(mark: Mark) -> Element {
     rsx! {
-        span { class: "standing-dot {mark.class()}", "aria-hidden": "true" }
+        if let Some(class) = mark.class() {
+            span { class: "standing-dot {class}", "aria-hidden": "true" }
+        }
     }
 }
 
@@ -628,6 +630,13 @@ mod tests {
     use tsumugi_connect::environments::Environment;
 
     use super::*;
+
+    #[test]
+    fn only_a_connection_being_reached_or_stopped_has_a_dot() {
+        assert_eq!(Mark::Connected.class(), None);
+        assert_eq!(Mark::Reaching.class(), Some("busy"));
+        assert_eq!(Mark::Stopped.class(), Some("fail"));
+    }
 
     #[test]
     fn only_an_environment_kept_on_a_work_machine_has_one_with_an_address_and_a_key() {

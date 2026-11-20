@@ -22,6 +22,9 @@ impl Summary {
     }
 
     fn count(&mut self, state: &State) {
+        if glyph(state).is_none() {
+            return;
+        }
         let state = match state {
             State::Waiting(_) => State::Waiting(Wait::Input),
             other => other.clone(),
@@ -130,16 +133,13 @@ pub(super) fn WorkSummary(summary: Summary) -> Element {
                     }
                 }
                 for (state, count) in &summary.states {
-                    {
-                        let (class, icon, word) = glyph(state);
-                        // Starting and idle share a row glyph; the summary
-                        // needs distinct shapes when both counts are present.
-                        let icon = if *state == State::Starting { Icon::Loader } else { icon };
-                        rsx! {
-                            span { class: "tree-count {class}", title: "{count} {word}",
-                                IconView { icon, size: 12 }
-                                "{count}"
+                    if let Some((class, icon, word)) = glyph(state) {
+                        span { class: "tree-count {class}", title: "{count} {word}",
+                            IconView {
+                                icon: if *state == State::Starting { Icon::Loader } else { icon },
+                                size: 12,
                             }
+                            "{count}"
                         }
                     }
                 }
@@ -158,6 +158,34 @@ mod tests {
 
     fn environment() -> EnvironmentId {
         EnvironmentId::unbound()
+    }
+
+    #[test]
+    fn idle_work_keeps_its_totals_without_redundant_state_counts() {
+        let mut command = shell(1, "/api");
+        command.state = Some(State::Done);
+        let tree = tree()
+            .session(session("idle").cwd("/api").state(State::Idle))
+            .session(session("seen").cwd("/api").state(State::Done))
+            .terminal(command)
+            .build();
+        let marks = Completions::default()
+            .updated(&tree, Some(Viewed::Session("seen")))
+            .updated(&tree, Some(Viewed::Terminal(1)));
+        for row in [
+            Item::Environment(environment()),
+            Item::Workspace(environment(), "/api".into()),
+            Item::Worktree(environment(), "/api".into()),
+            Item::Heading(environment(), "/api".into(), Heading::Sessions),
+            Item::Across(environment(), "/api".into(), Heading::Terminals),
+        ] {
+            let summary = summarize(&tree, &marks, &row).unwrap();
+            assert!(!summary.is_empty());
+            assert!(summary.states.is_empty(), "{row:?}: {summary:?}");
+            assert!(!summary.label().contains("idle"));
+        }
+        let summary = summarize(&tree, &marks, &Item::Environment(environment())).unwrap();
+        assert_eq!((summary.sessions, summary.terminals), (2, 1));
     }
 
     #[test]
@@ -237,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn summaries_group_wait_reasons_and_keep_every_other_state_distinct() {
+    fn summaries_group_wait_reasons_and_keep_special_states_distinct() {
         let tree = tree()
             .session(
                 session("permission")
@@ -262,8 +290,7 @@ mod tests {
             vec![
                 (State::Waiting(Wait::Input), 2),
                 (State::Background, 1),
-                (State::Starting, 1),
-                (State::Idle, 2)
+                (State::Starting, 1)
             ]
         );
         let unseen = summarize(
@@ -296,7 +323,7 @@ mod tests {
         let summary = summarize(&tree, &marks, &row).unwrap();
         assert_eq!(summary.sessions, 0);
         assert_eq!(summary.terminals, 3);
-        assert_eq!(summary.states, vec![(State::Working, 1), (State::Idle, 1)]);
+        assert_eq!(summary.states, vec![(State::Working, 1)]);
         let all = summarize(&tree, &marks, &Item::Environment(environment())).unwrap();
         assert_eq!(all.terminals, 3);
         assert_eq!(all.neovims, 1);

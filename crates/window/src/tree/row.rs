@@ -319,14 +319,14 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                     .and_then(|s| s.code.as_ref())
                     .map(ToString::to_string)
                     .unwrap_or_default(),
-                s.map(|s| glyph(context.completions.read().state(&s))),
+                s.and_then(|s| glyph(context.completions.read().state(&s))),
             )
         }
         Item::Terminal(_, id) => {
             let terminal = t.terminal(*id).map(|(_, _, s)| s);
             let name = terminal.map(|s| s.name.clone()).unwrap_or_default();
             let state =
-                terminal.and_then(|s| context.completions.read().terminal_state(s).map(glyph));
+                terminal.and_then(|s| context.completions.read().terminal_state(s).and_then(glyph));
             ("", name, String::new(), state)
         }
         Item::GitHub(_, root, listing) => {

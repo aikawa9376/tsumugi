@@ -15,10 +15,10 @@
 .sidebar-section:not(.active) .list-row.selected { box-shadow: none; background: transparent; }
 @media (prefers-reduced-motion: reduce) { .sidebar-sections { transition: none; } }
 .sidebar-view, .sidebar-tree-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.agents-overview { display: flex; flex-direction: column; gap: 5px; padding: 2px 12px 8px; flex-shrink: 0; border-bottom: 1px solid var(--line); }
-.agents-overview-title { font-size: var(--ui-font-tiny); color: var(--text-3); }
-.agent-counts { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; font-size: var(--ui-font-tiny); }
-.agent-total { white-space: nowrap; }
+.agents-overview { display: flex; align-items: center; gap: 10px; padding: 2px 12px 8px; flex-shrink: 0; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.agents-overview-title { padding-right: 10px; border-right: 1px solid var(--line); font-size: var(--ui-font-tiny); color: var(--text-3); }
+.agent-counts { display: inline-flex; align-items: center; flex-shrink: 0; gap: 8px; font-size: var(--ui-font-tiny); }
+.agent-total { display: inline-flex; align-items: center; flex-shrink: 0; gap: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .agent-total.active { color: var(--run); }
 .agent-total.waiting { color: var(--wait); }
 .agent-total.failed { color: var(--fail); }

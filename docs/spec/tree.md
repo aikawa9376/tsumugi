@@ -171,10 +171,9 @@ waiting on you are listed again at the bottom of the tree, apart from it.
 The tree heads each [environment](environments.md)'s work with a row named
 after it, which folds like a heading, one for every environment the window
 shows, however many there are. The same directory in two environments is two
-rows. Each heading says how its environment's connection stands: a mark alone
-while it is connected, and in words while it is being reached, cannot be
-reached, with how old its work is, reads only, or holds a change sent there
-that needs you. The heading also summarizes its sessions, terminals and
+rows. Each heading says in words when its environment is being reached,
+cannot be reached, with how old its work is, reads only, or holds a change
+sent there that needs you. The heading also summarizes its sessions, terminals and
 Neovims and how they stand, whether folded or open, across all its work even
 while the tree is filtered.
 The rows of every environment but the one of the selected row, or else of what

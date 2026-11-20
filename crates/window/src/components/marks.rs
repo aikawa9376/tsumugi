@@ -6,19 +6,18 @@ use tsumugi_model::{State, TerminalProgram, TerminalSession};
 
 use crate::icons::{Icon, IconView};
 
-/// A state's mark: its class, its icon, and the word told when the pointer
-/// is over it.
-pub(crate) fn glyph(state: &State) -> (&'static str, Icon, &'static str) {
+/// A state's mark, omitted while idle: its class, icon and pointer label.
+pub(crate) fn glyph(state: &State) -> Option<(&'static str, Icon, &'static str)> {
     let (class, icon) = match state {
         State::Waiting(_) => ("state-glyph wait", Icon::Bell),
         State::Starting => ("state-glyph idle", Icon::Circle),
         State::Working => ("state-glyph run", Icon::Loader),
         State::Background => ("state-glyph behind", Icon::Dots),
-        State::Idle => ("state-glyph idle", Icon::Circle),
+        State::Idle => return None,
         State::Done => ("state-glyph done", Icon::Check),
         State::Failed => ("state-glyph fail", Icon::AlertTriangle),
     };
-    (class, icon, state.word())
+    Some((class, icon, state.word()))
 }
 
 /// The mark of a session or a draft that only reads.
@@ -97,6 +96,24 @@ pub(crate) fn TerminalMark(runs: TerminalProgram) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idle_has_no_state_mark_but_active_and_special_states_do() {
+        assert_eq!(glyph(&State::Idle), None);
+        for (state, icon) in [
+            (State::Starting, Icon::Circle),
+            (State::Working, Icon::Loader),
+            (State::Background, Icon::Dots),
+            (State::Waiting(tsumugi_model::Wait::Input), Icon::Bell),
+            (State::Waiting(tsumugi_model::Wait::Permission), Icon::Bell),
+            (State::Done, Icon::Check),
+            (State::Failed, Icon::AlertTriangle),
+        ] {
+            let (_, shown, word) = glyph(&state).unwrap();
+            assert_eq!(shown, icon, "{state:?}");
+            assert_eq!(word, state.word());
+        }
+    }
 
     #[test]
     fn sessions_and_drafts_that_only_read_are_marked() {

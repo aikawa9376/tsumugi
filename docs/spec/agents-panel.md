@@ -11,7 +11,7 @@ the keyboard or a click. Agent rows offer the same context menu as session
 rows in Tree, with actions applied to the row the menu was opened on.
 
 Agents groups sessions by the parent that started them, followed by its
-children. It shows each session's reported state in words as well as a mark,
+children. It shows each session's reported state,
 and keeps the family's activity visible when its children are folded. A
 parent no longer listed remains identifiable above its children, without
 pretending that it is still running. Relationships come from Tsumugi's

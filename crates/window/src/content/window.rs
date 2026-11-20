@@ -90,11 +90,10 @@ pub(super) fn window_strip(
 #[component]
 fn WindowStrip(id: WindowId, strip: Strip) -> Element {
     let app = use_context::<AppCtx>();
-    let (g, icon, tip) = match &strip.mark {
+    let state_mark = match &strip.mark {
         StripMark::State(state) => glyph(state),
-        StripMark::Terminal(_) => ("", Icon::Terminal2, ""),
-        StripMark::Draft => ("place-mark", Icon::MessagePlus, "new session"),
-        StripMark::File(..) => ("", Icon::File, ""),
+        StripMark::Draft => Some(("place-mark", Icon::MessagePlus, "new session")),
+        StripMark::Terminal(_) | StripMark::File(..) => None,
     };
     let shell = matches!(strip.mark, StripMark::Terminal(_));
     rsx! {
@@ -108,7 +107,11 @@ fn WindowStrip(id: WindowId, strip: Strip) -> Element {
             match strip.mark {
                 StripMark::Terminal(runs) => rsx! { TerminalMark { runs } },
                 StripMark::File(glyph, colour) => rsx! { FileGlyph { glyph, style: colour } },
-                _ => rsx! { StateGlyph { class: g, icon, size: 13, title: tip } },
+                _ => rsx! {
+                    if let Some((g, icon, tip)) = state_mark {
+                        StateGlyph { class: g, icon, size: 13, title: tip }
+                    }
+                },
             }
             span { class: "win-name", "{strip.name}" }
             if let Some(label) = strip.agent {

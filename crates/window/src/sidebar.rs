@@ -125,11 +125,19 @@ fn AgentsPanel() -> Element {
     });
     let rows = view.read().rows().to_vec();
     let totals = view.read().totals.clone();
+    let total_label = if totals.total() == 1 {
+        "agent"
+    } else {
+        "agents"
+    };
     let mut environment = None;
     rsx! {
         div { class: "sidebar-view",
             div { class: "agents-overview", aria_label: "Agent totals across environments",
-                span { class: "agents-overview-title", "{totals.total()} agents" }
+                AgentCount {
+                    class: "agent-total agents-overview-title", icon: Icon::UsersGroup,
+                    count: totals.total(), label: total_label,
+                }
                 StateCounts { counts: totals }
             }
             div { class: "agents-list", role: "tree", aria_label: "Agents by parent session",
@@ -232,7 +240,9 @@ fn AgentRow(row: Row, parent_name: Option<String>) -> Element {
                     }
                 } else { span { class: "agent-leaf" } }
                 if let Some(session) = &row.session {
-                    { let (class, icon, title) = glyph(&session.state); rsx! { StateGlyph { class, icon, title, size: 13 } } }
+                    if let Some((class, icon, title)) = glyph(&session.state) {
+                        StateGlyph { class, icon, title, size: 13 }
+                    }
                     span { class: "agent-name",
                         SessionName { environment: row.key.environment.clone(), id: session.id.clone(), name: name.clone(), place: RenamePlace::Sidebar, sidebar_panel: Panel::Agents }
                     }
@@ -265,11 +275,26 @@ fn AgentRow(row: Row, parent_name: Option<String>) -> Element {
 fn StateCounts(counts: Counts) -> Element {
     rsx! {
         span { class: "agent-counts",
-            if counts.active() > 0 { span { class: "agent-total active", "{counts.active()} active" } }
-            if counts.waiting > 0 { span { class: "agent-total waiting", "{counts.waiting} waiting" } }
-            if counts.failed > 0 { span { class: "agent-total failed", "{counts.failed} failed" } }
-            if counts.idle > 0 { span { class: "agent-total idle", "{counts.idle} idle" } }
-            if counts.done > 0 { span { class: "agent-total done", "{counts.done} done" } }
+            for (count, class, icon, label) in [
+                (counts.active(), "agent-total active", Icon::Loader, "active"),
+                (counts.waiting, "agent-total waiting", Icon::Bell, "waiting"),
+                (counts.failed, "agent-total failed", Icon::AlertTriangle, "failed"),
+                (counts.idle, "agent-total idle", Icon::Circle, "idle"),
+                (counts.done, "agent-total done", Icon::Check, "done"),
+            ] {
+                if count > 0 { AgentCount { class, icon, count, label } }
+            }
+        }
+    }
+}
+
+#[component]
+fn AgentCount(class: &'static str, icon: Icon, count: usize, label: &'static str) -> Element {
+    let title = format!("{count} {label}");
+    rsx! {
+        span { class, role: "img", aria_label: title.clone(), title,
+            IconView { icon, size: 13 }
+            "{count}"
         }
     }
 }
@@ -280,6 +305,23 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
     use std::rc::Rc;
+
+    #[test]
+    fn agent_overview_keeps_totals_on_one_line_when_the_sidebar_is_narrow() {
+        let css = include_str!("../assets/css/sidebar.css");
+        let rule = |selector: &str| {
+            css.lines()
+                .find(|line| line.starts_with(&format!("{selector} {{")))
+                .unwrap_or_else(|| panic!("no rule for {selector}"))
+        };
+        let overview = rule(".agents-overview");
+        assert!(overview.contains("align-items: center"), "{overview}");
+        assert!(!overview.contains("flex-direction: column"), "{overview}");
+        assert!(overview.contains("overflow-x: auto"), "{overview}");
+        let counts = rule(".agent-counts");
+        assert!(!counts.contains("flex-wrap: wrap"), "{counts}");
+        assert!(counts.contains("flex-shrink: 0"), "{counts}");
+    }
 
     #[derive(Clone, Default)]
     struct Observed {

@@ -44,7 +44,6 @@
 .list-row.environment .kind-mark { flex: none; display: inline-flex; color: var(--text-2); }
 .list-row.environment.dim .list-row-name { color: var(--text-2); }
 .standing-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
-.standing-dot.ok { background: var(--done); }
 .standing-dot.fail { background: var(--fail); }
 .standing-dot.busy { width: 9px; height: 9px; border: 1.5px solid var(--run); border-right-color: transparent; animation: spin 1.2s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .standing-dot.busy { animation: none; } }

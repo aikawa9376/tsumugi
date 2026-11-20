@@ -130,7 +130,7 @@ pub(super) fn TabsBar(
             .flatten()
             .collect::<Vec<_>>()
             .join(" ");
-            let glyph_class = state.as_ref().map(glyph);
+            let glyph_class = state.as_ref().and_then(glyph);
             let target = Target::Tab(tab.clone());
             let closing = Target::Tab(tab.clone());
             let has_draft = drafted.read().contains(&tab);
