@@ -2,7 +2,8 @@
 
 The details panel tells about what the content's focused window shows, and the
 worktree it is in ([content](content.md)). It follows the focus from window to
-window and from tab to tab, not the tree's selection; with nothing open, it has
+window and from tab to tab, including tabs shown by moving the cursor in Tree
+or Agents while the keys stay in that section. With nothing open, it has
 nothing to describe. While an environment's heading is selected in the tree, it
 tells instead of that environment, and while a pull request's or an issue's
 row is selected, of that ([tree](tree.md)). A window showing an image a

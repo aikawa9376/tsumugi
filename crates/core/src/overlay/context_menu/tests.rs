@@ -12,6 +12,7 @@ fn grouped(target: Target, s: Option<&Session>) -> Vec<Vec<Action>> {
 fn every_entry_of_every_menu_shows_an_icon_and_has_a_row_in_the_table() {
     let own = session();
     let targets = [
+        Target::Agent(here(), "a".into()),
         Target::Row(Item::Workspace(here(), "/api".into())),
         Target::Row(Item::Worktree(here(), "/api".into())),
         Target::Row(Item::Session(here(), "a".into())),

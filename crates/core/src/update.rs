@@ -199,7 +199,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::PanesLive(live) => content::tell_live(&mut state.content, live),
 
         Msg::TreeSelect(row) => tree::select(&mut state.tree, row),
-        Msg::TreeKey(key) => tree::press(&mut state.tree, key),
+        Msg::TreeKey(key) => tree::move_cursor(state, key),
         Msg::TreeFold { row, open } => tree::fold(&mut state.tree, &row, open),
         Msg::TreeFoldToggle(row) => tree::toggle(&mut state.tree, &row),
         Msg::TreeFilter(text) => tree::filter(&mut state.tree, text),

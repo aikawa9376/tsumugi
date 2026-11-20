@@ -7,8 +7,12 @@ keeps its own query, cursor and folds when focus changes.
 
 Tree keeps the view by directory; Agents shows sessions across connected
 environments independently of the tree's folds. Sessions can be opened with
-the keyboard or a click. Agent rows offer the same context menu as session
-rows in Tree, with actions applied to the row the menu was opened on.
+the keyboard or a click. Moving the cursor to a session shows its tab while
+the keys stay in Agents. Agent rows offer session actions in their context
+menus, applied to the row the menu was opened on.
+An agent can also be shown in Tree: its directory path is unfolded and its
+session row selected, clearing Tree's search so the row is visible. This
+moves focus to Tree while keeping the content's windows as they are.
 
 Agents groups sessions by the parent that started them, followed by its
 children. It shows each session's reported state,

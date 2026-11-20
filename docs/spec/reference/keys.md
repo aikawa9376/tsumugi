@@ -127,6 +127,7 @@ changes them ([keys](../keys.md)).
 | `sidebar.next` |  | focus the other sidebar section, giving its list more room ([agents](../agents-panel.md)) | `tree`: `Tab`, `Shift+Tab`<br>`agents`: `Tab`, `Shift+Tab` |
 | `agents.expand` |  | expand the selected agent family or move to its first child | `agents`: `l`, `ArrowRight` |
 | `agents.collapse` |  | fold the selected agent family or move to its parent | `agents`: `h`, `ArrowLeft` |
+| `agents.reveal` |  | from Agents, show the selected session in Tree, clearing Tree's filter and unfolding its directory path ([agents](../agents-panel.md)) | `agents`: `g t` |
 | `details.toggle` | Toggle Details | show or hide the details panel | `global`: `Mod+d` |
 | `viewer.zoom_in` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](../content.md#viewers)) | `viewer`: `Plus`, `=` |
 | `viewer.zoom_out` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller | `viewer`: `-` |
@@ -306,6 +307,7 @@ changes them ([keys](../keys.md)).
 "Shift+Tab" = "sidebar.next"
 
 [agents]
+"g t" = "agents.reveal"
 "Tab" = "sidebar.next"
 "Shift+Tab" = "sidebar.next"
 "j" = "cursor.down"

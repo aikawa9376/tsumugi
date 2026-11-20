@@ -79,7 +79,7 @@ pub(crate) fn perform(
             };
             crate::sidebar::switch(state, panel)
         }
-        Action::AgentsExpand | Action::AgentsCollapse => Vec::new(),
+        Action::AgentsExpand | Action::AgentsCollapse | Action::AgentsReveal => Vec::new(),
         Action::None => Vec::new(),
         Action::KeysHelp => step(
             state,

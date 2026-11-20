@@ -218,6 +218,33 @@ pub(crate) fn select(view: &mut TreeView, row: Option<Item>) -> Vec<Effect> {
     Vec::new()
 }
 
+/// Reveal a session's own row under its worktree, rather than its second
+/// row gathered under the repository or in the inbox.
+pub(crate) fn reveal_session(
+    view: &mut TreeView,
+    environment: &EnvironmentId,
+    tree: &Tree,
+    id: &str,
+) -> bool {
+    let Some((workspace, worktree, _)) = tree.find(id) else {
+        return false;
+    };
+    let in_environment = Item::Environment(environment.clone());
+    let workspace_row = Item::Workspace(environment.clone(), workspace.root.clone());
+    let worktree_row = Item::Worktree(environment.clone(), worktree.worktree.path.clone());
+    let heading = Item::Heading(
+        environment.clone(),
+        worktree.worktree.path.clone(),
+        Heading::Sessions,
+    );
+    for row in [in_environment, workspace_row, worktree_row, heading] {
+        view.folds.set(&row, true);
+    }
+    view.filter.clear();
+    view.selected = Some(Item::Session(environment.clone(), id.to_owned()));
+    true
+}
+
 pub(crate) fn fold(view: &mut TreeView, row: &Item, open: bool) -> Vec<Effect> {
     view.folds.set(row, open);
     Vec::new()
@@ -252,7 +279,23 @@ pub(crate) fn every_worktree(view: &mut TreeView, hosts: &crate::host::Hosts) ->
     effects
 }
 
-pub(crate) fn press(view: &mut TreeView, key: Key) -> Vec<Effect> {
+pub(crate) fn move_cursor(state: &mut crate::state::ViewState, key: Key) -> Vec<Effect> {
+    let before = state.tree.selected.clone();
+    let mut effects = press(&mut state.tree, key);
+    if key == Key::Into {
+        build(&mut state.tree, &state.hosts);
+        go_into(&mut state.tree);
+    }
+    if state.tree.selected != before
+        && state.content.focus == crate::content::Area::Sidebar
+        && let Some(row) = state.tree.selected.clone()
+    {
+        effects.extend(crate::content::preview_row(state, &row));
+    }
+    effects
+}
+
+fn press(view: &mut TreeView, key: Key) -> Vec<Effect> {
     let rows = &view.built.rows;
     let current = view.selected.as_ref();
     let next = match key {
@@ -473,6 +516,12 @@ pub(crate) fn keep_selection(view: &mut TreeView, showing: &Showing, work: Optio
     if row.is_some() {
         view.selected = row;
     }
+}
+
+/// A sidebar cursor chose this tab; following it back would move the
+/// other section's cursor or choose another occurrence of the same row.
+pub(crate) fn keep_cursor(view: &mut TreeView, tab: Tab) {
+    view.followed = Some(tab);
 }
 
 /// The selection follows the focused window to what it now shows, however

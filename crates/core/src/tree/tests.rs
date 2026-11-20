@@ -163,6 +163,145 @@ fn a_workspace_where_nothing_runs_is_listed_folded() {
 }
 
 #[test]
+fn moving_the_tree_cursor_shows_the_session_tab_without_taking_the_keys() {
+    use crate::content::Area;
+
+    let mut run = Scenario::new()
+        .event(listing([session("a").cwd("/r"), session("b").cwd("/r")]))
+        .send(show_in(session_tab("b"), "/r"))
+        .send(show_in(session_tab("a"), "/r"))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::TreeSelect(Some(Item::Session(here(), "a".into()))));
+    let tabs = run.state().content.windows.tabs().len();
+    for (key, id) in [(Key::Down, "b"), (Key::Up, "a"), (Key::Down, "b")] {
+        run = run.send(Msg::TreeKey(key));
+        assert_eq!(
+            selected(&run),
+            Some(Item::Session(here(), id.into())),
+            "{key:?}; rows: {:?}",
+            rows(&run)
+        );
+        assert_eq!(
+            run.state().content.active(),
+            Some(&session_tab(id)),
+            "{key:?}"
+        );
+        assert_eq!(run.state().content.focus, Area::Sidebar);
+        assert_eq!(run.state().content.windows.tabs().len(), tabs);
+        assert_eq!(run.state().details.shown.session.as_deref(), Some(id));
+        assert_eq!(
+            run.state().details.shown.worktree.as_deref(),
+            Some(Path::new("/r"))
+        );
+    }
+    let run = run
+        .send(Msg::TreeKey(Key::Last))
+        .send(Msg::TreeKey(Key::First));
+    assert_eq!(run.state().content.active(), Some(&session_tab("b")));
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+}
+
+#[test]
+fn entering_the_sessions_heading_shows_its_first_session_without_taking_the_keys() {
+    use crate::content::Area;
+
+    let run = Scenario::new()
+        .event(listing([session("a").cwd("/r")]))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::TreeSelect(Some(Item::Heading(
+            here(),
+            "/r".into(),
+            Heading::Sessions,
+        ))))
+        .send(Msg::TreeKey(Key::Into));
+    assert_eq!(run.state().content.active(), Some(&session_tab("a")));
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+}
+
+#[test]
+fn moving_the_tree_cursor_to_a_terminal_shows_it_without_taking_the_keys() {
+    use crate::content::Area;
+
+    let run = Scenario::new()
+        .event(testing::snapshot().listed(testing::listed().terminals([shell(7, "/r")])))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::TreeSelect(Some(Item::Heading(
+            here(),
+            "/r".into(),
+            Heading::Terminals,
+        ))))
+        .send(Msg::TreeKey(Key::Into));
+    assert_eq!(
+        run.state().content.active(),
+        Some(&Tab::Terminal(here(), 7))
+    );
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+    assert_eq!(run.state().details.shown.session, None);
+    assert_eq!(
+        run.state().details.shown.worktree.as_deref(),
+        Some(Path::new("/r"))
+    );
+}
+
+#[test]
+fn moving_through_files_reveals_open_tabs_and_never_starts_an_editor() {
+    use crate::content::Area;
+
+    let run = Scenario::new()
+        .event(listing([session("a").cwd("/r")]))
+        .send(Msg::TreeFold {
+            row: Item::Heading(here(), "/r".into(), Heading::Files),
+            open: true,
+        })
+        .event(patch(2).change(TreeChange::Entries {
+            dir: "/r".into(),
+            entries: vec![
+                Entry {
+                    path: "/r/a.md".into(),
+                    dir: false,
+                },
+                Entry {
+                    path: "/r/b.rs".into(),
+                    dir: false,
+                },
+            ],
+        }))
+        .send(testing::show(Tab::Viewer(here(), "/r/a.md".into())))
+        .send(testing::show(session_tab("a")))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::TreeSelect(Some(Item::Heading(
+            here(),
+            "/r".into(),
+            Heading::Files,
+        ))))
+        .send(Msg::TreeKey(Key::Down));
+    assert_eq!(
+        run.state().content.active(),
+        Some(&Tab::Viewer(here(), "/r/a.md".into()))
+    );
+    let run = run.send(Msg::TreeKey(Key::Down));
+    assert_eq!(
+        selected(&run),
+        Some(Item::File {
+            environment: here(),
+            worktree: "/r".into(),
+            path: "/r/b.rs".into(),
+            dir: false,
+        })
+    );
+    assert_eq!(
+        run.state().content.active(),
+        Some(&Tab::Viewer(here(), "/r/a.md".into()))
+    );
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+    assert!(
+        !run.effects()
+            .iter()
+            .any(|effect| matches!(effect, Effect::StartTerminal(_)))
+    );
+}
+
+#[test]
 fn the_keys_move_the_selection_through_the_rows() {
     let base = || {
         Scenario::new()

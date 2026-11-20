@@ -146,6 +146,7 @@
 "Shift+Tab" = "sidebar.next"
 
 [agents]
+"g t" = "agents.reveal"
 "Tab" = "sidebar.next"
 "Shift+Tab" = "sidebar.next"
 "j" = "cursor.down"

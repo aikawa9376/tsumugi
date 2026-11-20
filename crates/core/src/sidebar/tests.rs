@@ -187,6 +187,123 @@ fn tab_switches_views_without_changing_the_directory_tree_or_its_selection() {
 }
 
 #[test]
+fn moving_the_agents_cursor_shows_its_tab_and_keeps_the_panel_focused() {
+    let mut run = family()
+        .send(Msg::SidebarPanel(Panel::Agents))
+        .send(Msg::SidebarSelect(key("parent")));
+    for (pressed, id) in [
+        ("j", "child"),
+        ("j", "grandchild"),
+        ("k", "child"),
+        ("h", "child"),
+        ("h", "parent"),
+        ("l", "child"),
+        ("k", "parent"),
+        ("G", "child"),
+        ("g", "independent"),
+    ] {
+        run = if pressed == "g" {
+            run.send(Msg::Key {
+                key: tsumugi_model::Key::new("g"),
+                probe: Box::default(),
+            })
+            .press("g")
+        } else {
+            run.press(pressed)
+        };
+        assert_eq!(run.state().sidebar.selected, Some(key(id)), "{pressed}");
+        assert_eq!(
+            run.state().content.active(),
+            Some(&Tab::Session(here(), id.into())),
+            "{pressed}"
+        );
+        assert_eq!(run.state().content.focus, Area::Sidebar, "{pressed}");
+        assert_eq!(run.state().details.shown.session.as_deref(), Some(id));
+        assert_eq!(run.state().details.shown.environment, here());
+    }
+    let run = run.press("Enter");
+    assert_eq!(run.state().content.focus, Area::Console);
+}
+
+#[test]
+fn moving_to_an_agent_in_another_environment_shows_that_environments_tab() {
+    let run = shows_there(
+        Scenario::new().event(listing([session("same")])),
+        [session("same")],
+    )
+    .send(Msg::SidebarPanel(Panel::Agents))
+    .send(Msg::SidebarSelect(key("same")))
+    .press("j");
+    assert_eq!(
+        run.state().sidebar.selected,
+        Some(NodeKey::session(there(), "same"))
+    );
+    assert_eq!(
+        run.state().content.active(),
+        Some(&Tab::Session(there(), "same".into()))
+    );
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+    assert_eq!(run.state().details.shown.environment, there());
+    assert_eq!(run.state().details.shown.session.as_deref(), Some("same"));
+}
+
+#[test]
+fn every_details_tab_follows_the_agents_cursor_while_the_keys_stay_in_agents() {
+    use crate::chrome::panels::layout::Side;
+    use crate::effect::Effect;
+    use tsumugi_protocol::Request;
+
+    for tab in 0..5 {
+        let run = family()
+            .send(Msg::PanelShow(Side::Details))
+            .send(Msg::SidebarPanel(Panel::Agents))
+            .send(Msg::SidebarSelect(key("parent")))
+            .send(Msg::DetailsTab(tab))
+            .press("j");
+        let details = &run.state().details;
+        assert_eq!(details.drill.tab(), tab);
+        assert_eq!(details.shown.session.as_deref(), Some("child"));
+        assert_eq!(
+            details.shown.worktree.as_deref(),
+            Some(std::path::Path::new("/r/child"))
+        );
+        assert_eq!(
+            crate::details::shown_session(details, run.state().hosts.work(&here()))
+                .unwrap()
+                .name,
+            "child-name"
+        );
+        assert!(run.last_effects().iter().any(|effect| matches!(effect,
+            Effect::Host { environment, request: Request::Watch(sight) }
+                if environment == &here()
+                    && sight.details
+                    && sight.session.as_deref() == Some("child")
+                    && sight.repositories.iter().all(|repo| repo.worktree == std::path::Path::new("/r/child"))
+        )), "details tab {tab} must read the session at the cursor");
+        assert_eq!(run.state().content.focus, Area::Sidebar);
+    }
+}
+
+#[test]
+fn moving_to_an_unavailable_parent_keeps_the_tab_that_was_shown() {
+    let run = Scenario::new()
+        .event(listing([session("child").parent(SessionId::new())]))
+        .send(crate::testing::show(Tab::Session(here(), "child".into())))
+        .send(Msg::SidebarPanel(Panel::Agents))
+        .send(Msg::SidebarSelect(key("child")))
+        .press("k");
+    assert!(matches!(
+        run.state().sidebar.selected.as_ref().unwrap().identity,
+        Identity::Parent(_)
+    ));
+    assert_eq!(
+        run.state().content.active(),
+        Some(&Tab::Session(here(), "child".into()))
+    );
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+}
+
+#[test]
 fn agents_open_and_stop_the_selected_session_in_its_own_environment() {
     let run = shows_there(family(), [session("remote").state(State::Working)])
         .send(Msg::SidebarPanel(Panel::Agents))
@@ -250,7 +367,10 @@ fn an_agent_context_menu_has_the_tree_session_actions_and_targets_its_own_row() 
     let session = session("remote").state(State::Working).build();
     let target = Target::Agent(there(), "remote".into());
     assert_eq!(
-        entries(&target, Some(&session), &here(), Reach::Here),
+        entries(&target, Some(&session), &here(), Reach::Here)
+            .into_iter()
+            .filter(|(action, _)| *action != Action::AgentsReveal)
+            .collect::<Vec<_>>(),
         entries(
             &Target::Row(crate::tree::nav::Item::Session(there(), "remote".into())),
             Some(&session),
@@ -276,6 +396,129 @@ fn an_agent_context_menu_has_the_tree_session_actions_and_targets_its_own_row() 
         }
         other => panic!("the context menu must target the clicked agent: {other:?}"),
     }
+}
+
+#[test]
+fn an_agent_menu_offers_show_in_tree() {
+    use crate::overlay::context_menu::{Reach, Target, entries};
+    let entries = entries(
+        &Target::Agent(here(), "child".into()),
+        Some(&session("child").build()),
+        &here(),
+        Reach::Here,
+    );
+    assert!(entries.iter().any(|(action, label)| {
+        *action == crate::actions::Action::AgentsReveal && *label == "Show in Tree"
+    }));
+}
+
+#[test]
+fn showing_an_agent_in_tree_unfolds_its_directory_path_and_selects_its_own_row() {
+    use crate::tree::nav::{Heading, Item};
+    for remote in [false, true] {
+        for flat in [false, true] {
+            let directory = if flat { "/r" } else { "/r/topic" };
+            let target = session("target").cwd(directory);
+            let run = family().send(Msg::ShowSession(here(), "parent".into()));
+            let (run, environment) = if remote {
+                (shows_there(run, [target]), there())
+            } else {
+                (
+                    run.event(listing([target, session("parent").cwd(directory)])),
+                    here(),
+                )
+            };
+            let ancestors = [
+                Item::Environment(environment.clone()),
+                Item::Workspace(environment.clone(), "/r".into()),
+                Item::Worktree(environment.clone(), "/r/topic".into()),
+                Item::Heading(environment.clone(), directory.into(), Heading::Sessions),
+            ];
+            let unrelated = Item::Workspace(environment.clone(), "/other".into());
+            let mut run = run.send(Msg::TreeFold {
+                row: unrelated.clone(),
+                open: false,
+            });
+            for row in &ancestors {
+                run = run.send(Msg::TreeFold {
+                    row: row.clone(),
+                    open: false,
+                });
+            }
+            let run = run
+                .send(Msg::TreeFilter("no matching session".into()))
+                .send(Msg::SidebarPanel(Panel::Agents))
+                .send(Msg::SidebarSelect(NodeKey::session(
+                    environment.clone(),
+                    "target",
+                )))
+                .send(Msg::SidebarFilter("target".into()));
+            let content = run.state().content.clone();
+            let run = run
+                .send(Msg::Key {
+                    key: tsumugi_model::Key::new("g"),
+                    probe: Box::default(),
+                })
+                .press("t");
+            let row = Item::Session(environment, "target".into());
+            assert_eq!(run.state().sidebar.panel, Panel::Tree);
+            assert_eq!(run.state().content.focus, Area::Sidebar);
+            assert_eq!(run.state().content.windows, content.windows);
+            assert_eq!(run.state().tree.selected.as_ref(), Some(&row));
+            assert!(run.state().tree.rows().contains(&row));
+            assert!(run.state().tree.filter.is_empty());
+            assert!(!run.state().tree.folds.is_open(&unrelated));
+            assert_eq!(run.state().sidebar.filter, "target");
+            assert_eq!(
+                run.state().sidebar.selected,
+                Some(NodeKey::session(row.environment().clone(), "target"))
+            );
+        }
+    }
+}
+
+#[test]
+fn show_in_tree_from_an_agent_menu_targets_the_clicked_session() {
+    use crate::overlay::context_menu::Target;
+    let action = crate::actions::Action::AgentsReveal;
+    let run = shows_there(family(), [session("remote")])
+        .send(Msg::SidebarPanel(Panel::Agents))
+        .send(Msg::SidebarSelect(key("parent")))
+        .send(Msg::MenuRun {
+            target: Target::Agent(there(), "remote".into()),
+            action: action.clone(),
+        })
+        .send(Msg::Perform {
+            action,
+            key: None,
+            probe: Box::default(),
+        });
+    assert_eq!(run.state().sidebar.panel, Panel::Tree);
+    assert_eq!(
+        run.state().tree.selected,
+        Some(tree::nav::Item::Session(there(), "remote".into()))
+    );
+}
+
+#[test]
+fn an_unavailable_parent_cannot_reveal_the_session_in_the_console() {
+    let parent = SessionId::new();
+    let run = Scenario::new()
+        .event(listing([session("orphan").parent(parent)]))
+        .send(Msg::ShowSession(here(), "orphan".into()))
+        .send(Msg::SidebarPanel(Panel::Agents))
+        .send(Msg::SidebarSelect(NodeKey {
+            environment: here(),
+            identity: Identity::Parent(parent.to_string()),
+        }));
+    let tree = run.state().tree.clone();
+    let run = run.send(Msg::Perform {
+        action: crate::actions::Action::AgentsReveal,
+        key: None,
+        probe: Box::default(),
+    });
+    assert_eq!(run.state().sidebar.panel, Panel::Agents);
+    assert_eq!(run.state().tree, tree);
 }
 
 #[test]

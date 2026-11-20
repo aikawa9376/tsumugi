@@ -129,6 +129,7 @@ pub enum Action {
     SidebarNext,
     AgentsExpand,
     AgentsCollapse,
+    AgentsReveal,
     DetailsToggle,
     ViewerZoomIn,
     ViewerZoomOut,
@@ -445,6 +446,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::SidebarNext, "sidebar.next", "focus the other sidebar section, giving its list more room ([agents](agents-panel.md))").says("Focus other sidebar section"),
     S::new(A::AgentsExpand, "agents.expand", "expand the selected agent family or move to its first child").says("Expand agent family"),
     S::new(A::AgentsCollapse, "agents.collapse", "fold the selected agent family or move to its parent").says("Fold agent family"),
+    S::new(A::AgentsReveal, "agents.reveal", "from Agents, show the selected session in Tree, clearing Tree's filter and unfolding its directory path ([agents](agents-panel.md))")
+        .icon(Icon::LayoutSidebar)
+        .row("Show in Tree", Go),
     S::new(A::DetailsToggle, "details.toggle", "show or hide the details panel").bar("Toggle Details", Icon::LayoutSidebarRight),
     S::new(A::ViewerZoomIn, "viewer.zoom_in", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](content.md#viewers))").says("Zoom in"),
     S::new(A::ViewerZoomOut, "viewer.zoom_out", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller").says("Zoom out"),
@@ -722,6 +726,7 @@ mod tests {
             SidebarNext,
             AgentsExpand,
             AgentsCollapse,
+            AgentsReveal,
             DetailsToggle,
             ViewerZoomIn,
             ViewerZoomOut,

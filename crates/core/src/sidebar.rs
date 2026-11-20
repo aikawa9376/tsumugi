@@ -372,6 +372,7 @@ pub(crate) fn press(
     if state.content.focus != Area::Sidebar || state.sidebar.panel != Panel::Agents {
         return None;
     }
+    let before = state.sidebar.selected.clone();
     let view = &mut state.sidebar;
     let at = view
         .selected
@@ -379,6 +380,18 @@ pub(crate) fn press(
         .and_then(|key| view.rows.iter().position(|r| &r.key == key))
         .unwrap_or_default();
     match action {
+        Action::AgentsReveal => {
+            if let Some(tree::nav::Item::Session(environment, id)) = selected(state)
+                && tree::reveal_session(
+                    &mut state.tree,
+                    &environment,
+                    tree::listed(state.hosts.work(&environment)),
+                    &id,
+                )
+            {
+                return Some(switch(state, Panel::Tree));
+            }
+        }
         Action::CursorDown | Action::CursorUp | Action::CursorFirst | Action::CursorLast => {
             if !view.rows.is_empty() {
                 let last = view.rows.len() - 1;
@@ -419,6 +432,11 @@ pub(crate) fn press(
             }
         }
         _ => return None,
+    }
+    if state.sidebar.selected != before
+        && let Some(item) = selected(state)
+    {
+        return Some(crate::content::preview_row(state, &item));
     }
     Some(Vec::new())
 }

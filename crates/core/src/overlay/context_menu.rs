@@ -79,12 +79,16 @@ pub fn entries(
     let close_tab = offer(Action::TabClose);
     let stop_terminal = offer(Action::TerminalStop);
     match target {
-        Target::Agent(environment, id) => entries(
-            &Target::Row(Item::Session(environment.clone(), id.clone())),
-            session,
-            own,
-            reach,
-        ),
+        Target::Agent(environment, id) => {
+            let mut entries = entries(
+                &Target::Row(Item::Session(environment.clone(), id.clone())),
+                session,
+                own,
+                reach,
+            );
+            entries.insert(opens.len(), offer(Action::AgentsReveal));
+            entries
+        }
         Target::Row(Item::Gathered(row)) => {
             entries(&Target::Row((**row).clone()), session, own, reach)
         }
