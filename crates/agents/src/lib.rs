@@ -259,6 +259,9 @@ type ContextProbe = std::pin::Pin<Box<dyn std::future::Future<Output = Option<(u
 /// A provider reader produces the details the overview can display.
 pub trait ConversationReader: Send {
     fn read(&mut self) -> crate::links::Links;
+    fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        Vec::new()
+    }
     fn stats(&self) -> tsumugi_model::ConversationStats {
         tsumugi_model::ConversationStats::default()
     }

@@ -90,7 +90,6 @@ impl Transcript {
     }
 
     // The shared collector owns address recognition, ordering and file labels.
-    // Translate only conversation content, never reasoning or injected context.
     fn feed(&mut self, timestamp: &Value, role: &str, content: Value) {
         self.found.said(role, timestamp, content, &|p| p.is_file());
     }
@@ -162,8 +161,24 @@ impl Follow for Transcript {
                                 _ => None,
                             })
                             .collect();
-                        self.feed(timestamp, role, json!(parts));
+                        self.found.take(
+                            &json!({"type":role, "timestamp":timestamp,
+                            "message":{"content":parts, "channel":payload["channel"],
+                                "phase":payload["phase"]}}),
+                            &|p| p.is_file(),
+                        );
                     }
+                }
+                Some("reasoning") => {
+                    let parts: Vec<_> = payload["summary"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|p| p["type"] == "summary_text")
+                        .filter_map(|p| p["text"].as_str())
+                        .map(|text| json!({"type":"thinking", "thinking":text}))
+                        .collect();
+                    self.feed(timestamp, "assistant", json!(parts));
                 }
                 Some("function_call")
                     if payload["name"]
@@ -291,6 +306,9 @@ impl Follow for Transcript {
 }
 
 impl ConversationReader for Transcript {
+    fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        self.found.messages()
+    }
     fn stats(&self) -> tsumugi_model::ConversationStats {
         self.metrics.stats()
     }
@@ -320,6 +338,54 @@ mod tests {
             json!({"type":"message", "role":role,
             "content":[{"type":"output_text", "text":text}]}),
         )
+    }
+
+    #[test]
+    fn conversation_uses_message_records_once_and_preserves_progress_channels() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut reader = rollout(
+            dir.path(),
+            &[
+                message("user", "Hello"),
+                record(
+                    "response_item",
+                    json!({"type":"reasoning",
+                    "summary":[{"type":"summary_text","text":"A recorded thought"}],
+                    "encrypted_content":"unreadable"}),
+                ),
+                record(
+                    "event_msg",
+                    json!({"type":"user_message","message":"Hello"}),
+                ),
+                record(
+                    "response_item",
+                    json!({"type":"message","role":"assistant","channel":"analysis",
+                "content":[{"type":"output_text","text":"private"}]}),
+                ),
+                record(
+                    "response_item",
+                    json!({"type":"message","role":"assistant","phase":"commentary",
+                "content":[{"type":"output_text","text":"Checking"}]}),
+                ),
+                record(
+                    "event_msg",
+                    json!({"type":"agent_message","message":"Done"}),
+                ),
+                message("assistant", "Done"),
+            ],
+        );
+        reader.read();
+        let messages = reader.messages();
+        assert_eq!(
+            messages.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+            ["Hello", "A recorded thought", "private", "Checking", "Done"]
+        );
+        assert!(messages[1].thinking);
+        assert!(messages[2].thinking);
+        assert!(!messages[3].thinking);
+        assert!(!messages[4].thinking);
+        reader.read();
+        assert_eq!(reader.messages(), messages);
     }
 
     /// A reader of `records`, written as a rollout in `dir`.

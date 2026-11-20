@@ -394,6 +394,17 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
     };
     Sight {
         agents: profiled && details::lists_profiles(&state.details),
+        conversations: state
+            .content
+            .windows
+            .shown()
+            .into_iter()
+            .filter(|tab| state.content.conversation(tab))
+            .filter_map(|tab| match tab {
+                Tab::Session(e, id) if e == environment => Some(id.clone()),
+                _ => None,
+            })
+            .collect(),
         // A window that shows no meter says so, rather than leave the host
         // to sample what its own settings name.
         system: shown_part

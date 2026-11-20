@@ -99,6 +99,7 @@ mod tests {
         round_trips(Request::ReadAgain);
         round_trips(Request::Watch(Box::new(Sight {
             session: Some("s".into()),
+            conversations: BTreeSet::from(["s".into(), "other".into()]),
             details: true,
             overview: true,
             repositories: vec![RepositorySight {

@@ -10,6 +10,7 @@ use serde_json::Value;
 
 pub use tsumugi_model::links::*;
 
+mod conversation;
 mod scan;
 use scan::*;
 
@@ -23,6 +24,7 @@ enum Group {
 /// What the lines of a transcript bring up, taken in a line at a time.
 #[derive(Debug, Clone)]
 pub struct Collector {
+    conversation: conversation::Conversation,
     cwd: PathBuf,
     home: PathBuf,
     /// How many times something was brought up, which orders them.
@@ -49,6 +51,7 @@ impl Collector {
     /// A collector for a session working in `cwd`, `~` standing for `home`.
     pub fn new(cwd: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Self {
         Collector {
+            conversation: conversation::Conversation::default(),
             cwd: cwd.into(),
             home: home.into(),
             count: 0,
@@ -87,6 +90,10 @@ impl Collector {
     }
 
     pub(crate) fn take(&mut self, v: &Value, exists: &dyn Fn(&Path) -> bool) {
+        self.conversation.take(v);
+        if conversation::is_thinking(v) {
+            return;
+        }
         let assistant = match v["type"].as_str() {
             Some("assistant") => true,
             Some("user") => false,
@@ -168,6 +175,10 @@ impl Collector {
         out.peers = peers.into_iter().map(|(_, p)| p.clone()).collect();
         out.prompts = self.prompts.iter().rev().take(KEPT).cloned().collect();
         out
+    }
+
+    pub fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        self.conversation.messages.clone()
     }
 
     /// What the user said in a turn of `content`, kept as a prompt; a turn

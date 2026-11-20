@@ -131,6 +131,13 @@ enum Receiver {
 /// delivery and the public input context use this order.
 fn receiver(state: &ViewState, probe: &Probe) -> Receiver {
     let area = state.content.focus;
+    if state.content.reading_conversation() && matches!(area, Area::Console | Area::Prompt) {
+        return if area == Area::Prompt {
+            Receiver::Prompt
+        } else {
+            Receiver::Gui
+        };
+    }
     let pane = probe.pane && matches!(area, Area::Console | Area::Prompt);
     if pane && area == Area::Console && (state.console.direct || state.console.send_next) {
         return Receiver::Program;
@@ -202,6 +209,9 @@ pub fn waits(state: &ViewState) -> bool {
 
 /// The agent of the session the console shows.
 fn shown_agent(state: &ViewState) -> Option<tsumugi_model::Agent> {
+    if state.content.reading_conversation() {
+        return None;
+    }
     match state.content.active() {
         Some(Tab::Session(environment, id)) => {
             state.hosts.session(environment, id).map(|(_, s)| s.agent)
@@ -219,6 +229,13 @@ pub fn text_goes(state: &ViewState) -> Typed {
         &state.chrome,
     )) {
         return Typed::Nowhere;
+    }
+    if state.content.reading_conversation() {
+        return if state.content.focus == Area::Prompt {
+            Typed::Prompt
+        } else {
+            Typed::Nowhere
+        };
     }
     let session = matches!(state.content.active(), Some(Tab::Session(_, _)));
     route::typed_into(
@@ -239,6 +256,15 @@ fn typed(state: &mut ViewState) {
 
 /// A key pressed, where the keys are now.
 pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect> {
+    let probe = if state.content.reading_conversation() {
+        Probe {
+            pane: false,
+            reader: None,
+            ..probe
+        }
+    } else {
+        probe
+    };
     if overlay::holder(state).is_some() {
         return overlay::press(state, key);
     }
@@ -323,24 +349,28 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
     // its answer; a shell takes every key but those.
     let pane = pane || (probe.pane && area == Area::Prompt);
     let passing = receiver(state, &probe) == Receiver::Program;
-    let contexts = crate::sidebar::contexts(
-        state.sidebar.panel,
-        area,
-        route::for_agent(
-            route::filing(
-                route::contexts(
+    let contexts = if area == Area::Console && state.content.reading_conversation() {
+        vec![Context::Viewer, Context::Console, Context::Global]
+    } else {
+        crate::sidebar::contexts(
+            state.sidebar.panel,
+            area,
+            route::for_agent(
+                route::filing(
+                    route::contexts(
+                        area,
+                        state.content.active(),
+                        passing,
+                        windowing,
+                        probe.inserting,
+                    ),
                     area,
-                    state.content.active(),
-                    passing,
-                    windowing,
-                    probe.inserting,
+                    matches!(state.tree.selected, Some(nav::Item::File { .. })),
                 ),
-                area,
-                matches!(state.tree.selected, Some(nav::Item::File { .. })),
+                agent,
             ),
-            agent,
-        ),
-    );
+        )
+    };
     let seq = std::mem::take(&mut state.console.pending);
     if seq.is_empty()
         && let Some(action) = repeated(state, &contexts, repeat.as_ref(), &key)

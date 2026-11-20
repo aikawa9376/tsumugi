@@ -2,6 +2,97 @@ use super::*;
 
 use serde_json::json;
 
+#[test]
+fn conversation_keeps_only_human_text_and_replies_in_order() {
+    let mut c = Collector::new("/w", "/home/me");
+    for line in [
+        user(json!(
+            "# AGENTS.md instructions for /w\n<INSTRUCTIONS>internal</INSTRUCTIONS>"
+        )),
+        user(json!("<environment_context>internal</environment_context>")),
+        user(json!(
+            "Fix this.<system-reminder>internal</system-reminder>"
+        )),
+        said("I will check."),
+        tool("t", "Read", json!({"file_path":"/w/file"})),
+        result("t", json!("tool output")),
+        json!({"type":"user","isMeta":true,"message":{"content":"injected"}}).to_string(),
+        user(json!("[message] from other session:\ninternal")),
+        said("Fixed.\n\n```rust\nlet x = 1;\n```"),
+        user(json!("Thanks")),
+    ] {
+        c.feed(&line, &|_| false);
+    }
+    let messages = c.messages();
+    assert_eq!(
+        messages.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        [
+            "Fix this.",
+            "I will check.",
+            "Fixed.\n\n```rust\nlet x = 1;\n```",
+            "Thanks"
+        ]
+    );
+    assert_eq!(messages[0].role, tsumugi_model::conversation::Role::User);
+    assert_eq!(
+        messages[1].role,
+        tsumugi_model::conversation::Role::Assistant
+    );
+    c.clear();
+    assert!(c.messages().is_empty());
+}
+
+#[test]
+fn conversation_separates_thinking_from_user_facing_text_without_folding_progress() {
+    let mut c = Collector::new("/w", "/home/me");
+    for record in [
+        json!({"type":"assistant","message":{"content":[
+            {"type":"thinking","thinking":"Consider https://thought.example"},
+            {"type":"text","text":"I will check."},
+            {"type":"thinking","thinking":"One more thought"},
+            {"type":"text","text":"Found it."}],"stop_reason":"tool_use"}}),
+        json!({"type":"assistant","message":{"phase":"commentary","content":"Checking"}}),
+        json!({"type":"assistant","message":{"channel":"analysis","content":"https://analysis.example"}}),
+    ] {
+        c.take(&record, &|_| false);
+    }
+    let messages = c.messages();
+    assert_eq!(
+        messages.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        [
+            "Consider https://thought.example",
+            "I will check.",
+            "One more thought",
+            "Found it.",
+            "Checking",
+            "https://analysis.example",
+        ]
+    );
+    assert_eq!(
+        messages.iter().map(|m| m.thinking).collect::<Vec<_>>(),
+        [true, false, true, false, false, true]
+    );
+    assert!(
+        c.links().urls.is_empty(),
+        "thoughts do not add conversation links"
+    );
+}
+
+#[test]
+fn conversation_preserves_indented_code_and_trailing_newlines_for_reading_and_copying() {
+    let mut c = Collector::new("/w", "/home/me");
+    let text = "    let x = 1;\n    let y = 2;\n";
+    c.feed(&user(json!(text)), &|_| false);
+    c.feed(&said(text), &|_| false);
+    assert_eq!(
+        c.messages()
+            .iter()
+            .map(|m| m.text.as_str())
+            .collect::<Vec<_>>(),
+        [text, text]
+    );
+}
+
 fn assistant(content: serde_json::Value) -> String {
     json!({"type": "assistant", "message": {"role": "assistant", "content": content}}).to_string()
 }

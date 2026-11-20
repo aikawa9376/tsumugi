@@ -193,6 +193,38 @@ pub fn thread_document(
     theme: &Document,
     nonce: &str,
 ) -> String {
+    discussion_document(fragment, libraries, theme, nonce, None)
+}
+
+pub fn conversation_document(
+    fragment: &str,
+    libraries: Libraries,
+    theme: &Document,
+    nonce: &str,
+    conversation: &str,
+) -> String {
+    discussion_document(fragment, libraries, theme, nonce, Some(conversation))
+}
+
+fn discussion_document(
+    fragment: &str,
+    libraries: Libraries,
+    theme: &Document,
+    nonce: &str,
+    conversation: Option<&str>,
+) -> String {
+    let metadata = conversation
+        .map(|id| format!(" data-conversation=\"{}\"", escape(id)))
+        .unwrap_or_default();
+    let (class, style, script) = if conversation.is_some() {
+        (
+            "conversation-thread",
+            include_str!("../../assets/css/conversation.css"),
+            include_str!("../../assets/js/conversation-page.js"),
+        )
+    } else {
+        ("gh-thread", THREAD_STYLE, "")
+    };
     let scripts: String = std::iter::once("embed.js")
         .chain(library_names(libraries))
         .map(|name| format!("<script src=\"{}\"></script>", arto_url(name)))
@@ -208,10 +240,10 @@ pub fn thread_document(
          <meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; \
          script-src 'nonce-{nonce}' {origin}; style-src 'unsafe-inline' {origin}; \
          img-src data: https: {origin}; font-src data: {origin}; media-src https:\">\
-         <link rel=\"stylesheet\" href=\"{css}\"><style>{PAGE_STYLE}{THREAD_STYLE}</style>\
-         <style id=\"tsumugi-theme\">{rule}</style>{page}{scripts}{own}{DOCUMENT_SCRIPT}</script>\
-         {own}{THREAD_SCRIPT}</script></head>\
-         <body><div class=\"markdown-viewer\"><article class=\"markdown-body gh-thread\">{fragment}</article></div></body></html>",
+         <link rel=\"stylesheet\" href=\"{css}\"><style>{PAGE_STYLE}{style}</style>\
+         <style id=\"tsumugi-theme\">{rule}</style>{page}{scripts}{own}{script}</script>\
+         {own}{DOCUMENT_SCRIPT}</script>{own}{THREAD_SCRIPT}</script></head>\
+         <body><div class=\"markdown-viewer\"><article class=\"markdown-body {class}\"{metadata}>{fragment}</article></div></body></html>",
         scheme = theme.scheme,
         rule = theme_rule(theme),
         css = arto_url("embed.css"),

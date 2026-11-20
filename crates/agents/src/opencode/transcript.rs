@@ -49,6 +49,7 @@ pub(super) struct Transcript {
     exported: Option<Asked>,
     running: Option<Running>,
     links: Links,
+    messages: Vec<tsumugi_model::conversation::Message>,
     stats: ConversationStats,
 }
 
@@ -69,6 +70,7 @@ impl Transcript {
             exported: None,
             running: None,
             links: Links::default(),
+            messages: Vec::new(),
             stats: ConversationStats::default(),
         }
     }
@@ -151,6 +153,9 @@ impl Transcript {
                             Some("text") => {
                                 content.push(json!({"type":"text", "text":part["text"]}));
                             }
+                            Some("reasoning") => {
+                                content.push(json!({"type":"thinking", "thinking":part["text"]}));
+                            }
                             Some("tool") => {
                                 stats.tool_calls += 1;
                                 if let Some((call, result)) = self.call(part) {
@@ -170,6 +175,7 @@ impl Transcript {
             }
         }
         self.links = found.links();
+        self.messages = found.messages();
         self.stats = stats;
     }
 
@@ -254,6 +260,9 @@ fn iso(ms: u64) -> String {
 }
 
 impl ConversationReader for Transcript {
+    fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        self.messages.clone()
+    }
     fn stats(&self) -> ConversationStats {
         self.stats.clone()
     }
@@ -330,6 +339,20 @@ mod tests {
         let (mut reader, _held, _) = reader(dir.path(), &exported);
         let links = settled(&mut reader);
         let urls: Vec<&str> = links.urls.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(
+            reader
+                .messages()
+                .iter()
+                .map(|m| m.text.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "see https://user.example",
+                "https://thought.example",
+                "[Report](report.md:3) https://docs.example"
+            ]
+        );
+        assert!(reader.messages()[1].thinking);
+        assert!(!reader.messages()[2].thinking);
         assert_eq!(urls, ["https://docs.example", "https://user.example"]);
         let touched: Vec<(String, Kind)> = links
             .files

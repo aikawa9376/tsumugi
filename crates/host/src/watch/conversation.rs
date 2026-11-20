@@ -1,7 +1,7 @@
 //! What the conversation of each session shown says: its stats, read on every
 //! sheet for the usage at the panel's foot, and, while the overview is shown,
 //! its links, the small copies of its images, and what it told other
-//! sessions through Tsumugi.
+//! sessions through Tsumugi; the human transcript for conversation views.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -9,7 +9,7 @@ use std::time::Duration;
 use tsumugi_agents::ConversationReader;
 use tsumugi_model::links::Links;
 use tsumugi_model::{ConversationStats, Session};
-use tsumugi_protocol::{ConversationRead, DetailsChange};
+use tsumugi_protocol::{ConversationRead, DetailsChange, TranscriptRead};
 
 use super::{Watched, shown_sessions};
 use crate::pictures::{self, Thumbs};
@@ -21,12 +21,11 @@ pub(super) async fn watch(mut watched: Watched) {
     let mut held: Vec<(Key, Reader)> = Vec::new();
     let mut thumbs = Thumbs::new();
     loop {
-        let shown: Vec<(Session, bool)> = shown_sessions(&watched.seen(), |_| true)
-            .into_iter()
-            .filter(|(s, _)| has_transcript(s))
-            .collect();
-        held.retain(|(key, _)| shown.iter().any(|(s, _)| Key::of(s) == *key));
-        for (s, overview) in shown {
+        let seen = watched.seen();
+        let sessions = watched.host().work().tree().sessions().to_vec();
+        let shown = conversation_sessions(&seen, &sessions);
+        held.retain(|(key, _)| shown.iter().any(|(s, _, _)| Key::of(s) == *key));
+        for (s, overview, transcript) in shown {
             let key = Key::of(&s);
             let at = held.iter().position(|(was, _)| *was == key);
             let reader = match at {
@@ -47,14 +46,15 @@ pub(super) async fn watch(mut watched: Watched) {
             let read = crate::environment::spawn_blocking(move || {
                 let mut reader = reader;
                 let (links, stats) = sample_conversation(&mut *reader, overview);
+                let messages = transcript.then(|| reader.messages());
                 let links = links.map(|mut links| {
                     pictures::refresh_thumbs(&mut links.images, &mut kept);
                     links
                 });
-                (reader, links, stats, kept)
+                (reader, links, stats, kept, messages)
             })
             .await;
-            if let Ok((reader, links, stats, kept)) = read {
+            if let Ok((reader, links, stats, kept, messages)) = read {
                 thumbs = kept;
                 held.push((key, reader));
                 let mut changes = vec![DetailsChange::Conversation {
@@ -64,6 +64,15 @@ pub(super) async fn watch(mut watched: Watched) {
                         stats,
                     },
                 }];
+                if let Some(messages) = messages {
+                    changes.push(DetailsChange::Transcript {
+                        session: s.id.clone(),
+                        transcript: TranscriptRead {
+                            id: s.session_id.clone(),
+                            messages,
+                        },
+                    });
+                }
                 if let Some(links) = links {
                     changes.extend(overview_changes(&s, links, &thumbs).await);
                 }
@@ -73,11 +82,36 @@ pub(super) async fn watch(mut watched: Watched) {
         watched
             .wait(Duration::from_secs(2), |seen| {
                 seen.iter()
-                    .map(|s| (s.session.as_ref().map(Key::of), s.sight.overview))
+                    .map(|s| {
+                        (
+                            s.session.as_ref().map(Key::of),
+                            s.sight.overview,
+                            s.sight.conversations.clone(),
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .await;
     }
+}
+
+fn conversation_sessions(
+    seen: &[crate::work::Seen],
+    sessions: &[Session],
+) -> Vec<(Session, bool, bool)> {
+    let mut shown: Vec<_> = shown_sessions(seen, |_| true)
+        .into_iter()
+        .map(|(s, overview)| (s, overview, false))
+        .collect();
+    for id in seen.iter().flat_map(|s| &s.sight.conversations) {
+        if let Some((_, _, transcript)) = shown.iter_mut().find(|(s, _, _)| &s.id == id) {
+            *transcript = true;
+        } else if let Some(s) = sessions.iter().find(|s| &s.id == id) {
+            shown.push((s.clone(), false, true));
+        }
+    }
+    shown.retain(|(s, _, _)| has_transcript(s));
+    shown
 }
 
 /// What the overview shows of `session` besides its stats: its `links`,
@@ -199,5 +233,22 @@ mod tests {
         assert_ne!(Key::of(&shown), Key::of(&session));
         session.cwd = "/other".into();
         assert_ne!(Key::of(&shown), Key::of(&session));
+    }
+
+    #[test]
+    fn conversations_in_splits_are_read_once_independently_of_the_details_selection() {
+        let a = session("a").session_id("a-conversation").build();
+        let b = session("b").session_id("b-conversation").build();
+        let seen = [crate::work::Seen {
+            session: Some(a.clone()),
+            sight: tsumugi_protocol::Sight {
+                conversations: ["a".into(), "b".into()].into(),
+                ..Default::default()
+            },
+        }];
+        assert_eq!(
+            conversation_sessions(&seen, &[a.clone(), b.clone()]),
+            vec![(a, false, true), (b, false, true)]
+        );
     }
 }

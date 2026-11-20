@@ -77,6 +77,10 @@ impl Transcript {
         self.metrics.stats()
     }
 
+    pub fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        self.found.messages()
+    }
+
     fn restart(&mut self) {
         self.metrics = super::metrics::Collector::default();
         self.agents = Subagents::new(&self.path);

@@ -105,6 +105,37 @@ fn what_is_read_reaches_each_window_that_shows_it_and_no_other() {
 }
 
 #[test]
+fn transcripts_follow_visible_conversations_even_with_the_details_panel_closed() {
+    let mut host = two_windows("a", "b");
+    host.handle(
+        A,
+        Request::Watch(Box::new(Sight {
+            conversations: ["b".into(), "c".into()].into(),
+            ..Default::default()
+        })),
+    );
+    let transcript = |id: &str| DetailsChange::Transcript {
+        session: id.into(),
+        transcript: tsumugi_protocol::TranscriptRead {
+            id: format!("{id}-conversation"),
+            messages: vec![],
+        },
+    };
+    let sent = host.record([transcript("b"), transcript("c")]);
+    assert_eq!(
+        changes(to(A, sent.clone()).pop()),
+        vec![transcript("b"), transcript("c")]
+    );
+    assert!(
+        to(B, sent).is_empty(),
+        "a console does not ask for a transcript"
+    );
+    assert!(host.work.details().sessions.contains_key("c"));
+    host.handle(A, watch(None, None));
+    assert!(!host.work.details().sessions.contains_key("c"));
+}
+
+#[test]
 fn each_window_s_patches_follow_on_from_its_own_snapshot() {
     let mut host = two_windows("a", "b");
     let seqs = |events: Vec<Event>| -> Vec<Seq> {
@@ -903,7 +934,6 @@ fn the_worktree_in_the_middle_is_read_while_it_is_there_and_left_as_it_goes() {
         read: tsumugi_protocol::PlaceRead {
             worktree: tsumugi_protocol::HostPath::local(worktree),
             files: vec!["a.rs".into()],
-            jj: false,
         },
     };
     let middle = |worktree: Option<&str>| {

@@ -33,7 +33,9 @@ pub(crate) fn perform(
     probe: &Probe,
 ) -> Vec<Effect> {
     let area = state.content.focus;
-    let pane = probe.pane && matches!(area, Area::Console | Area::Prompt);
+    let pane = probe.pane
+        && matches!(area, Area::Console | Area::Prompt)
+        && !state.content.reading_conversation();
     let prompt_runs = state.console.prompt_runs;
     if let Some(effects) = crate::sidebar::press(state, &action) {
         return effects;
@@ -61,7 +63,11 @@ pub(crate) fn perform(
     }
     // The focused window's viewer takes the viewer's actions.
     if area == Area::Console
-        && let Some(tab @ (Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. })) = &thing
+        && let Some(tab) = &thing
+        && (matches!(
+            tab,
+            Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. }
+        ) || state.content.conversation(tab))
         && let Some(action) = ViewerAction::of(&action)
         && let Some(window) = state.content.windows.focused_window()
     {

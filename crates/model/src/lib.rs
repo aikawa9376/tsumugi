@@ -6,6 +6,7 @@ mod clone;
 mod code;
 mod command;
 pub mod config;
+pub mod conversation;
 pub mod daemon;
 mod environment;
 pub mod files;

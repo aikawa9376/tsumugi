@@ -8,7 +8,7 @@ use tsumugi_core::content::{Area, Tab, file_name, shows_prompt};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::tree as tree_view;
 
-use super::{DraftForm, NothingOpen, ProfileChoice, Starting};
+use super::{ConversationScreen, DraftForm, NothingOpen, ProfileChoice, Starting};
 use crate::actions::Action;
 use crate::bridge::AppCtx;
 use crate::components::Keys;
@@ -18,7 +18,9 @@ use crate::nav;
 use crate::prompts::Op;
 
 #[component]
-pub(crate) fn FocusedBody() -> Element {
+pub(crate) fn FocusedBody(
+    viewer_command: ReadSignal<Option<(tsumugi_core::content::WindowId, crate::viewers::Command)>>,
+) -> Element {
     let app = use_context::<AppCtx>();
     let hub = use_context::<Hub>();
     let consoles = use_context::<Consoles>();
@@ -45,6 +47,8 @@ pub(crate) fn FocusedBody() -> Element {
     let content = app.content.read();
     let area = content.focus;
     let active_tab = content.active().cloned();
+    let conversation = content.reading_conversation();
+    let window = content.windows.focused_window();
     let hosts = app.hosts.read();
     let work = hosts.work(hosts.environment_of(active_tab.as_ref()));
     let tree = tree_view::listed(work);
@@ -160,6 +164,9 @@ pub(crate) fn FocusedBody() -> Element {
                 app.dispatch(Msg::FilesDropped(paths));
             },
             match (&active_tab, pane.is_some()) {
+                (Some(tab @ Tab::Session(..)), _) if conversation => rsx! {
+                    ConversationScreen { key: "{tab:?}", tab: tab.clone(), window: window.unwrap_or_default(), commands: viewer_command }
+                },
                 (Some(tab @ Tab::Draft { worktree, .. }), _) => rsx! {
                     DraftForm {
                         environment: tab.environment().clone(),
@@ -203,7 +210,7 @@ pub(crate) fn FocusedBody() -> Element {
                     }
                 },
             }
-            if passing && area == Area::Console {
+            if passing && area == Area::Console && !conversation {
                 div { class: "direct-banner",
                     span { class: "direct-banner-title", "Passing every key" }
                     span { "to the session. " Keys { keys: "Esc" } " stops, " Keys { keys: "Ctrl-c" } " sends Esc." }

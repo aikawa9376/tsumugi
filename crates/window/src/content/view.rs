@@ -11,7 +11,9 @@ use tsumugi_core::completion::Completions;
 use tsumugi_core::msg::Msg;
 use tsumugi_core::tree as tree_view;
 
-use super::bodies::{DrawnWindow, FocusedBody, GitHubWindow, UnfocusedBody, ViewerWindow};
+use super::bodies::{
+    ConversationScreen, DrawnWindow, FocusedBody, GitHubWindow, UnfocusedBody, ViewerWindow,
+};
 use super::tabs_bar::TabsBar;
 use super::window::{ContentWindow, WindowBorder, WindowDrop, window_strip};
 use crate::actions::Action;
@@ -80,7 +82,7 @@ pub(crate) fn ContentPanel(
         Some((label, style))
     });
     let windows_el: Vec<Element> = match windows.current() {
-        None => vec![rsx! { FocusedBody {} }],
+        None => vec![rsx! { FocusedBody { viewer_command } }],
         Some(tab) => {
             let hosts = app.hosts.read();
             let mut out = Vec::new();
@@ -161,7 +163,9 @@ pub(crate) fn ContentPanel(
                         }
                     }
                 } else if focused {
-                    rsx! { FocusedBody {} }
+                    rsx! { FocusedBody { viewer_command } }
+                } else if app.content.read().conversation(&shows) {
+                    rsx! { div { class: "console", ConversationScreen { key: "{shows:?}", tab: shows.clone(), window: id, commands: viewer_command } } }
                 } else {
                     rsx! {
                         UnfocusedBody { id, shows, background: background.clone(), frame, cell_width, boxes }

@@ -45,6 +45,23 @@ prompt below it as well ([prompt](prompt.md)). A terminal's window takes every
 key but the window commands' prefix and `Mod` keys. A viewer's window has no
 prompt and takes the `viewer` area's keys.
 
+## Reading a conversation
+
+A session can show its conversation in place of its console, with the prompt
+still available below it. The button on its tab switches between the two;
+switching keeps the session running and the message being written. The view
+follows the conversation as the agent records it, for Claude Code, Codex, Pi
+and OpenCode.
+
+The conversation shows the user's words and the assistant's replies, without
+tool calls, tool results or injected instructions. All replies addressed to the
+user remain visible, including progress reports. Recorded thinking folds away
+and can be opened separately. Each message can be copied as it was written.
+
+Reading keys move through the conversation rather than reaching the hidden
+console. Choices and approvals in the agent's interface are answered by
+switching back to the console.
+
 ## Opening
 
 Nothing opened takes the place of what a window shows, but for a document

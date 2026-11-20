@@ -128,6 +128,9 @@ impl Follow for Transcript {
                 for part in message["content"].as_array().into_iter().flatten() {
                     match part["type"].as_str() {
                         Some("text") => content.push(json!({"type":"text", "text":part["text"]})),
+                        Some("thinking") => {
+                            content.push(json!({"type":"thinking", "thinking":part["thinking"]}))
+                        }
                         Some("toolCall") => {
                             if let Some(call) = self.call(part) {
                                 content.push(call);
@@ -156,6 +159,9 @@ impl Follow for Transcript {
 }
 
 impl ConversationReader for Transcript {
+    fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
+        self.found.messages()
+    }
     fn stats(&self) -> ConversationStats {
         self.stats.clone()
     }
@@ -214,6 +220,20 @@ mod tests {
         );
         let links = reader.read();
         let urls: Vec<&str> = links.urls.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(
+            reader
+                .messages()
+                .iter()
+                .map(|m| m.text.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "see https://user.example",
+                "https://thought.example",
+                "[Report](report.md:3) https://docs.example"
+            ]
+        );
+        assert!(reader.messages()[1].thinking);
+        assert!(!reader.messages()[2].thinking);
         assert_eq!(urls, ["https://docs.example", "https://user.example"]);
         assert_eq!(links.files.len(), 1);
         assert_eq!(links.files[0].line, Some(3));

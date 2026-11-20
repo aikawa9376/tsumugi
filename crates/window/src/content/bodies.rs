@@ -1,5 +1,6 @@
 //! What a window shows, by the kind of thing it shows.
 
+mod conversation;
 mod draft;
 mod focused;
 mod github;
@@ -7,6 +8,7 @@ mod session;
 mod terminal;
 mod viewer;
 
+pub(crate) use conversation::*;
 pub(crate) use draft::*;
 pub(crate) use focused::*;
 pub(crate) use github::*;

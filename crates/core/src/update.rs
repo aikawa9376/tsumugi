@@ -133,6 +133,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::Window(action) => content::act(state, action),
         Msg::WindowFocus(id) => content::focus_window(state, id),
         Msg::TabShow(at) => content::show_tab(state, at),
+        Msg::SessionConversation { tab, shown } => content::show_conversation(state, tab, shown),
         Msg::TabReveal(tab) => content::reveal(state, &tab),
         Msg::Replace { from, to } => content::replace(&mut state.content, &from, to),
         Msg::ShellClosed { environment, id } => {

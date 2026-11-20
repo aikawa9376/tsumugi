@@ -24,6 +24,9 @@ pub struct Sight {
     pub session: Option<String>,
     /// Whether the details panel is open.
     pub details: bool,
+    /// The sessions whose conversation is read in the content's windows.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub conversations: BTreeSet<String>,
     /// Whether the details panel is on a sheet that lists the shown
     /// session's entries: its overview, agents or resources. Named for the
     /// overview the sheets were split from, as the wire still calls it.
@@ -101,6 +104,8 @@ pub struct DetailsWork {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SessionRead {
     pub conversation: Option<ConversationRead>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<TranscriptRead>,
     /// How full the conversation's context is, as the agent was asked,
     /// for an agent whose transcript does not say.
     pub context: Option<ContextRead>,
@@ -121,6 +126,14 @@ pub struct SessionRead {
 pub struct ConversationRead {
     pub id: String,
     pub stats: ConversationStats,
+}
+
+/// The human conversation, kept with the provider's id so a resumed or
+/// cleared conversation cannot show the one it replaced.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptRead {
+    pub id: String,
+    pub messages: Vec<tsumugi_model::conversation::Message>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -159,6 +172,10 @@ pub struct SystemUsage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DetailsChange {
+    Transcript {
+        session: String,
+        transcript: TranscriptRead,
+    },
     Conversation {
         session: String,
         conversation: ConversationRead,
@@ -213,6 +230,10 @@ impl DetailsWork {
     /// The details with `change` made; whether that changed them.
     pub fn apply(&mut self, change: DetailsChange) -> bool {
         match change {
+            DetailsChange::Transcript {
+                session,
+                transcript,
+            } => set(&mut self.session(session).transcript, Some(transcript)),
             DetailsChange::Conversation {
                 session,
                 conversation,
@@ -292,6 +313,43 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+
+    #[test]
+    fn transcript_updates_replace_the_conversation_and_round_trip() {
+        let mut work = DetailsWork::default();
+        let read = TranscriptRead {
+            id: "first".into(),
+            messages: vec![tsumugi_model::conversation::Message {
+                role: tsumugi_model::conversation::Role::User,
+                text: "Hello".into(),
+                at_ms: Some(1),
+                thinking: false,
+            }],
+        };
+        let change = DetailsChange::Transcript {
+            session: "a".into(),
+            transcript: read.clone(),
+        };
+        let decoded = serde_json::from_str(&serde_json::to_string(&change).unwrap()).unwrap();
+        assert!(work.apply(decoded));
+        assert_eq!(work.sessions["a"].transcript.as_ref(), Some(&read));
+        assert!(!work.apply(change));
+        work.apply(DetailsChange::Transcript {
+            session: "a".into(),
+            transcript: TranscriptRead {
+                id: "second".into(),
+                messages: vec![],
+            },
+        });
+        assert!(
+            work.sessions["a"]
+                .transcript
+                .as_ref()
+                .unwrap()
+                .messages
+                .is_empty()
+        );
     }
 
     #[test]

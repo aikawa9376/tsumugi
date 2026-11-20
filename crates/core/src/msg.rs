@@ -186,6 +186,10 @@ pub enum Msg {
     WindowFocus(WindowId),
     /// A tab was clicked, by its place counted from 0.
     TabShow(usize),
+    SessionConversation {
+        tab: Tab,
+        shown: bool,
+    },
     /// A menu was opened on the tab of a window showing this.
     TabReveal(Tab),
     /// `from` shows as `to` from now on, as a draft does once it starts.

@@ -1,0 +1,11 @@
+.conversation-thread{max-width:880px;margin:0 auto;padding:24px;box-sizing:border-box}
+.conversation-message{margin:0 0 24px;overflow-wrap:anywhere}
+.conversation-message>header{display:flex;align-items:center;gap:12px;margin-bottom:8px;color:var(--fgColor-muted);font-size:.8125em}
+.conversation-message>header button{margin-left:auto;padding:2px 8px;color:inherit;background:transparent;border:1px solid var(--borderColor-default);border-radius:5px;cursor:pointer;font:inherit}
+.conversation-message.user{padding:16px;border-radius:8px;background:var(--bgColor-muted)}
+.conversation-text>:first-child{margin-top:0!important}
+.conversation-text>:last-child{margin-bottom:0!important}
+.conversation-progress{margin:0 0 20px;color:var(--fgColor-muted)}
+.conversation-progress>summary{cursor:pointer;font-size:.8125em;margin-bottom:12px}
+.conversation-progress .conversation-message{padding-left:16px;border-left:2px solid var(--borderColor-default)}
+.conversation-empty{color:var(--fgColor-muted);text-align:center;margin-top:48px}

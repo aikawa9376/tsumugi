@@ -2,6 +2,7 @@
 //! into, what each window shows, the worktree in the middle, which area has
 //! the keys, and the options a draft starts with.
 
+mod conversation;
 pub mod draft;
 mod editing;
 mod focus;
@@ -23,6 +24,8 @@ use crate::chrome::panels::layout::Layout;
 use crate::effect::Effect;
 use crate::tree::Place;
 
+pub use conversation::conversation_read;
+pub(crate) use conversation::show_conversation;
 pub(crate) use editing::*;
 pub use focus::*;
 pub use layout::*;
@@ -51,6 +54,8 @@ pub struct ContentView {
     /// A window being dragged with the mouse, to move it.
     pub moving: Option<WindowMove>,
     pub drafts: Drafts,
+    /// The sessions read as conversation instead of console in this window.
+    conversations: std::collections::HashSet<Tab>,
     /// Where a session started with nothing open runs.
     scratch: PathBuf,
     /// Where the keys are.
@@ -95,6 +100,7 @@ impl Default for ContentView {
             drag: None,
             moving: None,
             drafts: Drafts::default(),
+            conversations: std::collections::HashSet::new(),
             scratch: PathBuf::new(),
             spot: Spot::SIDEBAR,
             restore: None,

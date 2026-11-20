@@ -725,14 +725,17 @@ fn in_sight(change: &Change, sight: &Sight) -> bool {
 
 fn details_in_sight(change: &DetailsChange, sight: &Sight) -> bool {
     match change {
+        DetailsChange::Transcript { session, .. } => sight.conversations.contains(session),
         DetailsChange::Conversation { session, .. }
         | DetailsChange::Context { session, .. }
         | DetailsChange::Links { session, .. }
         | DetailsChange::Thumbs { session, .. }
         | DetailsChange::Notes { session, .. }
         | DetailsChange::Processes { session, .. }
-        | DetailsChange::Timeline { session, .. }
-        | DetailsChange::SessionLeft { session } => sight.session.as_ref() == Some(session),
+        | DetailsChange::Timeline { session, .. } => sight.session.as_ref() == Some(session),
+        DetailsChange::SessionLeft { session } => {
+            sight.session.as_ref() == Some(session) || sight.conversations.contains(session)
+        }
         DetailsChange::Repository {
             worktree,
             read: RepositoryRead { spot, .. },

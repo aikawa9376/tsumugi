@@ -21,6 +21,29 @@ fn probe() -> Probe {
 }
 
 #[test]
+fn conversation_never_sends_reading_keys_to_the_hidden_console_even_during_a_dialog() {
+    let mut state = state();
+    crate::update::step(
+        &mut state,
+        Msg::SessionConversation {
+            tab: Tab::Session(here(), "a".into()),
+            shown: true,
+        },
+    );
+    state.console.dialog = true;
+    state.content.focus = Area::Console;
+    state.console.direct = true;
+    assert_eq!(input_target(&state, &probe()), InputTarget::Gui);
+    assert!(
+        !press(&mut state, Key::new("j"), probe())
+            .iter()
+            .any(|e| matches!(e, Effect::PaneKey(_)))
+    );
+    state.content.focus = Area::Prompt;
+    assert_eq!(input_target(&state, &probe()), InputTarget::Neovim);
+}
+
+#[test]
 fn input_target_follows_the_prompt_only_while_it_can_receive_keys() {
     let mut state = state();
     assert_eq!(input_target(&state, &probe()), InputTarget::Neovim);

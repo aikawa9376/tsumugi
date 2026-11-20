@@ -134,6 +134,8 @@ pub(super) fn TabsBar(
             let target = Target::Tab(tab.clone());
             let closing = Target::Tab(tab.clone());
             let has_draft = drafted.read().contains(&tab);
+            let conversation = app.content.read().conversation(&tab);
+            let switching = tab.clone();
             let number = place + 1;
             let windows = if count == 1 { "1 window".to_string() } else { format!("{count} windows") };
             rsx! {
@@ -162,6 +164,18 @@ pub(super) fn TabsBar(
                     span { class: "tab-count", title: "{windows}", "{count}" }
                     if has_draft {
                         DraftMark {}
+                    }
+                    if matches!(tab, Tab::Session(..)) {
+                        IconButton {
+                            icon: if conversation { Icon::Terminal2 } else { Icon::Message },
+                            title: if conversation { "Show console" } else { "Read conversation" },
+                            onmousedown: move |e: Event<MouseData>| e.stop_propagation(),
+                            onclick: move |e: Event<MouseData>| {
+                                e.stop_propagation();
+                                app.dispatch(Msg::TabShow(at));
+                                app.dispatch(Msg::SessionConversation { tab: switching.clone(), shown: !conversation });
+                            },
+                        }
                     }
                     IconButton {
                         icon: Icon::X,

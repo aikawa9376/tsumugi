@@ -62,6 +62,60 @@ fn live(ids: &[&str]) -> Msg {
 }
 
 #[test]
+fn conversation_is_a_session_s_display_and_keeps_its_tab_and_prompt() {
+    let a = session_tab("a");
+    let b = session_tab("b");
+    let run = listed_with([session("a").cwd("/r"), session("b").cwd("/r")])
+        .send(show(a.clone()))
+        .send(Msg::SessionConversation {
+            tab: a.clone(),
+            shown: true,
+        });
+    assert_eq!(active(&run), Some(a.clone()));
+    assert_eq!(shown(&run), std::slice::from_ref(&a));
+    assert!(shows_prompt(run.state().content.active()));
+    assert!(run.state().content.conversation(&a));
+    let run = run.send(show(b.clone()));
+    assert!(!run.state().content.conversation(&b));
+    let run = run.send(show(a.clone()));
+    assert!(run.state().content.conversation(&a));
+    assert!(
+        crate::settle::sight(run.state(), &here())
+            .conversations
+            .contains("a")
+    );
+    let run = run.send(Msg::SessionConversation {
+        tab: a.clone(),
+        shown: false,
+    });
+    assert!(!run.state().content.conversation(&a));
+    assert!(
+        crate::settle::sight(run.state(), &here())
+            .conversations
+            .is_empty()
+    );
+}
+
+#[test]
+fn conversation_is_not_shown_after_its_session_continues_in_another_provider_thread() {
+    let tab = session_tab("a");
+    let run = listed_with([session("a").session_id("old")])
+        .send(show(tab.clone()))
+        .tell(tsumugi_protocol::DetailsChange::Transcript {
+            session: "a".into(),
+            transcript: tsumugi_protocol::TranscriptRead {
+                id: "old".into(),
+                messages: vec![],
+            },
+        });
+    assert!(conversation_read(&run.state().hosts, &tab).is_some());
+    let run = run.tell(tsumugi_protocol::TreeChange::Listed {
+        listed: Box::new(listed().session(session("a").session_id("new")).build()),
+    });
+    assert!(conversation_read(&run.state().hosts, &tab).is_none());
+}
+
+#[test]
 fn a_window_follows_its_session_once_it_is_taken_over() {
     let own = session("own").cwd("/r").session_id("pid-1");
     let run = listed_with([session("pid-1").cwd("/r")])
