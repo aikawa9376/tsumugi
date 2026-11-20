@@ -1,5 +1,5 @@
 //! The worktree in the middle of the window: its files, which `@` in the
-//! prompt offers, and whether jj keeps it, read each time another worktree
+//! prompt offers, read each time another worktree
 //! comes to the middle or the window asks for everything read again.
 
 use std::time::Duration;
@@ -19,7 +19,6 @@ pub(super) async fn watch(mut watched: Watched) {
             let repo = Repo::open(path);
             let read = PlaceRead {
                 files: repo.files().await.unwrap_or_default(),
-                jj: repo.is_jj(),
                 worktree,
             };
             watched.record([PlaceChange::Read { read }]);

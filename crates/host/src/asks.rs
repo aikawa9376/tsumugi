@@ -91,13 +91,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             watched.read_again();
             made.map(|()| Answer::Done)
         }
-        Ask::PullWorktree {
-            repository,
-            number,
-            title,
-        } => tsumugi_vcs::github::pull_worktree(&repository, number, &title)
-            .await
-            .map(|path| Answer::Worktree { path }),
+        Ask::PullWorktree { repository, number } => {
+            tsumugi_vcs::github::pull_worktree(&repository, number)
+                .await
+                .map(|path| Answer::Worktree { path })
+        }
         Ask::GitHubThread {
             repository,
             listing,

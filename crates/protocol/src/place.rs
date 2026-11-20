@@ -1,6 +1,5 @@
 //! Where the work is, by the host it is on, and what the host reads of the
-//! worktree in the middle of a window: the files `@` in the prompt offers,
-//! and whether jj keeps it.
+//! worktree in the middle of a window: the files `@` in the prompt offers.
 
 use std::path::{Path, PathBuf};
 
@@ -65,8 +64,6 @@ pub struct PlaceRead {
     pub worktree: HostPath,
     /// Its files, by their paths in it.
     pub files: Vec<String>,
-    /// Whether it is a jj workspace.
-    pub jj: bool,
 }
 
 /// What the host read of the worktree in the middle.
@@ -115,7 +112,6 @@ mod tests {
             read: PlaceRead {
                 worktree: HostPath::local(worktree),
                 files: files.iter().map(|f| f.to_string()).collect(),
-                jj: false,
             },
         }
     }

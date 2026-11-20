@@ -1,6 +1,6 @@
 [package]
 name = "tsumugi-vcs"
-description = "What tsumugi reads of and makes in git and jj repositories, and the repositories ghq keeps"
+description = "What tsumugi reads of and makes in Git repositories, and the repositories ghq keeps"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

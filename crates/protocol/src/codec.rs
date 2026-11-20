@@ -185,7 +185,6 @@ mod tests {
             ask: Box::new(crate::Ask::PullWorktree {
                 repository: "/w".into(),
                 number: 7,
-                title: "修正".into(),
             }),
         });
         round_trips(Request::Ask {
@@ -440,7 +439,6 @@ mod tests {
                             from: None,
                         }],
                         &["target/".into()],
-                        false,
                     ),
                 }),
                 Change::Tree(TreeChange::Entries {
@@ -533,7 +531,6 @@ mod tests {
                     read: PlaceRead {
                         worktree: crate::HostPath::local("/w"),
                         files: vec!["src/a.rs".into()],
-                        jj: true,
                     },
                 }),
                 Change::Place(PlaceChange::Left),

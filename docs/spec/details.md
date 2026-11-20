@@ -80,8 +80,8 @@ window or such a row is described.
   Claude Code, Codex, Pi and OpenCode alike, each with how long ago; opening
   one shows it whole, and copying it copies its text. What Tsumugi or the
   agent put into a turn, as a command's output, is not a prompt.
-- **changes** — the current jj change's full description, or the HEAD
-  commit's full message in Git, alongside the files the worktree changes.
+- **changes** — the HEAD commit's full message in Git, alongside the files
+  the worktree changes.
   Opening a file shows its diff.
 - **log** — the changes that lead to the worktree, drawn as a graph: each
   change is joined by lines to its parents, so forks and merges show. A line
@@ -295,22 +295,9 @@ counts whole whatever its steps say. A tree is completed once every leaf task
 is, or its top task is; blocked while a leaf task is blocked; in progress once
 a leaf task is in progress or completed; and not started otherwise.
 
-## In a jj repository
-
-A worktree inside a jj repository, a colocated one too, is read through jj:
-
-- Changes lists what the working-copy change `@` changes.
-- Log lists the changes from trunk up to `@`, `@` first, each with its short
-  change ID, the first line of its description, and marks for `@`, an empty
-  change, a conflict and its bookmarks. Without a trunk, it lists the
-  ancestors of `@`, the most recent ones.
-
-Reading a jj repository runs jj, which records the working copy into `@` as
-any jj command does. It is read only while **change**, **changes** or **log** is in sight, or a
-change or file opened from them is shown. When jj
-cannot be run, the repository is read through git instead.
-
 ## In a git repository
+
+
 
 - Changes lists the files changed in the worktree against its last commit,
   staged or not, and each untracked file. An untracked file's diff shows all

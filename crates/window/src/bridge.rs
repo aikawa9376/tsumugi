@@ -796,18 +796,10 @@ impl AppCtx {
                 environment,
                 repository,
                 number,
-                title,
                 prompt,
             } => {
                 self.notice(format!("Making a worktree for pull request #{number}"));
-                let made = self.ask_in(
-                    &environment,
-                    Ask::PullWorktree {
-                        repository,
-                        number,
-                        title,
-                    },
-                );
+                let made = self.ask_in(&environment, Ask::PullWorktree { repository, number });
                 let app = *self;
                 spawn(async move {
                     match made.await {

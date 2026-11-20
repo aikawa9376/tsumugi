@@ -2,7 +2,7 @@ use super::*;
 use crate::testing::repository;
 
 async fn new_worktree(dir: &std::path::Path) -> Worktree {
-    tsumugi_vcs::worktree::create(&repository(dir), "review", None, "review")
+    tsumugi_vcs::worktree::create(&repository(dir), "review", None)
         .await
         .unwrap()
 }

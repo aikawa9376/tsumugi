@@ -116,10 +116,10 @@ pub struct Start {
     /// The directory to work in, or to make the worktree of; your own when omitted.
     #[serde(default)]
     pub dir: Option<PathBuf>,
-    /// Work in a new worktree of that directory: a jj workspace or a Git worktree.
+    /// Work in a new Git worktree of that directory.
     #[serde(default)]
     pub worktree: bool,
-    /// The revision the new worktree starts from; your current change or commit when omitted.
+    /// The revision the new worktree starts from; your current commit when omitted.
     #[serde(default)]
     pub base: Option<String>,
     /// `claude`, `codex`, `pi` or `opencode`; the agent of `profile`, else of the default profile, when omitted.

@@ -51,6 +51,6 @@ conversation or an editor's unsaved buffer.
 
 Tsumugi supplies the workspace around independently installed tools. Agent
 providers supply model access, authentication and their own execution policies.
-Repositories remain ordinary Git or jj repositories, and files remain yours to
+Repositories remain ordinary Git repositories, and files remain yours to
 open with other editors. The workspace is a place to do and review work, with
 its own small set of controls for keeping that work connected.

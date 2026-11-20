@@ -1,4 +1,4 @@
-//! What jj or git says of the files of each worktree whose files the tree
+//! What Git says of the files of each worktree whose files the tree
 //! lists, read again every two seconds so the marks follow the disk.
 
 use std::time::Duration;

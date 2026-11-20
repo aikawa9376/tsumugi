@@ -268,7 +268,6 @@ fn on_github(
             environment,
             repository: root.to_path_buf(),
             number,
-            title: item.title.clone(),
             prompt,
         }],
         Listing::Issues => {

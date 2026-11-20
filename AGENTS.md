@@ -57,7 +57,7 @@ Run `just ci` before reporting a change as done. CI runs the same recipe, and
 | `crates/term/` | the terminal host's client and server: felis sessions, their tags, screens and keys, and the protocol's versions |
 | `crates/nvim/` | the Neovims the window embeds for the prompt and the console's reader |
 | `crates/nvim/lua/` | the Lua the prompt's and the reader's Neovims run, taken in with `include_str!` |
-| `crates/vcs/` | what Tsumugi reads of and makes in git and jj repositories, and the repositories ghq keeps |
+| `crates/vcs/` | what Tsumugi reads of and makes in Git repositories, and the repositories ghq keeps |
 | `crates/sys/` | the Unix calls on files, processes and sockets Tsumugi makes, and what stands in for them on Windows |
 | `assets/logo/` | the weave logo and geometric wordmark as SVG, and `build.py` that regenerates them |
 | `assets/macos/` | the macOS app's Info.plist and the script that assembles the app |
@@ -71,6 +71,11 @@ Run `just ci` before reporting a change as done. CI runs the same recipe, and
 
 - README, docs and commit messages: English
 - Code comments, log and error messages: English
+
+## Version control
+
+Use Git for repository work. Do not run jj or install it for development or
+validation.
 
 ## Commits
 

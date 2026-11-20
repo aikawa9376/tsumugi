@@ -12,7 +12,7 @@ changes. A new kind of information had to be fitted into one of the fixed
 sheets, and a user who wanted it beside another could not have it.
 
 The work host reads only what the panel shows, since reading costs: a
-repository read runs jj, a usage read asks the agent. Which reads to make
+repository read runs Git, a usage read asks the agent. Which reads to make
 followed from which fixed sheet was shown.
 
 ## Decision

@@ -1,4 +1,4 @@
-//! What jj or git says of each file of a worktree, as the tree marks it.
+//! What Git says of each file of a worktree, as the tree marks it.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Change;
 
-/// What jj or git says of the files of one worktree.
+/// What Git says of the files of one worktree.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Marks {
     changed: HashMap<PathBuf, char>,
@@ -19,13 +19,12 @@ pub const HOLDS_CHANGES: char = '•';
 
 impl Marks {
     /// The marks of the worktree at `root` from what git lists: `changes`
-    /// and the `ignored` paths, both relative to it. In a jj workspace a
-    /// file git does not track is one jj added.
-    pub fn new(root: &Path, changes: &[Change], ignored: &[String], jj: bool) -> Self {
+    /// and the `ignored` paths, both relative to it.
+    pub fn new(root: &Path, changes: &[Change], ignored: &[String]) -> Self {
         Marks {
             changed: changes
                 .iter()
-                .map(|c| (root.join(&c.path), letter(&c.status, jj)))
+                .map(|c| (root.join(&c.path), letter(&c.status)))
                 .collect(),
             ignored: ignored
                 .iter()
@@ -55,9 +54,8 @@ impl Marks {
 
 /// The letter for git's two-letter status: the index's, else the
 /// worktree's.
-fn letter(status: &str, jj: bool) -> char {
+fn letter(status: &str) -> char {
     match status {
-        "??" if jj => 'A',
         "??" => '?',
         _ => status.trim().chars().next().unwrap_or('M'),
     }
@@ -85,7 +83,6 @@ mod tests {
                 change("R ", "moved.rs"),
             ],
             &[],
-            false,
         );
         assert_eq!(marks.of(Path::new("/w/src/lib.rs"), false), Some('M'));
         assert_eq!(marks.of(Path::new("/w/new.rs"), false), Some('A'));
@@ -94,17 +91,15 @@ mod tests {
     }
 
     #[test]
-    fn a_file_git_does_not_track_is_added_in_jj_and_untracked_in_git() {
+    fn a_file_git_does_not_track_is_marked_as_untracked() {
         let untracked = [change("??", "new.rs")];
-        let jj = Marks::new(Path::new("/w"), &untracked, &[], true);
-        let git = Marks::new(Path::new("/w"), &untracked, &[], false);
-        assert_eq!(jj.of(Path::new("/w/new.rs"), false), Some('A'));
+        let git = Marks::new(Path::new("/w"), &untracked, &[]);
         assert_eq!(git.of(Path::new("/w/new.rs"), false), Some('?'));
     }
 
     #[test]
     fn a_directory_holding_a_changed_file_is_marked_at_any_depth() {
-        let marks = Marks::new(Path::new("/w"), &[change(" M", "src/a/b.rs")], &[], false);
+        let marks = Marks::new(Path::new("/w"), &[change(" M", "src/a/b.rs")], &[]);
         assert_eq!(marks.of(Path::new("/w/src"), true), Some(HOLDS_CHANGES));
         assert_eq!(marks.of(Path::new("/w/src/a"), true), Some(HOLDS_CHANGES));
         assert_eq!(marks.of(Path::new("/w/docs"), true), None);
@@ -114,12 +109,7 @@ mod tests {
 
     #[test]
     fn what_lies_in_an_ignored_directory_is_ignored_too() {
-        let marks = Marks::new(
-            Path::new("/w"),
-            &[],
-            &["target/".into(), "run.log".into()],
-            false,
-        );
+        let marks = Marks::new(Path::new("/w"), &[], &["target/".into(), "run.log".into()]);
         assert!(marks.ignores(Path::new("/w/target")));
         assert!(marks.ignores(Path::new("/w/target/debug/a")));
         assert!(marks.ignores(Path::new("/w/run.log")));

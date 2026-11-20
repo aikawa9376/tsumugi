@@ -142,11 +142,10 @@ pub enum Ask {
         after: u128,
     },
     /// Make a worktree of the repository at `repository` that starts at the
-    /// head of its pull request `number` on GitHub, titled `title`.
+    /// head of its pull request `number` on GitHub.
     PullWorktree {
         repository: PathBuf,
         number: u64,
-        title: String,
     },
     /// Read the pull request or the issue `number` of the repository at
     /// `repository` whole, with what was said on it and the images shown.

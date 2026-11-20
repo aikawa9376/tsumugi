@@ -109,10 +109,9 @@ head, on a branch named after its number, when it comes from a fork.
 
 Files starts folded. Unfolded, it lists the worktree's files as a
 [file tree](#file-trees). Hidden files once shown, and what git ignores, are
-drawn dim; the version control's own `.git` and `.jj` are not listed. A file jj or
-git sees changed is marked at the end of its row with the letter git gives it,
-an added one in a jj workspace with `A`, and a directory holding one with a
-dot. The marks and the listing follow the disk within seconds.
+drawn dim; version control metadata is not listed. A file Git sees changed is
+marked at the end of its row with the letter Git gives it, and a directory
+holding one with a dot. The marks and the listing follow the disk within seconds.
 Opening a file shows it in a viewer or in Neovim, by its kind
 ([viewers](content.md#viewers)), and its row shows the tabs it is shown in.
 A file a Neovim started on it has open is drawn brighter than the other

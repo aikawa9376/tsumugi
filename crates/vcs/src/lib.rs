@@ -1,5 +1,5 @@
-//! What tsumugi reads of and makes in repositories: through jj in a jj
-//! repository, through git otherwise, and the repositories ghq keeps.
+//! What tsumugi reads of and makes in Git repositories, and the repositories
+//! ghq keeps.
 
 use std::path::{Path, PathBuf};
 
@@ -9,7 +9,6 @@ mod discover;
 pub mod ghq;
 pub mod git;
 pub mod github;
-pub mod jj;
 mod view;
 pub mod worktree;
 
@@ -38,23 +37,15 @@ pub enum Error {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
     Git,
-    Jj,
 }
 
 impl Backend {
-    /// The version control of the nearest directory above `dir` holding
-    /// `.jj` or `.git`: jj when it holds `.jj`, as a colocated one also
-    /// does; `None` outside both.
+    /// Git when `dir` or an ancestor holds `.git`; `None` outside Git.
     pub fn of(dir: impl AsRef<Path>) -> Option<Backend> {
-        let found = dir
-            .as_ref()
+        dir.as_ref()
             .ancestors()
-            .find(|d| d.join(".jj").is_dir() || d.join(".git").exists())?;
-        Some(if found.join(".jj").is_dir() {
-            Backend::Jj
-        } else {
-            Backend::Git
-        })
+            .find(|d| d.join(".git").exists())
+            .map(|_| Backend::Git)
     }
 }
 
@@ -62,43 +53,31 @@ impl Backend {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Repo {
     Git(PathBuf),
-    Jj(PathBuf),
 }
 
 impl Repo {
-    /// The worktree at `path`: a jj workspace when it belongs to jj, read
-    /// through git otherwise, where reading fails outside git.
+    /// The worktree at `path`, where reading fails outside Git.
     pub fn open(path: impl Into<PathBuf>) -> Repo {
-        let path = path.into();
-        match Backend::of(&path) {
-            Some(Backend::Jj) => Repo::Jj(path),
-            Some(Backend::Git) | None => Repo::Git(path),
-        }
+        Repo::Git(path.into())
     }
 
     pub fn path(&self) -> &Path {
         match self {
-            Repo::Git(path) | Repo::Jj(path) => path,
+            Repo::Git(path) => path,
         }
     }
 
-    pub fn is_jj(&self) -> bool {
-        matches!(self, Repo::Jj(_))
-    }
-
-    /// What `spot` shows, read through jj in a jj workspace, through git
-    /// otherwise or when jj cannot be run.
+    /// What `spot` shows, read through Git.
     pub async fn load(&self, spot: &Spot, limits: Limits) -> View {
         view::load(self, spot, limits).await
     }
 
-    /// What the version control says of each file of the worktree. git
-    /// reads it in a jj workspace too, which jj colocates with git.
+    /// What Git says of each file of the worktree.
     pub async fn marks(&self) -> Marks {
         let root = self.path();
         let changes = git::changes(root).await.unwrap_or_default();
         let ignored = git::ignored(root).await.unwrap_or_default();
-        Marks::new(root, &changes, &ignored, self.is_jj())
+        Marks::new(root, &changes, &ignored)
     }
 
     /// The files git tracks or would track, at most [`git::FILES`].
@@ -214,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_is_jj_s_when_the_nearest_repository_above_it_is() {
+    fn only_git_metadata_identifies_a_repository() {
         let dir = scratch("detect");
         for d in [
             "jj/.jj",
@@ -226,13 +205,11 @@ mod tests {
         ] {
             std::fs::create_dir_all(dir.join(d)).unwrap();
         }
-        assert_eq!(Backend::of(dir.join("jj/src")), Some(Backend::Jj));
-        assert_eq!(Backend::of(dir.join("colo")), Some(Backend::Jj));
-        // A git worktree inside a jj repository is git's.
+        assert_eq!(Backend::of(dir.join("jj/src")), None);
+        assert_eq!(Backend::of(dir.join("colo")), Some(Backend::Git));
         assert_eq!(Backend::of(dir.join("jj/wt")), Some(Backend::Git));
         assert_eq!(Backend::of(dir.join("plain")), Some(Backend::Git));
-        assert!(Repo::open(dir.join("jj/src")).is_jj());
-        assert!(!Repo::open(dir.join("plain")).is_jj());
+        assert_eq!(Repo::open(dir.join("colo")), Repo::Git(dir.join("colo")));
     }
 
     #[tokio::test]

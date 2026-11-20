@@ -100,15 +100,9 @@ pub(crate) async fn start(
     mut request: StartRequest,
 ) -> Result<Started, Failure> {
     let worktree = if place.worktree {
-        let summary = request.prompt.lines().next().unwrap_or_default();
-        let made = tsumugi_vcs::worktree::create(
-            &place.dir,
-            &request.name,
-            place.base.as_deref(),
-            summary,
-        )
-        .await
-        .map_err(|error| Failure::new(Stage::Refused, error))?;
+        let made = tsumugi_vcs::worktree::create(&place.dir, &request.name, place.base.as_deref())
+            .await
+            .map_err(|error| Failure::new(Stage::Refused, error))?;
         Some(made)
     } else {
         None
@@ -163,7 +157,7 @@ async fn launch(
 }
 
 /// `launched`, with the worktree made for it taken back unless its agent may
-/// have run, so a start that never ran leaves no directory, branch or change
+/// have run, so a start that never ran leaves no directory or branch
 /// behind.
 pub(crate) async fn settled<T>(
     worktree: Option<Worktree>,

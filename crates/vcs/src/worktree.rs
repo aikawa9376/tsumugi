@@ -1,5 +1,4 @@
-//! New worktrees for sessions to work in: a jj workspace where the directory
-//! belongs to jj, a Git worktree where it belongs to Git alone.
+//! New Git worktrees for sessions to work in.
 use std::{
     ffi::OsStr,
     path::{Component, Path, PathBuf},
@@ -16,110 +15,60 @@ pub struct Worktree {
     pub path: PathBuf,
     /// The full commit the worktree starts from.
     pub base: String,
-    backend: Backend,
     root: PathBuf,
-    native: String,
     /// The branch git made for it, which goes with it.
     branch: Option<String>,
 }
 
 /// Makes a worktree named `name` of the repository holding `source`, starting
-/// from `base`, or from `source`'s current change or commit when none is given.
-pub async fn create(
-    source: &Path,
-    name: &str,
-    base: Option<&str>,
-    description: &str,
-) -> Result<Worktree> {
+/// from `base`, or from `source`'s current commit when none is given.
+pub async fn create(source: &Path, name: &str, base: Option<&str>) -> Result<Worktree> {
     let spot = Spot::find(source, name).await?;
-    let default = match spot.backend {
-        Backend::Jj => "@",
-        Backend::Git => "HEAD",
-    };
-    let base = revision(
-        &spot.source,
-        spot.backend,
-        base.unwrap_or(default),
-        base.is_none(),
-    )
-    .await?;
+    let base = revision(&spot.source, base.unwrap_or("HEAD")).await?;
     let native = spot.native.clone();
-    match spot.backend {
-        Backend::Jj => spot.workspace(&base, description).await?,
-        Backend::Git => {
-            spot.git(&[
-                "-b".as_ref(),
-                native.as_ref(),
-                spot.path.as_os_str(),
-                base.as_ref(),
-            ])
-            .await?
-        }
-    }
+    spot.git(&[
+        "-b".as_ref(),
+        native.as_ref(),
+        spot.path.as_os_str(),
+        base.as_ref(),
+    ])
+    .await?;
     Ok(spot.with(base, Some(native)))
 }
 
 /// Makes a worktree of the repository holding `source` on its branch
-/// `branch`, as `remote` has it: git checks the branch out there, made to
-/// track `remote`'s when there is none yet; jj tracks `remote`'s bookmark
-/// and starts a workspace on it, its change described as `description`.
-pub async fn create_on_branch(
-    source: &Path,
-    branch: &str,
-    remote: &str,
-    description: &str,
-) -> Result<Worktree> {
+/// `branch`, as `remote` has it: checks the branch out there, made to
+/// track `remote`'s when there is none yet.
+pub async fn create_on_branch(source: &Path, branch: &str, remote: &str) -> Result<Worktree> {
     let spot = Spot::find(source, branch).await?;
     let tracked = format!("{remote}/{branch}");
-    match spot.backend {
-        Backend::Jj => {
-            let at = format!("{branch}@{remote}");
-            // A bookmark tracked already says so and stays as it is.
-            let _ = command(
-                &spot.root,
-                "jj",
-                &[
-                    "--no-pager".as_ref(),
-                    "bookmark".as_ref(),
-                    "track".as_ref(),
-                    at.as_ref(),
-                ],
-            )
-            .await;
-            let base = revision(&spot.source, spot.backend, &at, false).await?;
-            spot.workspace(&base, description).await?;
-            Ok(spot.with(base, None))
-        }
-        Backend::Git => {
-            let local = format!("refs/heads/{branch}");
-            let base = revision(&spot.source, spot.backend, &tracked, false).await?;
-            let has = command(
-                &spot.root,
-                "git",
-                &[
-                    "show-ref".as_ref(),
-                    "--verify".as_ref(),
-                    "--quiet".as_ref(),
-                    local.as_ref(),
-                ],
-            )
-            .await
-            .is_ok();
-            if has {
-                spot.git(&[spot.path.as_os_str(), branch.as_ref()]).await?;
-                Ok(spot.with(base, None))
-            } else {
-                spot.git(&[
-                    "--track".as_ref(),
-                    "-b".as_ref(),
-                    branch.as_ref(),
-                    spot.path.as_os_str(),
-                    tracked.as_ref(),
-                ])
-                .await?;
-                Ok(spot.with(base, Some(branch.to_string())))
-            }
-        }
+    let local = format!("refs/heads/{branch}");
+    let base = revision(&spot.source, &tracked).await?;
+    let has = command(
+        &spot.root,
+        "git",
+        &[
+            "show-ref".as_ref(),
+            "--verify".as_ref(),
+            "--quiet".as_ref(),
+            local.as_ref(),
+        ],
+    )
+    .await
+    .is_ok();
+    if has {
+        spot.git(&[spot.path.as_os_str(), branch.as_ref()]).await?;
+        Ok(spot.with(base, None))
+    } else {
+        spot.git(&[
+            "--track".as_ref(),
+            "-b".as_ref(),
+            branch.as_ref(),
+            spot.path.as_os_str(),
+            tracked.as_ref(),
+        ])
+        .await?;
+        Ok(spot.with(base, Some(branch.to_string())))
     }
 }
 
@@ -127,7 +76,6 @@ pub async fn create_on_branch(
 /// repository's others.
 struct Spot {
     source: PathBuf,
-    backend: Backend,
     root: PathBuf,
     path: PathBuf,
     native: String,
@@ -136,9 +84,9 @@ struct Spot {
 impl Spot {
     async fn find(source: &Path, name: &str) -> Result<Self> {
         let source = canonical(source)?;
-        let (backend, root, repository) = identify(&source).await?;
+        let (root, repository) = identify(&source).await?;
         let slug = slug(name);
-        let parent = destination(&base_directory(&root, &repository, backend).await?)?;
+        let parent = destination(&base_directory(&root, &repository).await?)?;
         let path = (1..)
             .map(|n| match n {
                 1 => parent.join(&slug),
@@ -156,32 +104,10 @@ impl Spot {
             .map_err(|error| format!("cannot create {}: {error}", parent.display()))?;
         Ok(Self {
             source,
-            backend,
             root,
             path,
             native,
         })
-    }
-
-    async fn workspace(&self, base: &str, description: &str) -> Result<()> {
-        command(
-            &self.root,
-            "jj",
-            &[
-                "--no-pager".as_ref(),
-                "workspace".as_ref(),
-                "add".as_ref(),
-                "--name".as_ref(),
-                self.native.as_ref(),
-                "--revision".as_ref(),
-                base.as_ref(),
-                "--message".as_ref(),
-                description.as_ref(),
-                self.path.as_os_str(),
-            ],
-        )
-        .await?;
-        Ok(())
     }
 
     async fn git(&self, args: &[&OsStr]) -> Result<()> {
@@ -197,66 +123,35 @@ impl Spot {
         Worktree {
             path: self.path,
             base,
-            backend: self.backend,
             root: self.root,
-            native: self.native,
             branch,
         }
     }
 }
 
 /// Undoes `create` for a worktree nothing has worked in yet: the directory,
-/// the worktree or workspace, and the branch or change made for it.
+/// the worktree, and the branch made for it.
 pub async fn remove(worktree: &Worktree) -> Result<()> {
-    let native: &OsStr = worktree.native.as_ref();
-    match worktree.backend {
-        Backend::Jj => {
-            let change = format!("{}@", worktree.native);
-            command(
-                &worktree.root,
-                "jj",
-                &["--no-pager".as_ref(), "abandon".as_ref(), change.as_ref()],
-            )
-            .await?;
-            command(
-                &worktree.root,
-                "jj",
-                &[
-                    "--no-pager".as_ref(),
-                    "workspace".as_ref(),
-                    "forget".as_ref(),
-                    native,
-                ],
-            )
-            .await?;
-            if exists(&worktree.path)? {
-                std::fs::remove_dir_all(&worktree.path).map_err(|error| {
-                    format!("cannot remove {}: {error}", worktree.path.display())
-                })?;
-            }
-        }
-        Backend::Git => {
-            command(
-                &worktree.root,
-                "git",
-                &[
-                    "worktree".as_ref(),
-                    "remove".as_ref(),
-                    "--force".as_ref(),
-                    worktree.path.as_os_str(),
-                ],
-            )
-            .await?;
-            if let Some(branch) = &worktree.branch {
-                command(
-                    &worktree.root,
-                    "git",
-                    &["branch".as_ref(), "-D".as_ref(), branch.as_ref()],
-                )
-                .await?;
-            }
-        }
+    command(
+        &worktree.root,
+        "git",
+        &[
+            "worktree".as_ref(),
+            "remove".as_ref(),
+            "--force".as_ref(),
+            worktree.path.as_os_str(),
+        ],
+    )
+    .await?;
+    if let Some(branch) = &worktree.branch {
+        command(
+            &worktree.root,
+            "git",
+            &["branch".as_ref(), "-D".as_ref(), branch.as_ref()],
+        )
+        .await?;
     }
+
     Ok(())
 }
 
@@ -274,21 +169,8 @@ fn slug(name: &str) -> String {
     }
 }
 
-async fn identify(source: &Path) -> Result<(Backend, PathBuf, PathBuf)> {
+async fn identify(source: &Path) -> Result<(PathBuf, PathBuf)> {
     match Backend::of(source) {
-        Some(Backend::Jj) => {
-            let reported = jj(source, &["root".as_ref()]).await?;
-            let root = canonical(Path::new(reported.trim()))?;
-            let metadata = root.join(".jj/repo");
-            let repository = if metadata.is_dir() {
-                metadata
-            } else {
-                let pointer = std::fs::read_to_string(&metadata)
-                    .map_err(|error| format!("cannot read the jj repository identity: {error}"))?;
-                root.join(".jj").join(pointer.trim())
-            };
-            Ok((Backend::Jj, root, canonical(&repository)?))
-        }
         Some(Backend::Git) => {
             let reported = command(
                 source,
@@ -305,11 +187,7 @@ async fn identify(source: &Path) -> Result<(Backend, PathBuf, PathBuf)> {
             let [top, common] = lines.as_slice() else {
                 return Err("Git did not report its worktree and repository".into());
             };
-            Ok((
-                Backend::Git,
-                canonical(Path::new(top))?,
-                canonical(Path::new(common))?,
-            ))
+            Ok((canonical(Path::new(top))?, canonical(Path::new(common))?))
         }
         None => Err(format!(
             "{} is not under version control, so no worktree can be made of it",
@@ -350,30 +228,13 @@ async fn command(dir: &Path, program: &str, args: &[&OsStr]) -> Result<String> {
     String::from_utf8(output.stdout).map_err(|_| format!("{program} returned invalid UTF-8"))
 }
 
-async fn jj(dir: &Path, args: &[&OsStr]) -> Result<String> {
-    let mut full = vec![
-        OsStr::new("--no-pager"),
-        OsStr::new("--color=never"),
-        OsStr::new("--at-operation=@"),
-        OsStr::new("--ignore-working-copy"),
-    ];
-    full.extend_from_slice(args);
-    command(dir, "jj", &full).await
-}
-
 /// Where new worktrees go: Git's `wt.basedir` when set, otherwise a sibling
 /// of the repository named after it.
-async fn base_directory(root: &Path, repository: &Path, backend: Backend) -> Result<PathBuf> {
-    let anchor = match backend {
-        Backend::Jj => repository
-            .parent()
-            .filter(|parent| parent.file_name().is_some_and(|name| name == ".jj"))
-            .and_then(Path::parent),
-        Backend::Git => (repository.file_name().is_some_and(|name| name == ".git"))
-            .then(|| repository.parent())
-            .flatten(),
-    }
-    .unwrap_or(root);
+async fn base_directory(root: &Path, repository: &Path) -> Result<PathBuf> {
+    let anchor = (repository.file_name().is_some_and(|name| name == ".git"))
+        .then(|| repository.parent())
+        .flatten()
+        .unwrap_or(root);
     if exists(&root.join(".git"))? {
         let configured = output(
             root,
@@ -413,38 +274,17 @@ async fn base_directory(root: &Path, repository: &Path, backend: Backend) -> Res
         )))
 }
 
-async fn revision(dir: &Path, backend: Backend, requested: &str, snapshot: bool) -> Result<String> {
-    let output = match backend {
-        Backend::Jj => {
-            let args: &[&OsStr] = &[
-                "--no-pager".as_ref(),
-                "--color=never".as_ref(),
-                "log".as_ref(),
-                "-r".as_ref(),
-                requested.as_ref(),
-                "--no-graph".as_ref(),
-                "-T".as_ref(),
-                "(commit_id ++ \"\\n\")".as_ref(),
-            ];
-            if snapshot {
-                command(dir, "jj", args).await?
-            } else {
-                jj(dir, args).await?
-            }
-        }
-        Backend::Git => {
-            command(
-                dir,
-                "git",
-                &[
-                    "rev-parse".as_ref(),
-                    "--verify".as_ref(),
-                    format!("{requested}^{{commit}}").as_ref(),
-                ],
-            )
-            .await?
-        }
-    };
+async fn revision(dir: &Path, requested: &str) -> Result<String> {
+    let output = command(
+        dir,
+        "git",
+        &[
+            "rev-parse".as_ref(),
+            "--verify".as_ref(),
+            format!("{requested}^{{commit}}").as_ref(),
+        ],
+    )
+    .await?;
     let values: Vec<_> = output.lines().collect();
     match values.as_slice() {
         [value]
@@ -513,8 +353,6 @@ mod tests {
             .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
             .env("GIT_COMMITTER_NAME", "Test")
             .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
-            .env("JJ_USER", "Test")
-            .env("JJ_EMAIL", "test@example.invalid")
             .output()
             .unwrap();
         assert!(
@@ -542,7 +380,7 @@ mod tests {
         run(&source, "git", &["config", "wt.basedir", "../trees"]);
         let head = run(&source, "git", &["rev-parse", "HEAD"]);
 
-        let made = create(&source, "Fix the flaky login test", None, "fix")
+        let made = create(&source, "Fix the flaky login test", None)
             .await
             .unwrap();
 
@@ -559,11 +397,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let source = git_repository(dir.path());
 
-        let first = create(&source, "review", None, "review").await.unwrap();
-        let second = create(&source, "review", None, "review").await.unwrap();
+        let first = create(&source, "review", None).await.unwrap();
+        let second = create(&source, "review", None).await.unwrap();
 
         assert_ne!(first.path, second.path);
         assert!(second.path.ends_with("review-2"));
+    }
+
+    #[tokio::test]
+    async fn colocated_metadata_does_not_change_git_worktree_creation_or_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = git_repository(dir.path());
+        std::fs::create_dir(source.join(".jj")).unwrap();
+        let head = run(&source, "git", &["rev-parse", "HEAD"]);
+
+        let made = create(&source, "review", None).await.unwrap();
+
+        assert_eq!(made.base, head.trim());
+        assert!(made.path.join(".git").is_file());
+        remove(&made).await.unwrap();
+        assert!(!made.path.exists());
+        assert!(
+            run(&source, "git", &["branch", "--list", "review"])
+                .trim()
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -575,7 +433,7 @@ mod tests {
         run(&source, "git", &["add", "b.txt"]);
         run(&source, "git", &["commit", "-q", "-m", "second"]);
 
-        let made = create(&source, "continue", Some(first.trim()), "continue")
+        let made = create(&source, "continue", Some(first.trim()))
             .await
             .unwrap();
 
@@ -584,28 +442,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg_attr(windows, ignore = "runs jj")]
-    async fn a_jj_repository_gets_a_workspace_holding_the_current_change() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("api");
-        std::fs::create_dir(&source).unwrap();
-        run(&source, "jj", &["git", "init", "--colocate"]);
-        std::fs::write(source.join("draft.txt"), "unfinished").unwrap();
-
-        let made = create(&source, "take over", None, "take over")
-            .await
-            .unwrap();
-
-        assert!(made.path.join("draft.txt").is_file());
-        let workspaces = run(&source, "jj", &["workspace", "list"]);
-        assert!(workspaces.contains("take-over"), "{workspaces}");
-    }
-
-    #[tokio::test]
     async fn a_git_worktree_taken_back_leaves_no_directory_worktree_or_branch() {
         let dir = tempfile::tempdir().unwrap();
         let source = git_repository(dir.path());
-        let made = create(&source, "review", None, "review").await.unwrap();
+        let made = create(&source, "review", None).await.unwrap();
 
         remove(&made).await.unwrap();
 
@@ -617,44 +457,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg_attr(windows, ignore = "runs jj")]
-    async fn a_jj_workspace_taken_back_leaves_no_directory_workspace_or_change() {
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("api");
-        std::fs::create_dir(&source).unwrap();
-        run(&source, "jj", &["git", "init", "--colocate"]);
-        std::fs::write(source.join("draft.txt"), "unfinished").unwrap();
-        let made = create(&source, "take over", None, "take over")
-            .await
-            .unwrap();
-
-        remove(&made).await.unwrap();
-
-        assert!(!made.path.exists());
-        let workspaces = run(&source, "jj", &["workspace", "list"]);
-        assert!(!workspaces.contains("take-over"), "{workspaces}");
-        let described = run(
-            &source,
-            "jj",
-            &[
-                "log",
-                "--no-graph",
-                "-r",
-                "description(substring:\"take over\")",
-                "-T",
-                "change_id",
-            ],
-        );
-        assert!(described.is_empty(), "{described}");
-    }
-
-    #[tokio::test]
     async fn a_directory_outside_version_control_gets_no_worktree() {
         let dir = tempfile::tempdir().unwrap();
 
-        let refused = create(dir.path(), "anything", None, "anything")
-            .await
-            .unwrap_err();
+        let refused = create(dir.path(), "anything", None).await.unwrap_err();
 
         assert!(refused.contains("not under version control"), "{refused}");
     }

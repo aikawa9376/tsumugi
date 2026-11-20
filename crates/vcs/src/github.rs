@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use tsumugi_model::github::{Checks, Counts, Item, Label, Listing, Pull, Read, Review};
 
-use crate::{Backend, Error, run};
+use crate::{Error, run};
 
 mod thread;
 pub use thread::*;
@@ -30,12 +30,7 @@ pub async fn installed() -> bool {
 
 /// The remote of the repository at `root` that is on GitHub, if one is.
 pub async fn remote(root: &Path) -> Option<Remote> {
-    let listed = match run("git", &["remote", "-v"], Some(root)).await {
-        Ok(listed) => listed,
-        Err(_) => run("jj", &["git", "remote", "list"], Some(root))
-            .await
-            .ok()?,
-    };
+    let listed = run("git", &["remote", "-v"], Some(root)).await.ok()?;
     choose(&remotes(&listed))
 }
 
@@ -168,20 +163,19 @@ fn counted(out: &str) -> Result<Counts, String> {
 /// A new worktree of the repository at `root` for its pull request `number`
 /// on GitHub: on the pull request's own branch when it comes from the
 /// repository itself, or else, as for a fork's, at its head, named after
-/// it; `title` describes the change a jj workspace starts.
-pub async fn pull_worktree(root: &Path, number: u64, title: &str) -> Result<PathBuf, String> {
+/// its number.
+pub async fn pull_worktree(root: &Path, number: u64) -> Result<PathBuf, String> {
     let remote = remote(root)
         .await
         .ok_or("the repository has no remote on GitHub")?;
     if let Some(branch) = own_branch(root, &remote.slug, number).await
         && fetch_branch(root, &remote.name, &branch).await.is_ok()
-        && let Ok(made) =
-            crate::worktree::create_on_branch(root, &branch, &remote.name, title).await
+        && let Ok(made) = crate::worktree::create_on_branch(root, &branch, &remote.name).await
     {
         return Ok(made.path);
     }
     let head = fetch_pull(root, &remote.name, number).await?;
-    crate::worktree::create(root, &format!("pr-{number}"), Some(&head), title)
+    crate::worktree::create(root, &format!("pr-{number}"), Some(&head))
         .await
         .map(|w| w.path)
 }
@@ -218,27 +212,20 @@ fn branch_of(slug: &str, out: &str) -> Option<String> {
         .then_some(pull.head.name)
 }
 
-/// The branch `branch` of `remote` fetched into the repository at `root`,
-/// where jj sees it too once imported.
+/// The branch `branch` of `remote` fetched into the repository at `root`.
 async fn fetch_branch(root: &Path, remote: &str, branch: &str) -> Result<(), String> {
     let spec = format!("+refs/heads/{branch}:refs/remotes/{remote}/{branch}");
     let failed = |e: Error| e.to_string();
     run("git", &["fetch", "--quiet", remote, &spec], Some(root))
         .await
         .map_err(failed)?;
-    if Backend::of(root) == Some(Backend::Jj) {
-        run("jj", &["git", "import"], Some(root))
-            .await
-            .map_err(failed)?;
-    }
     Ok(())
 }
 
 /// The commit the pull request `number` ends at on `remote`, fetched into
 /// the repository at `root`. GitHub keeps it as `refs/pull/<number>/head`,
 /// which a fork's pull request has too; it is kept as the remote's
-/// `pull/<number>`, where jj, which reads only branches and tags, sees it
-/// once imported.
+/// `pull/<number>`.
 async fn fetch_pull(root: &Path, remote: &str, number: u64) -> Result<String, String> {
     let tracking = format!("refs/remotes/{remote}/pull/{number}");
     let spec = format!("+refs/pull/{number}/head:{tracking}");
@@ -246,11 +233,6 @@ async fn fetch_pull(root: &Path, remote: &str, number: u64) -> Result<String, St
     run("git", &["fetch", "--quiet", remote, &spec], Some(root))
         .await
         .map_err(failed)?;
-    if Backend::of(root) == Some(Backend::Jj) {
-        run("jj", &["git", "import"], Some(root))
-            .await
-            .map_err(failed)?;
-    }
     let commit = run(
         "git",
         &["rev-parse", "--verify", &format!("{tracking}^{{commit}}")],
@@ -261,7 +243,7 @@ async fn fetch_pull(root: &Path, remote: &str, number: u64) -> Result<String, St
     Ok(commit.trim().into())
 }
 
-/// Each remote `git remote -v` or `jj git remote list` names, by its name
+/// Each remote `git remote -v` names, by its name
 /// and its URL, once.
 fn remotes(listed: &str) -> Vec<(String, String)> {
     let mut found: Vec<(String, String)> = Vec::new();
@@ -473,8 +455,6 @@ mod tests {
             .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
             .env("GIT_COMMITTER_NAME", "Test")
             .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
-            .env("JJ_USER", "Test")
-            .env("JJ_EMAIL", "test@example.invalid")
             .output()
             .unwrap();
         assert!(
@@ -521,8 +501,9 @@ mod tests {
     async fn a_git_worktree_on_a_pull_request_s_branch_checks_it_out_tracking_the_remote() {
         let dir = tempfile::tempdir().unwrap();
         let (clone, head) = cloned_with_a_pull(dir.path());
+        std::fs::create_dir(clone.join(".jj")).unwrap();
         fetch_branch(&clone, "origin", "fix").await.unwrap();
-        let made = crate::worktree::create_on_branch(&clone, "fix", "origin", "t")
+        let made = crate::worktree::create_on_branch(&clone, "fix", "origin")
             .await
             .unwrap();
         assert_eq!(made.base, head);
@@ -534,30 +515,6 @@ mod tests {
             &["rev-parse", "--abbrev-ref", "@{upstream}"],
         );
         assert_eq!(upstream.trim(), "origin/fix");
-    }
-
-    #[tokio::test]
-    #[cfg_attr(windows, ignore = "runs jj")]
-    async fn a_jj_workspace_on_a_pull_request_s_branch_tracks_its_bookmark_and_starts_on_it() {
-        let dir = tempfile::tempdir().unwrap();
-        let (clone, head) = cloned_with_a_pull(dir.path());
-        sh(&clone, "jj", &["git", "init", "--colocate"]);
-        fetch_branch(&clone, "origin", "fix").await.unwrap();
-        let made = crate::worktree::create_on_branch(&clone, "fix", "origin", "t")
-            .await
-            .unwrap();
-        let parent = sh(
-            &made.path,
-            "jj",
-            &["log", "--no-graph", "-r", "@-", "-T", "commit_id"],
-        );
-        assert_eq!(parent.trim(), head);
-        let tracked = sh(
-            &clone,
-            "jj",
-            &["bookmark", "list", "--tracked", "-T", "name ++ \"\\n\""],
-        );
-        assert!(tracked.lines().any(|l| l == "fix"), "{tracked}");
     }
 
     /// A repository standing for GitHub's, holding pull request 7 as GitHub
@@ -584,24 +541,10 @@ mod tests {
     async fn a_pull_request_s_head_is_fetched_as_its_remote_s_pull_ref() {
         let dir = tempfile::tempdir().unwrap();
         let (clone, head) = cloned_with_a_pull(dir.path());
+        std::fs::create_dir(clone.join(".jj")).unwrap();
         assert_eq!(fetch_pull(&clone, "origin", 7).await.unwrap(), head);
         let kept = sh(&clone, "git", &["rev-parse", "refs/remotes/origin/pull/7"]);
         assert_eq!(kept.trim(), head);
-    }
-
-    #[tokio::test]
-    #[cfg_attr(windows, ignore = "runs jj")]
-    async fn a_pull_request_s_head_fetched_into_a_jj_repository_is_seen_by_jj() {
-        let dir = tempfile::tempdir().unwrap();
-        let (clone, head) = cloned_with_a_pull(dir.path());
-        sh(&clone, "jj", &["git", "init", "--colocate"]);
-        assert_eq!(fetch_pull(&clone, "origin", 7).await.unwrap(), head);
-        let seen = sh(
-            &clone,
-            "jj",
-            &["log", "--no-graph", "-r", &head, "-T", "commit_id"],
-        );
-        assert_eq!(seen.trim(), head);
     }
 
     #[tokio::test]
@@ -636,14 +579,12 @@ mod tests {
     }
 
     #[test]
-    fn remotes_are_read_once_each_from_git_s_and_jj_s_listings() {
+    fn remotes_are_read_once_each_from_git_s_listing() {
         let git = "origin\tgit@github.com:o/r.git (fetch)\norigin\tgit@github.com:o/r.git (push)\n";
         assert_eq!(
             remotes(git),
             [("origin".into(), "git@github.com:o/r.git".into())]
         );
-        let jj = "origin https://github.com/o/r.git\nupstream https://github.com/u/r.git\n";
-        assert_eq!(remotes(jj).len(), 2);
     }
 
     #[test]

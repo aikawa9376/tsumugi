@@ -2,14 +2,14 @@
 
 Tsumugi is developed primarily on Linux. `README.md` lists desktop libraries
 and runtime helpers. `nix develop` provides the development tools; alternatively
-install Rust, just, Neovim, Node.js, jj and Ghostscript alongside those libraries.
+install Rust, just, Neovim, Node.js and Ghostscript alongside those libraries.
 The Rust toolchain and bundled Neovim are pinned in the repository.
 
 On macOS, install the Xcode Command Line Tools (`xcode-select --install`) and
 Rust before building. The system webview replaces Linux's GTK/WebKitGTK
 libraries, and PDF rendering uses PDFKit rather than Ghostscript. The Nix
 development shell supports both `aarch64-darwin` (Apple Silicon) and
-`x86_64-darwin` (Intel). Without Nix, install just, Neovim, Node.js, jj,
+`x86_64-darwin` (Intel). Without Nix, install just, Neovim, Node.js,
 Python 3 and cargo-about as well as Rust to run the complete quality gate.
 
 Run `just ci` before submitting a change. It builds a version without the

@@ -39,9 +39,8 @@ cannot act as another.
   It never starts from the caller's profile unless it names it. A profile that
   is not defined or starts another agent is refused, and a
   refused start leaves no record and runs nothing.
-  A new worktree is a jj workspace when the directory belongs to jj, otherwise
-  a git worktree; it starts from the given revision, or from the caller's
-  current change or commit. Outside version control, a new worktree is
+  A new worktree is a Git worktree; it starts from the given revision, or from
+  the caller's current commit. Outside Git, a new worktree is
   refused. A worktree that cannot be made refuses the start; the session never
   falls back to the caller's directory. A start refused or failed after its
   worktree is made removes that worktree again, unless the agent may already

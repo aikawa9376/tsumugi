@@ -162,14 +162,7 @@ fn DetailsSide(focused: bool, shown: bool) -> Element {
         let workspace = current
             .as_ref()
             .and_then(|p| tree.workspace_of(&p.worktree));
-        // A workspace outside git may still be a jj repository, which the
-        // details panel reads through jj.
-        current.as_ref().is_some_and(|p| {
-            let jj = work
-                .and_then(|w| w.place.of(&p.worktree))
-                .is_some_and(|r| r.jj);
-            workspace.is_some_and(|w| !w.git) && !jj
-        })
+        workspace.is_some_and(|w| !w.git)
     };
     let live_input_ms = active.as_ref().and_then(|tab| {
         ui.hub

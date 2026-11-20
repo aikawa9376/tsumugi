@@ -598,7 +598,6 @@ fn the_prompt_s_neovim_is_offered_the_sessions_and_the_middle_s_files_each_time_
         read: PlaceRead {
             worktree: tsumugi_protocol::HostPath::local("/r/a"),
             files: vec!["src/lib.rs".into()],
-            jj: false,
         },
     });
     assert_eq!(

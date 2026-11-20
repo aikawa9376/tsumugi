@@ -1,7 +1,7 @@
 //! What the details panel reads of a worktree: the files a change touches,
 //! one file's diff in it, or the history.
 
-use crate::{Error, Listing, Repo, Rev, Revision, Spot, git, jj};
+use crate::{Error, Listing, Repo, Rev, Revision, Spot, git};
 
 /// How much is read for a spot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,64 +21,30 @@ pub struct View {
 
 pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
     let worktree = repo.path();
-    let mut listing = None;
-    let mut read_with_jj = false;
-    if repo.is_jj() {
-        let rev = |r: &Rev| match r {
-            Rev::WorkingCopy => "@".to_string(),
-            Rev::Commit(id) => id.clone(),
-        };
-        let read = match spot {
-            Spot::Files(r) => jj::files(worktree, &rev(r)).await.map(Listing::Files),
-            Spot::Diff(r, c) => jj::file_diff(worktree, &rev(r), c, limits.diff_lines)
-                .await
-                .map(Listing::Diff),
-            Spot::Log => jj::history(worktree, limits.log_commits)
-                .await
-                .map(Listing::Log),
-        };
-        // Without jj, a colocated repository still reads through git.
-        if !matches!(read, Err(Error::Spawn { .. })) {
-            read_with_jj = true;
-            listing = Some(read);
-        }
-    }
-    let read = match listing {
-        Some(read) => read,
-        None => {
-            let rev = |r: &Rev| match r {
+    let read = match spot {
+        Spot::Files(Rev::WorkingCopy) => git::changes(worktree).await.map(Listing::Files),
+        Spot::Files(Rev::Commit(id)) => git::commit_files(worktree, id).await.map(Listing::Files),
+        Spot::Diff(rev, change) => {
+            let revision = match rev {
                 Rev::WorkingCopy => None,
-                Rev::Commit(id) => Some(id.clone()),
+                Rev::Commit(id) => Some(id.as_str()),
             };
-            match spot {
-                Spot::Files(Rev::WorkingCopy) => git::changes(worktree).await.map(Listing::Files),
-                Spot::Files(Rev::Commit(id)) => {
-                    git::commit_files(worktree, id).await.map(Listing::Files)
-                }
-                Spot::Diff(r, c) => {
-                    git::file_diff(worktree, rev(r).as_deref(), c, limits.diff_lines)
-                        .await
-                        .map(Listing::Diff)
-                }
-                Spot::Log => git::history(worktree, limits.log_commits)
-                    .await
-                    .map(Listing::Log),
-            }
+            git::file_diff(worktree, revision, change, limits.diff_lines)
+                .await
+                .map(Listing::Diff)
         }
+        Spot::Log => git::history(worktree, limits.log_commits)
+            .await
+            .map(Listing::Log),
     };
     let revision = if read.is_ok() {
         match spot {
             Spot::Files(rev) => {
                 let target = match rev {
-                    Rev::WorkingCopy if read_with_jj => "@",
                     Rev::WorkingCopy => "HEAD",
                     Rev::Commit(id) => id,
                 };
-                if read_with_jj {
-                    jj::revision(worktree, target).await.ok()
-                } else {
-                    git::revision(worktree, target).await.ok()
-                }
+                git::revision(worktree, target).await.ok()
             }
             _ => None,
         }
@@ -101,27 +67,26 @@ mod tests {
     };
 
     #[tokio::test]
-    #[cfg_attr(windows, ignore = "runs jj")]
     async fn changes_and_opened_log_entries_show_their_full_descriptions_even_without_files() {
         let dir = tempfile::tempdir().unwrap();
-        let jj = |args: &[&str]| {
-            std::process::Command::new("jj")
-                .args([
-                    "--config",
-                    "user.name=test",
-                    "--config",
-                    "user.email=test@example.com",
-                ])
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
                 .args(args)
                 .current_dir(dir.path())
+                .env("GIT_AUTHOR_NAME", "Test")
+                .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+                .env("GIT_COMMITTER_NAME", "Test")
+                .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
                 .output()
                 .unwrap()
                 .status
                 .success()
         };
-        assert!(jj(&["git", "init", "."]));
-        assert!(jj(&[
-            "describe",
+        assert!(git(&["init", "-q"]));
+        std::fs::create_dir(dir.path().join(".jj")).unwrap();
+        assert!(git(&[
+            "commit",
+            "--allow-empty",
             "-m",
             "first subject",
             "-m",
@@ -135,7 +100,7 @@ mod tests {
             first.description,
             "first subject\n\nThe reason for this change."
         );
-        assert!(jj(&["new", "-m", "second subject"]));
+        assert!(git(&["commit", "--allow-empty", "-m", "second subject"]));
         let opened = repo
             .load(&Spot::Files(Rev::Commit(first.id.clone())), LIMITS)
             .await;

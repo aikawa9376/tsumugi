@@ -7,8 +7,7 @@ use tsumugi_vcs::{Limits, Repo, Spot};
 
 pub use tsumugi_core::details::*;
 
-/// Read what `spot` shows of `worktree`: through jj in a jj repository,
-/// through git otherwise or when jj cannot be run.
+/// Read what `spot` shows of `worktree` through Git.
 pub async fn load(spot: Spot, worktree: &Path) -> RepositoryRead {
     let details = crate::settings::current().details;
     let limits = Limits {

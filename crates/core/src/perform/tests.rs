@@ -1069,7 +1069,6 @@ fn a_new_session_on_a_pull_request_asks_for_a_worktree_at_its_head_first() {
             environment: here(),
             repository: "/r".into(),
             number: 7,
-            title: "Fix the login".into(),
             prompt: "Pull request #7: Fix the login\nhttps://github.com/o/r/pull/7\n".into(),
         }]
     );

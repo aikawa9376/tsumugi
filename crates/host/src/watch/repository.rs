@@ -1,6 +1,5 @@
 //! A worktree's repository, as the details panel's changes and log list it:
-//! read only while one of those is shown, since every jj command may record
-//! the working copy.
+//! read only while one of those is shown.
 
 use std::time::Duration;
 

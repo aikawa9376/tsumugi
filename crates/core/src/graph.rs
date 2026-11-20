@@ -368,8 +368,7 @@ mod tests {
 
     #[test]
     fn a_stack_of_three_parent_merges_stays_on_the_left_lane() {
-        // Recorded from this repository's stack with `jj log --no-graph`, the
-        // commit ids shortened; `9ba5` is trunk, off the list.
+        // A stack with shortened commit ids; `9ba5` is trunk, off the list.
         let rows = lay(&[
             "1172 15da ae18",
             "15da 7d3d",

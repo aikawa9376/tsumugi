@@ -121,8 +121,6 @@
               pkgs.neovim
               # The extension Pi sessions load; its tests run it in Node.
               pkgs.nodejs
-              # What tsumugi reads of jj repositories; its tests make them with jj.
-              pkgs.jujutsu
               # Writes the licences of the crates Tsumugi is built from
               # (just licenses).
               pkgs.cargo-about

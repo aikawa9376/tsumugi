@@ -1,4 +1,4 @@
-//! What a repository says, whichever version control reads it: the files a
+//! What Git says of a repository: the files a
 //! change touches, the changes of a history, the lines of a diff, which of
 //! them the details panel asks for, and the marks the tree gives files.
 
@@ -38,16 +38,16 @@ impl Change {
     }
 }
 
-/// A commit, or a jj change.
+/// A Git commit.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Commit {
-    /// What names it: a commit hash, or a change ID, which a rewrite keeps.
+    /// Its commit hash.
     pub id: String,
     /// `id` as short as it is shown.
     pub short: String,
     /// The first line of its description; empty when it has none.
     pub subject: String,
-    /// How long ago, as git or jj words it.
+    /// How long ago, as Git words it.
     pub when: String,
     /// The commit hash its children name it by among their parents.
     pub node: String,
@@ -86,9 +86,9 @@ pub struct DiffLine {
 /// Where changes are read from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Rev {
-    /// What is being worked on: git's worktree, or jj's `@`.
+    /// What is being worked on: Git's worktree.
     WorkingCopy,
-    /// A commit, or a jj change, by its [`Commit::id`].
+    /// A commit by its [`Commit::id`].
     Commit(String),
 }
 
