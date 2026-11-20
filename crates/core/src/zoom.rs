@@ -70,11 +70,15 @@ mod tests {
     fn automatic_scaling_enlarges_unscaled_high_resolution_displays() {
         for (width, height, expected) in [
             (1920, 1080, 1.0),
+            (2560, 1439, 1.0),
             (2560, 1440, 1.25),
+            (3840, 2159, 1.25),
             (3840, 2160, 1.5),
             (2160, 3840, 1.5),
             (5120, 1440, 1.25),
+            (5120, 2879, 1.5),
             (5120, 2880, 2.0),
+            (7680, 4319, 2.0),
             (7680, 4320, 3.0),
         ] {
             assert_eq!(automatic(width, height, 1.0), expected, "{width}x{height}");

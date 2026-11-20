@@ -276,7 +276,7 @@ impl Default for Settings {
             prompt_min_rows: 3,
             prompt_max_rows: 12,
             font_family: String::new(),
-            font_size: 13.0,
+            font_size: 15.0,
             font_weight: 400,
             appearance: Appearance::System,
             light_theme: LIGHT_THEME.into(),

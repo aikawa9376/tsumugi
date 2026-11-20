@@ -15,7 +15,7 @@ when the file does not name it, and what it does
 | `close_successful_commands` | boolean | `true` | Close a command's tabs and splits when it finishes successfully; its output stays available from the tree. Off, its windows stay open too. |
 | `dark_theme` | string | `"Solarized Dark"` | The theme drawn while the appearance is dark, named as the light one is. |
 | `font_family` | string | `""` | The font the console and the prompt are drawn in, as the system names its family; empty for Tsumugi's own, JetBrainsMono Nerd Font Mono. Tsumugi's own stands behind any other, so Nerd Font glyphs draw whatever font is chosen, and a Japanese font behind that. A line is as tall as the font asks, as in a terminal. |
-| `font_size` | number | `13.0` | The font's size, in points, from 8 to 32. |
+| `font_size` | number | `15.0` | The font's size, in points, from 8 to 32. |
 | `font_weight` | integer | `400` | The font's weight, from 100 to 900; Tsumugi's own comes in regular and bold, and draws other weights in the nearer of them. |
 | `keep_awake` | boolean | `true` | Keep the Mac from idle sleep while a session or a shell runs, the window open or not; the display still sleeps. |
 | `light_theme` | string | `"Solarized Light"` | The theme drawn while the appearance is light, by name: one tsumugi comes with, or one in `themes/` beside `settings.toml`. |

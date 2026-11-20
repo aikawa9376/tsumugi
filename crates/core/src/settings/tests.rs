@@ -21,6 +21,17 @@ fn successful_commands_close_by_default_and_the_choice_survives_saving() {
 }
 
 #[test]
+fn the_console_and_prompt_default_to_fifteen_without_overriding_a_chosen_size() {
+    assert_eq!(Settings::default().font_size, 15.0);
+    assert_eq!(Settings::parse("").unwrap().font_size, 15.0);
+    for size in [8.0, 13.0, 15.5, 32.0] {
+        let chosen = Settings::parse(&format!("font_size = {size}\n")).unwrap();
+        assert_eq!(chosen.font_size, size);
+        assert_eq!(written_and_read(&chosen).font_size, size);
+    }
+}
+
+#[test]
 fn a_file_missing_reads_as_designed_and_one_that_cannot_be_had_names_itself() {
     use tsumugi_protocol::{ConfigFile, FileText};
     let file = |text| ConfigFile {
