@@ -9,12 +9,14 @@ use dioxus::prelude::*;
 use tsumugi_core::agent_pages::AgentPage;
 use tsumugi_core::profiles::{self, Login, LoginFolder};
 use tsumugi_model::Agent;
-use tsumugi_model::config::{CodexOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions};
+use tsumugi_model::config::{
+    CodexOptions, CursorOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
+};
 use tsumugi_model::paths::tilde;
 use tsumugi_model::profile::{AgentProfile, LoginStanding, ProfileId};
 use tsumugi_protocol::{AgentsWork, Answer, Ask, Request};
 
-use super::agents::{CodexGroup, OpenCodeGroup, PiGroup, SessionGroup};
+use super::agents::{CodexGroup, CursorGroup, OpenCodeGroup, PiGroup, SessionGroup};
 use super::{Change, LaunchGroup};
 use crate::components::{
     Button, ConfirmInline, Select, SettingGroup, SettingRow, SettingsError, TextField, choices_of,
@@ -391,6 +393,17 @@ fn ProfilePage(
                     set: {
                         let id = profile.id.clone();
                         move |options: OpenCodeOptions| edit_profile(change, &id, move |p| p.options = AgentOptions::OpenCode(options))
+                    },
+                }
+            },
+            AgentOptions::Cursor(options) => rsx! {
+                CursorGroup {
+                    key: "cursor-{profile.id}",
+                    title: "New sessions",
+                    options,
+                    set: {
+                        let id = profile.id.clone();
+                        move |options: CursorOptions| edit_profile(change, &id, move |p| p.options = AgentOptions::Cursor(options))
                     },
                 }
             },

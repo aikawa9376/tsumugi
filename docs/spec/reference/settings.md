@@ -143,7 +143,7 @@ The profiles sessions start from, each `[[profiles]]` table one of them ([settin
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode` |  | The agent it starts, `claude`, `codex`, `pi` or `opencode`. |
+| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode`, `cursor` |  | The agent it starts, `claude`, `codex`, `pi`, `opencode` or `cursor`. |
 | `profiles.home` | string |  | The folder of its own its agent keeps its login, history and settings in, as an absolute path without `~`, `.` or `..` and with no `/` doubled or at its end, which no other profile names; it is fixed when the login is made, since the CLIs tell logins apart by it as it is written. Left out, the agent runs in its own environment, shared with the terminal. |
 | `profiles.id` | string |  | The profile's id, kept when it is renamed: lowercase letters, digits and `-`. |
 | `profiles.name` | string | `""` | What the profile is called; empty for its id. |
@@ -169,6 +169,16 @@ Codex's model and reasoning effort, approval policy and sandbox, for a `codex` p
 | `profiles.codex.model` | string | `""` | Codex's model; empty for its own choice. |
 | `profiles.codex.reasoning_effort` | string | `""` | Its reasoning effort, one the selected model and Codex version support; empty for its own choice. |
 | `profiles.codex.sandbox_mode` | string | `""` | Where its commands can write: empty, `read-only`, `workspace-write` or `danger-full-access`. |
+
+### `[profiles.cursor]`
+
+Cursor CLI's model, mode and sandbox, for a `cursor` profile; empty values leave Cursor's own settings in effect.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `profiles.cursor.mode` | string | `""` | The mode it starts in: empty for its agent mode, `plan` or `ask`. |
+| `profiles.cursor.model` | string | `""` | Cursor's model, as `agent models` lists it; empty for its own choice. |
+| `profiles.cursor.sandbox` | string | `""` | Whether its sandbox is `enabled` or `disabled`; empty for its own setting. |
 
 ### `[profiles.launch]`
 
@@ -279,6 +289,22 @@ model = ""
 agent = ""
 permissions = []
 auto = false
+
+[[profiles]]
+id = "cursor"
+name = "Cursor CLI"
+agent = "cursor"
+
+[profiles.launch]
+command = []
+via_shell = false
+
+[profiles.launch.env]
+
+[profiles.cursor]
+model = ""
+mode = ""
+sandbox = ""
 ```
 
 ## `[shell]`

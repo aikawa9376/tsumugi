@@ -172,6 +172,19 @@ pub struct OpenCodeOptions {
     pub auto: bool,
 }
 
+/// How Cursor CLI sessions start, in Cursor's own terms.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct CursorOptions {
+    /// Cursor's model, as `agent models` lists it; empty for its own choice.
+    pub model: String,
+    /// The mode it starts in: empty for its agent mode, `plan` or `ask`.
+    pub mode: String,
+    /// Whether its sandbox is `enabled` or `disabled`; empty for its own
+    /// setting.
+    pub sandbox: String,
+}
+
 /// One of OpenCode's permission rules.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]

@@ -74,21 +74,6 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(super::protocol::CreateLocalIssue),
         ),
         tool(
-            "resources",
-            "List the paths and addresses the user keeps in this project as its resources: the configuration, documents and sites they linked for the work. Only references are kept, never copies; read a path with your own tools and fetch an address as you would any. Call it, with the words the user used as `query`, when they point at something loosely — \"check the conf link\", \"see the docs I linked\" — or when you need material about the project that code does not hold. Call it without `query` to see them all.",
-            schemars::schema_for!(super::protocol::Resources),
-        ),
-        tool(
-            "add_resource",
-            "Keep a path or an address in this project's resources, where the user and every session of the project find it. Do it when the user asks you to save, link or remember a reference, never on your own. Give it a label and a note in the words the user will search by.",
-            schemars::schema_for!(super::protocol::AddResource),
-        ),
-        tool(
-            "remove_resource",
-            "Stop keeping a resource of this project, by the id `resources` lists. Do it only when the user asks you to.",
-            schemars::schema_for!(super::protocol::RemoveResource),
-        ),
-        tool(
             "send",
             "Send a message to another session by its code: what it should know, or a question about what it knows; never work for it to do. It reaches that session between its turns and costs it a turn: send only what it has to act on or answer, and plan nothing on a reply coming.",
             schemars::schema_for!(Send),
@@ -172,11 +157,6 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "send" => Command::Send(serde_json::from_value(arguments).map_err(parsed)?),
         "create_local_issue" => {
             Command::CreateLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
-        }
-        "resources" => Command::Resources(serde_json::from_value(arguments).map_err(parsed)?),
-        "add_resource" => Command::AddResource(serde_json::from_value(arguments).map_err(parsed)?),
-        "remove_resource" => {
-            Command::RemoveResource(serde_json::from_value(arguments).map_err(parsed)?)
         }
         "sessions" => Command::Sessions(serde_json::from_value(arguments).map_err(parsed)?),
         "models" => Command::Models,
@@ -586,9 +566,6 @@ mod tests {
             [
                 "start_session",
                 "create_local_issue",
-                "resources",
-                "add_resource",
-                "remove_resource",
                 "send",
                 "sessions",
                 "rename_session",

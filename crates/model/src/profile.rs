@@ -11,7 +11,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::Agent;
-use crate::config::{CodexOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions};
+use crate::config::{
+    CodexOptions, CursorOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
+};
 
 /// Why a string cannot be an id.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +117,7 @@ pub enum AgentOptions {
     Codex(CodexOptions),
     Pi(PiOptions),
     OpenCode(OpenCodeOptions),
+    Cursor(CursorOptions),
 }
 
 impl AgentOptions {
@@ -125,6 +128,7 @@ impl AgentOptions {
             Agent::Codex => Self::Codex(CodexOptions::default()),
             Agent::Pi => Self::Pi(PiOptions::default()),
             Agent::OpenCode => Self::OpenCode(OpenCodeOptions::default()),
+            Agent::Cursor => Self::Cursor(CursorOptions::default()),
         }
     }
 
@@ -134,6 +138,7 @@ impl AgentOptions {
             Self::Codex(_) => Agent::Codex,
             Self::Pi(_) => Agent::Pi,
             Self::OpenCode(_) => Agent::OpenCode,
+            Self::Cursor(_) => Agent::Cursor,
         }
     }
 
@@ -145,6 +150,7 @@ impl AgentOptions {
             Self::Codex(options) => &options.model,
             Self::Pi(options) => &options.model,
             Self::OpenCode(options) => &options.model,
+            Self::Cursor(options) => &options.model,
         }
     }
 
@@ -154,6 +160,7 @@ impl AgentOptions {
             Self::Codex(options) => &mut options.model,
             Self::Pi(options) => &mut options.model,
             Self::OpenCode(options) => &mut options.model,
+            Self::Cursor(options) => &mut options.model,
         }
     }
 
@@ -213,6 +220,21 @@ impl AgentOptions {
     pub fn opencode_mut(&mut self) -> Option<&mut OpenCodeOptions> {
         match self {
             Self::OpenCode(options) => Some(options),
+            _ => None,
+        }
+    }
+
+    /// Cursor CLI's options; none for another agent's.
+    pub fn cursor(&self) -> Option<&CursorOptions> {
+        match self {
+            Self::Cursor(options) => Some(options),
+            _ => None,
+        }
+    }
+
+    pub fn cursor_mut(&mut self) -> Option<&mut CursorOptions> {
+        match self {
+            Self::Cursor(options) => Some(options),
             _ => None,
         }
     }
@@ -305,7 +327,7 @@ struct ProfileEntry {
     /// What the profile is called; empty for its id.
     #[serde(default)]
     name: String,
-    /// The agent it starts, `claude`, `codex`, `pi` or `opencode`.
+    /// The agent it starts, `claude`, `codex`, `pi`, `opencode` or `cursor`.
     agent: Agent,
     /// The folder of its own its agent keeps its login, history and settings
     /// in, as an absolute path without `~`, `.` or `..` and with no `/`
@@ -340,6 +362,10 @@ struct ProfileEntry {
     /// profile; empty values leave OpenCode's own settings in effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     opencode: Option<OpenCodeOptions>,
+    /// Cursor CLI's model, mode and sandbox, for a `cursor` profile; empty
+    /// values leave Cursor's own settings in effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cursor: Option<CursorOptions>,
     /// Whether files written while profiles were archived rather than
     /// deleted kept it for the sessions that ran from it alone; read by
     /// [`earlier`] alone.
@@ -371,6 +397,7 @@ impl ProfileEntry {
             (Agent::Codex, self.codex.is_some()),
             (Agent::Pi, self.pi.is_some()),
             (Agent::OpenCode, self.opencode.is_some()),
+            (Agent::Cursor, self.cursor.is_some()),
         ];
         if let Some((other, _)) = held.iter().find(|(a, held)| *held && *a != agent) {
             return Err(format!(
@@ -385,6 +412,7 @@ impl ProfileEntry {
             Agent::Codex => AgentOptions::Codex(self.codex.unwrap_or_default()),
             Agent::Pi => AgentOptions::Pi(self.pi.unwrap_or_default()),
             Agent::OpenCode => AgentOptions::OpenCode(self.opencode.unwrap_or_default()),
+            Agent::Cursor => AgentOptions::Cursor(self.cursor.unwrap_or_default()),
         };
         Ok(AgentProfile {
             home: self.home,
@@ -399,12 +427,14 @@ impl ProfileEntry {
 impl From<AgentProfile> for ProfileEntry {
     fn from(profile: AgentProfile) -> Self {
         let agent = profile.agent();
-        let (mut claude, mut codex, mut pi, mut opencode) = (None, None, None, None);
+        let (mut claude, mut codex, mut pi, mut opencode, mut cursor) =
+            (None, None, None, None, None);
         match profile.options {
             AgentOptions::Claude(options) => claude = Some(options),
             AgentOptions::Codex(options) => codex = Some(options),
             AgentOptions::Pi(options) => pi = Some(options),
             AgentOptions::OpenCode(options) => opencode = Some(options),
+            AgentOptions::Cursor(options) => cursor = Some(options),
         }
         Self {
             id: profile.id,
@@ -417,6 +447,7 @@ impl From<AgentProfile> for ProfileEntry {
             codex,
             pi,
             opencode,
+            cursor,
             archived: false,
         }
     }
@@ -535,6 +566,7 @@ mod tests {
                 options.codex().is_some(),
                 options.pi().is_some(),
                 options.opencode().is_some(),
+                options.cursor().is_some(),
             ];
             assert_eq!(held.iter().filter(|h| **h).count(), 1, "{agent:?}");
         }

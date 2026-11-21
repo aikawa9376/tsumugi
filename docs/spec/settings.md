@@ -252,9 +252,10 @@ A profile's `id` is how everything else refers to it, and it is kept when
 the profile is renamed: renaming changes `name` alone. An id is lowercase
 letters, digits and `-`, starts with a letter or a digit, and is at most 64
 characters long; no two profiles share one. `agent` is `claude`, `codex`,
-`pi` or `opencode`, and the profile holds options for that agent alone:
+`pi`, `opencode` or `cursor`, and the profile holds options for that agent alone:
 `[profiles.claude]` for Claude Code, `[profiles.codex]` for Codex,
-`[profiles.pi]` for Pi, `[profiles.opencode]` for OpenCode, each left out
+`[profiles.pi]` for Pi, `[profiles.opencode]` for OpenCode,
+`[profiles.cursor]` for Cursor CLI, each left out
 for the agent's options with nothing chosen. `[profiles.launch]` says how
 the agent is started, as `[neovim]` does for Neovim.
 

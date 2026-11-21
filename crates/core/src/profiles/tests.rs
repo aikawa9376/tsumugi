@@ -406,7 +406,8 @@ fn a_draft_offers_a_profile_by_its_agent_and_name_and_says_when_it_has_a_login_o
             "Codex · codex",
             "Codex",
             "Pi",
-            "OpenCode"
+            "OpenCode",
+            "Cursor CLI"
         ]
     );
 }
@@ -461,9 +462,9 @@ fn a_session_starts_from_a_profile_or_tsumugi_s_own_for_an_agent_with_none() {
     delete_profile(&mut s, &id("claude-work")).unwrap();
     let ids =
         |s: &Settings| -> Vec<String> { startable(s).iter().map(|p| p.id.to_string()).collect() };
-    assert_eq!(ids(&s), ["claude", "codex", "pi", "opencode"]);
+    assert_eq!(ids(&s), ["claude", "codex", "pi", "opencode", "cursor"]);
     s.profiles.retain(|p| p.agent() == Agent::Claude);
-    assert_eq!(ids(&s), ["claude", "codex", "pi", "opencode"]);
+    assert_eq!(ids(&s), ["claude", "codex", "pi", "opencode", "cursor"]);
     assert_eq!(startable(&s)[1], AgentProfile::builtin(Agent::Codex));
 }
 

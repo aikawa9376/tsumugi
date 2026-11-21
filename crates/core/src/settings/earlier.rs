@@ -113,6 +113,7 @@ impl File {
                             codex,
                             AgentProfile::builtin(Agent::Pi),
                             AgentProfile::builtin(Agent::OpenCode),
+                            AgentProfile::builtin(Agent::Cursor),
                         ],
                         Vec::new(),
                     ),

@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use tsumugi_model::config::{
-    CodexOptions, OpenCodeOptions, PiOptions, SessionOptions, format_list, format_rules,
-    parse_list, parse_rules,
+    CodexOptions, CursorOptions, OpenCodeOptions, PiOptions, SessionOptions, format_list,
+    format_rules, parse_list, parse_rules,
 };
 
 use super::Edits;
@@ -106,6 +106,57 @@ pub(super) fn PiGroup(title: String, options: PiOptions, set: Callback<PiOptions
                     aria_label: "Tools",
                     placeholder: "read, bash, edit, write",
                     onchange: edits.of(|o, value: String| o.tools = parse_list(&value)),
+                }
+            }
+        }
+    }
+}
+
+/// How Cursor CLI sessions run: their model, the mode they start in and
+/// whether they run in Cursor's sandbox.
+#[component]
+pub(super) fn CursorGroup(
+    title: String,
+    options: CursorOptions,
+    set: Callback<CursorOptions>,
+) -> Element {
+    let edits = Edits::new(&options, set);
+    rsx! {
+        SettingGroup { title: "{title}",
+            SettingRow { label: "Model", hint: "As `agent models` lists it; empty for Cursor's own.",
+                TextField {
+                    value: options.model,
+                    aria_label: "Model",
+                    placeholder: "Cursor's own",
+                    onchange: edits.of(|o, value: String| o.model = value.trim().into()),
+                }
+            }
+            SettingRow { label: "Mode", hint: "`plan` plans without editing, `ask` answers without editing; empty for Cursor's agent mode.",
+                TextField {
+                    list: "cursor-modes",
+                    aria_label: "Mode",
+                    value: options.mode,
+                    placeholder: "agent",
+                    onchange: edits.of(|o, value: String| o.mode = value.trim().into()),
+                }
+                datalist { id: "cursor-modes",
+                    for value in ["plan", "ask"] {
+                        option { key: "{value}", value: value }
+                    }
+                }
+            }
+            SettingRow { label: "Sandbox", hint: "`enabled` or `disabled`; empty for the sandbox setting Cursor keeps.",
+                TextField {
+                    list: "cursor-sandbox",
+                    aria_label: "Sandbox",
+                    value: options.sandbox,
+                    placeholder: "Cursor's own",
+                    onchange: edits.of(|o, value: String| o.sandbox = value.trim().into()),
+                }
+                datalist { id: "cursor-sandbox",
+                    for value in ["enabled", "disabled"] {
+                        option { key: "{value}", value: value }
+                    }
                 }
             }
         }

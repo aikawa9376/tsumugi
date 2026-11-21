@@ -186,39 +186,6 @@ pub fn link_sections(
                     ..LinkRow::plain(at, icon, label, tag, a.call.clone())
                 })
             }
-            Entry::Pinned(resource) => {
-                let path = resource.reach() == tsumugi_model::Reach::Path;
-                let tag = resource.note.clone().unwrap_or_else(|| {
-                    if path {
-                        let parent = Path::new(&resource.target)
-                            .parent()
-                            .unwrap_or(Path::new(""));
-                        match parent.strip_prefix(home) {
-                            Ok(rel) => format!("~/{}", rel.display()),
-                            Err(_) => parent.display().to_string(),
-                        }
-                    } else {
-                        let bare = resource
-                            .target
-                            .split_once("://")
-                            .map_or(&*resource.target, |(_, rest)| rest);
-                        bare.split(['/', '?', '#'])
-                            .next()
-                            .unwrap_or_default()
-                            .to_owned()
-                    }
-                });
-                Some(LinkRow {
-                    file: path,
-                    ..LinkRow::plain(
-                        at,
-                        if path { Icon::File } else { Icon::Link },
-                        resource.title(),
-                        tag,
-                        resource.target.clone(),
-                    )
-                })
-            }
             Entry::Link(link) => {
                 let icon = match link.kind {
                     LinkKind::Artifact => Icon::AppWindow,

@@ -103,13 +103,6 @@ pub(super) fn Specimen(placed: Placed) -> Element {
                 Link::new(Icon::Link, "RFC 9110: HTTP Semantics", "www.rfc-editor.org"),
             ],
         ),
-        Component::Pinned => links(
-            "2 resources · Web server, API guide",
-            &[
-                Link::new(Icon::File, "Web server", "Proxy and TLS"),
-                Link::new(Icon::Link, "API guide", "docs.example.com"),
-            ],
-        ),
         Component::Files => links(
             "3 files · login.rs, retry.rs, README.md",
             &[

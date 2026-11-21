@@ -19,7 +19,7 @@ limited platform coverage; issues and small, focused contributions are welcome.
 
 ## Work in your own tools
 
-- Run Claude Code, Codex, Pi and OpenCode in their own terminal interfaces.
+- Run Claude Code, Codex, Pi, OpenCode and Cursor CLI in their own terminal interfaces.
 - Write prompts in embedded Neovim and edit files with your normal Neovim setup.
 - Keep projects, worktrees, sessions and shells together, with tabs and splits.
 - Read changes, conversation history and session activity beside the work.

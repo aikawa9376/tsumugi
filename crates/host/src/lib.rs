@@ -35,7 +35,6 @@ mod presences;
 pub mod processes;
 pub mod programs;
 pub mod remote;
-mod resources;
 pub mod restore;
 pub mod scratch;
 pub mod serve;

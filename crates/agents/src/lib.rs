@@ -5,6 +5,7 @@ mod child;
 pub mod claude;
 mod codex;
 pub mod commands;
+pub mod cursor;
 mod delivery;
 mod integration;
 pub mod links;
@@ -26,7 +27,9 @@ pub use verdict::*;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tsumugi_model::Agent;
-use tsumugi_model::config::{CodexOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions};
+use tsumugi_model::config::{
+    CodexOptions, CursorOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
+};
 use tsumugi_model::profile::{AgentOptions, AgentProfile, ProfileId};
 
 /// A command that starts an agent: the program, its arguments and the
@@ -228,6 +231,15 @@ impl AgentContext {
 
     pub fn opencode_mut(&mut self) -> Option<&mut OpenCodeOptions> {
         self.options.opencode_mut()
+    }
+
+    /// Cursor CLI's options; nothing chosen for a profile of another agent.
+    pub fn cursor(&self) -> CursorOptions {
+        self.options.cursor().cloned().unwrap_or_default()
+    }
+
+    pub fn cursor_mut(&mut self) -> Option<&mut CursorOptions> {
+        self.options.cursor_mut()
     }
 }
 
@@ -555,6 +567,7 @@ pub fn adapter(agent: Agent) -> &'static dyn AgentAdapter {
         Agent::Codex => &codex::Codex,
         Agent::Pi => &pi::Pi,
         Agent::OpenCode => &opencode::OpenCode,
+        Agent::Cursor => &cursor::Cursor,
     }
 }
 
@@ -575,7 +588,7 @@ mod tests {
 
     #[test]
     fn each_agent_s_adapter_names_its_agent() {
-        for agent in [Agent::Claude, Agent::Codex, Agent::Pi, Agent::OpenCode] {
+        for agent in Agent::ALL {
             assert_eq!(adapter(agent).agent(), agent);
         }
     }

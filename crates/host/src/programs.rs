@@ -332,7 +332,14 @@ agent = "codex"
             .collect();
         assert_eq!(
             listed,
-            ["claude", "claude-work", "codex-review", "pi", "opencode"]
+            [
+                "claude",
+                "claude-work",
+                "codex-review",
+                "pi",
+                "opencode",
+                "cursor"
+            ]
         );
         let only_claude =
             Settings::parse("[[profiles]]\nid = \"mine\"\nagent = \"claude\"\n").unwrap();
@@ -340,7 +347,7 @@ agent = "codex"
             .iter()
             .map(|c| c.profile.to_string())
             .collect();
-        assert_eq!(listed, ["mine", "codex", "pi", "opencode"]);
+        assert_eq!(listed, ["mine", "codex", "pi", "opencode", "cursor"]);
     }
 
     #[test]
@@ -362,6 +369,7 @@ agent = "codex"
                 ("codex-review".into(), None),
                 ("pi".into(), None),
                 ("opencode".into(), None),
+                ("cursor".into(), None),
                 ("claude".into(), None),
             ]
         );

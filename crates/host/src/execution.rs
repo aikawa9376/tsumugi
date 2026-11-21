@@ -397,6 +397,9 @@ fn configured(
         (AgentPermissions::ReadOnly, Agent::OpenCode) => {
             tsumugi_agents::opencode::read_only(&mut context);
         }
+        (AgentPermissions::ReadOnly, Agent::Cursor) => {
+            tsumugi_agents::cursor::read_only(&mut context);
+        }
         (AgentPermissions::ReadOnly, Agent::Claude) => {
             if let Some(options) = context.claude_mut() {
                 options.read_only = Some(
@@ -448,6 +451,12 @@ fn configured(
                     options.agent = primary.clone();
                     options.permissions = permissions.clone();
                     options.auto = *auto;
+                }
+            }
+            (CustomPermissions::Cursor { mode, sandbox }, Agent::Cursor) => {
+                if let Some(options) = context.cursor_mut() {
+                    options.mode = mode.clone();
+                    options.sandbox = sandbox.clone();
                 }
             }
             _ => return Err("custom permissions belong to another agent".into()),

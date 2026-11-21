@@ -986,7 +986,7 @@ fn a_file_that_cannot_be_read_says_which_setting_and_why() {
         ),
         (
             "[[profiles]]\nid = \"a\"\nagent = \"claude\"\nnonsense = 1\n",
-            "unknown field `nonsense`, expected one of `id`, `name`, `agent`, `home`, `connection`, `launch`, `claude`, `codex`, `pi`, `opencode`, `archived`\nin `profiles`\n",
+            "unknown field `nonsense`, expected one of `id`, `name`, `agent`, `home`, `connection`, `launch`, `claude`, `codex`, `pi`, `opencode`, `cursor`, `archived`\nin `profiles`\n",
         ),
         (
             "profile = \"gone\"\n[[profiles]]\nid = \"a\"\nagent = \"claude\"\n",
@@ -1003,7 +1003,7 @@ fn a_file_that_cannot_be_read_says_which_setting_and_why() {
         ),
         (
             "agent = \"nope\"\n",
-            "unknown variant `nope`, expected one of `claude`, `codex`, `pi`, `opencode`\nin `agent`\n",
+            "unknown variant `nope`, expected one of `claude`, `codex`, `pi`, `opencode`, `cursor`\nin `agent`\n",
         ),
         (
             "[sessions]\nmodel = 3\n",

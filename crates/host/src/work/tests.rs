@@ -14,30 +14,6 @@ use super::*;
 const LONE: WindowId = WindowId(1);
 
 #[test]
-fn resources_reach_every_window_and_are_in_a_new_windows_snapshot() {
-    let mut host = two_windows("a", "b");
-    let resource = tsumugi_model::Resource {
-        id: "resource".into(),
-        project: "/project".into(),
-        target: "https://example.com".into(),
-        label: None,
-        note: None,
-    };
-    let change = TreeChange::Resources {
-        resources: vec![resource.clone()],
-    };
-    let sent = host.record([change.clone()]);
-    for window in [A, B] {
-        let event = to(window, sent.clone()).pop().unwrap();
-        assert!(
-            matches!(event, Event::Patch(patch) if patch.changes == [Change::Tree(change.clone())])
-        );
-    }
-    let opened = host.handle(WindowId(3), hello(&[SPOKEN[0].0]));
-    assert!(opened.iter().any(|(_, event)| matches!(event, Event::Snapshot(work) if work.tree.resources == [resource.clone()])));
-}
-
-#[test]
 fn local_issues_reach_every_window_and_are_in_a_new_windows_snapshot() {
     let mut host = two_windows("a", "b");
     let issue = tsumugi_model::LocalIssue {

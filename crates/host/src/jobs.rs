@@ -162,7 +162,13 @@ async fn keep_workspace(watched: &Watched, window: WindowId, dir: PathBuf) -> Re
         watched.tell(window, failure(text.clone()));
         return Err(text);
     }
-    let root = crate::workspaces::root_of(&dir).await;
+    let scratch = crate::paths::scratch_dir();
+    let root = match dir.starts_with(&scratch) {
+        true => scratch,
+        false => tsumugi_vcs::inspect(&dir)
+            .await
+            .map_or(dir, |worktree| worktree.repo),
+    };
     let state = crate::paths::instance_state();
     let kept =
         crate::environment::spawn_blocking(move || crate::workspaces::keep(&state, [root])).await;

@@ -1,0 +1,45 @@
+# How Cursor CLI's screen tells how it stands while it reports no status: the
+# workspace trust it asks for before its interface, the command it asks to
+# run, the hint to stop a turn running and the hints under its input.
+#
+# These signs were written from Cursor's documentation and what others have
+# shown of its screen, not from a session, so a release or a screen that
+# differs leaves a session without a state until the rules follow.
+
+agent = "cursor"
+
+[lines]
+trust = '(?i)trust this workspace'
+permission = '(?i)skip \(esc or n\)|run \(once\)'
+interrupt = '(?i)ctrl\+c to stop'
+hint = '(?i)/ for commands|@ for files'
+
+[regions]
+foot = { tail_non_empty = 4 }
+
+[[rules]]
+id = "trust_asked"
+state = "waiting-input"
+startup = "awaiting-trust"
+dialog = true
+when = { has = "trust" }
+
+[[rules]]
+id = "permission_asked"
+state = "waiting-permission"
+dialog = true
+when = { has = "permission" }
+
+[[rules]]
+id = "interrupt_hint"
+state = "working"
+when = { in = "foot", has = "interrupt" }
+
+[[rules]]
+id = "prompt_idle"
+state = "idle"
+when = { in = "foot", has = "hint" }
+
+[[rules]]
+id = "nothing_yet"
+default = true

@@ -183,7 +183,7 @@ none follows `--`.
 - It opens in the window as a session another opens does, the session the
   command runs in, if any, as its opener; `--background` keeps it to the
   tree.
-- `--profile <id>` starts it from that profile, and `--agent claude|codex|pi|opencode`
+- `--profile <id>` starts it from that profile, and `--agent claude|codex|pi|opencode|cursor`
   from that agent's default profile; with both, the profile has to start the
   agent. Without either it starts from the default profile.
 - `--model <model>` selects the model for this launch without changing the

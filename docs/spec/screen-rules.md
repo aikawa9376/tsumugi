@@ -14,7 +14,7 @@ source under `crates/agents/rules/`, are a starting point for one of yours.
 A file `screen-rules/<agent>.toml` in Tsumugi's configuration folder —
 `$XDG_CONFIG_HOME/tsumugi/`, or `~/.config/tsumugi/` — on the machine where the
 sessions run takes the place of the whole set Tsumugi carries for `<agent>`:
-`claude`, `codex`, `pi` or `opencode`. It is read again once it changes, is
+`claude`, `codex`, `pi`, `opencode` or `cursor`. It is read again once it changes, is
 made or is removed; nothing needs restarting.
 
 A file that cannot be used is set aside, and the set Tsumugi carries reads the

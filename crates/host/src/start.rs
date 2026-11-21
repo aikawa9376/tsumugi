@@ -11,7 +11,7 @@ use tsumugi_term::Daemon;
 use crate::scratch;
 use crate::starting;
 
-const USAGE: &str = "usage: tsumugi session start [--dir <path>] [--worktree [--base <rev>]] [--name <name>] [--background] [--permissions <default|read_only> | --permissions-file <path>] [--agent <claude|codex|pi|opencode>] [--profile <id>] [--model <model>] [-- <prompt>]";
+const USAGE: &str = "usage: tsumugi session start [--dir <path>] [--worktree [--base <rev>]] [--name <name>] [--background] [--permissions <default|read_only> | --permissions-file <path>] [--agent <claude|codex|pi|opencode|cursor>] [--profile <id>] [--model <model>] [-- <prompt>]";
 
 /// What `tsumugi session start` was asked for.
 #[derive(Debug, Default, PartialEq, Eq)]

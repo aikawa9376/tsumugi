@@ -385,7 +385,9 @@ mod tests {
         assert!(s.contains("| `auto_scale` | boolean | `true` |"), "{s}");
         assert!(s.contains("| `profile` | string | `\"claude\"` |"), "{s}");
         assert!(
-            s.contains("| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode` |  |"),
+            s.contains(
+                "| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode`, `cursor` |  |"
+            ),
             "{s}"
         );
         assert!(

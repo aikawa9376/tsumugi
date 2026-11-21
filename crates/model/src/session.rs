@@ -26,16 +26,24 @@ pub enum Agent {
     Codex,
     Pi,
     OpenCode,
+    Cursor,
 }
 
 impl Agent {
-    pub const ALL: [Self; 4] = [Self::Claude, Self::Codex, Self::Pi, Self::OpenCode];
+    pub const ALL: [Self; 5] = [
+        Self::Claude,
+        Self::Codex,
+        Self::Pi,
+        Self::OpenCode,
+        Self::Cursor,
+    ];
     pub const fn key(self) -> &'static str {
         match self {
             Self::Claude => "claude",
             Self::Codex => "codex",
             Self::Pi => "pi",
             Self::OpenCode => "opencode",
+            Self::Cursor => "cursor",
         }
     }
 
@@ -46,6 +54,7 @@ impl Agent {
             Self::Codex => "Codex",
             Self::Pi => "Pi",
             Self::OpenCode => "OpenCode",
+            Self::Cursor => "Cursor CLI",
         }
     }
 
@@ -67,6 +76,7 @@ impl Agent {
             "codex" => Some(Self::Codex),
             "pi" => Some(Self::Pi),
             "opencode" => Some(Self::OpenCode),
+            "cursor" => Some(Self::Cursor),
             _ => None,
         }
     }

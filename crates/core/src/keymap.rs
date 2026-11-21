@@ -59,7 +59,7 @@ pub enum Context {
 }
 
 impl Context {
-    pub const ALL: [Context; 16] = [
+    pub const ALL: [Context; 17] = [
         Context::Global,
         Context::Tree,
         Context::Agents,
@@ -76,6 +76,7 @@ impl Context {
         Context::Agent(Agent::Codex),
         Context::Agent(Agent::Pi),
         Context::Agent(Agent::OpenCode),
+        Context::Agent(Agent::Cursor),
     ];
 
     pub fn name(self) -> &'static str {
@@ -96,6 +97,7 @@ impl Context {
             Context::Agent(Agent::Codex) => "console.codex",
             Context::Agent(Agent::Pi) => "console.pi",
             Context::Agent(Agent::OpenCode) => "console.opencode",
+            Context::Agent(Agent::Cursor) => "console.cursor",
         }
     }
     /// What the Settings window heads the area's bindings with.
@@ -117,6 +119,7 @@ impl Context {
             Context::Agent(Agent::Codex) => "Console of Codex",
             Context::Agent(Agent::Pi) => "Console of Pi",
             Context::Agent(Agent::OpenCode) => "Console of OpenCode",
+            Context::Agent(Agent::Cursor) => "Console of Cursor CLI",
         }
     }
 

@@ -54,8 +54,6 @@ pub enum Component {
     Links,
     /// The files the session wrote, edited, read or named.
     Files,
-    /// The paths and addresses the user keeps in the project.
-    Pinned,
     /// The current change's description and the files it changes.
     Changes,
     /// The changes that lead to the worktree, as a graph.
@@ -172,7 +170,6 @@ impl Component {
         Component::Images,
         Component::Links,
         Component::Files,
-        Component::Pinned,
         Component::Changes,
         Component::Log,
         Component::Prompts,
@@ -216,7 +213,6 @@ impl Component {
             Component::Images => "images",
             Component::Links => "links",
             Component::Files => "files",
-            Component::Pinned => "pinned",
             Component::Changes => "changes",
             Component::Log => "log",
             Component::Prompts => "prompts",
@@ -261,7 +257,6 @@ impl Component {
             Component::Images => "Images",
             Component::Links => "Links",
             Component::Files => "Files",
-            Component::Pinned => "Pinned",
             Component::Changes => "Changes",
             Component::Log => "Log",
             Component::Prompts => "Prompts",
@@ -314,7 +309,6 @@ impl Component {
             Component::Images => "The images the console drew and the image files seen.",
             Component::Links => "The other web addresses the conversation brought up.",
             Component::Files => "The files the session wrote, edited, read or named.",
-            Component::Pinned => "The paths and addresses the user keeps in the project.",
             Component::Changes => "The current change's description and its files.",
             Component::Log => "The changes that lead to the worktree, as a graph.",
             Component::Prompts => "The prompts sent to the session, newest first.",
@@ -369,7 +363,6 @@ impl Component {
             Component::Images => Icon::Photo,
             Component::Links => Icon::Link,
             Component::Files => Icon::File,
-            Component::Pinned => Icon::Folder,
             Component::Changes => Icon::FileDiff,
             Component::Log => Icon::GitCommit,
             Component::Prompts => Icon::Send,
@@ -411,11 +404,9 @@ impl Component {
             | Component::Messages
             | Component::Subagents
             | Component::Prompts => Kind::Session,
-            Component::Artifacts
-            | Component::Images
-            | Component::Links
-            | Component::Files
-            | Component::Pinned => Kind::Resources,
+            Component::Artifacts | Component::Images | Component::Links | Component::Files => {
+                Kind::Resources
+            }
             Component::Changes
             | Component::Log
             | Component::Github
@@ -587,7 +578,6 @@ impl Component {
                 | Component::Images
                 | Component::Links
                 | Component::Files
-                | Component::Pinned
                 | Component::Prompts
                 | Component::Profiles
         )
@@ -909,13 +899,7 @@ impl Surface {
                 DetailsTab::new(
                     "Resources",
                     Icon::Link,
-                    &[
-                        p(C::Pinned),
-                        p(C::Files),
-                        p(C::Links),
-                        p(C::Artifacts),
-                        p(C::Images),
-                    ],
+                    &[p(C::Files), p(C::Links), p(C::Artifacts), p(C::Images)],
                 ),
             ],
         }

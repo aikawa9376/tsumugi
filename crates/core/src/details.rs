@@ -511,8 +511,6 @@ pub enum Group {
     Images,
     Links,
     Files,
-    /// What the user keeps in the project as its resources.
-    Pinned,
     Timeline,
     /// The files the working copy changes.
     Changed,
@@ -543,7 +541,6 @@ impl Group {
             Group::Images => "Images",
             Group::Links => "Links",
             Group::Files => "Files",
-            Group::Pinned => "Pinned",
             Group::Timeline => "Timeline",
             Group::Changed => "Changes",
             Group::Log => "Log",
@@ -567,8 +564,6 @@ pub enum Entry {
     Process(tsumugi_model::Process),
     Fact(Fact),
     Link(Link),
-    /// A resource the user keeps in the project.
-    Pinned(tsumugi_model::Resource),
     Image(Shot),
     /// A tree of the timeline, heading its tasks.
     Tree(TreeCard),
@@ -602,7 +597,6 @@ impl Entry {
                 Group::Images => "\0images",
                 Group::Links => "\0links",
                 Group::Files => "\0files",
-                Group::Pinned => "\0pinned",
                 Group::Timeline => "\0timeline",
                 Group::Changed => "\0changed",
                 Group::Log => "\0log",
@@ -615,7 +609,6 @@ impl Entry {
             Entry::Process(p) => &p.key,
             Entry::Fact(f) => f.label,
             Entry::Link(l) => l.target.as_str(),
-            Entry::Pinned(r) => r.id.as_str(),
             Entry::Image(s) => s.key.as_str(),
             Entry::Tree(card) => card.key.as_str(),
             Entry::Task(line) => line.id.as_str(),
@@ -632,7 +625,6 @@ impl Entry {
                 Group::Images => "\0more images",
                 Group::Links => "\0more links",
                 Group::Files => "\0more files",
-                Group::Pinned => "\0more pinned",
                 Group::Timeline => "\0more timeline",
                 Group::Changed => "\0more changed",
                 Group::Log => "\0more log",
@@ -652,7 +644,6 @@ impl Entry {
             Entry::Process(_) => Group::Running,
             Entry::Fact(_) => Group::About,
             Entry::Link(l) => Group::of(&l.kind),
-            Entry::Pinned(_) => Group::Pinned,
             Entry::Image(_) => Group::Images,
             Entry::Tree(_) | Entry::Task(_) => Group::Timeline,
             Entry::Changed(_) => Group::Changed,
@@ -1034,13 +1025,6 @@ pub fn said(group: Group, rows: &[Entry]) -> String {
                 }),
             )
         }
-        Group::Pinned => line(
-            plural(n as u64, "resource", "resources"),
-            names(&|e| match e {
-                Entry::Pinned(r) => Some(r.title()),
-                _ => None,
-            }),
-        ),
         Group::Images => plural(n as u64, "image", "images"),
         Group::Prompts => line(
             plural(n as u64, "prompt", "prompts"),

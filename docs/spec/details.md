@@ -22,8 +22,8 @@ no tabs are drawn.
 As Tsumugi comes, a window's panel has the tabs Overview (the session, its
 change, the branch's pull request, the three newest trees of its timeline,
 what runs for it and About), Code (changes and log), Timeline, Conversation (prompts,
-messages, subagents and sessions) and Resources (pinned resources, files,
-links, artifacts and images), over a foot of the conversation's context, the account's limits and
+messages, subagents and sessions) and Resources (files, links, artifacts and
+images), over a foot of the conversation's context, the account's limits and
 the machine's load. An environment's has the tabs Overview (its connection,
 its buttons and what waits for it) and Profiles, over a foot of its
 machine's meters; a pull request's or issue's has the tabs Overview (it and
@@ -77,12 +77,6 @@ window or such a row is described.
   brought up. The images are those the session's console drew and the image
   files it came across that still exist, together, each beside a small
   picture of it.
-- **pinned** — the paths and addresses you keep in the project of what the
-  window shows, as its resources ([resources](resources.md)), in the order
-  they were kept, each by its title and its note or where it points. Opening
-  one opens it as a link or file of the same kind opens, and a path can be
-  revealed or copied like a file. It lists nothing where the project keeps
-  none.
 - **prompts** — what was said to the session in its turns, newest first, for
   Claude Code, Codex, Pi and OpenCode alike, each with how long ago; opening
   one shows it whole, and copying it copies its text. What Tsumugi or the

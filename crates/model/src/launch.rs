@@ -85,6 +85,8 @@ pub enum CustomPermissions {
         permissions: Vec<crate::config::OpenCodeRule>,
         auto: bool,
     },
+    /// Cursor CLI's own mode and sandbox setting.
+    Cursor { mode: String, sandbox: String },
 }
 
 /// Where a launch's model came from.

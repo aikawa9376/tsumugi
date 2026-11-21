@@ -8,7 +8,7 @@ closed, if that still runs.
 
 ## Agents
 
-A session runs Claude Code, Codex CLI, Pi or OpenCode in its own terminal interface. Each
+A session runs Claude Code, Codex CLI, Pi, OpenCode or Cursor CLI in its own terminal interface. Each
 session is given its profile, and with it its agent and login
 ([settings](settings.md#profiles)), while it is still a
 draft, before its first prompt is sent. The empty window and drafts offer
@@ -119,6 +119,12 @@ on you.
 OpenCode sessions list their conversation's links and files in the details
 panel, read through OpenCode itself. A message with a leading `!` runs as a shell
 line in OpenCode.
+
+Cursor CLI sessions are started in Cursor's own terminal interface and shown
+as it stands by its screen alone. Tsumugi can override its model, and a
+read-only session runs in its ask mode and sandbox. Cursor has no account usage
+to show, and its conversations are not listed, resumed from Tsumugi or read
+into the details panel. A Cursor session starts no sessions of its own.
 
 ## Instances
 
