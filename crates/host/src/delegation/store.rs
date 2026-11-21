@@ -13,10 +13,11 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 13;
 
 mod issues;
 mod resources;
+mod saved_commands;
 
 /// The tables as the first schema made them; a new database is made by it
 /// and then by every step in `MIGRATIONS`, so it ends as one carried forward.
@@ -135,6 +136,14 @@ const MIGRATIONS: &[&str] = &[
          label TEXT,
          note TEXT,
          UNIQUE (project, target)
+     );",
+    // The shell commands each project keeps to run again.
+    "CREATE TABLE IF NOT EXISTS saved_commands (
+         seq INTEGER PRIMARY KEY AUTOINCREMENT,
+         id TEXT NOT NULL UNIQUE,
+         project TEXT NOT NULL,
+         label TEXT NOT NULL,
+         command TEXT NOT NULL
      );",
 ];
 

@@ -329,6 +329,13 @@ pub enum Msg {
     PickerDir(PathBuf),
     /// List every directory's conversations, or the directory's again.
     PickerEvery,
+    /// Open the list of the commands the project keeps.
+    CommandsOpen,
+    /// Open `0` in a tab behind the one shown, the keys staying where they
+    /// are.
+    OpenBehind(Tab),
+    /// Text typed into the command being written.
+    CommandsTyped(crate::picker::commands::Typed),
 
     /// Run `action`, which `key` ran or a click when none, where the keys
     /// are now, with what the window knows of its programs then.

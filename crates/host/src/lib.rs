@@ -37,6 +37,7 @@ pub mod programs;
 pub mod remote;
 mod resources;
 pub mod restore;
+mod saved_commands;
 pub mod scratch;
 pub mod serve;
 pub mod service;

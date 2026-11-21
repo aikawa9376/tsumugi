@@ -17,6 +17,7 @@ use crate::tree::Place;
 use crate::tree::{self, TreeView};
 
 mod choices;
+pub mod commands;
 pub mod filer;
 pub mod fuzzy;
 mod go;
@@ -27,6 +28,7 @@ pub mod resume;
 mod tests;
 
 pub use choices::*;
+use commands::Commands;
 use filer::{Filer, Row};
 pub use go::*;
 use interrupted::Waiting;
@@ -53,6 +55,8 @@ pub enum Picking {
     Resume(Resume),
     /// Bring back what the terminal host took with it.
     Interrupted(Waiting),
+    /// Run, write, edit or delete a command the project keeps.
+    Commands(Commands),
 }
 
 impl Picking {
@@ -62,6 +66,7 @@ impl Picking {
             Picking::Go(p) => &p.list,
             Picking::Resume(r) => &r.list,
             Picking::Interrupted(w) => &w.list,
+            Picking::Commands(c) => &c.list,
         }
     }
 
@@ -70,6 +75,7 @@ impl Picking {
             Picking::Go(p) => &mut p.list,
             Picking::Resume(r) => &mut r.list,
             Picking::Interrupted(w) => &mut w.list,
+            Picking::Commands(c) => &mut c.list,
         }
     }
 
@@ -281,6 +287,9 @@ pub(crate) fn every(view: &mut PickerView) -> Vec<Effect> {
 /// A key the picker's query field does not type with, or any key in its
 /// directory tree.
 pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
+    if matches!(state.picker.open, Some(Picking::Commands(_))) {
+        return commands::press(state, key);
+    }
     let ctrl = key.ctrl && !key.alt && !key.meta;
     let browsed = browsed(state);
     let work = state.hosts.work(&browsed);
@@ -353,6 +362,7 @@ fn rows_len(view: &PickerView, hosts: &Hosts, tree: &TreeView) -> usize {
             resume::rows(r, &view.home, hosts.work(&r.environment)).map_or(0, |r| r.len())
         }
         Some(Picking::Interrupted(w)) => interrupted::rows(w, &view.home, hosts).len(),
+        Some(Picking::Commands(c)) => commands::rows(c, hosts).len(),
         None => 0,
     }
 }
@@ -397,6 +407,7 @@ pub(crate) fn choose(state: &mut ViewState, at: usize) -> Vec<Effect> {
             .nth(at),
         Some(Picking::Resume(_)) => return resume::choose(state, at),
         Some(Picking::Interrupted(_)) => return interrupted::choose(state, at),
+        Some(Picking::Commands(_)) => return commands::choose(state, at),
         None => None,
     };
     match chosen {

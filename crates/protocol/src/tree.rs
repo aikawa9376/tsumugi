@@ -35,6 +35,9 @@ pub struct TreeWork {
     /// What each project keeps as its resources.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<tsumugi_model::Resource>,
+    /// What each project keeps as its saved commands.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub saved_commands: Vec<tsumugi_model::SavedCommand>,
     /// The sessions and terminals as last listed; none before the first
     /// list.
     pub listed: Option<Box<Listed>>,
@@ -105,6 +108,9 @@ pub enum TreeChange {
     Resources {
         resources: Vec<tsumugi_model::Resource>,
     },
+    SavedCommands {
+        commands: Vec<tsumugi_model::SavedCommand>,
+    },
     Listed {
         listed: Box<Listed>,
     },
@@ -143,6 +149,7 @@ impl TreeWork {
         match change {
             TreeChange::LocalIssues { issues } => set(&mut self.local_issues, issues),
             TreeChange::Resources { resources } => set(&mut self.resources, resources),
+            TreeChange::SavedCommands { commands } => set(&mut self.saved_commands, commands),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),
             TreeChange::Failing { error } => set(&mut self.failing, error),
             TreeChange::Marks { worktree, marks } => {

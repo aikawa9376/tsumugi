@@ -461,6 +461,7 @@ pub(crate) fn perform(
         Action::SessionPick => step(state, Msg::PickerOpen),
         Action::WorkspaceAdd => step(state, Msg::PickerAddOpen),
         Action::LocalIssues => crate::local_issues::open(state),
+        Action::SavedCommands => step(state, Msg::CommandsOpen),
         // An environment holds no directory to start in: where the session
         // works is picked in that environment.
         Action::SessionNew if on_list && matches!(cur, Some(Item::Environment(_))) => {

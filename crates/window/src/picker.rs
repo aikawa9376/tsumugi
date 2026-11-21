@@ -9,6 +9,7 @@ use tsumugi_core::picker::Picking;
 use crate::bridge::AppCtx;
 use crate::components::{InlineField, KeyHint};
 
+mod commands;
 mod go;
 mod interrupted;
 mod resume;
@@ -33,6 +34,7 @@ pub(crate) fn Picker() -> Element {
                 Picking::Go(picker) => rsx! { go::Go { picker: *picker } },
                 Picking::Resume(list) => rsx! { resume::Resume { list } },
                 Picking::Interrupted(list) => rsx! { interrupted::Interrupted { list } },
+                Picking::Commands(list) => rsx! { commands::Commands { list } },
             }
         }
     }

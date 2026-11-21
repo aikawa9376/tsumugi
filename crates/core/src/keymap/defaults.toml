@@ -137,6 +137,7 @@
 "w" = "session.pick"
 "A" = "workspace.add"
 "!" = "worktrees.toggle"
+"c" = "saved_commands.open"
 "N" = "file.new"
 "K" = "directory.new"
 "}" = "workspace.next"
