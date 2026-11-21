@@ -7,9 +7,11 @@ use std::time::Duration;
 
 use arto_frontend::Libraries;
 use dioxus::prelude::*;
-use tsumugi_core::viewers::{Effect, MarkdownState, ViewerState};
+use tsumugi_core::msg::Msg;
+use tsumugi_core::prompt::github_write::{Act, act};
+use tsumugi_core::viewers::{Effect, MarkdownState, ViewerAction, ViewerState};
 use tsumugi_model::EnvironmentId;
-use tsumugi_model::github::{Listing, Thread};
+use tsumugi_model::github::{Listing, Thread, Write};
 use tsumugi_protocol::{Answer, Ask};
 
 use crate::bridge::AppCtx;
@@ -51,6 +53,8 @@ pub(crate) fn GitHubWindow(
     // loses its scroll, so what is read later reaches it by message.
     let mut frame_doc = use_signal(|| None::<(String, Libraries)>);
     let mut reads = use_signal(|| 0_u64);
+    // The card the keys act on, by its number among the thread's posts.
+    let mut selected = use_signal(|| None::<usize>);
     let last =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(command.peek().map_or(0, |c| c.seq))));
     let slug = {
@@ -136,9 +140,22 @@ pub(crate) fn GitHubWindow(
         }
     });
 
+    // The card selected is drawn so, in the page.
+    let select = {
+        let media_id = media_id.clone();
+        move |card: usize| {
+            selected.set(Some(card));
+            document::eval(&frame_script(
+                &media_id,
+                &serde_json::json!({ "select": card }).to_string(),
+            ));
+        }
+    };
+
     // A link pressed in the page is opened in the browser.
     use_hook({
         let media_id = media_id.clone();
+        let mut select = select.clone();
         move || {
             spawn(async move {
                 let mut heard = document::eval(&format!(
@@ -146,13 +163,45 @@ pub(crate) fn GitHubWindow(
                        const f = document.getElementById({media_id:?});
                        if (!f || e.source !== f.contentWindow) return;
                        const m = e.data;
-                       if (m && m.tsumugiViewerOpen === 1 && typeof m.url === 'string') dioxus.send(m.url);
+                       if (m && m.tsumugiViewerOpen === 1 && typeof m.url === 'string') dioxus.send(JSON.stringify({{ open: m.url }}));
+                       else if (m && typeof m.tsumugiGithub === 'string') dioxus.send(JSON.stringify(m));
                      }});
                      await new Promise(() => {{}});"
                 ));
-                while let Ok(url) = heard.recv::<String>().await {
-                    if url.starts_with("https://") || url.starts_with("http://") {
-                        crate::bridge::open([url]);
+                while let Ok(told) = heard.recv::<String>().await {
+                    let Ok(told) = serde_json::from_str::<serde_json::Value>(&told) else {
+                        continue;
+                    };
+                    if let Some(url) = told["open"].as_str() {
+                        if url.starts_with("https://") || url.starts_with("http://") {
+                            crate::bridge::open([url.to_string()]);
+                        }
+                        continue;
+                    }
+                    match told["tsumugiGithub"].as_str() {
+                        // A card pressed becomes the one the keys act on.
+                        Some("select") => {
+                            if let Some(card) = told["card"].as_u64() {
+                                select(card as usize);
+                            }
+                        }
+                        // A box of a file pressed, which is the explicit act.
+                        Some("viewed") => {
+                            let pull = match read.peek().as_ref() {
+                                Some(Ok(thread)) => thread.pull_id.clone(),
+                                _ => String::new(),
+                            };
+                            if let (Some(path), Some(viewed)) =
+                                (told["path"].as_str(), told["viewed"].as_bool())
+                            {
+                                app.dispatch(Msg::GitHubWrite(Write::Viewed {
+                                    pull,
+                                    path: path.to_string(),
+                                    viewed,
+                                }));
+                            }
+                        }
+                        _ => {}
                     }
                 }
             });
@@ -161,6 +210,7 @@ pub(crate) fn GitHubWindow(
 
     use_effect({
         let media_id = media_id.clone();
+        let mut select = select.clone();
         move || {
             let Some(cmd) = command() else {
                 return;
@@ -169,6 +219,19 @@ pub(crate) fn GitHubWindow(
                 return;
             }
             last.set(cmd.seq);
+            if let ViewerAction::Github(key) = cmd.action {
+                let thread = match read.peek().as_ref() {
+                    Some(Ok(thread)) => thread.clone(),
+                    _ => return,
+                };
+                match act(key, &thread, *selected.peek()) {
+                    Ok(Act::Select(card)) => select(card),
+                    Ok(Act::Compose(aim)) => app.dispatch(Msg::GitHubCompose(aim)),
+                    Ok(Act::Write(write)) => app.dispatch(Msg::GitHubWrite(write)),
+                    Err(why) => app.notice(why),
+                }
+                return;
+            }
             match state.write().apply(cmd.action) {
                 Effect::Scroll(s) => {
                     document::eval(&frame_script(&media_id, &frame_scroll(s)));

@@ -44,7 +44,10 @@ in the tree or the details; it is marked again when they come back.
 A session's window shows the agent's interface; the focused one shows the
 prompt below it as well ([prompt](prompt.md)). A terminal's window takes every
 key but the window commands' prefix and `Mod` keys. A viewer's window has no
-prompt and takes the `viewer` area's keys.
+prompt and takes the `viewer` area's keys; a pull request's or an issue's window
+is the exception, which shows the prompt it is written on GitHub with
+([tree](tree.md#writing-on-a-pull-request-or-an-issue)), and takes the `github`
+area's keys before the `viewer` area's.
 
 ## Reading a conversation
 

@@ -159,6 +159,14 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             .map(|thread| Answer::Thread {
                 thread: Box::new(thread),
             }),
+        Ask::GitHubWrite {
+            repository,
+            listing,
+            number,
+            write,
+        } => tsumugi_vcs::github::write(&repository, listing, number, &write)
+            .await
+            .map(|text| Answer::Told { text }),
         Ask::SaveSettings { text } => save_settings(text),
         Ask::SaveSettingsChecked { text, expected } => save_settings_checked(text, expected),
         Ask::SaveKeys { text } => save_keys(&text),

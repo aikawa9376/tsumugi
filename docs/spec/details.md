@@ -187,7 +187,9 @@ already is not written one. A push Git refuses, a `gh` that is not installed
 or not logged in, and a pull request GitHub refuses fail with their own
 words, create nothing the failure came before, and leave the text in the
 prompt to be sent again. `A` asks the agent of the session shown to draft the
-title and body, which are then copied into the prompt.
+title and body, which are then copied into the prompt. Once it is open, the
+pull request is answered and reviewed from its tab
+([tree](tree.md#writing-on-a-pull-request-or-an-issue)).
 
 These work wherever the work host runs, and name each file by its path as it
 is, whatever characters it holds. When Git refuses, the panel says why.

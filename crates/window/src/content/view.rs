@@ -12,8 +12,8 @@ use tsumugi_core::msg::Msg;
 use tsumugi_core::tree as tree_view;
 
 use super::bodies::{
-    ConversationScreen, DiffWindow, DrawnWindow, FocusedBody, GitHubWindow, UnfocusedBody,
-    ViewerWindow,
+    ConversationScreen, DiffWindow, DrawnWindow, FocusedBody, GitHubWindow, GithubFrame,
+    UnfocusedBody, ViewerWindow,
 };
 use super::tabs_bar::TabsBar;
 use super::window::{ContentWindow, WindowBorder, WindowDrop, window_strip};
@@ -147,17 +147,20 @@ pub(crate) fn ContentPanel(
                     number,
                 } = &shows
                 {
+                    let target = tree_view::github_title(work, &shows)
+                        .unwrap_or_else(|| format!("#{number}"));
                     rsx! {
-                        GitHubWindow {
-                            key: "{id}",
-                            window: id,
-                            environment: environment.clone(),
-                            repository: repository.clone(),
-                            listing: *listing,
-                            number: *number,
-                            theme,
-                            commands: viewer_command,
-                            on_close: move |_| app.dispatch(Msg::Window(Action::WindowQuit)),
+                        GithubFrame { key: "{id}", focused, target,
+                            GitHubWindow {
+                                window: id,
+                                environment: environment.clone(),
+                                repository: repository.clone(),
+                                listing: *listing,
+                                number: *number,
+                                theme,
+                                commands: viewer_command,
+                                on_close: move |_| app.dispatch(Msg::Window(Action::WindowQuit)),
+                            }
                         }
                     }
                 } else if let Tab::Drawn {

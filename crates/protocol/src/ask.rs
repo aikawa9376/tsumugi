@@ -234,6 +234,14 @@ pub enum Ask {
         listing: tsumugi_model::github::Listing,
         number: u64,
     },
+    /// Write `write` on the pull request or the issue `number` of the
+    /// repository at `repository`, as the login `gh` uses there.
+    GitHubWrite {
+        repository: PathBuf,
+        listing: tsumugi_model::github::Listing,
+        number: u64,
+        write: tsumugi_model::github::Write,
+    },
     /// Run the command `tsumugi <args>` as run in `cwd`, with `input` on its
     /// standard input.
     Run {

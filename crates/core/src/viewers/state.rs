@@ -26,6 +26,20 @@ pub enum ViewerAction {
     Review(Review),
     /// Read what is shown again from where it comes from.
     Reload,
+    /// What a pull request's or an issue's tab does with its cards.
+    Github(Github),
+}
+
+/// What a key does in a pull request's or an issue's tab to its cards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Github {
+    Next,
+    Prev,
+    Comment,
+    Reply,
+    Resolve,
+    React,
+    Review,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -68,6 +82,13 @@ impl ViewerAction {
             Action::ReviewResolve => V::Review(Review::Resolve),
             Action::ReviewSend => V::Review(Review::Send),
             Action::ReviewDraft => V::Review(Review::Draft),
+            Action::GithubNext => V::Github(Github::Next),
+            Action::GithubPrev => V::Github(Github::Prev),
+            Action::GithubComment => V::Github(Github::Comment),
+            Action::GithubReply => V::Github(Github::Reply),
+            Action::GithubResolve => V::Github(Github::Resolve),
+            Action::GithubReact => V::Github(Github::React),
+            Action::GithubReview => V::Github(Github::Review),
             Action::WindowQuit => V::Close,
             _ => return None,
         })
@@ -299,7 +320,7 @@ impl ViewerState {
             A::Close => Effect::Close,
             A::Reload => Effect::Reload,
             // Only a diff of lines has comments to act on.
-            A::Review(_) => Effect::Nothing,
+            A::Review(_) | A::Github(_) => Effect::Nothing,
         }
     }
 }

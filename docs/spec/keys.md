@@ -162,6 +162,7 @@ takes the keys away, so they do nothing there.
 | `prompt` | the prompt, before Neovim |
 | `draft` | before the area's bindings while a new session is shown, including the prompt in insert mode |
 | `viewer` | a viewer in the focused window |
+| `github` | a pull request or an issue in the focused window, before `viewer` |
 | `overlay` | what is drawn over the window: a picker, a menu, a question, the keys help, the sheet adding an environment |
 | `confirm` | a question to answer, before `overlay` |
 

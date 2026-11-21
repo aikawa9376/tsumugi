@@ -58,6 +58,7 @@ fn every_other_area_follows_in_the_order_the_file_names_them() {
             Context::Console,
             Context::Prompt,
             Context::Draft,
+            Context::GitHub,
             Context::Lightbox,
             Context::Overlay,
             Context::Confirm,

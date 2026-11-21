@@ -43,6 +43,9 @@ pub enum Context {
     Draft,
     /// A viewer in the focused window.
     Viewer,
+    /// A pull request or an issue in the focused window, before the
+    /// viewer's bindings.
+    GitHub,
     /// The lightbox over the window, while it is open.
     Lightbox,
     /// What else is drawn over the window and holds the keys: a picker, a
@@ -59,7 +62,7 @@ pub enum Context {
 }
 
 impl Context {
-    pub const ALL: [Context; 17] = [
+    pub const ALL: [Context; 18] = [
         Context::Global,
         Context::Tree,
         Context::Agents,
@@ -69,6 +72,7 @@ impl Context {
         Context::Prompt,
         Context::Draft,
         Context::Viewer,
+        Context::GitHub,
         Context::Lightbox,
         Context::Overlay,
         Context::Confirm,
@@ -89,6 +93,7 @@ impl Context {
             Context::Prompt => "prompt",
             Context::Draft => "draft",
             Context::Viewer => "viewer",
+            Context::GitHub => "github",
             Context::Lightbox => "lightbox",
             Context::Overlay => "overlay",
             Context::Confirm => "confirm",
@@ -111,6 +116,7 @@ impl Context {
             Context::Prompt => "Prompt",
             Context::Draft => "New session",
             Context::Viewer => "Viewer",
+            Context::GitHub => "Pull request or issue",
             Context::Lightbox => "Lightbox",
             Context::Overlay => "Over the window",
             Context::Confirm => "Question",
@@ -134,6 +140,9 @@ impl Context {
             Context::Prompt => "The prompt, before Neovim takes the key.",
             Context::Draft => "Before the area's bindings while a new session is shown.",
             Context::Viewer => "A viewer of an image, a movie, an HTML page or a PDF.",
+            Context::GitHub => {
+                "Before the viewer's bindings while a pull request or an issue is shown."
+            }
             Context::Lightbox => {
                 "The lightbox of a session's images, while it is open over the window."
             }

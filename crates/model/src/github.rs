@@ -142,6 +142,10 @@ pub struct Thread {
     /// Of a pull request, the checks on its head, those that failed first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<Check>,
+    /// Of a pull request, GitHub's id for it, which marking its files viewed
+    /// is asked by; empty when it was not read.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pull_id: String,
 }
 
 /// Something written on a pull request or an issue: its body, a comment or
@@ -154,6 +158,84 @@ pub struct Post {
     pub at: String,
     /// Its Markdown, as written.
     pub body: String,
+    /// GitHub's id for it, which a reaction to it is asked by; empty when
+    /// it was not read.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    /// The reactions it has, those most given first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
+    /// The thread of a pull request's lines it is a comment of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread: Option<ReviewThread>,
+}
+
+/// The reactions GitHub offers, in the order it lists them.
+pub const REACTIONS: [&str; 8] = [
+    "+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes",
+];
+
+/// How many gave one reaction to a post.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reaction {
+    /// One of [`REACTIONS`].
+    pub content: String,
+    pub count: u64,
+}
+
+/// A thread of comments on lines of a pull request's files.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewThread {
+    /// GitHub's id for the thread, which replying to it and resolving it
+    /// are asked by.
+    pub id: String,
+    pub resolved: bool,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u64>,
+}
+
+/// What a review of a pull request says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Approve,
+    RequestChanges,
+    Comment,
+}
+
+/// Something written on a pull request or an issue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Write {
+    /// A new comment on the conversation.
+    Comment { body: String },
+    /// A reply in the thread of lines with the id `thread`.
+    Reply { thread: String, body: String },
+    /// Resolve the thread `thread`, or open it again.
+    Resolve { thread: String, resolved: bool },
+    /// Give a reaction to what `subject` is the id of, or take it back.
+    React {
+        subject: String,
+        content: String,
+        add: bool,
+    },
+    /// Review the pull request.
+    Review { verdict: Verdict, body: String },
+    /// Mark a file of the pull request `pull` viewed, or not.
+    Viewed {
+        pull: String,
+        path: String,
+        viewed: bool,
+    },
+}
+
+impl Thread {
+    /// Everything said on it, its body first: what a card is drawn for, and
+    /// what the keys of its tab select among.
+    pub fn posts(&self) -> impl Iterator<Item = &Post> {
+        std::iter::once(&self.body).chain(&self.said)
+    }
 }
 
 /// What a post did.
@@ -205,6 +287,9 @@ pub struct FileChange {
     /// or one too large.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
+    /// The login has marked it viewed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub viewed: bool,
 }
 
 /// A check run on a pull request's head, or a status set on it.

@@ -71,6 +71,9 @@ pub(crate) fn nothing_taken(state: &mut ViewState) -> Vec<Effect> {
 /// in front, usually Yes. The prompt waits for it to be answered, and the
 /// keys go where the answer is given.
 pub(crate) fn taken(state: &mut ViewState, taken: Taken) -> Vec<Effect> {
+    if matches!(taken.tab, Some(Tab::GitHub { .. })) {
+        return super::github_write::taken(state, taken);
+    }
     if let Some(pulling) = state.prompt.pulling.clone() {
         return super::pull_request::taken(state, pulling, taken);
     }
@@ -277,6 +280,7 @@ pub(crate) fn sent(state: &mut ViewState, ok: bool) -> Vec<Effect> {
     if ok {
         state.prompt.committing = None;
         state.prompt.pulling = None;
+        state.prompt.writing = None;
         vec![Effect::PromptSent]
     } else {
         vec![restore(taken)]
