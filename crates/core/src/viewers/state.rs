@@ -2,6 +2,7 @@
 
 use super::kind::FileKind;
 use crate::actions::Action;
+use tsumugi_model::github::Method;
 
 /// What a key does in a viewer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,6 +43,14 @@ pub enum Github {
     Review,
     FixChecks,
     FixThreads,
+    /// Merge the pull request: with the method asked for, or the one its
+    /// repository prefers.
+    Merge(Option<tsumugi_model::github::Method>),
+    AutoMerge,
+    /// Close it, or open it again.
+    Close,
+    /// Mark a draft ready, or an open one a draft.
+    Ready,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -93,6 +102,13 @@ impl ViewerAction {
             Action::GithubReview => V::Github(Github::Review),
             Action::GithubFixChecks => V::Github(Github::FixChecks),
             Action::GithubFixThreads => V::Github(Github::FixThreads),
+            Action::GithubMerge => V::Github(Github::Merge(None)),
+            Action::GithubMergeSquash => V::Github(Github::Merge(Some(Method::Squash))),
+            Action::GithubMergeCommit => V::Github(Github::Merge(Some(Method::Merge))),
+            Action::GithubMergeRebase => V::Github(Github::Merge(Some(Method::Rebase))),
+            Action::GithubAutoMerge => V::Github(Github::AutoMerge),
+            Action::GithubClose => V::Github(Github::Close),
+            Action::GithubReady => V::Github(Github::Ready),
             Action::WindowQuit => V::Close,
             _ => return None,
         })

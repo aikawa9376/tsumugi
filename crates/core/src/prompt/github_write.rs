@@ -4,7 +4,7 @@
 //! text say how to read. Nothing is sent but by sending the prompt, and a
 //! write that fails puts the text back.
 
-use tsumugi_model::github::{Post, REACTIONS, Thread, Verdict, Write};
+use tsumugi_model::github::{Listing, Post, REACTIONS, Thread, Verdict, Write};
 
 use crate::viewers::Github;
 
@@ -170,6 +170,8 @@ pub enum Act {
     Fix(Box<super::fix_request::Fix>),
     /// Write at once.
     Write(Write),
+    /// Write once the user has answered yes to the question about it.
+    Ask(Write),
 }
 
 /// What `key` comes to in the tab of `thread`, with the card numbered
@@ -197,6 +199,9 @@ pub fn act(key: Github, thread: &Thread, selected: Option<usize>) -> Result<Act,
                 quote: post.body.clone(),
             })
         }
+        Github::Merge(_) | Github::AutoMerge | Github::Close | Github::Ready => {
+            Act::Ask(crate::pull_change::plan(key, thread)?)
+        }
         Github::Resolve => {
             let on = card()?
                 .thread
@@ -217,6 +222,23 @@ pub fn act(key: Github, thread: &Thread, selected: Option<usize>) -> Result<Act,
             })
         }
     })
+}
+
+/// Ask whether to do `write` on the pull request the GitHub tab shown shows;
+/// nothing is written until the answer is yes.
+pub(crate) fn ask(state: &mut ViewState, write: Write) -> Vec<Effect> {
+    match subject(state.content.active()) {
+        Some((environment, repository, Listing::Pulls, number)) => {
+            state.overlays.confirm = Some(crate::overlay::confirm::Ask::PullWrite {
+                environment,
+                repository,
+                number,
+                write,
+            });
+            Vec::new()
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// The pull request or the issue a GitHub tab shows, as the write is asked
@@ -791,6 +813,95 @@ mod tests {
                     false
                 )]
             );
+        }
+
+        fn squash() -> Write {
+            Write::Merge {
+                method: tsumugi_model::github::Method::Squash,
+                head: "abc".into(),
+            }
+        }
+
+        #[test]
+        fn a_merge_is_asked_of_the_user_and_writes_nothing_until_the_answer_is_yes() {
+            let mut state = shown(Listing::Pulls);
+            let asked = step(&mut state, Msg::GitHubAsk(squash()));
+            assert_eq!(writes(&asked), []);
+            assert!(matches!(
+                state.overlays.confirm,
+                Some(crate::overlay::confirm::Ask::PullWrite { number: 7, .. })
+            ));
+            let yes = step(&mut state, Msg::ConfirmAnswer(true));
+            assert_eq!(writes(&yes), [(&squash(), false)]);
+            let Some(Effect::GitHubWrite {
+                repository,
+                listing,
+                number,
+                ..
+            }) = yes.first()
+            else {
+                panic!("{yes:?}")
+            };
+            assert_eq!(
+                (repository.to_str(), *listing, *number),
+                (Some("/r"), Listing::Pulls, 7)
+            );
+        }
+
+        #[test]
+        fn a_merge_that_is_answered_no_writes_nothing_at_all() {
+            let mut state = shown(Listing::Pulls);
+            step(&mut state, Msg::GitHubAsk(squash()));
+            let no = step(&mut state, Msg::ConfirmAnswer(false));
+            assert_eq!(writes(&no), []);
+            assert_eq!(state.overlays.confirm, None);
+        }
+
+        #[test]
+        fn closing_is_asked_as_a_loss_and_merging_is_not() {
+            let mut state = shown(Listing::Pulls);
+            step(&mut state, Msg::GitHubAsk(Write::Close { closed: true }));
+            assert!(state.overlays.confirm.as_ref().unwrap().destroys());
+            let (_, title, _, yes) = state.overlays.confirm.as_ref().unwrap().dialog();
+            assert_eq!((title.as_str(), yes), ("Close PR #7?", "Close"));
+            step(&mut state, Msg::ConfirmAnswer(false));
+            step(&mut state, Msg::GitHubAsk(squash()));
+            assert!(!state.overlays.confirm.as_ref().unwrap().destroys());
+        }
+
+        #[test]
+        fn nothing_is_asked_where_the_tab_shown_is_an_issue_or_no_github_tab() {
+            let mut state = shown(Listing::Issues);
+            step(&mut state, Msg::GitHubAsk(squash()));
+            assert_eq!(state.overlays.confirm, None);
+            let mut none = ViewState::default();
+            step(&mut none, Msg::GitHubAsk(squash()));
+            assert_eq!(none.overlays.confirm, None);
+        }
+
+        #[test]
+        fn the_keys_that_merge_close_or_ready_come_to_a_question_or_to_a_reason() {
+            use tsumugi_model::github::{Item, Merge, Pull, Status};
+            let thread = Thread {
+                item: Item {
+                    number: 7,
+                    pull: Some(Pull::default()),
+                    ..Default::default()
+                },
+                state: "open".into(),
+                merge: Some(Merge {
+                    status: Status::Dirty,
+                    conflicting: true,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            assert_eq!(
+                act(Github::Close, &thread, None),
+                Ok(Act::Ask(Write::Close { closed: true }))
+            );
+            let said = act(Github::Merge(None), &thread, None).unwrap_err();
+            assert!(said.contains("conflicts"), "{said}");
         }
 
         #[test]

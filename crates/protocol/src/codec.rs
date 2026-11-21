@@ -447,6 +447,16 @@ mod tests {
                 path: "a.rs".into(),
                 viewed: true,
             },
+            tsumugi_model::github::Write::Merge {
+                method: tsumugi_model::github::Method::Squash,
+                head: "abc".into(),
+            },
+            tsumugi_model::github::Write::Auto {
+                method: tsumugi_model::github::Method::Rebase,
+                enabled: true,
+            },
+            tsumugi_model::github::Write::Close { closed: true },
+            tsumugi_model::github::Write::Draft { draft: false },
         ] {
             round_trips(Request::Ask {
                 asked: 14,

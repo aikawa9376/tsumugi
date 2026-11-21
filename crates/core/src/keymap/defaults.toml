@@ -327,6 +327,13 @@
 "v" = "github.review"
 "f" = "github.fix_checks"
 "F" = "github.fix_threads"
+"M" = "github.merge"
+"m s" = "github.merge_squash"
+"m m" = "github.merge_commit"
+"m r" = "github.merge_rebase"
+"m a" = "github.auto_merge"
+"m c" = "github.close"
+"m d" = "github.ready"
 
 [lightbox]
 "l" = "lightbox.next"

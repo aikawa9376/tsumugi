@@ -189,12 +189,37 @@ starting a new one on a line is not offered here. A file of a pull request
 has a box to mark it viewed.
 
 Nothing is written on GitHub but by sending the prompt, by the key that
-resolves a thread and by that box. A write that fails, because the work
+resolves a thread, by that box and by the keys that finish a pull request
+([below](#merging-and-closing-a-pull-request)). A write that fails, because the work
 machine is offline, `gh` is logged out or GitHub refuses the login, says why
 in GitHub's words and leaves the text in the prompt to be sent again.
 Leaving the prompt gives a prepared write up, and the text stays. A comment
 or review that is posted is never edited or deleted from here, and neither
 is anyone else's.
+
+## Merging and closing a pull request
+
+From a pull request's tab, keys ([keys](reference/keys.md#actions)) merge it,
+turn GitHub's auto-merge on or off, close or reopen it, and mark a draft ready
+or an open one a draft. A merge takes the method the repository prefers, or
+squash, a merge commit or rebase as the key says; only the methods the
+repository allows are taken.
+
+Nothing is merged, closed or changed without a question that names the pull
+request and what will be done, and no answer but yes does it. Where GitHub
+would refuse, the reason is said instead of asking: the pull request is
+merged, closed or a draft, the login may only read or triage, a review is
+required or has asked for changes, there are conflicts, the branch is behind,
+required checks have not passed (named, when they failed), GitHub has not yet
+worked out whether it can merge, or the method is not allowed. Auto-merge is
+offered only while something holds the merge back, and turning it off is
+offered wherever it is on. A merge is made only while the pull request still
+ends at the commit the tab showed. When what merging depends on could not be
+read, nothing is merged until the tab is read again.
+
+The repository's merge queue is not looked for: auto-merge is asked of
+`gh pr merge --auto`, which GitHub applies to a queue itself. The keys act on
+the tab shown; a pull request's row in the tree has none of them.
 
 ## Asking an agent to fix a pull request
 

@@ -149,6 +149,10 @@ pub struct Thread {
     /// is asked by; empty when it was not read.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub pull_id: String,
+    /// Of a pull request, what its merging depends on; none when it could
+    /// not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge: Option<Merge>,
 }
 
 /// Something written on a pull request or an issue: its body, a comment or
@@ -235,6 +239,127 @@ pub enum Write {
         path: String,
         viewed: bool,
     },
+    /// Merge the pull request with `method`, but only while it still ends at
+    /// the commit `head`, the one that was shown.
+    Merge { method: Method, head: String },
+    /// Have GitHub merge the pull request with `method` once what it waits
+    /// on is met, or stop it from doing so.
+    Auto { method: Method, enabled: bool },
+    /// Close the pull request, or open it again.
+    Close { closed: bool },
+    /// Mark the pull request as a draft, or as ready for review.
+    Draft { draft: bool },
+}
+
+/// How GitHub merges a pull request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Method {
+    Merge,
+    Squash,
+    Rebase,
+}
+
+impl Method {
+    /// The order a repository's methods are offered in.
+    pub const ALL: [Method; 3] = [Method::Squash, Method::Merge, Method::Rebase];
+
+    /// What it is called where it is chosen.
+    pub fn label(self) -> &'static str {
+        match self {
+            Method::Merge => "Create merge commit",
+            Method::Squash => "Squash and merge",
+            Method::Rebase => "Rebase and merge",
+        }
+    }
+}
+
+/// The methods a repository allows, and the one it prefers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Methods {
+    pub default: Method,
+    /// In the order of [`Method::ALL`].
+    pub allowed: Vec<Method>,
+}
+
+impl Methods {
+    /// What a repository whose settings were not read is taken to allow:
+    /// every method, preferring squash. GitHub still refuses what it does
+    /// not allow.
+    pub fn any() -> Self {
+        Methods {
+            default: Method::Squash,
+            allowed: Method::ALL.to_vec(),
+        }
+    }
+
+    /// The repository's settings as `gh repo view` tells them. The method it
+    /// prefers is used only while it is allowed, else the first that is;
+    /// none when it allows none.
+    pub fn of(preferred: Option<Method>, merge: bool, squash: bool, rebase: bool) -> Option<Self> {
+        let allowed: Vec<Method> = Method::ALL
+            .into_iter()
+            .filter(|m| match m {
+                Method::Merge => merge,
+                Method::Squash => squash,
+                Method::Rebase => rebase,
+            })
+            .collect();
+        let default = preferred
+            .filter(|p| allowed.contains(p))
+            .or_else(|| allowed.first().copied())?;
+        Some(Methods { default, allowed })
+    }
+}
+
+/// What GitHub calls how far a pull request is from being merged.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    Clean,
+    /// It has conflicts.
+    Dirty,
+    /// What the base branch requires is not met.
+    Blocked,
+    /// The base branch has moved on, and the branch must be updated.
+    Behind,
+    /// A check that is not required failed.
+    Unstable,
+    HasHooks,
+    Draft,
+    #[default]
+    Unknown,
+}
+
+/// What a pull request's merging depends on, as read with it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Merge {
+    pub status: Status,
+    /// GitHub found it cannot be merged without resolving conflicts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub conflicting: bool,
+    /// How its review stands, when one is required.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<Review>,
+    /// The method auto-merge is on with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto: Option<Method>,
+    /// What the repository allows; none when it could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub methods: Option<Methods>,
+    /// What the login may do in the repository, as GitHub names it: `ADMIN`,
+    /// `MAINTAIN`, `WRITE`, `TRIAGE` or `READ`; empty when it was not read.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub permission: String,
+}
+
+impl Merge {
+    /// Whether the login may merge: unread permission is not held against it,
+    /// GitHub being the authority.
+    pub fn may_merge(&self) -> bool {
+        self.permission.is_empty()
+            || ["ADMIN", "MAINTAIN", "WRITE"].contains(&self.permission.as_str())
+    }
 }
 
 impl Thread {
@@ -485,6 +610,38 @@ mod tests {
         });
         assert_eq!(repository.count(Listing::Issues), Some(41));
         assert_eq!(repository.count(Listing::Pulls), Some(0));
+    }
+
+    #[test]
+    fn the_methods_a_repository_allows_are_offered_in_order_with_its_preferred_first_choice() {
+        let methods = Methods::of(Some(Method::Rebase), true, true, true).unwrap();
+        assert_eq!(methods.default, Method::Rebase);
+        assert_eq!(
+            methods.allowed,
+            [Method::Squash, Method::Merge, Method::Rebase]
+        );
+        // A preferred method the repository does not allow gives way to the
+        // first it does.
+        let methods = Methods::of(Some(Method::Merge), false, false, true).unwrap();
+        assert_eq!(methods.default, Method::Rebase);
+        assert_eq!(methods.allowed, [Method::Rebase]);
+        let methods = Methods::of(None, true, true, false).unwrap();
+        assert_eq!(methods.default, Method::Squash);
+        assert_eq!(Methods::of(Some(Method::Squash), false, false, false), None);
+    }
+
+    #[test]
+    fn a_login_that_can_only_read_or_triage_may_not_merge() {
+        let merge = |permission: &str| Merge {
+            permission: permission.into(),
+            ..Default::default()
+        };
+        for ok in ["ADMIN", "MAINTAIN", "WRITE", ""] {
+            assert!(merge(ok).may_merge(), "{ok}");
+        }
+        for no in ["TRIAGE", "READ"] {
+            assert!(!merge(no).may_merge(), "{no}");
+        }
     }
 
     #[test]

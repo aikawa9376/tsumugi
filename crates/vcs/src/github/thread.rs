@@ -5,8 +5,8 @@ use std::path::Path;
 use base64::Engine;
 use serde::Deserialize;
 use tsumugi_model::github::{
-    Check, Did, FileChange, Image, Item, Label, Listing, Outcome, Post, Pull, REACTIONS, Reaction,
-    ReviewThread, Thread,
+    Check, Did, FileChange, Image, Item, Label, Listing, Merge, Method, Methods, Outcome, Post,
+    Pull, REACTIONS, Reaction, Review, ReviewThread, Status, Thread,
 };
 
 use super::{reason, remote};
@@ -129,6 +129,7 @@ async fn graphql(root: &Path, owner: &str, name: &str, number: u64) -> Result<St
 /// viewed, and the comments on lines among the rest said, oldest first.
 fn merge(thread: &mut Thread, texts: &mut Vec<Text>, graph: Graph) {
     thread.pull_id = graph.id;
+    thread.merge = Some(graph.merge);
     for file in &mut thread.files {
         file.viewed = graph.viewed.contains(&file.path);
     }
@@ -335,6 +336,7 @@ fn read(
         files: Vec::new(),
         checks: Vec::new(),
         pull_id: String::new(),
+        merge: None,
     };
     Ok((thread, texts))
 }
@@ -366,10 +368,23 @@ struct Graph {
     /// Each thread as the posts of its comments, with the text each is
     /// drawn from.
     threads: Vec<(Vec<Post>, Vec<Text>)>,
+    /// What its merging depends on: of the pull request, and of the
+    /// repository's settings that `gh repo view` also tells.
+    merge: Merge,
+}
+
+/// A merge method as GraphQL names it.
+fn method_of(name: &str) -> Option<Method> {
+    match name {
+        "MERGE" => Some(Method::Merge),
+        "SQUASH" => Some(Method::Squash),
+        "REBASE" => Some(Method::Rebase),
+        _ => None,
+    }
 }
 
 /// The query for a [`Graph`].
-const GRAPH_QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id files(first:100){nodes{path viewerViewedState}} reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:50){nodes{id body bodyHTML createdAt author{login} reactionGroups{content reactors{totalCount}}}}}}}}}";
+const GRAPH_QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod viewerPermission pullRequest(number:$number){id reviewDecision mergeable mergeStateStatus autoMergeRequest{mergeMethod} files(first:100){nodes{path viewerViewedState}} reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:50){nodes{id body bodyHTML createdAt author{login} reactionGroups{content reactors{totalCount}}}}}}}}}";
 
 /// A [`Graph`] from what the query answered.
 fn graph(out: &str) -> Result<Graph, String> {
@@ -385,6 +400,21 @@ fn graph(out: &str) -> Result<Graph, String> {
     struct Repository {
         #[serde(rename = "pullRequest")]
         pull: Option<PullGraph>,
+        #[serde(rename = "mergeCommitAllowed")]
+        merge_commit: Option<bool>,
+        #[serde(rename = "squashMergeAllowed")]
+        squash: Option<bool>,
+        #[serde(rename = "rebaseMergeAllowed")]
+        rebase: Option<bool>,
+        #[serde(rename = "viewerDefaultMergeMethod")]
+        preferred: Option<String>,
+        #[serde(rename = "viewerPermission")]
+        permission: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Auto {
+        #[serde(rename = "mergeMethod")]
+        method: String,
     }
     #[derive(Deserialize)]
     struct Nodes<T> {
@@ -394,6 +424,13 @@ fn graph(out: &str) -> Result<Graph, String> {
     #[derive(Deserialize)]
     struct PullGraph {
         id: String,
+        #[serde(rename = "reviewDecision")]
+        review: Option<String>,
+        mergeable: Option<String>,
+        #[serde(rename = "mergeStateStatus")]
+        status: Option<String>,
+        #[serde(rename = "autoMergeRequest")]
+        auto: Option<Auto>,
         files: Nodes<File>,
         #[serde(rename = "reviewThreads")]
         threads: Nodes<Threaded>,
@@ -440,11 +477,49 @@ fn graph(out: &str) -> Result<Graph, String> {
     }
     let answer: Answer = serde_json::from_str(out)
         .map_err(|e| format!("GitHub answered what cannot be read: {e}"))?;
-    let pull = answer
+    let repository = answer
         .data
         .and_then(|d| d.repository)
-        .and_then(|r| r.pull)
         .ok_or("GitHub does not know the pull request")?;
+    let methods = match (
+        repository.merge_commit,
+        repository.squash,
+        repository.rebase,
+    ) {
+        (Some(merge), Some(squash), Some(rebase)) => Methods::of(
+            repository.preferred.as_deref().and_then(method_of),
+            merge,
+            squash,
+            rebase,
+        ),
+        _ => None,
+    };
+    let permission = repository.permission.unwrap_or_default();
+    let pull = repository
+        .pull
+        .ok_or("GitHub does not know the pull request")?;
+    let merge = Merge {
+        status: match pull.status.as_deref() {
+            Some("CLEAN") => Status::Clean,
+            Some("DIRTY") => Status::Dirty,
+            Some("BLOCKED") => Status::Blocked,
+            Some("BEHIND") => Status::Behind,
+            Some("UNSTABLE") => Status::Unstable,
+            Some("HAS_HOOKS") => Status::HasHooks,
+            Some("DRAFT") => Status::Draft,
+            _ => Status::Unknown,
+        },
+        conflicting: pull.mergeable.as_deref() == Some("CONFLICTING"),
+        review: match pull.review.as_deref() {
+            Some("REVIEW_REQUIRED") => Some(Review::Required),
+            Some("CHANGES_REQUESTED") => Some(Review::ChangesRequested),
+            Some("APPROVED") => Some(Review::Approved),
+            _ => None,
+        },
+        auto: pull.auto.and_then(|a| method_of(&a.method)),
+        methods,
+        permission,
+    };
     let graphql_name = |content: &str| match content {
         "THUMBS_UP" => Some("+1"),
         "THUMBS_DOWN" => Some("-1"),
@@ -511,6 +586,7 @@ fn graph(out: &str) -> Result<Graph, String> {
             .map(|f| f.path)
             .collect(),
         threads,
+        merge,
     })
 }
 
@@ -996,6 +1072,48 @@ mod tests {
             4,
             "the body, bob's comment and the two on lines"
         );
+    }
+
+    #[test]
+    fn what_merging_depends_on_is_read_with_the_pull_request_and_its_repository() {
+        let answer = r#"{"data": {"repository": {
+            "mergeCommitAllowed": false, "squashMergeAllowed": true,
+            "rebaseMergeAllowed": true, "viewerDefaultMergeMethod": "REBASE",
+            "viewerPermission": "WRITE",
+            "pullRequest": {"id": "PR_1", "files": {"nodes": []},
+                "reviewThreads": {"nodes": []},
+                "reviewDecision": "REVIEW_REQUIRED", "mergeable": "CONFLICTING",
+                "mergeStateStatus": "BEHIND",
+                "autoMergeRequest": {"mergeMethod": "SQUASH"}}}}}"#;
+        let merge = graph(answer).unwrap().merge;
+        assert_eq!(merge.status, Status::Behind);
+        assert!(merge.conflicting);
+        assert_eq!(merge.review, Some(Review::Required));
+        assert_eq!(merge.auto, Some(Method::Squash));
+        assert_eq!(merge.permission, "WRITE");
+        let methods = merge.methods.unwrap();
+        assert_eq!(methods.default, Method::Rebase);
+        assert_eq!(methods.allowed, [Method::Squash, Method::Rebase]);
+    }
+
+    #[test]
+    fn a_pull_request_that_says_nothing_of_its_merging_reads_as_unknown_and_unsettled() {
+        let merge = graph(GRAPH).unwrap().merge;
+        assert_eq!(merge.status, Status::Unknown);
+        assert!(!merge.conflicting);
+        assert_eq!(
+            (merge.review, merge.auto, merge.methods),
+            (None, None, None)
+        );
+        assert_eq!(merge.permission, "");
+    }
+
+    #[test]
+    fn the_merge_state_read_joins_the_thread() {
+        let (mut thread, mut texts) = read(PULL_ISSUE, Some(PULL), "", "").unwrap();
+        assert_eq!(thread.merge, None);
+        merge(&mut thread, &mut texts, graph(GRAPH).unwrap());
+        assert!(thread.merge.is_some());
     }
 
     #[test]

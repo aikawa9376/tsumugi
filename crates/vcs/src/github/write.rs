@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use tsumugi_model::github::{Listing, REACTIONS, Verdict, Write};
+use tsumugi_model::github::{Listing, Method, REACTIONS, Verdict, Write};
 
 use super::remote;
 use crate::{Error, run};
@@ -82,6 +82,22 @@ fn done(listing: Listing, number: u64, write: &Write) -> String {
             viewed: false,
             ..
         } => format!("Marked {path} not viewed"),
+        Write::Merge { method, .. } => format!(
+            "Merged {what} #{number} ({})",
+            method.label().to_lowercase()
+        ),
+        Write::Auto {
+            method,
+            enabled: true,
+        } => format!(
+            "Auto-merge on for {what} #{number} ({})",
+            method.label().to_lowercase()
+        ),
+        Write::Auto { enabled: false, .. } => format!("Auto-merge off for {what} #{number}"),
+        Write::Close { closed: true } => format!("Closed {what} #{number}"),
+        Write::Close { closed: false } => format!("Reopened {what} #{number}"),
+        Write::Draft { draft: true } => format!("Made {what} #{number} a draft"),
+        Write::Draft { draft: false } => format!("Marked {what} #{number} ready for review"),
     }
 }
 
@@ -220,7 +236,59 @@ fn args(slug: &str, listing: Listing, number: u64, write: &Write) -> Result<Vec<
                 &[("pull", pull), ("path", path)],
             )
         }
+        Write::Merge { .. } | Write::Auto { .. } | Write::Close { .. } | Write::Draft { .. } => {
+            if listing != Listing::Pulls {
+                return Err("Only a pull request is merged, closed or made ready".into());
+            }
+            pull_command(slug, number, write)
+        }
     })
+}
+
+/// The `gh pr` call that merges, closes or marks the pull request `number`.
+/// `--repo` names the repository, so what `gh` finds in the directory does
+/// not matter, and every method is a flag of its own, so `gh` never asks.
+fn pull_command(slug: &str, number: u64, write: &Write) -> Vec<String> {
+    let flag = |method: Method| {
+        match method {
+            Method::Merge => "--merge",
+            Method::Squash => "--squash",
+            Method::Rebase => "--rebase",
+        }
+        .to_string()
+    };
+    let mut args: Vec<String> = vec!["pr".into()];
+    match write {
+        Write::Merge { method, head } => {
+            args.extend(["merge".into(), number.to_string(), flag(*method)]);
+            // The merge is fenced to what was shown: GitHub refuses it when
+            // the head moved on.
+            if !head.is_empty() {
+                args.push(format!("--match-head-commit={head}"));
+            }
+        }
+        Write::Auto {
+            method,
+            enabled: true,
+        } => args.extend([
+            "merge".into(),
+            number.to_string(),
+            "--auto".into(),
+            flag(*method),
+        ]),
+        Write::Auto { enabled: false, .. } => {
+            args.extend(["merge".into(), number.to_string(), "--disable-auto".into()])
+        }
+        Write::Close { closed: true } => args.extend(["close".into(), number.to_string()]),
+        Write::Close { closed: false } => args.extend(["reopen".into(), number.to_string()]),
+        Write::Draft { draft: false } => args.extend(["ready".into(), number.to_string()]),
+        Write::Draft { draft: true } => {
+            args.extend(["ready".into(), number.to_string(), "--undo".into()]);
+        }
+        _ => unreachable!("only the writes of a pull request's state come here"),
+    }
+    args.push(format!("--repo={slug}"));
+    args
 }
 
 /// Why `gh` refused, from its own words, with what a refusal for the login
@@ -423,6 +491,101 @@ mod tests {
             viewed: true,
         });
         assert!(unread.is_err());
+    }
+
+    #[test]
+    fn a_merge_names_its_method_and_is_fenced_to_the_head_that_was_shown() {
+        let merge = |method, head: &str| {
+            pulls(&Write::Merge {
+                method,
+                head: head.into(),
+            })
+            .unwrap()
+        };
+        assert_eq!(
+            merge(Method::Squash, "abc"),
+            [
+                "pr",
+                "merge",
+                "7",
+                "--squash",
+                "--match-head-commit=abc",
+                "--repo=o/r"
+            ]
+        );
+        assert_eq!(merge(Method::Merge, "")[3], "--merge");
+        assert!(
+            !merge(Method::Rebase, "")
+                .iter()
+                .any(|a| a.contains("match-head"))
+        );
+        assert_eq!(merge(Method::Rebase, "")[3], "--rebase");
+    }
+
+    #[test]
+    fn auto_merge_is_turned_on_with_a_method_and_off_without_one() {
+        let on = pulls(&Write::Auto {
+            method: Method::Squash,
+            enabled: true,
+        })
+        .unwrap();
+        assert_eq!(on, ["pr", "merge", "7", "--auto", "--squash", "--repo=o/r"]);
+        let off = pulls(&Write::Auto {
+            method: Method::Squash,
+            enabled: false,
+        })
+        .unwrap();
+        assert_eq!(off, ["pr", "merge", "7", "--disable-auto", "--repo=o/r"]);
+    }
+
+    #[test]
+    fn a_pull_request_is_closed_reopened_and_marked_ready_or_draft() {
+        let one = |write| pulls(&write).unwrap();
+        assert_eq!(one(Write::Close { closed: true })[..2], ["pr", "close"]);
+        assert_eq!(one(Write::Close { closed: false })[..2], ["pr", "reopen"]);
+        assert_eq!(
+            one(Write::Draft { draft: false }),
+            ["pr", "ready", "7", "--repo=o/r"]
+        );
+        assert_eq!(
+            one(Write::Draft { draft: true }),
+            ["pr", "ready", "7", "--undo", "--repo=o/r"]
+        );
+    }
+
+    #[test]
+    fn an_issue_is_neither_merged_nor_closed_as_a_pull_request() {
+        let error = args(
+            "o/r",
+            Listing::Issues,
+            7,
+            &Write::Merge {
+                method: Method::Squash,
+                head: String::new(),
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("pull request"), "{error}");
+    }
+
+    #[test]
+    fn what_was_done_to_a_pull_request_is_said_in_words() {
+        let said = |write| done(Listing::Pulls, 7, &write);
+        assert_eq!(
+            said(Write::Merge {
+                method: Method::Squash,
+                head: String::new()
+            }),
+            "Merged pull request #7 (squash and merge)"
+        );
+        assert_eq!(
+            said(Write::Close { closed: false }),
+            "Reopened pull request #7"
+        );
+        assert_eq!(
+            said(Write::Draft { draft: false }),
+            "Marked pull request #7 ready for review"
+        );
     }
 
     #[test]

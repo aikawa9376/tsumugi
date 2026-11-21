@@ -523,6 +523,19 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
             op: tsumugi_protocol::GitOp::Abort,
             prompt: false,
         }],
+        Ask::PullWrite {
+            environment,
+            repository,
+            number,
+            write,
+        } => vec![Effect::GitHubWrite {
+            environment,
+            repository,
+            listing: tsumugi_model::github::Listing::Pulls,
+            number,
+            write,
+            prompt: false,
+        }],
         Ask::AmendCommit {
             environment,
             worktree,

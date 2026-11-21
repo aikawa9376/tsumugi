@@ -124,6 +124,13 @@ pub(crate) fn perform(
         | Action::GithubReview
         | Action::GithubFixChecks
         | Action::GithubFixThreads
+        | Action::GithubMerge
+        | Action::GithubMergeSquash
+        | Action::GithubMergeCommit
+        | Action::GithubMergeRebase
+        | Action::GithubAutoMerge
+        | Action::GithubClose
+        | Action::GithubReady
         | Action::OverlayClose
         | Action::OverlayDown
         | Action::OverlayUp
