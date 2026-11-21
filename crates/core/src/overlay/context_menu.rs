@@ -56,6 +56,7 @@ pub fn entries(
         Action::SessionNew,
         Action::ShellOpen,
         Action::NeovimOpen,
+        Action::BrowserOpen,
         Action::LocalIssues,
     ]
     .map(offer);
@@ -129,6 +130,7 @@ pub fn entries(
             .chain(here)
             .chain(makes)
             .collect(),
+        Target::Row(Item::Browser(..)) => opens.into_iter().chain(here).chain([close]).collect(),
         Target::Row(Item::Heading(_, _, Heading::Files)) => {
             [fold].into_iter().chain(here).chain(makes).collect()
         }
@@ -170,7 +172,11 @@ pub fn entries(
         Target::Tab(Tab::Terminal(_, _)) => vec![close_tab, stop_terminal],
         Target::Tab(Tab::Draft { .. }) => Vec::new(),
         Target::Tab(
-            Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. } | Tab::Diff { .. },
+            Tab::Browser { .. }
+            | Tab::Viewer(_, _)
+            | Tab::Drawn { .. }
+            | Tab::GitHub { .. }
+            | Tab::Diff { .. },
         ) => vec![close_tab],
         Target::Link { file, .. } => [Action::CursorGo, Action::CursorCopy]
             .map(offer)

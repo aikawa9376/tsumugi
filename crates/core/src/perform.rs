@@ -470,6 +470,7 @@ pub(crate) fn perform(
         | Action::WorkspacePrev
         | Action::SessionNew
         | Action::ShellOpen
+        | Action::BrowserOpen
         | Action::NeovimOpen => step(state, Msg::Window(action)),
         Action::TerminalStop => match thing {
             Some(Tab::Terminal(environment, id)) => vec![Effect::EndShell { environment, id }],

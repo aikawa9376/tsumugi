@@ -1,6 +1,6 @@
 //! VTE is optional at runtime; GTK objects stay on the desktop's UI thread.
+use crate::native_layer::Layer;
 use crate::shell::Ui;
-use dioxus::desktop::wry::WebViewExtUnix;
 use dioxus::prelude::*;
 use gtk::glib::translate::{FromGlibPtrNone, ToGlibPtr};
 use gtk::prelude::*;
@@ -115,45 +115,6 @@ fn api() -> Result<Rc<Api>, String> {
 }
 pub(crate) fn available() -> Result<(), String> {
     api().map(|_| ())
-}
-
-pub(super) struct Layer {
-    _overlay: gtk::Overlay,
-    pub(super) fixed: gtk::Fixed,
-}
-impl Layer {
-    fn install(desktop: &dioxus::desktop::DesktopContext) -> Result<Self, String> {
-        let webview = desktop.webview.webview();
-        Self::wrap(&webview)
-    }
-    pub(super) fn wrap(webview: &impl IsA<gtk::Widget>) -> Result<Self, String> {
-        let parent = webview
-            .parent()
-            .and_then(|p| p.downcast::<gtk::Container>().ok())
-            .ok_or("The desktop webview has no GTK container")?;
-        let overlay = gtk::Overlay::new();
-        overlay.set_hexpand(true);
-        overlay.set_vexpand(true);
-        let fixed = gtk::Fixed::new();
-        fixed.set_hexpand(true);
-        fixed.set_vexpand(true);
-        parent.remove(webview);
-        overlay.add(webview);
-        if let Some(parent) = parent.downcast_ref::<gtk::Box>() {
-            parent.pack_start(&overlay, true, true, 0);
-        } else {
-            parent.add(&overlay);
-        }
-        overlay.add_overlay(&fixed);
-        // The host owns input modes and the page owns shortcuts/IME/focus.
-        // All pointer events pass through to the existing console hit cells.
-        overlay.set_overlay_pass_through(&fixed, true);
-        overlay.show_all();
-        Ok(Self {
-            _overlay: overlay,
-            fixed,
-        })
-    }
 }
 
 struct Native {
@@ -618,7 +579,7 @@ mod tests {
         parent.pack_start(&page, true, true, 0);
         window.add(&parent);
         let layer = Rc::new(Layer::wrap(&page).unwrap());
-        assert!(layer._overlay.is_overlay_pass_through(&layer.fixed));
+        assert!(layer.passes_input());
         let api = api().unwrap();
         crate::bundled_font::native_map().unwrap();
         let native = Native::new(api.clone(), layer.clone());

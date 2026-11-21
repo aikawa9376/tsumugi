@@ -62,7 +62,8 @@ pub fn commands_dir(tree: &Tree, tab: Option<&Tab>, place: Option<&Place>) -> Op
             | Tab::Viewer(_, _)
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }
-            | Tab::Diff { .. },
+            | Tab::Diff { .. }
+            | Tab::Browser { .. },
         ) => None,
         None => place.map(|p| p.worktree.clone()),
     }

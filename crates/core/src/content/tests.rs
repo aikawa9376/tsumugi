@@ -1,5 +1,6 @@
 use crate::testing::here;
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use tsumugi_model::{TerminalProgram, Wait};
 use tsumugi_protocol::Request;
@@ -23,6 +24,72 @@ fn place(worktree: &str) -> Option<Place> {
 
 fn active(run: &Scenario) -> Option<Tab> {
     run.state().content.active().cloned()
+}
+
+#[test]
+fn a_browser_opens_for_the_selected_environment_without_starting_a_program() {
+    let run = Scenario::new()
+        .send(Msg::TreeSelect(Some(Item::Environment(there()))))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::Window(Action::BrowserOpen));
+    let tab = active(&run).unwrap();
+    assert!(matches!(&tab, Tab::Browser { environment, .. } if *environment == there()));
+    assert!(!shows_prompt(Some(&tab)));
+    assert!(
+        run.last_effects()
+            .iter()
+            .all(|e| !matches!(e, Effect::StartTerminal(_)))
+    );
+}
+
+#[test]
+fn opening_a_browser_again_opens_another_page_listed_under_the_worktree_it_was_opened_in() {
+    let run = listed_with([session("a").cwd("/r")])
+        .send(show(session_tab("a")))
+        .send(Msg::Focus(Area::Console))
+        .send(Msg::Window(Action::BrowserOpen))
+        .send(Msg::Window(Action::BrowserOpen));
+    let pages = run.state().content.pages();
+    assert_eq!(pages.len(), 2);
+    assert_ne!(pages[0].1.id, pages[1].1.id);
+    assert!(
+        pages
+            .iter()
+            .all(|(e, p)| *e == here() && p.worktree == Path::new("/r"))
+    );
+    let rows = run.state().tree.rows();
+    let browsers = rows
+        .iter()
+        .filter(|row| matches!(row, Item::Browser(..)))
+        .count();
+    assert!(browsers >= 2, "{rows:?}");
+}
+
+#[test]
+fn browser_pages_close_independently() {
+    let first = Tab::browser(here(), "/r");
+    let second = Tab::browser(here(), "/r");
+    let run = Scenario::new()
+        .send(show(first.clone()))
+        .send(show(second))
+        .send(Msg::Focus(Area::Console));
+    assert_eq!(shown(&run).len(), 2);
+    let run = run.send(Msg::Window(Action::TabClose));
+    assert_eq!(shown(&run), [first]);
+}
+
+#[test]
+fn a_browser_opens_new_work_in_the_worktree_it_hangs_under() {
+    let run = listed_with([session("a").cwd("/r")])
+        .send(show(Tab::browser(here(), "/r")))
+        .send(Msg::Focus(Area::Console));
+    assert!(run.state().content.place.is_none());
+    let run = run.send(Msg::Window(Action::ShellOpen));
+    assert!(
+        run.last_effects().iter().any(
+            |e| matches!(e, Effect::StartTerminal(ask) if ask.place == Place::at(&here(), "/r"))
+        )
+    );
 }
 
 fn shown(run: &Scenario) -> Vec<Tab> {

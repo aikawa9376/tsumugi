@@ -33,6 +33,12 @@ pub enum Op {
     Close(Option<Tab>),
     /// Lines for a tab; answered with whether the prompt took them.
     Add(Option<Tab>, Vec<String>, Option<oneshot::Sender<bool>>),
+    Context(
+        Option<Tab>,
+        Vec<String>,
+        Vec<PathBuf>,
+        oneshot::Sender<bool>,
+    ),
     /// The shown tab's text, with the tab it was written for, leaving the
     /// prompt empty.
     Take(oneshot::Sender<Taken>),
@@ -73,6 +79,29 @@ where
         drafts.put_back(text);
         *opened = false;
     }
+}
+
+async fn add_context<F, Fut>(
+    drafts: &mut Drafts,
+    images: &mut tsumugi_core::prompt::images::Attachments,
+    tab: Option<Tab>,
+    lines: Vec<String>,
+    paths: Vec<PathBuf>,
+    mut put: F,
+) -> bool
+where
+    F: FnMut(String) -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let took = if drafts.add(&tab, &lines) {
+        put(lines.join("\n")).await
+    } else {
+        true
+    };
+    if took {
+        images.add_to(tab, paths);
+    }
+    took
 }
 
 async fn restore_before_op<F, Fut>(
@@ -283,6 +312,11 @@ pub(crate) fn keeper(nvim: Signal<Option<Arc<Embedded>>>, app: AppCtx) -> Prompt
                             let _ = reply.send(took);
                         }
                     }
+                    Op::Context(tab, lines, paths, reply) => {
+                        let took =
+                            add_context(&mut drafts, &mut images, tab, lines, paths, put).await;
+                        let _ = reply.send(took);
+                    }
                     Op::Attach(path) => images.add(vec![path]),
                     Op::RemoveImage(path) => images.remove(&path),
                     Op::RestoreImages(tab, paths) => images.restore(tab, paths),
@@ -404,6 +438,63 @@ pub(crate) fn keeper(nvim: Signal<Option<Arc<Embedded>>>, app: AppCtx) -> Prompt
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn browser_feedback_appends_to_its_target_with_images_without_replacing_a_draft() {
+        use tsumugi_core::prompt::images::Attachments;
+        let tab = Some(Tab::Session(EnvironmentId::new("a"), "s".into()));
+        let other = Some(Tab::Session(EnvironmentId::new("a"), "other".into()));
+        let mut drafts = Drafts::default();
+        drafts.show(tab.clone(), String::new());
+        drafts.show(other, "Existing instruction".into());
+        let mut images = Attachments::default();
+        images.show(tab.clone());
+        images.add(vec!["old.png".into()]);
+        images.show(None);
+        assert!(
+            add_context(
+                &mut drafts,
+                &mut images,
+                tab.clone(),
+                vec!["UI feedback".into()],
+                vec!["new.png".into()],
+                |_| std::future::ready(false)
+            )
+            .await
+        );
+        let kept = drafts.saved("");
+        assert!(
+            kept.values()
+                .any(|text| text == "Existing instruction\nUI feedback")
+        );
+        images.show(tab);
+        assert_eq!(
+            images.current(),
+            &[
+                std::path::PathBuf::from("old.png"),
+                std::path::PathBuf::from("new.png")
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_prompt_insert_does_not_add_context_images() {
+        use tsumugi_core::prompt::images::Attachments;
+        let mut drafts = Drafts::default();
+        let mut images = Attachments::default();
+        images.add(vec!["old.png".into()]);
+        assert!(
+            !add_context(
+                &mut drafts,
+                &mut images,
+                None,
+                vec!["UI feedback".into()],
+                vec!["new.png".into()],
+                |_| std::future::ready(false)
+            )
+            .await
+        );
+        assert_eq!(images.current(), &[std::path::PathBuf::from("old.png")]);
+    }
     use std::collections::BTreeMap;
 
     use super::*;

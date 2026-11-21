@@ -22,7 +22,7 @@ use tsumugi_protocol::{Seq, WorkSnapshot};
 
 use crate::chrome::panels::layout::Layout;
 use crate::effect::Effect;
-use crate::tree::Place;
+use crate::tree::{Place, nav};
 
 pub use conversation::conversation_read;
 pub(crate) use conversation::show_conversation;
@@ -594,6 +594,35 @@ pub(crate) fn choose_options(
     Vec::new()
 }
 
+impl ContentView {
+    /// The browser pages open in any window, as the tree lists them.
+    pub fn pages(&self) -> Vec<(EnvironmentId, nav::Page)> {
+        let mut out: Vec<_> = self
+            .windows
+            .tabs()
+            .iter()
+            .flat_map(|t| t.windows())
+            .filter_map(|w| match &w.shows {
+                Tab::Browser {
+                    environment,
+                    worktree,
+                    id,
+                } => Some((
+                    environment.clone(),
+                    nav::Page {
+                        worktree: worktree.clone(),
+                        id: *id,
+                    },
+                )),
+                _ => None,
+            })
+            .collect();
+        out.sort_by_key(|(_, page)| page.id);
+        out.dedup();
+        out
+    }
+}
+
 /// The worktree in the middle follows what the focused window shows, however
 /// the focus came to it.
 pub(crate) fn follow_place(view: &mut ContentView, work: Option<&WorkSnapshot>) {
@@ -605,6 +634,10 @@ pub(crate) fn follow_place(view: &mut ContentView, work: Option<&WorkSnapshot>) 
     let Some(now) = now else {
         return;
     };
+    if matches!(now, Tab::Browser { .. }) {
+        view.place = None;
+        return;
+    }
     let at = crate::tree::place_of_tab(
         crate::tree::listed(work),
         crate::tree::terminals(work),

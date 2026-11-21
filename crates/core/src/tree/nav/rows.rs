@@ -8,6 +8,15 @@ use tsumugi_model::github::{Listing, Repository};
 use tsumugi_model::{EnvironmentId, TerminalProgram, TerminalSession, Tree, WorktreeNode};
 
 use super::{Folds, Heading, Item};
+use crate::content::BrowserId;
+
+/// A page of the browser of an environment, as the tree lists it: under the
+/// Browser heading of the worktree it was opened in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Page {
+    pub worktree: PathBuf,
+    pub id: BrowserId,
+}
 
 /// Every item the tree of `environment` shows, top to bottom. Children of a
 /// folded node are left out, `read` lists a directory's entries once it is
@@ -21,7 +30,7 @@ pub fn items(
     read: &dyn Fn(&Path) -> Vec<Entry>,
     github: &BTreeMap<PathBuf, Repository>,
 ) -> Vec<Item> {
-    items_with_issues(environment, tree, folds, read, github, &[])
+    items_with_issues(environment, tree, folds, read, github, &[], &[])
 }
 
 /// The same tree with local issues alongside the repository's GitHub issues.
@@ -32,6 +41,7 @@ pub fn items_with_issues(
     read: &dyn Fn(&Path) -> Vec<Entry>,
     github: &BTreeMap<PathBuf, Repository>,
     issues: &[tsumugi_model::LocalIssue],
+    pages: &[Page],
 ) -> Vec<Item> {
     let mut out = Vec::new();
     for ws in &tree.workspaces {
@@ -44,14 +54,19 @@ pub fn items_with_issues(
         }
         if ws.flat() {
             for w in &ws.worktrees {
-                out.extend(headed(environment, w, folds, read));
+                out.extend(headed(environment, w, folds, read, pages));
             }
             if ws.git || !local.is_empty() {
                 out.extend(on_github(environment, &ws.root, github, folds, &local));
             }
             continue;
         }
-        for heading in [Heading::Sessions, Heading::Terminals, Heading::Neovim] {
+        for heading in [
+            Heading::Sessions,
+            Heading::Terminals,
+            Heading::Neovim,
+            Heading::Browser,
+        ] {
             let hi = Item::Across(environment.clone(), ws.root.clone(), heading);
             let open = folds.is_open(&hi);
             out.push(hi);
@@ -59,7 +74,7 @@ pub fn items_with_issues(
                 out.extend(
                     ws.worktrees
                         .iter()
-                        .flat_map(|w| under(environment, w, heading))
+                        .flat_map(|w| under(environment, w, heading, pages))
                         .map(|row| Item::Gathered(Box::new(row))),
                 );
             }
@@ -70,7 +85,7 @@ pub fn items_with_issues(
             let t_open = folds.is_open(&ti);
             out.push(ti);
             if t_open {
-                out.extend(headed(environment, w, folds, read));
+                out.extend(headed(environment, w, folds, read, pages));
             }
         }
     }
@@ -146,6 +161,7 @@ fn headed(
     w: &WorktreeNode,
     folds: &Folds,
     read: &dyn Fn(&Path) -> Vec<Entry>,
+    pages: &[Page],
 ) -> Vec<Item> {
     let mut out = Vec::new();
     for heading in Heading::ALL {
@@ -160,7 +176,7 @@ fn headed(
                 let root = &w.worktree.path;
                 files_in(environment, root, root, folds, read, &mut out);
             }
-            _ => out.extend(under(environment, w, heading)),
+            _ => out.extend(under(environment, w, heading, pages)),
         }
     }
     out
@@ -201,9 +217,14 @@ pub(super) fn listed_under(terminal: &TerminalSession) -> Option<Heading> {
     }
 }
 
-/// What runs in a worktree of `environment`, under one of its headings;
-/// Files holds no such rows.
-pub fn under(environment: &EnvironmentId, w: &WorktreeNode, heading: Heading) -> Vec<Item> {
+/// What runs in a worktree of `environment`, under one of its headings, and
+/// the `pages` opened in it; Files holds no such rows.
+pub fn under(
+    environment: &EnvironmentId,
+    w: &WorktreeNode,
+    heading: Heading,
+    pages: &[Page],
+) -> Vec<Item> {
     match heading {
         Heading::Sessions => w
             .sessions
@@ -215,6 +236,11 @@ pub fn under(environment: &EnvironmentId, w: &WorktreeNode, heading: Heading) ->
             .iter()
             .filter(|t| listed_under(t) == Some(heading))
             .map(|t| Item::Terminal(environment.clone(), t.id))
+            .collect(),
+        Heading::Browser => pages
+            .iter()
+            .filter(|p| p.worktree == w.worktree.path)
+            .map(|p| Item::Browser(environment.clone(), p.worktree.clone(), p.id))
             .collect(),
         Heading::Files => Vec::new(),
     }
@@ -239,6 +265,7 @@ pub fn depth(tree: &Tree, item: &Item) -> usize {
         Item::Terminal(_, id) => tree
             .terminal(*id)
             .map_or(0, |(_, w, _)| heading_at(&w.worktree.path) + 1),
+        Item::Browser(_, worktree, _) => heading_at(worktree) + 1,
         Item::File { worktree, path, .. } => {
             let below = path
                 .strip_prefix(worktree)

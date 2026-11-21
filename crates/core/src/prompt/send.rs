@@ -227,7 +227,8 @@ fn go(state: &mut ViewState, taken: Taken) -> Vec<Effect> {
             | Tab::Viewer(_, _)
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }
-            | Tab::Diff { .. },
+            | Tab::Diff { .. }
+            | Tab::Browser { .. },
         )
         | None => {
             state.prompt.sending = None;

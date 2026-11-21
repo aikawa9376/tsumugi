@@ -55,6 +55,7 @@ fn a_menu_draws_going_starting_and_ending_apart() {
                 Action::SessionNew,
                 Action::ShellOpen,
                 Action::NeovimOpen,
+                Action::BrowserOpen,
                 Action::LocalIssues
             ],
             vec![Action::CursorClose, Action::SessionStop],
@@ -100,6 +101,7 @@ fn a_session_tsumugi_runs_can_be_opened_renamed_started_beside_and_ended() {
                 Action::SessionNew,
                 Action::ShellOpen,
                 Action::NeovimOpen,
+                Action::BrowserOpen,
                 Action::LocalIssues,
                 Action::CursorClose,
                 Action::SessionStop,
@@ -115,6 +117,7 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
         Action::SessionNew,
         Action::ShellOpen,
         Action::NeovimOpen,
+        Action::BrowserOpen,
         Action::LocalIssues,
     ];
     assert_eq!(
@@ -159,6 +162,7 @@ fn a_terminal_row_opens_it_starts_beside_it_and_offers_an_explicit_stop() {
                 Action::SessionNew,
                 Action::ShellOpen,
                 Action::NeovimOpen,
+                Action::BrowserOpen,
                 Action::LocalIssues,
                 Action::CursorClose,
                 Action::TerminalStop,
@@ -185,6 +189,7 @@ fn a_file_opens_where_its_key_says_copies_its_path_makes_beside_it_and_closes_it
                 Action::SessionNew,
                 Action::ShellOpen,
                 Action::NeovimOpen,
+                Action::BrowserOpen,
                 Action::LocalIssues,
                 Action::FileNew,
                 Action::DirectoryNew,
@@ -254,10 +259,11 @@ fn heading_groups(environment: EnvironmentId, reach: Reach) -> Vec<Vec<Action>> 
     .collect()
 }
 
-const STARTS: [Action; 5] = [
+const STARTS: [Action; 6] = [
     Action::SessionNew,
     Action::ShellOpen,
     Action::NeovimOpen,
+    Action::BrowserOpen,
     Action::LocalIssues,
     Action::WorkspaceAdd,
 ];

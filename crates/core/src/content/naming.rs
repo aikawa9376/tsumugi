@@ -18,6 +18,7 @@ pub fn file_name(path: &Path) -> String {
 /// What `thing` is called in a tab and on its windows.
 pub fn thing_name(tree: &Tree, terminals: &[TerminalSession], thing: &Tab) -> String {
     match thing {
+        Tab::Browser { .. } => "Browser".into(),
         Tab::Session(_, id) => nav::find(tree, id)
             .map(|(_, s)| s.name.clone())
             .unwrap_or_else(|| id.clone()),

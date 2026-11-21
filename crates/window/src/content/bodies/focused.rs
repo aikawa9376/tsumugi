@@ -108,6 +108,9 @@ pub(crate) fn FocusedBody(
         Vec::new()
     };
     let target = match &active_tab {
+        Some(tab @ Tab::Browser { .. }) => {
+            crate::browser::title(tab).unwrap_or_else(|| "Browser".into())
+        }
         Some(Tab::Session(_, id)) => nav::find(tree, id)
             .map(|(_, s)| s.name.clone())
             .unwrap_or_else(|| id.clone()),

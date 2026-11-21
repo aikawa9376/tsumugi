@@ -31,6 +31,7 @@ pub(super) struct Strip {
 
 #[derive(Debug, Clone, PartialEq)]
 enum StripMark {
+    Browser,
     State(State),
     Terminal(TerminalProgram),
     Draft,
@@ -58,6 +59,7 @@ pub(super) fn window_strip(
         ),
         Tab::Terminal(_, id) => StripMark::Terminal(runs_of(terminals, *id)),
         Tab::Draft { .. } => StripMark::Draft,
+        Tab::Browser { .. } => StripMark::Browser,
         Tab::GitHub { .. } | Tab::Diff { .. } => StripMark::File(
             file_icons::find(std::path::Path::new("README.md"), file_icons::Kind::File).glyph,
             String::new(),
@@ -93,6 +95,7 @@ fn WindowStrip(id: WindowId, strip: Strip) -> Element {
     let state_mark = match &strip.mark {
         StripMark::State(state) => glyph(state),
         StripMark::Draft => Some(("place-mark", Icon::MessagePlus, "new session")),
+        StripMark::Browser => Some(("place-mark", Icon::World, "browser")),
         StripMark::Terminal(_) | StripMark::File(..) => None,
     };
     let shell = matches!(strip.mark, StripMark::Terminal(_));

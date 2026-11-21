@@ -39,6 +39,10 @@ what runs counts what it holds and shows how that work stands, folded too.
 Workspace and worktree rows summarize the work they hold without opening them.
 Where a workspace has no worktree row, the headings are its checkout's.
 
+The browser pages opened in a worktree are listed under its Browser heading
+([browsing](content.md#browsing)), each by the site it shows. They are not
+counted among what runs.
+
 A workspace with worktree rows lists, above them, its own Sessions,
 Terminals and Neovim: every session and terminal of all its worktrees, so
 what runs in the repository is seen without opening each worktree. The

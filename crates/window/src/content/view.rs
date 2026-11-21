@@ -67,9 +67,11 @@ pub(crate) fn ContentPanel(
         let shows = windows.shows(m.window)?;
         let hosts = app.hosts.read();
         let work = hosts.work(shows.environment());
-        let name = tree_view::github_title(work, shows).unwrap_or_else(|| {
-            thing_name(tree_view::listed(work), tree_view::terminals(work), shows)
-        });
+        let name = tree_view::github_title(work, shows)
+            .or_else(|| crate::browser::title(shows))
+            .unwrap_or_else(|| {
+                thing_name(tree_view::listed(work), tree_view::terminals(work), shows)
+            });
         let more = m
             .tab
             .and_then(|at| windows.tabs().get(at))
@@ -96,11 +98,19 @@ pub(crate) fn ContentPanel(
                 let focused = Some(id) == focused_window;
                 let marked = Some(id) == marked_window;
                 let settings = &app.config.read().settings;
-                let title = tree_view::github_title(work, &shows);
+                let title =
+                    tree_view::github_title(work, &shows).or_else(|| crate::browser::title(&shows));
                 let strip = window_strip(t, terms, &completions.read(), settings, &shows, title);
                 // A viewer is drawn the same focused or not, so it keeps its
                 // zoom, page and playback as the focus moves.
-                let body = if let Tab::Viewer(environment, path) = &shows {
+                let body = if let Tab::Browser {
+                    environment,
+                    worktree,
+                    id: page,
+                } = &shows
+                {
+                    rsx! { crate::browser::BrowserWindow { key: "{id}", window: id, environment: environment.clone(), worktree: worktree.clone(), id: *page } }
+                } else if let Tab::Viewer(environment, path) = &shows {
                     let environment = environment.clone();
                     // A document shows images from the worktree it is in,
                     // or else from its own folder.

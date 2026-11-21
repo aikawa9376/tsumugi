@@ -11,7 +11,6 @@ use tsumugi_core::zoom;
 struct Applied(Rc<Cell<Option<f64>>>);
 
 /// The rendered zoom for native UI anchored to coordinates in the page.
-#[cfg(target_os = "linux")]
 pub(crate) fn current() -> f64 {
     try_consume_context::<Applied>()
         .and_then(|scale| scale.0.get())

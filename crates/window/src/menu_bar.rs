@@ -89,6 +89,7 @@ pub fn sections() -> Vec<Section> {
                 Separator,
                 Run(Action::ShellOpen),
                 Run(Action::NeovimOpen),
+                Run(Action::BrowserOpen),
                 Run(Action::TerminalStop),
                 Run(Action::TabClose),
                 Run(Action::WindowOpen),

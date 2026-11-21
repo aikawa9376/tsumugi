@@ -192,6 +192,21 @@ pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
                 true,
             )
         }
+        Action::BrowserOpen => {
+            let environment = if on_list {
+                crate::sidebar::selected(state).map(|item| item.environment().clone())
+            } else {
+                state.content.active().map(|tab| tab.environment().clone())
+            }
+            .unwrap_or_else(|| super::shown_environment(state));
+            let worktree = browser_worktree(state, &environment, on_list);
+            state
+                .content
+                .windows
+                .open(Tab::browser(environment, worktree));
+            state.content.focus = Area::Console;
+            Vec::new()
+        }
         Action::ShellOpen | Action::NeovimOpen => {
             let runs = if action == Action::NeovimOpen {
                 TerminalProgram::Neovim
@@ -297,7 +312,33 @@ pub(crate) fn draft_written(
     effects
 }
 
+/// The worktree a page opened now for `environment` hangs under: the one
+/// the keys are in, else the first the environment lists.
+fn browser_worktree(state: &ViewState, environment: &EnvironmentId, on_list: bool) -> PathBuf {
+    let tree = tree::listed(state.hosts.work(environment));
+    let here = match state.content.active() {
+        Some(Tab::Browser { worktree, .. }) if !on_list => Some(worktree.clone()),
+        _ => place_here(state, on_list)
+            .filter(|p| p.environment == *environment)
+            .map(|p| p.worktree),
+    };
+    here.and_then(|dir| {
+        tsumugi_model::innermost(tree.worktrees().map(|w| &w.worktree.path), &dir).cloned()
+    })
+    .or_else(|| tree.worktrees().next().map(|w| w.worktree.path.clone()))
+    .unwrap_or_default()
+}
+
 fn place_here(state: &ViewState, on_list: bool) -> Option<Place> {
+    if !on_list
+        && let Some(Tab::Browser {
+            environment,
+            worktree,
+            ..
+        }) = state.content.active()
+    {
+        return Some(Place::at(environment, worktree.clone()));
+    }
     let selected = crate::sidebar::selected(state);
     match selected.as_ref().filter(|_| on_list) {
         Some(Item::Environment(environment)) => {

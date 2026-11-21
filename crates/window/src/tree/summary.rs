@@ -54,7 +54,7 @@ pub(super) fn summarize(tree: &Tree, marks: &Completions, row: &Item) -> Option<
     let heading = match row {
         Item::Environment(_) | Item::Workspace(..) | Item::Worktree(..) => None,
         Item::Across(_, _, heading) | Item::Heading(_, _, heading)
-            if *heading != Heading::Files =>
+            if !matches!(heading, Heading::Files | Heading::Browser) =>
         {
             Some(*heading)
         }
@@ -78,7 +78,7 @@ pub(super) fn summarize(tree: &Tree, marks: &Completions, row: &Item) -> Option<
                 }
             }
             if heading != Some(Heading::Sessions) {
-                let listed = heading.map(|h| nav::under(row.environment(), worktree, h));
+                let listed = heading.map(|h| nav::under(row.environment(), worktree, h, &[]));
                 for terminal in &worktree.terminals {
                     if listed.as_ref().is_some_and(|rows| {
                         !rows.contains(&Item::Terminal(row.environment().clone(), terminal.id))

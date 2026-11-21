@@ -7,9 +7,88 @@ use tsumugi_model::testing::{self, TreeBuilder};
 use tsumugi_model::{EnvironmentId, Session, TerminalProgram, TerminalSession, Tree, Wait, inbox};
 
 use super::*;
-use crate::content::Tab;
+use crate::content::{BrowserId, Tab};
 use crate::testing::here;
 use crate::tree::Place;
+
+#[test]
+fn browser_pages_hang_under_the_browser_heading_of_the_worktree_they_were_opened_in() {
+    let t = tree();
+    let oauth = Page {
+        worktree: OAUTH.into(),
+        id: BrowserId::new(),
+    };
+    let web = Page {
+        worktree: "/web".into(),
+        id: BrowserId::new(),
+    };
+    let pages = [oauth.clone(), web.clone()];
+    let rows = items_with_issues(
+        &here(),
+        &t,
+        &Folds::default(),
+        &|_| Vec::new(),
+        &BTreeMap::new(),
+        &[],
+        &pages,
+    );
+    let heading = across("/api", Heading::Browser);
+    let pos = rows.iter().position(|row| row == &heading).unwrap();
+    assert_eq!(rows[pos - 1], across("/api", Heading::Neovim));
+    let page = Item::Browser(here(), OAUTH.into(), oauth.id);
+    assert_eq!(rows[pos + 1], Item::Gathered(Box::new(page.clone())));
+    assert!(holds(&heading));
+    assert_eq!(depth(&t, &rows[pos + 1]), 2);
+    let flat = Item::Heading(here(), "/web".into(), Heading::Browser);
+    let pos = rows.iter().position(|row| row == &flat).unwrap();
+    let flat_page = Item::Browser(here(), "/web".into(), web.id);
+    assert_eq!(rows[pos + 1], flat_page);
+    assert_eq!(depth(&t, &flat_page), 2);
+    assert_eq!(place_of(&t, &page), Some(at(OAUTH)));
+    assert_eq!(
+        parent(&rows, |item| depth(&t, item), &flat_page),
+        Some(flat)
+    );
+}
+
+#[test]
+fn a_page_opens_its_own_tab_and_a_folded_browser_heading_hides_its_pages() {
+    let t = tree();
+    let id = BrowserId::new();
+    let page = Item::Browser(EnvironmentId::new("remote"), "/remote".into(), id);
+    let tab = Tab::Browser {
+        environment: EnvironmentId::new("remote"),
+        worktree: "/remote".into(),
+        id,
+    };
+    assert_eq!(
+        opens(&page, &t, &[], false),
+        Opens::Shows(tab.clone(), None)
+    );
+    assert_eq!(stands_for(&page, &[]), [tab]);
+    assert_eq!(stands_for(&Item::Gathered(Box::new(page)), &[]).len(), 1);
+    let heading = across("/api", Heading::Browser);
+    let mut folds = Folds::default();
+    folds.set(&heading, false);
+    let rows = items_with_issues(
+        &here(),
+        &t,
+        &folds,
+        &|_| Vec::new(),
+        &BTreeMap::new(),
+        &[],
+        &[Page {
+            worktree: OAUTH.into(),
+            id,
+        }],
+    );
+    assert!(rows.contains(&heading));
+    assert!(
+        !rows
+            .iter()
+            .any(|row| matches!(row.own(), Item::Browser(..)))
+    );
+}
 
 #[test]
 fn the_same_path_in_two_environments_is_two_rows_folded_apart() {
@@ -59,6 +138,7 @@ fn local_issues_share_the_issues_toggle_at_the_same_depth_as_github_issues() {
         &|_| vec![],
         &BTreeMap::new(),
         std::slice::from_ref(&issue),
+        &[],
     );
     assert!(closed.contains(&heading));
     assert!(!closed.contains(&row));
@@ -70,6 +150,7 @@ fn local_issues_share_the_issues_toggle_at_the_same_depth_as_github_issues() {
         &|_| vec![],
         &BTreeMap::new(),
         &[issue],
+        &[],
     );
     assert_eq!(
         parent(&rows, |item| depth(&tree, item), &row),
@@ -95,7 +176,7 @@ fn local_issues_share_the_issues_toggle_at_the_same_depth_as_github_issues() {
         session: None,
         error: None,
     }];
-    let rows = items_with_issues(&here(), &tree, &folds, &|_| vec![], &github, &issues);
+    let rows = items_with_issues(&here(), &tree, &folds, &|_| vec![], &github, &issues, &[]);
     let remote = Item::GitHubItem(here(), "/api".into(), Listing::Issues, 42);
     assert_eq!(
         parent(&rows, |item| depth(&tree, item), &row),
@@ -172,6 +253,7 @@ fn gathered(root: &str, sessions: &[&str], shells: &[u128]) -> Vec<Item> {
             .map(|&id| Item::Gathered(Box::new(Item::Terminal(here(), id))))
             .collect(),
         vec![across(root, Heading::Neovim)],
+        vec![across(root, Heading::Browser)],
     ]
     .concat()
 }
@@ -184,7 +266,7 @@ fn a_repository_s_worktrees_start_folded_and_unfold_to_their_own_headings() {
     let got = rows(&t, &folds);
     let at = got.iter().position(|i| *i == worktree(OAUTH)).unwrap();
     assert_eq!(got[at - 1], worktree("/api"));
-    assert_eq!(got[at + 1..at + 6], group(OAUTH, &[session("o")], &[])[..]);
+    assert_eq!(got[at + 1..at + 7], group(OAUTH, &[session("o")], &[])[..]);
     assert_eq!(depth(&t, &across("/api", Heading::Sessions)), 1);
     assert_eq!(depth(&t, &gathered_session("o")), 2);
     assert_eq!(depth(&t, &sessions_of(OAUTH)), 2);
@@ -280,6 +362,7 @@ fn group(path: &str, sessions: &[Item], shells: &[Item]) -> Vec<Item> {
         &[shells_of(path)],
         shells,
         &[Item::Heading(here(), path.into(), Heading::Neovim)],
+        &[Item::Heading(here(), path.into(), Heading::Browser)],
     ]
     .concat()
 }
@@ -353,7 +436,7 @@ fn a_repository_on_github_lists_its_listings_folded_after_what_runs_before_its_w
         .iter()
         .position(|i| *i == on_github("/api", Listing::Pulls))
         .unwrap();
-    assert_eq!(got[at - 1], across("/api", Heading::Neovim));
+    assert_eq!(got[at - 1], across("/api", Heading::Browser));
     assert_eq!(
         got[at + 1..at + 3],
         [on_github("/api", Listing::Issues), worktree("/api")]
@@ -371,7 +454,7 @@ fn a_flat_repository_lists_its_listings_after_its_checkout_s_headings() {
         .unwrap();
     assert_eq!(
         got[at - 1],
-        Item::Heading(here(), "/web".into(), Heading::Neovim)
+        Item::Heading(here(), "/web".into(), Heading::Browser)
     );
     assert_eq!(depth(&t, &on_github("/web", Listing::Pulls)), 1);
 }
@@ -1149,9 +1232,9 @@ fn a_neovim_on_no_file_has_its_own_heading_and_one_on_a_file_has_no_row_of_its_o
     let t = shelled().with_terminals(&[sh(2, "shell", DEV), nvim, on_file]);
     let w = t.worktrees().find(|w| w.worktree.path == Path::new(DEV));
     let w = w.unwrap();
-    assert_eq!(under(&here(), w, Heading::Terminals), [shell(2)]);
+    assert_eq!(under(&here(), w, Heading::Terminals, &[]), [shell(2)]);
     let editors = Heading::Neovim;
-    assert_eq!(under(&here(), w, editors), [shell(6)]);
+    assert_eq!(under(&here(), w, editors, &[]), [shell(6)]);
     let list = rows(&t, &unfolded());
     assert_eq!(
         row_above(&list, &shell(6)),
@@ -1205,7 +1288,10 @@ fn a_command_sits_under_shells_in_the_order_started() {
     let t = shelled().with_terminals(&[sh(2, "shell", DEV), claude]);
     let w = t.worktrees().find(|w| w.worktree.path == Path::new(DEV));
     let w = w.unwrap();
-    assert_eq!(under(&here(), w, Heading::Terminals), [shell(2), shell(7)]);
+    assert_eq!(
+        under(&here(), w, Heading::Terminals, &[]),
+        [shell(2), shell(7)]
+    );
     let list = rows(&t, &unfolded());
     assert_eq!(row_above(&list, &shell(7)), Some(shell(2)));
 }

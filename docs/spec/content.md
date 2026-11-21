@@ -2,7 +2,8 @@
 
 The middle of the window is the content. It holds tabs, each tab is split into
 windows, and each window shows one thing: a session, a session not started
-yet, a terminal Tsumugi runs ([terminals](#terminals)), or a file in the viewer
+yet, a terminal Tsumugi runs ([terminals](#terminals)), a page of an
+environment's browser ([browsing](#browsing)), or a file in the viewer
 of its kind ([viewers](#viewers)).
 
 ## Tabs
@@ -107,6 +108,48 @@ kept content's place.
 
 A terminal runs a shell, Neovim or any other program, apart from agent
 conversations, and is listed beside the sessions of the worktree it runs in
+## Browsing
+
+Open Browser in the application menu or a row's start menu opens a new page
+of that environment's browser, listed under the Browser heading of the
+worktree it was opened in, beside that worktree's sessions and terminals
+([the tree](tree.md)). A page is shown, closed and told apart from the others
+as any row there is, and is named after the site it shows. Its address field
+opens web pages and local development servers; the toolbar goes back, forward
+and reloads. Links requesting a new window open in the same page.
+
+Switching tabs keeps the page and its unfinished input. Closing a page ends
+it; pages are not restored across application runs. Website data belongs to
+the environment, shared by its pages, and stays separate from that of other
+environments. On macOS before 14, website data is temporary.
+
+The page takes its own keys. Ctrl+Shift+Escape gives the keys back to the
+workspace. Browsing runs on the computer displaying Tsumugi, including for
+a remote environment: localhost reaches this computer, not its work host.
+
+Annotate lets the user select page elements, one after another until they
+turn it off or press Escape. Selecting an element shows a card by it, over a
+still of the page, to write what should change or ask about it; the user
+adds the note or cancels it. Each selected element is numbered on the page,
+and the same number marks its note in the list under the page, where a note
+can be edited, deleted or all of them cleared. Grab selects one element and
+adds it to the prompt as it is, without a note. Draw shows a still of the
+page to draw on with a pen, a highlighter, arrows, boxes, ellipses and text,
+and adds the drawing to the prompt as an image.
+
+A note keeps the page address, the element and the text it holds, its size and
+source location when the page exposes one, and an image of the visible part of
+the element; the element's HTML and computed styles are added when the user
+asks for page details. When an image cannot be captured, the note says so;
+images are available on Linux and macOS.
+
+Feedback is added to the prompt of a session of the page's environment, or
+copied as text; the sessions of the worktree the page hangs under come first
+and the first of them is chosen until the user chooses another. Its existing
+text and attachments are preserved. The user reviews the prompt and sends it
+as usual. Notes stay with the page when switching tabs until they are added to
+a prompt or removed; closing the page ends its unsent notes.
+
 ([the tree](tree.md)). A shell is the account's login shell unless configured
 otherwise; Neovim reads the user's own configuration. A command terminal runs
 its program through the shell, as an interactive login shell would run it,

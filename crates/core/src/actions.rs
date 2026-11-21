@@ -88,6 +88,7 @@ pub enum Action {
     ShellOpen,
     TerminalStop,
     NeovimOpen,
+    BrowserOpen,
     TabClose,
     EnvironmentAdd,
     EnvironmentRemove,
@@ -385,6 +386,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::NeovimOpen, "neovim.open", "open Neovim, with your own configuration, in the worktree as `shell.open` opens a shell ([shells](content.md#terminals))")
         .bar("Open Neovim", Icon::Code)
         .row("Open Neovim here", Start),
+    S::new(A::BrowserOpen, "browser.open", "open a new page of the environment's browser, listed under the worktree it is opened in")
+        .bar("Open Browser", Icon::World)
+        .row("Open Browser here", Start),
     S::new(A::TabClose, "tab.close", "close the content's tab shown and every window in it; agents and terminals keep running and remain reachable from the tree")
         .bar("Close Tab", Icon::X)
         .row("Close tab", End),
@@ -687,6 +691,7 @@ mod tests {
             ShellOpen,
             TerminalStop,
             NeovimOpen,
+            BrowserOpen,
             TabClose,
             EnvironmentAdd,
             EnvironmentRemove,

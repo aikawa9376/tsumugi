@@ -24,10 +24,11 @@ impl Attachments {
     }
 
     pub fn add(&mut self, images: Vec<PathBuf>) {
-        self.kept
-            .entry(self.shown.clone())
-            .or_default()
-            .extend(images);
+        self.add_to(self.shown.clone(), images);
+    }
+
+    pub fn add_to(&mut self, tab: Option<Tab>, images: Vec<PathBuf>) {
+        self.kept.entry(tab).or_default().extend(images);
     }
 
     pub fn remove(&mut self, path: &Path) {

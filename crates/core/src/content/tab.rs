@@ -7,10 +7,40 @@ use tsumugi_model::{AgentPermissions, DraftId, EnvironmentId};
 
 use super::{Kept, KeptNode, KeptTab};
 
+/// A browser page of this run of the window, which gives each its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct BrowserId(u64);
+
+impl BrowserId {
+    pub fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    }
+}
+
+impl Default for BrowserId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for BrowserId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// What a window shows, by the environment it belongs to and its own
 /// identity there.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Tab {
+    /// A page of the environment's browser, listed under the Browser heading
+    /// of the worktree it was opened in and held by this window.
+    Browser {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        id: BrowserId,
+    },
     /// A Claude Code session, by id.
     Session(EnvironmentId, String),
     /// A shell tsumugi started in a worktree, by the daemon's id.
@@ -56,6 +86,7 @@ pub fn shows_prompt(tab: Option<&Tab>) -> bool {
         tab,
         Some(
             Tab::Terminal(..)
+                | Tab::Browser { .. }
                 | Tab::Viewer(..)
                 | Tab::Drawn { .. }
                 | Tab::GitHub { .. }
@@ -90,9 +121,19 @@ impl Tab {
         }
     }
 
+    /// A new page of the browser of `environment`, hanging under `worktree`.
+    pub fn browser(environment: EnvironmentId, worktree: impl Into<PathBuf>) -> Self {
+        Self::Browser {
+            environment,
+            worktree: worktree.into(),
+            id: BrowserId::new(),
+        }
+    }
+
     pub fn environment(&self) -> &EnvironmentId {
         match self {
             Tab::Session(environment, _)
+            | Tab::Browser { environment, .. }
             | Tab::Terminal(environment, _)
             | Tab::Viewer(environment, _)
             | Tab::Draft { environment, .. }
@@ -372,6 +413,7 @@ pub fn kept_name(tab: &Tab) -> Option<String> {
         Tab::Session(_, id) => format!("session:{id}"),
         Tab::Terminal(_, id) => format!("terminal:{id:x}"),
         Tab::Draft { .. }
+        | Tab::Browser { .. }
         | Tab::Viewer(..)
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }

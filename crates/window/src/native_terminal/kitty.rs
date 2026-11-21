@@ -1,5 +1,5 @@
 //! A private kitty process presents the host's screen without owning its input.
-use super::linux::Layer;
+use crate::native_layer::Layer;
 use gtk::glib::translate::ToGlibPtr;
 use gtk::prelude::*;
 use std::ffi::{CStr, CString, c_char, c_int, c_uint, c_ulong, c_void};

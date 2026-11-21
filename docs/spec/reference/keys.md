@@ -85,6 +85,7 @@ changes them ([keys](../keys.md)).
 | `shell.open` | Open Shell | open a shell in the worktree | `global`: `Mod+s`<br>`tree`: `$` |
 | `terminal.stop` | Stop Terminal | end the terminal selected in the tree, or else the one shown |  |
 | `neovim.open` | Open Neovim | open Neovim, with your own configuration, in the worktree as `shell.open` opens a shell ([shells](../content.md#terminals)) | `global`: `Mod+e`<br>`tree`: `e` |
+| `browser.open` | Open Browser | open a new page of the environment's browser, listed under the worktree it is opened in |  |
 | `tab.close` | Close Tab | close the content's tab shown and every window in it; agents and terminals keep running and remain reachable from the tree | `global`: `Mod+w` |
 | `environment.add` | Add Environment… | add an environment, on this computer or on a work machine paired then, which every window lists at once ([details](../environments.md)) |  |
 | `environment.remove` |  | remove the environment selected in the tree from every window after asking, unless the window was started in it; its sessions keep running on its host ([details](../environments.md)) |  |

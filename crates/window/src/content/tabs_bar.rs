@@ -58,13 +58,15 @@ pub(super) fn TabsBar(
                             .is_some_and(|o| o.permissions == AgentPermissions::ReadOnly);
                         (None, session_mark(reader))
                     }
-                    Tab::Terminal(_, _)
+                    Tab::Browser { .. }
+                    | Tab::Terminal(_, _)
                     | Tab::Viewer(_, _)
                     | Tab::Drawn { .. }
                     | Tab::GitHub { .. }
                     | Tab::Diff { .. } => (None, None),
                 };
                 let name = tree_view::github_title(work, &shows)
+                    .or_else(|| crate::browser::title(&shows))
                     .unwrap_or_else(|| thing_name(t, terms, &shows));
                 let code = thing_code(t, &shows);
                 (
@@ -153,6 +155,7 @@ pub(super) fn TabsBar(
                     }
                     if let Some(runs) = shell { TerminalMark { runs } }
                     if matches!(tab, Tab::Draft { .. }) { PlaceMark { icon: Icon::MessagePlus, size: 13 } }
+                    if matches!(tab, Tab::Browser { .. }) { PlaceMark { icon: Icon::World, size: 13 } }
                     if let (Tab::Session(environment, id), true) = (&tab, is_active) {
                         SessionName {
                             environment: environment.clone(), id: id.clone(), name: name.clone(), place: RenamePlace::Tab,

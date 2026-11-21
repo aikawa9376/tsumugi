@@ -36,7 +36,7 @@ fn rows_of_same(item: &Item) -> impl Iterator<Item = Item> + '_ {
         Item::Waiting(environment, id) | Item::Session(environment, id) => {
             Some(Item::Session(environment.clone(), id.clone()))
         }
-        terminal @ Item::Terminal(..) => Some(terminal.clone()),
+        terminal @ (Item::Terminal(..) | Item::Browser(..)) => Some(terminal.clone()),
         _ => None,
     };
     let waiting = match &own {
@@ -105,6 +105,17 @@ pub fn row_of(
         }
         (Some(Tab::Terminal(environment, id)), None) => {
             let own = Item::Terminal(environment.clone(), *id);
+            vec![Item::Gathered(Box::new(own.clone())), own]
+        }
+        (
+            Some(Tab::Browser {
+                environment,
+                worktree,
+                id,
+            }),
+            None,
+        ) => {
+            let own = Item::Browser(environment.clone(), worktree.clone(), *id);
             vec![Item::Gathered(Box::new(own.clone())), own]
         }
         _ => Vec::new(),

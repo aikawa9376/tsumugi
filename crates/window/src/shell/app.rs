@@ -67,6 +67,7 @@ fn App() -> Element {
     use_scroll_into_view(app);
     use_effects(&ui);
     use_input(&ui);
+    crate::browser::use_browsers(app);
     use_drop(settings_window::close);
     rsx! {
         RootStyle {}

@@ -85,7 +85,13 @@ struct Built {
 
 /// What the rows are built from: each environment by the patch its work is
 /// at, the filter, the folds and whether hidden files are listed.
-type BuiltFrom = (Vec<(EnvironmentId, Option<Seq>)>, String, Folds, bool);
+type BuiltFrom = (
+    Vec<(EnvironmentId, Option<Seq>)>,
+    String,
+    Folds,
+    bool,
+    Vec<(EnvironmentId, nav::Page)>,
+);
 
 /// A key on the tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,7 +289,7 @@ pub(crate) fn move_cursor(state: &mut crate::state::ViewState, key: Key) -> Vec<
     let before = state.tree.selected.clone();
     let mut effects = press(&mut state.tree, key);
     if key == Key::Into {
-        build(&mut state.tree, &state.hosts);
+        build(&mut state.tree, &state.hosts, &[]);
         go_into(&mut state.tree);
     }
     if state.tree.selected != before
@@ -341,7 +347,7 @@ fn press(view: &mut TreeView, key: Key) -> Vec<Effect> {
 /// built: each environment's under its heading, then
 /// the sessions waiting on the user in all of them. A directory's entries
 /// come from what its environment's host listed of it.
-pub(crate) fn build(view: &mut TreeView, hosts: &Hosts) {
+pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId, nav::Page)]) {
     for (environment, host) in hosts.each() {
         view.folds
             .rest(environment, facts(host.work.as_ref()).tree());
@@ -354,6 +360,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts) {
         view.filter.clone(),
         view.folds.clone(),
         view.show_hidden,
+        pages.to_vec(),
     );
     if view.built.from.as_ref() == Some(&from) {
         return;
@@ -384,6 +391,11 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts) {
                 }
                 entries
             };
+            let own: Vec<_> = pages
+                .iter()
+                .filter(|(e, _)| e == environment)
+                .map(|(_, page)| page.clone())
+                .collect();
             rows.extend(nav::items_with_issues(
                 environment,
                 &narrowed,
@@ -391,6 +403,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts) {
                 &read as &dyn Fn(&Path) -> Vec<Entry>,
                 &facts.github,
                 &facts.local_issues,
+                &own,
             ));
         }
         view.built.narrowed.insert(environment.clone(), narrowed);
@@ -626,6 +639,7 @@ pub(crate) fn sight(view: &TreeView, environment: &EnvironmentId) -> TreeSight {
 pub fn place_of_tab(tree: &Tree, terminals: &[TerminalSession], tab: &Tab) -> Option<Place> {
     let at = |worktree: &std::path::Path| Place::at(tab.environment(), worktree);
     match tab {
+        Tab::Browser { .. } => None,
         Tab::Session(_, id) => nav::find(tree, id).map(|(p, _)| at(p)),
         Tab::Terminal(_, id) => terminals.iter().find(|s| s.id == *id).map(|s| at(&s.cwd)),
         Tab::Draft { worktree, .. } => Some(at(worktree)),
@@ -663,6 +677,7 @@ pub fn crumbs(showing: &Showing, work: Option<&WorkSnapshot>) -> Option<Crumbs> 
         .workspace_of(&place.worktree)
         .map(|w| (w.name.clone(), w.scratch));
     let target = match tab {
+        Tab::Browser { .. } => "Browser".into(),
         Tab::Session(_, id) => nav::find(tree, id)
             .map(|(_, s)| s.name.clone())
             .unwrap_or_else(|| id.clone()),

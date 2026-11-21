@@ -45,6 +45,9 @@ pub enum Item {
     Session(EnvironmentId, String),
     /// A shell or a Neovim tsumugi runs, by the daemon's id.
     Terminal(EnvironmentId, u128),
+    /// A page of the browser, under the Browser heading of the worktree it
+    /// was opened in.
+    Browser(EnvironmentId, PathBuf, crate::content::BrowserId),
     /// A file or a directory of a worktree, under its Files heading.
     File {
         environment: EnvironmentId,
@@ -69,14 +72,16 @@ pub enum Heading {
     Sessions,
     Terminals,
     Neovim,
+    Browser,
 }
 
 impl Heading {
-    pub const ALL: [Heading; 4] = [
+    pub const ALL: [Heading; 5] = [
         Heading::Files,
         Heading::Sessions,
         Heading::Terminals,
         Heading::Neovim,
+        Heading::Browser,
     ];
 
     pub fn name(self) -> &'static str {
@@ -85,6 +90,7 @@ impl Heading {
             Heading::Sessions => "Sessions",
             Heading::Terminals => "Terminals",
             Heading::Neovim => "Neovim",
+            Heading::Browser => "Browser",
         }
     }
 }
@@ -100,6 +106,7 @@ impl Item {
             | Item::Heading(environment, ..)
             | Item::Session(environment, _)
             | Item::Terminal(environment, _)
+            | Item::Browser(environment, ..)
             | Item::File { environment, .. }
             | Item::GitHub(environment, ..)
             | Item::GitHubItem(environment, ..)

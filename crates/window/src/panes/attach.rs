@@ -30,7 +30,8 @@ fn kept_id(tab: &Tab) -> Option<u128> {
     match tab {
         Tab::Session(_, id) => sessions::id_of(id),
         Tab::Terminal(_, id) => Some(*id),
-        Tab::Draft { .. }
+        Tab::Browser { .. }
+        | Tab::Draft { .. }
         | Tab::Viewer(_, _)
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
@@ -192,7 +193,8 @@ impl Ui {
             _ if tab.environment() != environment => true,
             Tab::Session(_, id) => sessions.contains(id),
             Tab::Terminal(_, id) => terminals.contains(id),
-            Tab::Draft { .. }
+            Tab::Browser { .. }
+            | Tab::Draft { .. }
             | Tab::Viewer(_, _)
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }

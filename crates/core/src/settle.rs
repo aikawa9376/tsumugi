@@ -193,7 +193,8 @@ fn tree_failing(state: &mut ViewState, effects: &mut Vec<Effect>) {
 
 /// The tree's rows are built from what the host listed.
 fn tree_rows(state: &mut ViewState, _: &mut Vec<Effect>) {
-    tree::build(&mut state.tree, &state.hosts);
+    let pages = state.content.pages();
+    tree::build(&mut state.tree, &state.hosts, &pages);
     tree::go_into(&mut state.tree);
     tree::land(&mut state.tree);
 }

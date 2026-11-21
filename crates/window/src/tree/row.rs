@@ -44,6 +44,7 @@ pub(crate) fn row_tip(item: &Item) -> &'static str {
         Item::Terminal(_, _) => {
             "A terminal tsumugi runs. Enter shows it; closing its tab leaves it running"
         }
+        Item::Browser(..) => "A page of the browser. Enter shows it; closing its tab ends the page",
         Item::Across(..) => {
             "What runs in every worktree of the repository, of one kind. Enter folds it"
         }
@@ -384,6 +385,19 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 .unwrap_or_default();
             ("dim", why, String::new(), None)
         }
+        Item::Browser(_, _, id) => {
+            let name = crate::browser::title(&Tab::Browser {
+                environment: it.environment().clone(),
+                worktree: std::path::PathBuf::new(),
+                id: *id,
+            });
+            (
+                "",
+                name.unwrap_or_else(|| "New page".into()),
+                String::new(),
+                None,
+            )
+        }
         Item::Environment(_) | Item::File { .. } | Item::Waiting(_, _) | Item::Gathered(_) => {
             ("", String::new(), String::new(), None)
         }
@@ -397,6 +411,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
         Item::Terminal(environment, id) => {
             content_now.tabs_showing(&Tab::Terminal(environment.clone(), *id))
         }
+        Item::Browser(environment, worktree, id) => content_now.tabs_showing(&Tab::Browser {
+            environment: environment.clone(),
+            worktree: worktree.clone(),
+            id: *id,
+        }),
         _ => Vec::new(),
     }
     .iter()
@@ -409,6 +428,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
         _ => None,
     };
     let place_icon = match &it {
+        Item::Browser(..) => Some(Icon::World),
         Item::Workspace(_, root) if t.workspace_of(root).is_some_and(|w| w.scratch) => {
             Some(Icon::Notes)
         }
@@ -421,6 +441,16 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     };
     // What the console shows stands out wherever the selection is.
     let kind = match &own {
+        Item::Browser(environment, worktree, id)
+            if shows
+                == Some(Tab::Browser {
+                    environment: environment.clone(),
+                    worktree: worktree.clone(),
+                    id: *id,
+                }) =>
+        {
+            format!("{kind} shown")
+        }
         Item::Session(environment, id)
             if shows == Some(Tab::Session(environment.clone(), id.clone())) =>
         {

@@ -4,6 +4,7 @@ pub use tsumugi_core::actions;
 mod adding;
 mod alerts;
 mod bridge;
+mod browser;
 mod build;
 mod bundled_font;
 mod client_keys;
@@ -41,6 +42,8 @@ mod link;
 mod local_issues;
 mod logins;
 pub mod menu_bar;
+#[cfg(target_os = "linux")]
+mod native_layer;
 mod native_terminal;
 #[cfg(target_os = "linux")]
 pub fn kitty_display(args: &[String]) -> i32 {

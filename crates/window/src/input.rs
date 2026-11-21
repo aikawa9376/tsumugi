@@ -160,7 +160,7 @@ pub(crate) fn use_input(ui: &Ui) {
                 && *window_id == desktop.window.id()
             {
                 app.dispatch(Msg::WindowFocused(*on));
-                if *on && !composing.get() {
+                if *on && !composing.get() && !crate::browser::has_focus() {
                     keys::trace(|| "window made key: the page takes the keys");
                     let _ = desktop.webview.focus();
                 }
@@ -194,7 +194,11 @@ pub(crate) fn use_input(ui: &Ui) {
             loop {
                 tokio::time::sleep(LOOK_FOR_KEYS_EVERY).await;
                 let key = desktop.window.is_focused();
-                if watch.look(key, page_focused.get(), desktop.webview.is_devtools_open()) {
+                if watch.look(
+                    key,
+                    page_focused.get() || crate::browser::has_focus(),
+                    desktop.webview.is_devtools_open(),
+                ) {
                     keys::trace(|| "the page lost the keys of the window: giving them back");
                     let _ = desktop.webview.focus();
                 }

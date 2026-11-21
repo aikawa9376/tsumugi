@@ -46,6 +46,14 @@ pub fn unfolds(item: &Item, folds: &Folds) -> bool {
 /// it is text and nowhere when it is not.
 pub fn opens(item: &Item, tree: &Tree, terminals: &[TerminalSession], local: bool) -> Opens {
     match item {
+        Item::Browser(environment, worktree, id) => Opens::Shows(
+            Tab::Browser {
+                environment: environment.clone(),
+                worktree: worktree.clone(),
+                id: *id,
+            },
+            None,
+        ),
         Item::LocalIssue(environment, dir, id) => {
             Opens::LocalIssue(Place::at(environment, dir), id.clone())
         }
@@ -119,6 +127,11 @@ fn editing<'a>(
 /// started on it.
 pub fn stands_for(item: &Item, terminals: &[TerminalSession]) -> Vec<Tab> {
     match item {
+        Item::Browser(environment, worktree, id) => vec![Tab::Browser {
+            environment: environment.clone(),
+            worktree: worktree.clone(),
+            id: *id,
+        }],
         Item::Gathered(own) => stands_for(own, terminals),
         Item::Waiting(environment, id) | Item::Session(environment, id) => {
             vec![Tab::Session(environment.clone(), id.clone())]
@@ -175,6 +188,7 @@ pub fn copied(item: &Item, tree: &Tree, terminals: &[TerminalSession]) -> Option
         | Item::GitHub(..)
         | Item::GitHubItem(..)
         | Item::LocalIssue(..)
+        | Item::Browser(..)
         | Item::GitHubFailed(..) => None,
     }
 }
