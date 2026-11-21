@@ -13,9 +13,10 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 12;
 
 mod issues;
+mod resources;
 
 /// The tables as the first schema made them; a new database is made by it
 /// and then by every step in `MIGRATIONS`, so it ends as one carried forward.
@@ -125,6 +126,16 @@ const MIGRATIONS: &[&str] = &[
     "",
     // Older hosts cannot read issues explicitly closed by the user.
     "",
+    // The paths and addresses each project keeps for its agents and itself.
+    "CREATE TABLE IF NOT EXISTS resources (
+         seq INTEGER PRIMARY KEY AUTOINCREMENT,
+         id TEXT NOT NULL UNIQUE,
+         project TEXT NOT NULL,
+         target TEXT NOT NULL,
+         label TEXT,
+         note TEXT,
+         UNIQUE (project, target)
+     );",
 ];
 
 /// What the window or the work host knows of a session before its program starts.

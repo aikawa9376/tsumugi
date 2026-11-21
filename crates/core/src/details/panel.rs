@@ -182,6 +182,7 @@ fn group_of(component: Component) -> Option<Group> {
         Component::Images => Group::Images,
         Component::Links => Group::Links,
         Component::Files => Group::Files,
+        Component::Pinned => Group::Pinned,
         Component::Changes => Group::Changed,
         Component::Log => Group::Log,
         Component::Prompts => Group::Prompts,
@@ -588,6 +589,9 @@ fn fold(details: &mut Details, group: Group, shut: bool) {
 fn used(details: &Details, entry: &Entry, how: Use) -> Vec<Effect> {
     match entry {
         Entry::Link(link) => use_link(link, how, &details.shown.environment),
+        Entry::Pinned(resource) => {
+            use_link(&resource_link(resource), how, &details.shown.environment)
+        }
         Entry::Image(shot) => use_shot(
             shot,
             how,
@@ -619,6 +623,20 @@ fn copied(how: Use, text: &str, done: String) -> Vec<Effect> {
             done,
         }],
         Use::Open(_) | Use::Reveal => Vec::new(),
+    }
+}
+
+/// `resource` as the link it opens and copies as: a path as a file, which
+/// reveals, and any other address as a web address.
+fn resource_link(resource: &tsumugi_model::Resource) -> Link {
+    Link {
+        kind: match resource.reach() {
+            tsumugi_model::Reach::Path => LinkKind::File(tsumugi_model::links::Touch::Mentioned),
+            tsumugi_model::Reach::Address => LinkKind::Url,
+        },
+        target: resource.target.clone(),
+        title: Some(resource.title()),
+        line: None,
     }
 }
 
@@ -783,6 +801,28 @@ fn rows_of(
                 _ => Vec::new(),
             };
             return grouped(Group::Log, rows, &folded, opened, first(usize::MAX));
+        }
+        Component::Pinned => {
+            let project = details
+                .shown
+                .worktree
+                .as_deref()
+                .zip(work)
+                .and_then(|(worktree, work)| work.tree.tree().workspace_of(worktree))
+                .map(|workspace| &workspace.root);
+            let rows = project
+                .zip(work)
+                .map(|(project, work)| {
+                    work.tree
+                        .resources
+                        .iter()
+                        .filter(|r| &r.project == project)
+                        .cloned()
+                        .map(Entry::Pinned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            return grouped(Group::Pinned, rows, &folded, opened, first(d.links_shown));
         }
         _ => {}
     }
@@ -2517,6 +2557,7 @@ pub(crate) mod tests {
                         )
                     }
                     Entry::Link(l) => l.target.clone(),
+                    Entry::Pinned(r) => format!("pinned {}", r.target),
                     other => format!("{other:?}"),
                 })
                 .collect(),
@@ -2532,6 +2573,92 @@ pub(crate) mod tests {
         assert_eq!(
             keys(entries_of(&run)),
             ["Links", "https://a.dev", "Files", "/w/a.rs"]
+        );
+    }
+
+    fn resource(project: &str, target: &str) -> tsumugi_model::Resource {
+        tsumugi_model::Resource {
+            id: format!("{project}{target}"),
+            project: project.into(),
+            target: target.into(),
+            label: None,
+            note: None,
+        }
+    }
+
+    /// The session `a` shown in `/w` with the panel made of the settings
+    /// `panel`, where the projects keep `resources`.
+    fn pinned_in(panel: &str, resources: Vec<tsumugi_model::Resource>) -> Scenario {
+        Scenario::new()
+            .event(crate::config::testing::configured(panel))
+            .event(work(read("a", file_and_url())).with(|w| w.tree.resources = resources))
+            .send(shown(Some("a"), Some("/w")))
+    }
+
+    const PINNED_TAB: &str =
+        "[[panel.session.tabs]]\ntitle = \"Mine\"\ncomponents = [\"pinned\", \"files\"]\n";
+
+    #[test]
+    fn the_resources_of_the_shown_project_are_listed_under_pinned_and_those_of_others_are_not() {
+        let run = pinned_in(
+            PINNED_TAB,
+            vec![
+                resource("/w", "https://a.dev/doc"),
+                resource("/elsewhere", "https://b.dev"),
+                resource("/w", "/etc/a.conf"),
+            ],
+        );
+        assert_eq!(
+            keys(entries_of(&run)),
+            [
+                "Pinned",
+                "pinned https://a.dev/doc",
+                "pinned /etc/a.conf",
+                "Files",
+                "/w/a.rs"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_project_that_keeps_nothing_lists_no_pinned_heading() {
+        let run = pinned_in(PINNED_TAB, vec![resource("/elsewhere", "https://b.dev")]);
+        assert_eq!(keys(entries_of(&run)), ["Files", "/w/a.rs"]);
+    }
+
+    #[test]
+    fn a_pinned_address_opens_and_a_pinned_path_opens_and_reveals_and_either_copies() {
+        let pressed = |keys: &[Key]| {
+            let run = pinned_in(
+                PINNED_TAB,
+                vec![
+                    resource("/w", "https://a.dev/doc"),
+                    resource("/w", "/etc/a.conf"),
+                ],
+            );
+            local(&run.send_all(keys.iter().copied().map(Msg::DetailsKey)))
+        };
+        assert_eq!(
+            pressed(&[Key::Down, Key::Open]),
+            [Effect::Open {
+                environment: here(),
+                target: "https://a.dev/doc".into()
+            }]
+        );
+        assert_eq!(pressed(&[Key::Down, Key::Reveal]), []);
+        assert_eq!(
+            pressed(&[Key::Down, Key::Down, Key::Reveal]),
+            [Effect::Reveal {
+                environment: here(),
+                path: "/etc/a.conf".into()
+            }]
+        );
+        assert_eq!(
+            pressed(&[Key::Down, Key::Copy]),
+            [Effect::Copy {
+                text: "https://a.dev/doc".into(),
+                done: "Copied https://a.dev/doc".into()
+            }]
         );
     }
 

@@ -85,6 +85,9 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::CreateLocalIssue(issue) => {
             super::commands::create_local_issue(context, &caller, issue).await
         }
+        Command::Resources(asked) => super::commands::resources(context, &caller, asked).await,
+        Command::AddResource(asked) => super::commands::add_resource(context, &caller, asked).await,
+        Command::RemoveResource(asked) => super::commands::remove_resource(context, asked).await,
         Command::Rename(asked) => rename(context, &caller, asked).await,
         Command::Close => close(context, &caller).await,
         Command::Prompted { cleared } => prompted(context, &caller, cleared).await,

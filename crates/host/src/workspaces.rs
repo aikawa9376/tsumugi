@@ -11,6 +11,18 @@ const FILE: &str = "workspaces.json";
 /// Taken while what is kept is read, changed and written again.
 static KEEPING: Mutex<()> = Mutex::new(());
 
+/// The root of the workspace holding `dir`: its repository's when git holds
+/// it, the scratch folder's for one below it, or else the directory itself.
+pub async fn root_of(dir: &Path) -> PathBuf {
+    let scratch = crate::paths::scratch_dir();
+    if dir.starts_with(&scratch) {
+        return scratch;
+    }
+    tsumugi_vcs::inspect(dir)
+        .await
+        .map_or_else(|| dir.to_owned(), |worktree| worktree.repo)
+}
+
 /// The workspaces kept in `directory`, none before any is.
 pub fn load(directory: &Path) -> Result<BTreeSet<PathBuf>, String> {
     let path = directory.join(FILE);
