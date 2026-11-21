@@ -77,7 +77,16 @@ fn a_menu_draws_going_starting_and_ending_apart() {
     assert_eq!(
         grouped(Target::Row(Item::Session(here(), "a".into())), Some(&s)),
         [
-            [&OPENS[..], &[Action::SessionRename, Action::CursorCopy]].concat(),
+            [
+                &OPENS[..],
+                &[
+                    Action::SessionRename,
+                    Action::SessionMarkUnread,
+                    Action::NotificationsMute,
+                    Action::CursorCopy
+                ]
+            ]
+            .concat(),
             vec![
                 Action::SessionNew,
                 Action::ShellOpen,
@@ -124,6 +133,8 @@ fn a_session_tsumugi_runs_can_be_opened_renamed_started_beside_and_ended() {
             &OPENS[..],
             &[
                 Action::SessionRename,
+                Action::SessionMarkUnread,
+                Action::NotificationsMute,
                 Action::CursorCopy,
                 Action::SessionNew,
                 Action::ShellOpen,
@@ -150,7 +161,11 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
     assert_eq!(
         actions(Target::Row(Item::Workspace(here(), "/api".into())), None),
         [
-            &[Action::CursorGo, Action::CursorCopy][..],
+            &[
+                Action::CursorGo,
+                Action::CursorCopy,
+                Action::NotificationsMute
+            ][..],
             &starts,
             &[Action::WorktreeNew, Action::WorkspaceRemove]
         ]
@@ -160,7 +175,7 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
         actions(Target::Row(Item::Worktree(here(), "/api".into())), None),
         [
             &OPENS[..],
-            &[Action::CursorCopy],
+            &[Action::CursorCopy, Action::NotificationsMute],
             &starts,
             &[
                 Action::WorktreeNew,

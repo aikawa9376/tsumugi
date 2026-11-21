@@ -1089,3 +1089,43 @@ fn a_new_session_on_a_pull_request_asks_for_a_worktree_at_its_head_first() {
         images: Vec::new(),
     }));
 }
+
+#[test]
+fn marking_unread_acts_on_the_session_the_console_shows_and_needs_one() {
+    let run =
+        showing(Area::Console).send(perform(Action::SessionMarkUnread, None, Probe::default()));
+    let state = run.state();
+    let tree = state.hosts.own().work.as_ref().unwrap().tree.tree();
+    let (_, _, a) = tree.find("a").unwrap();
+    assert!(state.tree.completions.unread(a));
+    let run = Scenario::new().event(listing()).send(perform(
+        Action::SessionMarkUnread,
+        None,
+        Probe::default(),
+    ));
+    assert_eq!(run.state().tree.completions.unread_count(), 0);
+}
+
+#[test]
+fn muting_silences_the_worktree_of_the_session_shown_and_again_lets_it_be_told() {
+    let run =
+        showing(Area::Console).send(perform(Action::NotificationsMute, None, Probe::default()));
+    let silenced = |run: &Scenario| {
+        let state = run.state();
+        let tree = state.hosts.own().work.as_ref().unwrap().tree.tree();
+        state.notices.mutes.silences(&here(), tree, "a")
+    };
+    assert!(silenced(&run));
+    let run = run.send(perform(Action::NotificationsMute, None, Probe::default()));
+    assert!(!silenced(&run));
+}
+
+#[test]
+fn muting_with_nothing_shown_does_nothing() {
+    let run = Scenario::new().event(listing()).send(perform(
+        Action::NotificationsMute,
+        None,
+        Probe::default(),
+    ));
+    assert!(run.last_effects().is_empty());
+}

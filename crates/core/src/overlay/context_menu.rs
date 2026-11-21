@@ -70,6 +70,8 @@ pub fn entries(
     .map(offer);
     let ending = session.map(|_| offer(Action::SessionStop));
     let rename = session.map(|_| offer(Action::SessionRename));
+    let unread = session.map(|_| offer(Action::SessionMarkUnread));
+    let mute = offer(Action::NotificationsMute);
     // The key says where a row opens, as in fern.
     let opens = [
         Action::CursorGo,
@@ -104,7 +106,8 @@ pub fn entries(
         Target::Row(Item::Session(_, _) | Item::Waiting(_, _)) => opens
             .into_iter()
             .chain(rename)
-            .chain([copy_name])
+            .chain(unread)
+            .chain([mute, copy_name])
             .chain(here)
             .chain([close])
             .chain(ending)
@@ -124,7 +127,7 @@ pub fn entries(
             .collect(),
         Target::Row(Item::Worktree(_, _)) => opens
             .into_iter()
-            .chain([copy_path])
+            .chain([copy_path, mute])
             .chain(here)
             .chain([
                 offer(Action::WorktreeNew),
@@ -132,7 +135,7 @@ pub fn entries(
                 offer(Action::WorktreeDelete),
             ])
             .collect(),
-        Target::Row(Item::Workspace(_, _)) => [fold, copy_path]
+        Target::Row(Item::Workspace(_, _)) => [fold, copy_path, mute]
             .into_iter()
             .chain(here)
             .chain([offer(Action::WorktreeNew), offer(Action::WorkspaceRemove)])

@@ -40,6 +40,7 @@ pub mod status;
 #[cfg(test)]
 pub mod testing;
 pub mod tree;
+mod unread;
 pub mod update;
 pub mod viewers;
 pub mod worktree;

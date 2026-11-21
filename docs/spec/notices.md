@@ -41,7 +41,15 @@ host no longer keeps.
 
 A notification outside the window is told when a failure or a completion
 happens while the window is not in front, as for a session that waits
-([settings](settings.md)); Settings turns each of the three on or off.
+([settings](settings.md)); each of the three is on until Settings turns it off.
+
+**Mute or unmute notifications** (`notifications.mute`), on the row of a
+workspace, a worktree or a session, silences the three kinds for what runs in
+that workspace or worktree, a session's meaning the worktree it runs in, and
+tells them again when used a second time. A muted row is marked, and its rows
+and the notices list stand as they would: only the notification outside the
+window is not told. A window remembers what it muted across runs, apart from
+other windows.
 Nothing is told of what the host kept before the window first heard from it,
 nor twice of the same notice, and with several windows open the one holding
 the lowest number tells.

@@ -231,6 +231,9 @@ pub enum Effect {
     /// Keep what the window has read of the notices, for when it opens
     /// again.
     KeepReads(crate::notices::Reads),
+    /// Keep which workspaces and worktrees the window silenced, for when it
+    /// opens again.
+    KeepMutes(crate::notices::Mutes),
 
     // The tree.
     /// Give the filter's field the keys, or take them from it.

@@ -282,6 +282,20 @@ pub(crate) fn perform(
             }
             None => Vec::new(),
         },
+        Action::SessionMarkUnread => {
+            match crate::unread::session_of(cur.as_ref(), on_list, thing.as_ref()) {
+                Some((environment, id)) => step(state, Msg::SessionMarkUnread { environment, id }),
+                None => Vec::new(),
+            }
+        }
+        Action::NotificationsMute => {
+            match crate::unread::place_of(state, cur.as_ref(), on_list, thing.as_ref()) {
+                Some((environment, path)) => {
+                    step(state, Msg::NotificationsMute { environment, path })
+                }
+                None => Vec::new(),
+            }
+        }
         Action::SessionRename => {
             if area == Area::Sidebar
                 && state.sidebar.panel == crate::sidebar::Panel::Agents

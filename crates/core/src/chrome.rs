@@ -43,11 +43,16 @@ impl Default for Chrome {
 }
 
 /// The window's title: with what `git describe` said of the source, which
-/// only a debug build is told.
-pub fn title(described: Option<&str>) -> String {
-    match described {
+/// only a debug build is told, and ahead of it how many sessions and
+/// terminals are unread, as a browser tab counts them.
+pub fn title(described: Option<&str>, unread: usize) -> String {
+    let name = match described {
         Some(d) => format!("Tsumugi ({d})"),
         None => "Tsumugi".into(),
+    };
+    match unread {
+        0 => name,
+        n => format!("({n}) {name}"),
     }
 }
 
@@ -164,8 +169,14 @@ mod tests {
 
     #[test]
     fn a_build_that_knows_its_source_names_it_in_the_title() {
-        assert_eq!(title(Some("6b5486a-dirty")), "Tsumugi (6b5486a-dirty)");
-        assert_eq!(title(None), "Tsumugi");
+        assert_eq!(title(Some("6b5486a-dirty"), 0), "Tsumugi (6b5486a-dirty)");
+        assert_eq!(title(None, 0), "Tsumugi");
+    }
+
+    #[test]
+    fn the_title_counts_what_is_unread_ahead_of_the_name() {
+        assert_eq!(title(None, 3), "(3) Tsumugi");
+        assert_eq!(title(Some("6b5486a"), 1), "(1) Tsumugi (6b5486a)");
     }
 
     #[test]

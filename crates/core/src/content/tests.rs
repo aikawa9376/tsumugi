@@ -461,6 +461,31 @@ fn a_session_that_starts_waiting_is_told_of_after_the_first_listing() {
 }
 
 #[test]
+fn a_session_starting_to_wait_in_a_muted_workspace_is_not_told_of_but_still_shows_it() {
+    let waits = session("a").cwd("/r").waiting(Wait::Permission);
+    let run = Scenario::new()
+        .send(opened(None))
+        .send(Msg::NotificationsMute {
+            environment: here(),
+            path: "/r".into(),
+        })
+        .event(listing([session("a").cwd("/r")]))
+        .event(patch(2).listed(listed().session(waits)));
+    assert!(
+        !run.last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::NotifyWaiting(_)))
+    );
+    let state = run.state();
+    let tree = state.hosts.own().work.as_ref().unwrap().tree.tree();
+    let (_, _, a) = tree.find("a").unwrap();
+    assert!(matches!(
+        state.tree.completions.state(a),
+        tsumugi_model::State::Waiting(_)
+    ));
+}
+
+#[test]
 fn the_middle_follows_what_the_focused_window_shows() {
     let run = listed_with([session("a"), session("b")]).send(show(session_tab("a")));
     assert_eq!(run.state().content.place, place("/r/a"));

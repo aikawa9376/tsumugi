@@ -84,6 +84,8 @@ pub enum Action {
     NoticesOpen,
     SessionStop,
     SessionRename,
+    SessionMarkUnread,
+    NotificationsMute,
     SessionProfileNext,
     SessionProfilePrev,
     ShellOpen,
@@ -397,6 +399,12 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::SessionRename, "session.rename", "edit the name of a session Tsumugi runs in place; the tree shows it, and the session is sent Claude Code's `/rename` so its own interface says it too")
         .bar("Rename…", Icon::Pencil)
         .row("Rename…", Go),
+    S::new(A::SessionMarkUnread, "session.mark_unread", "mark a session unread, as if it had finished out of view: its row is drawn bold and counted in the window's title until a window in front shows it anew ([details](sessions.md#unread-sessions))")
+        .row("Mark as unread", Go)
+        .icon(Icon::Circle),
+    S::new(A::NotificationsMute, "notifications.mute", "silence the notifications outside the window of the workspace or worktree of the selected row, or tell them again; its rows keep showing how its sessions stand ([details](notices.md#outside-the-window))")
+        .row("Mute or unmute notifications", Go)
+        .icon(Icon::BellOff),
     S::new(A::SessionProfileNext, "session.profile_next", "while a session not started yet is shown, switch the profile it is to start from to the next one ([details](sessions.md#agents))")
         .bar("Next Profile of New Session", Icon::ChevronDown),
     S::new(A::SessionProfilePrev, "session.profile_prev", "while a session not started yet is shown, switch the profile it is to start from to the previous one ([details](sessions.md#agents))")
@@ -750,6 +758,8 @@ mod tests {
             NoticesOpen,
             SessionStop,
             SessionRename,
+            SessionMarkUnread,
+            NotificationsMute,
             SessionProfileNext,
             SessionProfilePrev,
             ShellOpen,
