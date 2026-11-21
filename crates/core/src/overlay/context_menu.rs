@@ -27,6 +27,10 @@ pub enum Target {
         at: usize,
         file: bool,
     },
+    /// Row `at` of the details panel's list, a commit of the log.
+    Commit {
+        at: usize,
+    },
     /// The details panel's Resources where no row is.
     Panel,
 }
@@ -210,6 +214,17 @@ pub fn entries(
             .chain(file.then(|| offer(Action::CursorReveal)))
             .chain([offer(Action::ResourceEdit), offer(Action::ResourceRemove)])
             .collect(),
+        Target::Commit { .. } => [
+            Action::LogOpenRemote,
+            Action::LogCopyHash,
+            Action::LogExplain,
+            Action::LogBranch,
+            Action::LogWorktree,
+            Action::LogCherryPick,
+            Action::LogRevert,
+        ]
+        .map(offer)
+        .to_vec(),
         Target::Panel => vec![
             offer(Action::ResourceAdd),
             offer(Action::ResourceScreenshot),

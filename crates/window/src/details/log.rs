@@ -6,6 +6,7 @@ use tsumugi_model::repository::Commit;
 
 use crate::bridge::AppCtx;
 use tsumugi_core::msg::Msg;
+use tsumugi_core::overlay::context_menu::{Reach, Target};
 
 /// `commits` with their graph; a click opens one, or, with `base`, the row at
 /// its place from `base` of the panel's list.
@@ -30,6 +31,17 @@ pub(super) fn LogRows(
                     Some(base) => Msg::DetailsClick(base + i),
                     None => Msg::DetailsOpenRow(i),
                 }),
+                oncontextmenu: move |e: Event<MouseData>| {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    let p = e.client_coordinates();
+                    app.dispatch(Msg::MenuOpen {
+                        x: p.x,
+                        y: p.y,
+                        target: Target::Commit { at: base.unwrap_or(0) + i },
+                        reach: Reach::Here,
+                    });
+                },
                 div {
                     class: "commit-graph",
                     dangerous_inner_html: graph::svg(row, lanes, graph::Marks { current: c.current, empty: c.empty, conflict: c.conflict }),

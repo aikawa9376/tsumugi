@@ -349,7 +349,7 @@ pub(crate) fn run_menu(state: &mut ViewState, target: Target, action: Action) ->
         ),
         Target::Row(item) | Target::Start(item) => (Msg::TreeSelect(Some(item)), Area::Sidebar),
         Target::Tab(tab) => (Msg::TabReveal(tab), Area::Console),
-        Target::Link { at, .. } | Target::Pinned { at, .. } => {
+        Target::Link { at, .. } | Target::Pinned { at, .. } | Target::Commit { at } => {
             (Msg::DetailsSelect(at), Area::Details)
         }
         Target::Panel => (Msg::Focus(Area::Details), Area::Details),
@@ -521,6 +521,26 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
             environment,
             worktree,
             op: tsumugi_protocol::GitOp::Abort,
+            prompt: false,
+        }],
+        Ask::CherryPick {
+            environment,
+            worktree,
+            commit,
+        } => vec![Effect::Git {
+            environment,
+            worktree,
+            op: tsumugi_protocol::GitOp::CherryPick { commit: commit.id },
+            prompt: false,
+        }],
+        Ask::RevertCommit {
+            environment,
+            worktree,
+            commit,
+        } => vec![Effect::Git {
+            environment,
+            worktree,
+            op: tsumugi_protocol::GitOp::Revert { commit: commit.id },
             prompt: false,
         }],
         Ask::PullWrite {

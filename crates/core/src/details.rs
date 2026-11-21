@@ -15,6 +15,7 @@ use tsumugi_protocol::RepositoryRead;
 
 pub use tsumugi_model::Note;
 
+mod commits;
 mod conflicts;
 mod environment;
 mod layout;
@@ -23,6 +24,8 @@ mod rows;
 mod system;
 mod timeline;
 
+pub(crate) use commits::press as press_on_commit;
+pub use commits::selected_commit;
 pub(crate) use conflicts::{open_in_neovim, resolve};
 pub use environment::*;
 pub use layout::*;
@@ -1314,6 +1317,14 @@ impl Drill {
     /// The tab shown, by its place.
     pub fn tab(&self) -> usize {
         self.tab
+    }
+
+    /// The commit of the log opened, whose files are shown.
+    pub fn commit(&self) -> Option<&Commit> {
+        match self.opened.first() {
+            Some(Opened::Commit(commit)) => Some(commit),
+            _ => None,
+        }
     }
 
     /// The subagent opened, by its call.

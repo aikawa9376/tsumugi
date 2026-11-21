@@ -159,6 +159,13 @@ pub enum Action {
     DetailsBase,
     DetailsResolve,
     DetailsNeovim,
+    LogCopyHash,
+    LogOpenRemote,
+    LogExplain,
+    LogBranch,
+    LogWorktree,
+    LogCherryPick,
+    LogRevert,
     ViewerZoomIn,
     ViewerZoomOut,
     ViewerZoomFit,
@@ -550,6 +557,27 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::DetailsBase, "details.base", "in the details panel, write the base the branch is compared with in the prompt, an empty one giving up the choice for the one Tsumugi finds; sending chooses it ([details](details.md#branch-and-conflicts))").says("Choose the base of the branch"),
     S::new(A::DetailsResolve, "details.resolve", "in the details panel, open a draft in the worktree whose prompt asks an agent to resolve the files in conflict ([details](details.md#branch-and-conflicts))").says("Resolve the conflicts with an agent"),
     S::new(A::DetailsNeovim, "details.neovim", "in the details panel, open the diff of the selected change in your Neovim, a file in conflict in its Diffview where it has one ([details](details.md#branch-and-conflicts))").says("Open the change in Neovim"),
+    S::new(A::LogCopyHash, "log.copy_hash", "in the details panel, copy the full hash of the commit selected in the log, or opened from it ([details](details.md#log))").says("Copy the commit hash")
+        .icon(Icon::Copy)
+        .row("Copy commit hash", Go),
+    S::new(A::LogOpenRemote, "log.open_remote", "in the details panel, open the commit selected in the log on GitHub, in the browser of the worktree; a repository that is not on GitHub says so ([details](details.md#log))").says("Open the commit on GitHub")
+        .icon(Icon::BrandGithub)
+        .row("Open commit on GitHub", Go),
+    S::new(A::LogExplain, "log.explain", "in the details panel, open a draft in the worktree whose prompt asks an agent to explain the commit selected in the log; sending it starts the session ([details](details.md#log))").says("Explain the commit with an agent")
+        .icon(Icon::MessageQuestion)
+        .row("Explain with an agent", Go),
+    S::new(A::LogBranch, "log.branch", "in the details panel, write the name of a branch to make at the commit selected in the log in the prompt: sending makes it without checking it out, and leaving the prompt gives it up ([details](details.md#log))").says("Create a branch here")
+        .icon(Icon::GitBranch)
+        .row("Create branch here…", Start),
+    S::new(A::LogWorktree, "log.worktree", "in the details panel, open the new worktree dialog starting at the commit selected in the log ([details](details.md#log))").says("Create a worktree here")
+        .icon(Icon::FolderPlus)
+        .row("Create worktree here…", Start),
+    S::new(A::LogCherryPick, "log.cherry_pick", "in the details panel, after asking, cherry-pick the commit selected in the log onto the branch checked out; a dirty worktree, an unfinished operation, a merge commit and a commit already applied are told and change nothing, and a conflict is left to resolve, continue or abort ([details](details.md#log))").says("Cherry-pick the commit…")
+        .icon(Icon::GitCommit)
+        .row("Cherry-pick…", Go),
+    S::new(A::LogRevert, "log.revert", "in the details panel, after asking, revert the commit selected in the log in a commit of its own on the branch checked out, with the same refusals as `log.cherry_pick` ([details](details.md#log))").says("Revert the commit…")
+        .icon(Icon::ArrowBackUp)
+        .row("Revert…", Go),
     S::new(A::ViewerZoomIn, "viewer.zoom_in", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](content.md#viewers))").says("Zoom in"),
     S::new(A::ViewerZoomOut, "viewer.zoom_out", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller").says("Zoom out"),
     S::new(A::ViewerZoomFit, "viewer.zoom_fit", "in a viewer, draw an image, a PDF, an HTML page or a Markdown document fitting the window").says("Fit to the window"),
@@ -879,6 +907,13 @@ mod tests {
             DetailsBase,
             DetailsResolve,
             DetailsNeovim,
+            LogCopyHash,
+            LogOpenRemote,
+            LogExplain,
+            LogBranch,
+            LogWorktree,
+            LogCherryPick,
+            LogRevert,
             ViewerZoomIn,
             ViewerZoomOut,
             ViewerZoomFit,

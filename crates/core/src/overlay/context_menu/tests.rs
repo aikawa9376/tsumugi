@@ -22,6 +22,7 @@ fn every_entry_of_every_menu_shows_an_icon_and_has_a_row_in_the_table() {
         Target::Tab(Tab::Terminal(here(), 1)),
         Target::Link { at: 0, file: true },
         Target::Pinned { at: 0, file: true },
+        Target::Commit { at: 0 },
         Target::Panel,
     ];
     for target in targets {
@@ -377,4 +378,22 @@ fn every_entry_of_a_heading_s_menu_shows_an_icon_and_has_a_row_in_the_table() {
         assert!(action.icon().is_some(), "{label}");
         assert!(action.spec().row.is_some(), "{label}");
     }
+}
+
+#[test]
+fn a_commit_of_the_log_offers_what_can_be_done_with_it_and_runs_it_on_that_row() {
+    let offered = grouped(Target::Commit { at: 3 }, None);
+    let all: Vec<Action> = offered.concat();
+    for action in [
+        Action::LogOpenRemote,
+        Action::LogCopyHash,
+        Action::LogExplain,
+        Action::LogBranch,
+        Action::LogWorktree,
+        Action::LogCherryPick,
+        Action::LogRevert,
+    ] {
+        assert!(all.contains(&action), "{action:?}");
+    }
+    assert_eq!(all.len(), 7);
 }
