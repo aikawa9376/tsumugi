@@ -43,6 +43,10 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             state.overlays.local_issues = None;
             Vec::new()
         }
+        Msg::ResourceSheetClose => {
+            state.overlays.resource_sheet = None;
+            Vec::new()
+        }
         Msg::Opened { home, environment } => {
             state.picker.home = home;
             state.hosts.open(environment.clone());
@@ -236,6 +240,19 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::DetailsTab(tab) => details::show_tab(&mut state.details, tab),
         Msg::DetailsTabStep(delta) => details::step_tab(&mut state.details, delta),
         Msg::DetailsShowComponent(c) => details::show_component(&mut state.details, c),
+        Msg::DetailsKey(key @ (details::Key::Add | details::Key::Edit)) => {
+            let environment = content::shown_environment(state);
+            let sheet = details::resource_sheet(
+                &state.details,
+                state.hosts.work(&environment),
+                key == details::Key::Edit,
+            );
+            if sheet.is_some() {
+                state.overlays.menu = None;
+                state.overlays.resource_sheet = sheet;
+            }
+            Vec::new()
+        }
         Msg::DetailsKey(key) => {
             let environment = content::shown_environment(state);
             details::press(&mut state.details, state.hosts.work(&environment), key)

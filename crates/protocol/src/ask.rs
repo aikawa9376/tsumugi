@@ -32,6 +32,23 @@ pub enum Ask {
     DeleteLocalIssue {
         id: String,
     },
+    /// Keep `target`, an address or a path, as a resource of the project
+    /// holding `dir`; a relative path is taken from `dir`.
+    PinResource {
+        dir: PathBuf,
+        target: String,
+        label: Option<String>,
+    },
+    /// Keep the resource of `id` no more.
+    UnpinResource {
+        id: String,
+    },
+    /// Replace the label and note of the resource of `id`.
+    DescribeResource {
+        id: String,
+        label: Option<String>,
+        note: Option<String>,
+    },
     PathEntries {
         root: Option<HostPath>,
         typed: String,

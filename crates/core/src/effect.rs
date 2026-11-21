@@ -51,6 +51,21 @@ pub enum Effect {
     Lightbox(Tab),
     /// Tell the user this in the status line.
     Notice(String),
+    /// Ask the work host of `environment` to keep `target`, an address or a
+    /// path, as a resource of the project holding `dir`.
+    PinResource {
+        environment: EnvironmentId,
+        dir: PathBuf,
+        target: String,
+        label: Option<String>,
+    },
+    /// Ask the work host of `environment` to keep the resource of `id`, known
+    /// as `title`, no more.
+    UnpinResource {
+        environment: EnvironmentId,
+        id: String,
+        title: String,
+    },
     /// Ask the work host of `environment` to make `path` in `worktree`, a
     /// directory when `dir`, with the directories it passes through.
     MakeEntry {

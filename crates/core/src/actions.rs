@@ -62,6 +62,10 @@ pub enum Action {
     CursorCopy,
     CursorReveal,
     CursorBrowse,
+    ResourcePin,
+    ResourceUnpin,
+    ResourceAdd,
+    ResourceEdit,
     FilerDown,
     FilerUp,
     FilerInto,
@@ -342,6 +346,14 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::CursorBrowse, "cursor.browse", "open the selected pull request or issue on GitHub in the browser")
         .icon(Icon::BrandGithub)
         .row("Open on GitHub", Go),
+    S::new(A::ResourcePin, "resource.pin", "in the details panel, keep the selected link, file or artifact as a resource of the project the panel shows ([resources](resources.md#pinning-and-unpinning))")
+        .says("Pin it to the project"),
+    S::new(A::ResourceUnpin, "resource.unpin", "in the details panel, stop keeping the selected pinned resource ([resources](resources.md#pinning-and-unpinning))")
+        .says("Unpin it"),
+    S::new(A::ResourceAdd, "resource.add", "in the details panel, type a path or an address to keep as a resource of the project the panel shows, and a label for it ([resources](resources.md#pinning-and-unpinning))")
+        .says("Pin a path or an address"),
+    S::new(A::ResourceEdit, "resource.edit", "in the details panel, change the label and the note of the selected pinned resource ([resources](resources.md#pinning-and-unpinning))")
+        .says("Edit its label and note"),
     S::new(A::FilerDown, "filer.down", "move to the next file or directory, in the tree's files or the picker's directories").says("Next entry"),
     S::new(A::FilerUp, "filer.up", "move to the previous file or directory").says("Previous entry"),
     S::new(A::FilerInto, "filer.into", "open the directory selected and go to its first entry once it is read; on a file of the tree, open it as `cursor.go` does").says("Go into"),
@@ -665,6 +677,10 @@ mod tests {
             CursorCopy,
             CursorReveal,
             CursorBrowse,
+            ResourcePin,
+            ResourceUnpin,
+            ResourceAdd,
+            ResourceEdit,
             FilerDown,
             FilerUp,
             FilerInto,

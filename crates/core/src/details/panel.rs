@@ -107,6 +107,14 @@ pub enum Key {
     Fold,
     Copy,
     Reveal,
+    /// Keep the link selected as a resource of the project shown.
+    Pin,
+    /// Keep the resource selected no more.
+    Unpin,
+    /// Open the sheet keeping a path or an address typed by hand.
+    Add,
+    /// Open the sheet describing the resource selected.
+    Edit,
 }
 
 /// How the panel scrolls what is not a list.
@@ -420,7 +428,15 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         Key::Up => details.drill.step(l, -1),
         Key::First => details.drill.first(l),
         Key::Last => details.drill.last(l),
-        Key::Open | Key::OpenIn(_) | Key::Fold | Key::Copy | Key::Reveal => {}
+        Key::Open
+        | Key::OpenIn(_)
+        | Key::Fold
+        | Key::Copy
+        | Key::Reveal
+        | Key::Pin
+        | Key::Unpin
+        | Key::Add
+        | Key::Edit => {}
     }
     Vec::new()
 }
@@ -468,6 +484,9 @@ fn pressed_on_entries(
         _ => None,
     };
     match (folds, how, chosen) {
+        (None, None, Some(entry)) if matches!(key, Key::Pin | Key::Unpin) => {
+            pinned(details, entry, key)
+        }
         (Some((group, shut)), ..) => {
             fold(details, group, shut);
             if let Some(now) = entry_listing(details, work)
@@ -482,6 +501,59 @@ fn pressed_on_entries(
         (None, Some(_), None) => Vec::new(),
         _ => moved(details, l, key),
     }
+}
+
+/// `key` pressed on `entry`: a link is pinned to the project shown, and a
+/// pinned resource unpinned; no other row is.
+fn pinned(details: &Details, entry: &Entry, key: Key) -> Vec<Effect> {
+    let environment = details.shown.environment.clone();
+    match (key, entry) {
+        (Key::Pin, Entry::Link(link)) => details
+            .shown
+            .worktree
+            .clone()
+            .map(|dir| Effect::PinResource {
+                environment,
+                dir,
+                target: link.target.clone(),
+                label: link.title.clone().filter(|t| !t.trim().is_empty()),
+            })
+            .into_iter()
+            .collect(),
+        (Key::Unpin, Entry::Pinned(resource)) => vec![Effect::UnpinResource {
+            environment,
+            id: resource.id.clone(),
+            title: resource.title(),
+        }],
+        _ => Vec::new(),
+    }
+}
+
+/// The sheet keeping a resource by hand in the project shown, or describing
+/// the pinned one selected; none where no project is shown, or no pinned row
+/// is selected to describe.
+pub(crate) fn resource_sheet(
+    details: &Details,
+    work: Option<&WorkSnapshot>,
+    edit: bool,
+) -> Option<crate::overlay::ResourceSheet> {
+    let dir = details.shown.worktree.clone()?;
+    let editing = if edit {
+        let Some(ref l @ Listing::Entries(ref entries)) = list(details, work) else {
+            return None;
+        };
+        match details.drill.selected(l).map(|at| &entries[at]) {
+            Some(Entry::Pinned(resource)) => Some(resource.clone()),
+            _ => return None,
+        }
+    } else {
+        None
+    };
+    Some(crate::overlay::ResourceSheet {
+        environment: details.shown.environment.clone(),
+        dir,
+        editing,
+    })
 }
 
 /// `entry` of `l` opened: the row for a group's rest shows the group whole,
@@ -2660,6 +2732,119 @@ pub(crate) mod tests {
                 done: "Copied https://a.dev/doc".into()
             }]
         );
+    }
+
+    /// What pressing `keys` on the panel of [`PINNED_TAB`], where `/w` keeps
+    /// two resources, asks of the window.
+    fn pinning(keys: &[Key]) -> Scenario {
+        pinned_in(
+            PINNED_TAB,
+            vec![
+                resource("/w", "https://a.dev/doc"),
+                resource("/w", "/etc/a.conf"),
+            ],
+        )
+        .send_all(keys.iter().copied().map(Msg::DetailsKey))
+    }
+
+    #[test]
+    fn a_row_of_files_links_or_artifacts_is_pinned_to_the_project_shown() {
+        // Rows: Pinned, two pinned, Files, /w/a.rs.
+        let run = pinning(&[Key::Last, Key::Pin]);
+        assert_eq!(
+            local(&run),
+            [Effect::PinResource {
+                environment: here(),
+                dir: "/w".into(),
+                target: "/w/a.rs".into(),
+                label: None
+            }]
+        );
+    }
+
+    #[test]
+    fn a_titled_link_is_pinned_by_its_title() {
+        let titled = Link {
+            title: Some("API guide".into()),
+            ..link(LinkKind::Url, "https://a.dev")
+        };
+        let run = Scenario::new()
+            .event(crate::config::testing::configured(
+                "[[panel.session.tabs]]\ntitle = \"Mine\"\ncomponents = [\"links\"]\n",
+            ))
+            .event(work(read(
+                "a",
+                with_links(Links {
+                    urls: vec![titled],
+                    ..Default::default()
+                }),
+            )))
+            .send(shown(Some("a"), Some("/w")))
+            .send_all([Msg::DetailsKey(Key::Last), Msg::DetailsKey(Key::Pin)]);
+        assert_eq!(
+            local(&run),
+            [Effect::PinResource {
+                environment: here(),
+                dir: "/w".into(),
+                target: "https://a.dev".into(),
+                label: Some("API guide".into())
+            }]
+        );
+    }
+
+    #[test]
+    fn only_a_link_row_is_pinned() {
+        // A heading, and a row already pinned, pin nothing.
+        assert_eq!(local(&pinning(&[Key::Pin])), []);
+        assert_eq!(local(&pinning(&[Key::Down, Key::Pin])), []);
+    }
+
+    #[test]
+    fn a_pinned_row_is_unpinned_and_no_other_row_is() {
+        let run = pinning(&[Key::Down, Key::Down, Key::Unpin]);
+        assert_eq!(
+            local(&run),
+            [Effect::UnpinResource {
+                environment: here(),
+                id: "/w/etc/a.conf".into(),
+                title: "a.conf".into()
+            }]
+        );
+        assert_eq!(local(&pinning(&[Key::Unpin])), []);
+        assert_eq!(local(&pinning(&[Key::Last, Key::Unpin])), []);
+    }
+
+    #[test]
+    fn adding_opens_the_sheet_for_the_project_shown_and_editing_opens_it_on_the_pinned_row_selected()
+     {
+        let sheet = |keys: &[Key]| pinning(keys).state().overlays.resource_sheet.clone();
+        assert_eq!(
+            sheet(&[Key::Add]),
+            Some(crate::overlay::ResourceSheet {
+                environment: here(),
+                dir: "/w".into(),
+                editing: None
+            })
+        );
+        assert_eq!(
+            sheet(&[Key::Down, Key::Edit]),
+            Some(crate::overlay::ResourceSheet {
+                environment: here(),
+                dir: "/w".into(),
+                editing: Some(resource("/w", "https://a.dev/doc"))
+            })
+        );
+        assert_eq!(sheet(&[Key::Edit]), None);
+        assert_eq!(sheet(&[Key::Last, Key::Edit]), None);
+    }
+
+    #[test]
+    fn nothing_is_pinned_or_added_where_no_project_is_shown() {
+        let run = Scenario::new()
+            .event(crate::config::testing::configured(PINNED_TAB))
+            .event(work(read("a", file_and_url())))
+            .send_all([Msg::DetailsKey(Key::Add)]);
+        assert_eq!(run.state().overlays.resource_sheet, None);
     }
 
     #[test]

@@ -59,6 +59,10 @@ changes them ([keys](../keys.md)).
 | `cursor.copy` |  | copy the path of the selected file, worktree or workspace, or the name of the selected session, shell or Neovim; in the details panel, the selected link of the overview: its address, or its file's path | `tree`: `y`<br>`agents`: `y`<br>`details`: `y` |
 | `cursor.reveal` |  | in the details panel, show the selected file of the overview in the Finder |  |
 | `cursor.browse` |  | open the selected pull request or issue on GitHub in the browser | `tree`: `g x`<br>`viewer`: `g x` |
+| `resource.pin` |  | in the details panel, keep the selected link, file or artifact as a resource of the project the panel shows ([resources](../resources.md#pinning-and-unpinning)) | `details`: `p` |
+| `resource.unpin` |  | in the details panel, stop keeping the selected pinned resource ([resources](../resources.md#pinning-and-unpinning)) | `details`: `x` |
+| `resource.add` |  | in the details panel, type a path or an address to keep as a resource of the project the panel shows, and a label for it ([resources](../resources.md#pinning-and-unpinning)) | `details`: `a` |
+| `resource.edit` |  | in the details panel, change the label and the note of the selected pinned resource ([resources](../resources.md#pinning-and-unpinning)) | `details`: `e` |
 | `filer.down` |  | move to the next file or directory, in the tree's files or the picker's directories | `filer`: `j`, `ArrowDown` |
 | `filer.up` |  | move to the previous file or directory | `filer`: `k`, `ArrowUp` |
 | `filer.into` |  | open the directory selected and go to its first entry once it is read; on a file of the tree, open it as `cursor.go` does | `filer`: `l`, `ArrowRight` |
@@ -361,6 +365,10 @@ changes them ([keys](../keys.md)).
 "G" = "cursor.last"
 "Escape" = "cursor.fold"
 "y" = "cursor.copy"
+"p" = "resource.pin"
+"x" = "resource.unpin"
+"a" = "resource.add"
+"e" = "resource.edit"
 "Backspace" = "cursor.fold"
 "1" = "details.tab 1"
 "2" = "details.tab 2"

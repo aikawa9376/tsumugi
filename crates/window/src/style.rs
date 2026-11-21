@@ -38,6 +38,7 @@ pub const CSS: &str = concat!(
     include_str!("../assets/css/keys-help.css"),
     include_str!("../assets/css/adding.css"),
     include_str!("../assets/css/local-issues.css"),
+    include_str!("../assets/css/resources.css"),
     include_str!("../assets/css/lightbox.css"),
 );
 
