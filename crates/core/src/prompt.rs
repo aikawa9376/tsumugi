@@ -2,6 +2,7 @@
 //! shown, where Tab pressed there goes, and stepping through the prompts
 //! sent before, which the work host reads.
 
+pub mod base;
 pub mod drafts;
 pub mod fix_request;
 pub mod github_write;
@@ -65,6 +66,9 @@ pub struct PromptView {
     /// The pull request the prompt is written for: its first line is the
     /// title, and what is sent from it opens the pull request.
     pub pulling: Option<pull_request::Pulling>,
+    /// The base of a branch the prompt is written for: its first line is the
+    /// ref, and what is sent from it chooses it.
+    pub basing: Option<base::Basing>,
     /// What the prompt under a GitHub tab is written for; a new comment
     /// where none.
     pub writing: Option<github_write::Aim>,
@@ -96,6 +100,7 @@ impl Default for PromptView {
             commands: None,
             committing: None,
             pulling: None,
+            basing: None,
             writing: None,
         }
     }
@@ -145,6 +150,7 @@ pub(crate) fn begin_commit(
     let last = crate::details::working_copy(&state.details, state.hosts.work(&environment))
         .and_then(|view| view.revision)
         .map(|revision| revision.description);
+    state.prompt.basing = None;
     state.prompt.committing = Some(Committing {
         environment,
         worktree,

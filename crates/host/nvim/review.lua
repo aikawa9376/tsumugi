@@ -4,7 +4,9 @@ vim.env.TSUMUGI_REVIEW = nil
 local function open()
   local rev = scope.Files or (scope.Diff and scope.Diff[1]) or 'WorkingCopy'
   local change = scope.Diff and scope.Diff[2]
-  local commit = type(rev) == 'table' and rev.Commit or nil
+  local since = type(rev) == 'table' and rev.Branch or nil
+  local commit = type(rev) == 'table' and (rev.Commit or (rev.Branch and 'HEAD')) or nil
+  local unmerged = change and ({ DD = true, AU = true, UD = true, UA = true, DU = true, AA = true, UU = true })[change.status]
   local function git(args)
     local command = { 'git', '--literal-pathspecs' }
     vim.list_extend(command, args)
@@ -26,10 +28,14 @@ local function open()
   -- as data to the plugin rather than through Ex command parsing.
   local available, diffview = pcall(require, 'diffview')
   if available and type(diffview) == 'table' and type(diffview.open) == 'function' then
-    local range = commit and (commit .. '^!') or 'HEAD'
-    if git({ 'rev-parse', '--verify', commit and (commit .. '^') or 'HEAD' }) then
+    local range = since and (since .. '..HEAD') or (commit and (commit .. '^!') or 'HEAD')
+    if git({ 'rev-parse', '--verify', since or (commit and (commit .. '^') or 'HEAD') }) then
       local args = { range }
-      if change then
+      if unmerged then
+        -- A file in conflict is Diffview's to merge: it lists it apart from
+        -- the changes, which a range would leave out.
+        args = { '--', change.path }
+      elseif change then
         vim.list_extend(args, { '--', change.path })
         if change.from and change.from ~= vim.NIL then table.insert(args, change.from) end
       end
@@ -38,10 +44,12 @@ local function open()
       vim.notify('DiffviewOpen failed: ' .. tostring(err) .. '. Opening built-in diff.', vim.log.levels.WARN)
     end
   end
-  local base = commit and (commit .. '^') or 'HEAD'
+  local base = since or (commit and (commit .. '^') or 'HEAD')
   local files
   if change then
     files = { change.path }
+  elseif since then
+    files = paths(git({ 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', since, 'HEAD', '--' }))
   elseif commit then
     files = paths(git({ 'diff-tree', '--root', '--no-commit-id', '--no-renames', '-r', '--name-only', '-z', commit, '--' }))
   else

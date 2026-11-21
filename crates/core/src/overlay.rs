@@ -423,6 +423,29 @@ pub(crate) fn ask_discard(state: &mut ViewState) -> Vec<Effect> {
     Vec::new()
 }
 
+/// Ask to abort the operation Git has not finished in the worktree the
+/// details panel shows; with none, say so.
+pub(crate) fn ask_abort(state: &mut ViewState) -> Vec<Effect> {
+    let Some(worktree) = state.details.shown.worktree.clone() else {
+        return Vec::new();
+    };
+    let environment = crate::content::shown_environment(state);
+    let work = state.hosts.work(&environment);
+    let Some(operation) =
+        crate::details::branch(&state.details, work).and_then(|branch| branch.operation)
+    else {
+        return vec![Effect::Notice(
+            "No merge, rebase, cherry-pick or revert is in progress".into(),
+        )];
+    };
+    state.overlays.confirm = Some(Ask::AbortOperation {
+        environment,
+        worktree,
+        operation,
+    });
+    Vec::new()
+}
+
 /// Ask to force push, or to amend, the worktree the details panel shows.
 pub(crate) fn ask_rewrite(state: &mut ViewState, amend: bool) -> Vec<Effect> {
     let Some(worktree) = state.details.shown.worktree.clone() else {
@@ -488,6 +511,16 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
             environment,
             worktree,
             op: tsumugi_protocol::GitOp::Push { lease: true },
+            prompt: false,
+        }],
+        Ask::AbortOperation {
+            environment,
+            worktree,
+            ..
+        } => vec![Effect::Git {
+            environment,
+            worktree,
+            op: tsumugi_protocol::GitOp::Abort,
             prompt: false,
         }],
         Ask::AmendCommit {

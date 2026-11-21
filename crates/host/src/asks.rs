@@ -635,6 +635,11 @@ async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<Answer, tsumugi
         }
         GitOp::Push { lease } => write::push(worktree, lease).await.map(told),
         GitOp::Pull => write::pull(worktree).await.map(told),
+        GitOp::Abort => write::abort(worktree).await.map(told),
+        GitOp::Resume => write::resume(worktree).await.map(told),
+        GitOp::ChooseBase { base } => write::choose_base(worktree, base.as_deref())
+            .await
+            .map(|()| Answer::Done),
         GitOp::CreatePull {
             base,
             title,

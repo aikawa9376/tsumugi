@@ -112,6 +112,7 @@ pub(crate) fn begin(
         .map(|revision| revision.description)
         .unwrap_or_default();
     state.prompt.committing = None;
+    state.prompt.basing = None;
     state.prompt.pulling = Some(Pulling {
         environment,
         worktree,

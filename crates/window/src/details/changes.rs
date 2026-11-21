@@ -107,7 +107,7 @@ pub(super) fn Repository(
                 (_, Some(Listing::Diff(lines))) => rsx! {
                     DiffRows { lines }
                 },
-                (_, Some(Listing::Entries(_))) => rsx! {},
+                (_, Some(Listing::Entries(_) | Listing::Branch(_))) => rsx! {},
             }
         }
     }

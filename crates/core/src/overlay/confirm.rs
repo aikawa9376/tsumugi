@@ -67,6 +67,12 @@ pub enum Ask {
         environment: EnvironmentId,
         worktree: PathBuf,
     },
+    /// Give up the merge, rebase, cherry-pick or revert of a worktree.
+    AbortOperation {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        operation: tsumugi_model::repository::Operation,
+    },
     /// Lose these changes of a worktree, staged or not.
     DiscardChanges {
         environment: EnvironmentId,
@@ -193,6 +199,15 @@ impl Ask {
                 "The remote's branch is overwritten with this one, unless somebody else pushed to it since you last fetched. Commits only the remote has are lost.".into(),
                 "Force push",
             ),
+            Self::AbortOperation { operation, .. } => (
+                Icon::Trash,
+                format!("Abort the {}?", operation.name()),
+                format!(
+                    "The worktree goes back as it was before the {} began. What you resolved during it is lost.",
+                    operation.name()
+                ),
+                "Abort",
+            ),
             Self::DiscardChanges { changes, .. } => (
                 Icon::Trash,
                 match changes.as_slice() {
@@ -234,6 +249,7 @@ impl Ask {
             Self::KillProcess(..)
             | Self::RestartDaemon(_)
             | Self::DiscardChanges { .. }
+            | Self::AbortOperation { .. }
             | Self::AmendCommit { .. }
             | Self::ForcePush { .. } => true,
             Self::RemoveWorkspace { terminals, .. } | Self::CloseWorktree { terminals, .. } => {

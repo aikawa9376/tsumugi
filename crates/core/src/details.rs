@@ -10,11 +10,12 @@ use tsumugi_model::time::ago;
 use tsumugi_model::usage::{Limit, Severity, Window};
 use tsumugi_model::{Session, State};
 
-use tsumugi_model::repository::{Change, Commit, DiffLine, Rev, Spot};
+use tsumugi_model::repository::{Change, Commit, DiffLine, Operation, Rev, Spot};
 use tsumugi_protocol::RepositoryRead;
 
 pub use tsumugi_model::Note;
 
+mod conflicts;
 mod environment;
 mod layout;
 pub(crate) mod panel;
@@ -22,6 +23,7 @@ mod rows;
 mod system;
 mod timeline;
 
+pub(crate) use conflicts::{open_in_neovim, resolve};
 pub use environment::*;
 pub use layout::*;
 pub use panel::*;
@@ -480,6 +482,8 @@ pub enum Listing {
     Log(Vec<Commit>),
     Diff(Vec<DiffLine>),
     Error(String),
+    /// Where the branch of the worktree stands.
+    Branch(Box<tsumugi_model::repository::Branch>),
     /// The rows a sheet lists of the session shown, in the order it shows
     /// them.
     Entries(Vec<Entry>),
@@ -521,7 +525,7 @@ impl Listing {
             Listing::Files(files) => files.iter().map(|f| f.path.as_str()).collect(),
             Listing::Log(commits) => commits.iter().map(|c| c.id.as_str()).collect(),
             Listing::Entries(entries) => entries.iter().map(Entry::key).collect(),
-            Listing::Diff(_) | Listing::Error(_) => Vec::new(),
+            Listing::Diff(_) | Listing::Error(_) | Listing::Branch(_) => Vec::new(),
         }
     }
 }
@@ -543,6 +547,8 @@ pub enum Group {
     Timeline,
     /// The files the working copy changes.
     Changed,
+    /// The files the branch committed since it parted from its base.
+    Branch,
     /// The changes leading to the worktree.
     Log,
     Prompts,
@@ -575,6 +581,7 @@ impl Group {
             Group::Pinned => "Pinned",
             Group::Timeline => "Timeline",
             Group::Changed => "Changes",
+            Group::Branch => "Committed on Branch",
             Group::Log => "Log",
             Group::Prompts => "Prompts",
             Group::Processes => "Processes",
@@ -608,6 +615,13 @@ pub enum Entry {
     Task(TaskLine),
     /// A file the working copy changes, which opens its diff.
     Changed(Change),
+    /// A file the branch committed since it parted from its base, which opens
+    /// its diff.
+    Compared(Compared),
+    /// Where the branch stands against its base.
+    Branch(BranchCard),
+    /// The operation Git has not finished in the worktree.
+    Operation(OperationCard),
     /// A change of the log, which opens the files it changed.
     Commit(Commit),
     /// What was said to the session in a turn, which opens it whole.
@@ -637,6 +651,7 @@ impl Entry {
                 Group::Pinned => "\0pinned",
                 Group::Timeline => "\0timeline",
                 Group::Changed => "\0changed",
+                Group::Branch => "\0branch",
                 Group::Log => "\0log",
                 Group::Prompts => "\0prompts",
                 Group::Processes => "\0processes",
@@ -654,6 +669,9 @@ impl Entry {
             Entry::Tree(card) => card.key.as_str(),
             Entry::Task(line) => line.id.as_str(),
             Entry::Changed(c) => c.path.as_str(),
+            Entry::Compared(c) => c.key.as_str(),
+            Entry::Branch(_) => "\0branch card",
+            Entry::Operation(_) => "\0operation",
             Entry::Commit(c) => c.id.as_str(),
             Entry::Prompt(p) => p.key.as_str(),
             Entry::More { group, .. } => match group {
@@ -669,6 +687,7 @@ impl Entry {
                 Group::Pinned => "\0more pinned",
                 Group::Timeline => "\0more timeline",
                 Group::Changed => "\0more changed",
+                Group::Branch => "\0more branch",
                 Group::Log => "\0more log",
                 Group::Prompts => "\0more prompts",
                 Group::Processes => "\0more processes",
@@ -691,12 +710,84 @@ impl Entry {
             Entry::Pinned(_) => Group::Pinned,
             Entry::Image(_) => Group::Images,
             Entry::Tree(_) | Entry::Task(_) => Group::Timeline,
-            Entry::Changed(_) => Group::Changed,
+            Entry::Changed(_) | Entry::Branch(_) | Entry::Operation(_) => Group::Changed,
+            Entry::Compared(_) => Group::Branch,
             Entry::Commit(_) => Group::Log,
             Entry::Prompt(_) => Group::Prompts,
             Entry::More { group, .. } => *group,
         }
     }
+}
+
+/// A file the branch committed since it parted from its base.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Compared {
+    /// The commit it parted at, which the file's diff is read from.
+    pub since: String,
+    pub change: Change,
+    /// What tells the row apart from the working copy's row of the same file.
+    key: String,
+}
+
+impl Compared {
+    pub fn new(since: String, change: Change) -> Self {
+        let key = format!("\0branch\0{}", change.path);
+        Self { since, change, key }
+    }
+}
+
+/// Where the branch stands against its base, as a row says it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchCard {
+    /// The branch, or the commit when none is checked out.
+    pub head: String,
+    pub detached: bool,
+    /// The base it is compared with.
+    pub base: Option<String>,
+    pub ahead: usize,
+    pub behind: usize,
+    pub added: usize,
+    pub removed: usize,
+    /// Why it could not be compared, when it could not.
+    pub note: Option<String>,
+}
+
+impl BranchCard {
+    /// What `branch` says of how the branch stands.
+    pub fn of(branch: &tsumugi_model::repository::Branch) -> Self {
+        use tsumugi_model::repository::{Compared as Status, Head};
+        let c = &branch.comparison;
+        let (head, detached) = match &branch.head {
+            Head::Branch(name) => (name.clone(), false),
+            Head::Detached(short) => (format!("detached at {short}"), true),
+        };
+        let note = match &c.status {
+            Status::Ready => None,
+            Status::Unborn => Some("No commit yet, so there is nothing to compare".to_string()),
+            Status::NoBase(why) | Status::Unrelated(why) | Status::Failed(why) => {
+                Some(format!("Cannot compare: {why}"))
+            }
+        };
+        Self {
+            head,
+            detached,
+            base: c.base.clone(),
+            ahead: c.ahead,
+            behind: c.behind,
+            added: c.added,
+            removed: c.removed,
+            note,
+        }
+    }
+}
+
+/// What Git began in the worktree and has not finished, and how many files
+/// it waits on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationCard {
+    pub operation: Operation,
+    /// The files still in conflict.
+    pub conflicts: usize,
 }
 
 /// How many of each kind run for the session.
@@ -1095,6 +1186,7 @@ pub fn said(group: Group, rows: &[Entry]) -> String {
                 .unwrap_or_default(),
         ),
         Group::Changed => plural(n as u64, "file changed", "files changed"),
+        Group::Branch => plural(n as u64, "file changed", "files changed"),
         Group::Log => line(
             plural(n as u64, "change", "changes"),
             rows.iter()
@@ -1133,6 +1225,7 @@ impl View {
                 Ok(tsumugi_model::repository::Listing::Files(files)) => Listing::Files(files),
                 Ok(tsumugi_model::repository::Listing::Log(commits)) => Listing::Log(commits),
                 Ok(tsumugi_model::repository::Listing::Diff(lines)) => Listing::Diff(lines),
+                Ok(tsumugi_model::repository::Listing::Branch(branch)) => Listing::Branch(branch),
                 Err(e) => Listing::Error(e),
             },
             revision: read.revision,
@@ -1181,6 +1274,8 @@ pub fn change_line(view: &View) -> Option<ChangeLine> {
 enum Opened {
     Commit(Commit),
     File(Change),
+    /// A file the branch committed, as its row.
+    Compared(Compared),
     /// A subagent, by its call, and its description.
     Agent(String, String),
     /// A message of Agents, by its id, and its first line.
@@ -1279,6 +1374,7 @@ impl Drill {
         let rev = |c: &Commit| Rev::Commit(c.id.clone());
         Some(match self.opened.as_slice() {
             [Opened::File(f), ..] => Spot::Diff(Rev::WorkingCopy, f.clone()),
+            [Opened::Compared(c), ..] => Spot::Diff(Rev::Branch(c.since.clone()), c.change.clone()),
             [Opened::Commit(c)] => Spot::Files(rev(c)),
             [Opened::Commit(c), Opened::File(f), ..] => Spot::Diff(rev(c), f.clone()),
             _ => return None,
@@ -1295,6 +1391,7 @@ impl Drill {
                 }
                 Opened::Commit(c) => format!("{} {}", c.short, c.subject),
                 Opened::File(f) => f.shown(),
+                Opened::Compared(c) => c.change.shown(),
                 Opened::Agent(_, description) => description.clone(),
                 Opened::Message(_, summary) => summary.clone(),
                 Opened::Process(_, name) => name.clone(),
@@ -1368,11 +1465,12 @@ impl Drill {
                 Entry::Process(p) => Opened::Process(p.key.clone(), p.name.clone()),
                 Entry::Task(t) => Opened::Task(t.id.clone(), t.title.clone()),
                 Entry::Changed(c) => Opened::File(c.clone()),
+                Entry::Compared(c) => Opened::Compared(c.clone()),
                 Entry::Commit(c) => Opened::Commit(c.clone()),
                 Entry::Prompt(p) => Opened::Prompt(p.key.clone(), p.summary().to_owned()),
                 _ => return false,
             },
-            Listing::Diff(_) | Listing::Error(_) => return false,
+            Listing::Diff(_) | Listing::Error(_) | Listing::Branch(_) => return false,
         };
         self.opened.push(opened);
         self.cursor = None;
@@ -1397,6 +1495,7 @@ impl Drill {
         let key = match opened {
             Opened::Commit(c) => c.id,
             Opened::File(f) => f.path,
+            Opened::Compared(c) => c.key,
             Opened::Agent(call, _) => call,
             Opened::Message(id, _) => id,
             Opened::Process(key, _) => key,
@@ -1417,7 +1516,7 @@ impl Drill {
         let gone = match listing {
             Listing::Error(_) => true,
             Listing::Diff(lines) => lines.is_empty(),
-            Listing::Files(_) | Listing::Log(_) | Listing::Entries(_) => false,
+            Listing::Files(_) | Listing::Log(_) | Listing::Entries(_) | Listing::Branch(_) => false,
         };
         if gone && !self.opened.is_empty() {
             return self.back();

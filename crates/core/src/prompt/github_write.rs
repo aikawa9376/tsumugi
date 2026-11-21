@@ -265,6 +265,7 @@ pub(crate) fn begin(state: &mut ViewState, aim: Aim) -> Vec<Effect> {
     let text = template(&aim);
     state.prompt.committing = None;
     state.prompt.pulling = None;
+    state.prompt.basing = None;
     state.prompt.writing = Some(aim);
     let mut effects = step(state, Msg::Focus(Area::Prompt));
     if let Some(text) = text {

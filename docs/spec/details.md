@@ -196,6 +196,39 @@ pull request is answered and reviewed from its tab
 These work wherever the work host runs, and name each file by its path as it
 is, whatever characters it holds. When Git refuses, the panel says why.
 
+## Branch and conflicts
+
+**Changes** also says where the branch stands: the branch checked out, or the
+commit when none is, the base it is compared with, how many commits it is
+ahead of the base and behind it, and the lines it added and took out since the
+two parted. Under the working copy's changes, **Committed on Branch** lists the
+files the branch committed since then, each opening its diff. What is only
+edited in the worktree is not counted there.
+
+The base is the one chosen for the branch, else the default branch of
+`origin`, else `main` or `master`. `b` writes it in the prompt, and sending
+chooses it; an empty prompt goes back to the one found. A base that is not a
+commit of the repository is refused. The choice is kept in the repository's own
+Git configuration, as `branch.<name>.tsumugiBase`, and so is read from a
+worktree wherever it is made. When the branch cannot be compared, because no
+base is found or the one named does not exist, because the branch has no
+commit, or because it and the base share none, as in a clone too shallow to
+reach where they parted, the panel says why in place of numbers and lists
+nothing as committed.
+
+A merge, rebase, cherry-pick or revert that Git has not finished shows above
+the changes, with how many files it waits on. Its files in conflict are marked
+`U`, and are opened in your Neovim, in Diffview where you have it, with `E`.
+`m` goes on with it once every file is resolved and staged, naming those that
+are not; a rebase that meets another conflict stops there and says so. `Q`
+gives it up after asking, putting the worktree back as it was before it began.
+`I` opens a draft in the worktree whose prompt asks an agent to resolve the
+files in conflict, and sending it starts that session.
+
+An operation in progress is never broken by what else the panel does: a pull
+and an amend are refused while one is unfinished, and a file in conflict can
+be neither unstaged nor discarded.
+
 ## Arranging the panel
 
 The arrangement is this computer's, for every environment, kept with its

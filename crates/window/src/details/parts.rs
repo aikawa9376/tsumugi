@@ -351,13 +351,63 @@ fn Changed(
                                         span { class: "list-row-name", "{f.shown()}" }
                                     }
                                 },
-                                Entry::Heading { folded, count, .. } => rsx! {
+                                Entry::Compared(c) => rsx! {
+                                    ListRow { key: "{c.change.path}-branch",
+                                        kind: "mono",
+                                        selected: selected == Some(at),
+                                        onclick: move |_| app.dispatch(Msg::DetailsClick(at)),
+                                        super::changes::FileStatus { status: c.change.status.clone(), conflicted: false }
+                                        span { class: "list-row-name", "{c.change.shown()}" }
+                                    }
+                                },
+                                Entry::Branch(card) => rsx! {
+                                    ListRow { key: "branch-{at}",
+                                        kind: "dim",
+                                        selected: selected == Some(at),
+                                        onclick: move |_| app.dispatch(Msg::DetailsClick(at)),
+                                        span { class: "list-row-name", title: "{card.head}",
+                                            "{card.head}"
+                                            if let Some(base) = &card.base { " → {base}" }
+                                        }
+                                        if card.note.is_none() {
+                                            span { class: "details-link-tag", "↑{card.ahead} ↓{card.behind}" }
+                                            span { class: "details-link-tag", "+{card.added} −{card.removed}" }
+                                        }
+                                    }
+                                    if let Some(note) = &card.note {
+                                        div { class: "git-error", "{note}" }
+                                    }
+                                },
+                                Entry::Operation(card) => rsx! {
+                                    div { class: "git-error operation-card", key: "operation-{at}",
+                                        span { class: "list-row-name",
+                                            {format!("{} in progress", card.operation.name())}
+                                            if card.conflicts > 0 {
+                                                {format!(" · {} in conflict", card.conflicts)}
+                                            }
+                                        }
+                                        div { class: "review-actions",
+                                            button { onclick: move |_| app.dispatch(Msg::DetailsKey(tsumugi_core::details::Key::Resume)), "Continue" }
+                                            button { onclick: move |_| app.dispatch(Msg::DetailsKey(tsumugi_core::details::Key::Abort)), "Abort" }
+                                            if card.conflicts > 0 {
+                                                button { onclick: move |_| app.dispatch(Msg::DetailsKey(tsumugi_core::details::Key::Resolve)), "Resolve with agent" }
+                                            }
+                                        }
+                                    }
+                                },
+                                Entry::Heading { group, folded, count } => rsx! {
                                     ListRow { key: "heading-{at}",
                                         kind: "details-link-heading",
                                         selected: selected == Some(at),
                                         onclick: move |_| app.dispatch(Msg::DetailsClick(at)),
                                         crate::icons::IconView { icon: if folded { crate::icons::Icon::ChevronRight } else { crate::icons::Icon::ChevronDown }, size: 12 }
-                                        span { class: "list-row-name details-summary", {said.clone().unwrap_or_else(|| format!("{count} changed"))} }
+                                        span { class: "list-row-name details-summary",
+                                            if group == tsumugi_core::details::Group::Branch {
+                                                {format!("{} · {count} changed", group.title())}
+                                            } else {
+                                                {said.clone().unwrap_or_else(|| format!("{count} changed"))}
+                                            }
+                                        }
                                     }
                                 },
                                 Entry::More { hidden, .. } => rsx! {
