@@ -169,7 +169,7 @@ pub fn added(path: &str, content: &[u8], max: usize) -> Vec<DiffLine> {
 
 /// Has git write a path as it is rather than octal escapes for anything
 /// outside ASCII, so a Japanese name reads as itself.
-const UNQUOTED: &str = "core.quotePath=false";
+pub(crate) const UNQUOTED: &str = "core.quotePath=false";
 
 pub(crate) fn git_dir(path: &Path) -> Result<&str, Error> {
     path.to_str().ok_or_else(|| Error::Failed {
@@ -257,6 +257,51 @@ pub async fn file_diff(
     args.extend(change.paths());
     let out = run_head("git", &args, None, lines, DIFF_BYTES).await?;
     Ok(parse_diff(&out, lines))
+}
+
+/// What `change` does to its file in the commits made since `since`, up to
+/// `lines` lines: the line diff of `since` against HEAD, which leaves the
+/// worktree out.
+pub async fn since_diff(
+    path: &Path,
+    since: &str,
+    change: &Change,
+    lines: usize,
+) -> Result<Vec<DiffLine>, Error> {
+    let dir = git_dir(path)?;
+    let mut args = vec!["-C", dir, "-c", UNQUOTED, "diff", "-M"];
+    args.extend([
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        since,
+        "HEAD",
+        "--",
+    ]);
+    args.extend(change.paths());
+    let out = run_head("git", &args, None, lines, DIFF_BYTES).await?;
+    Ok(parse_diff(&out, lines))
+}
+
+/// The files the commits made since `since` changed.
+pub async fn since_files(path: &Path, since: &str) -> Result<Vec<Change>, Error> {
+    let out = git(
+        path,
+        &[
+            "-c",
+            UNQUOTED,
+            "diff",
+            "--name-status",
+            "-z",
+            "-M",
+            "--no-ext-diff",
+            since,
+            "HEAD",
+            "--",
+        ],
+    )
+    .await?;
+    Ok(parse_name_status(&out))
 }
 
 /// At most `max` bytes from the start of a file.

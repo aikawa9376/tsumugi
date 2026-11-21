@@ -9,6 +9,9 @@ use std::path::Path;
 
 use tokio::process::Command;
 
+use tsumugi_model::repository::{Head, Operation};
+
+use crate::branch;
 use crate::git::{git, git_dir};
 use crate::{Change, Error, run};
 
@@ -39,6 +42,22 @@ fn refuse_conflicts(changes: &[Change], what: &str) -> Result<(), Error> {
         Some(c) => Err(Error::Failed {
             program: "git".into(),
             stderr: format!("{} is in conflict; resolve it before you {what} it", c.path),
+        }),
+        None => Ok(()),
+    }
+}
+
+/// Fail while a merge, rebase, cherry-pick or revert is unfinished in the
+/// worktree: what is `what` would be built on a state Git has not settled,
+/// and is lost or tangled with it.
+async fn refuse_during_operation(path: &Path, what: &str) -> Result<(), Error> {
+    match branch::operation(path).await {
+        Some(operation) => Err(Error::Failed {
+            program: "git".into(),
+            stderr: format!(
+                "a {} is in progress; finish or abort it before you {what}",
+                operation.name()
+            ),
         }),
         None => Ok(()),
     }
@@ -186,6 +205,8 @@ pub async fn commit(path: &Path, message: &str, amend: bool) -> Result<String, E
     }
     let mut args = vec!["commit"];
     if amend {
+        // The last commit is not the one this operation is making.
+        refuse_during_operation(path, "amend the last commit").await?;
         args.push("--amend");
     }
     args.extend(["--message", message]);
@@ -227,11 +248,97 @@ pub async fn push(path: &Path, lease: bool) -> Result<String, Error> {
 /// git would not choose between merging and rebasing diverged branches, they
 /// are merged.
 pub async fn pull(path: &Path) -> Result<String, Error> {
+    refuse_during_operation(path, "pull").await?;
     match tell(path, &["pull", "--no-edit"]).await {
         Err(Error::Failed { stderr, .. }) if stderr.contains("divergent branches") => {
             tell(path, &["pull", "--no-edit", "--no-rebase"]).await
         }
         done => done,
+    }
+}
+
+/// The operation unfinished in the worktree, or why there is none.
+async fn unfinished(path: &Path) -> Result<Operation, Error> {
+    branch::operation(path).await.ok_or_else(|| Error::Failed {
+        program: "git".into(),
+        stderr: "no merge, rebase, cherry-pick or revert is in progress".into(),
+    })
+}
+
+/// Give up the merge, rebase, cherry-pick or revert in progress and put the
+/// worktree back as it was before it began. What was resolved during it is
+/// lost, so whoever asks has asked the user first.
+pub async fn abort(path: &Path) -> Result<String, Error> {
+    let operation = unfinished(path).await?;
+    tell(path, &[operation.name(), "--abort"]).await
+}
+
+/// Finish what the user resolved of the operation in progress: a merge is
+/// committed, a rebase goes on to its next commit, a cherry-pick or revert
+/// makes its commit. A file still in conflict stops it with the files named,
+/// and a rebase that meets another conflict stops there, as told.
+pub async fn resume(path: &Path) -> Result<String, Error> {
+    let operation = unfinished(path).await?;
+    let unmerged = make(path, &["ls-files", "--unmerged", "-z"]).await?;
+    let mut left: Vec<&str> = unmerged
+        .split('\0')
+        .filter_map(|entry| entry.split_once('\t').map(|(_, name)| name))
+        .collect();
+    left.dedup();
+    if !left.is_empty() {
+        return Err(Error::Failed {
+            program: "git".into(),
+            stderr: format!(
+                "{} still in conflict; resolve and stage {} before you continue the {}",
+                left.join(", "),
+                if left.len() == 1 { "it" } else { "them" },
+                operation.name()
+            ),
+        });
+    }
+    match tell(path, &[operation.name(), "--continue"]).await {
+        Err(Error::Failed { stderr, .. })
+            if branch::operation(path).await == Some(operation)
+                && !make(path, &["ls-files", "--unmerged"])
+                    .await
+                    .unwrap_or_default()
+                    .is_empty() =>
+        {
+            // The next commit of a rebase conflicts: the operation goes on.
+            Ok(stderr)
+        }
+        done => done,
+    }
+}
+
+/// Compare the branch checked out with `base` from now on, or with the one
+/// Tsumugi finds when `base` is `None`. A base that is not a commit of the
+/// repository is refused, so a comparison is never left without one.
+pub async fn choose_base(path: &Path, base: Option<&str>) -> Result<(), Error> {
+    let fail = |stderr: String| Error::Failed {
+        program: "git".into(),
+        stderr,
+    };
+    let Head::Branch(name) = branch::head(path).await? else {
+        return Err(fail(
+            "HEAD is not on a branch; check one out before you choose its base".into(),
+        ));
+    };
+    let key = branch::base_key(&name);
+    match base.map(str::trim) {
+        None | Some("") => {
+            // A key never set is already what was asked.
+            let _ = git(path, &["config", "--unset", &key]).await;
+            Ok(())
+        }
+        Some(base) => {
+            if base.starts_with('-') || !branch::resolves(path, base).await {
+                return Err(fail(format!(
+                    "{base} does not name a commit in this repository"
+                )));
+            }
+            git(path, &["config", &key, base]).await.map(drop)
+        }
     }
 }
 
@@ -679,5 +786,182 @@ mod tests {
             panic!("a detached head was pushed");
         };
         assert!(stderr.contains("not on a branch"), "{stderr}");
+    }
+
+    /// `main` and `feature` both rewrote `f.txt` since they parted, and `main`
+    /// is checked out.
+    fn conflicting() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        git_in(dir.path(), &["init", "-q", "-b", "main"]);
+        for (branch, text) in [("feature", "feature\n"), ("main", "main\n")] {
+            if branch == "feature" {
+                committed(dir.path(), &[("f.txt", "base\n")]);
+                git_in(dir.path(), &["switch", "-q", "-c", "feature"]);
+            } else {
+                git_in(dir.path(), &["switch", "-q", "main"]);
+            }
+            write(dir.path(), "f.txt", text);
+            git_in(dir.path(), &["commit", "-q", "-am", branch]);
+        }
+        dir
+    }
+
+    fn failing(dir: &Path, args: &[&str]) {
+        let ok = std::process::Command::new("git")
+            .args(["-c", "user.name=a", "-c", "user.email=a@b"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(!ok, "git {args:?} was expected to stop");
+    }
+
+    #[tokio::test]
+    async fn aborting_puts_the_worktree_back_as_before_the_merge_began() {
+        let dir = conflicting();
+        failing(dir.path(), &["merge", "feature"]);
+        assert_eq!(statuses(dir.path()).await, [status("UU", "f.txt")]);
+        abort(dir.path()).await.unwrap();
+        assert!(statuses(dir.path()).await.is_empty());
+        assert_eq!(branch::operation(dir.path()).await, None);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "main\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn aborting_a_rebase_cherry_pick_or_revert_goes_by_its_own_command() {
+        let dir = conflicting();
+        git_in(dir.path(), &["switch", "-q", "feature"]);
+        failing(dir.path(), &["rebase", "main"]);
+        assert_eq!(branch::operation(dir.path()).await, Some(Operation::Rebase));
+        abort(dir.path()).await.unwrap();
+        assert_eq!(log(dir.path()), ["feature", "first"]);
+        failing(dir.path(), &["cherry-pick", "main"]);
+        assert_eq!(
+            branch::operation(dir.path()).await,
+            Some(Operation::CherryPick)
+        );
+        abort(dir.path()).await.unwrap();
+        git_in(dir.path(), &["switch", "-q", "main"]);
+        failing(dir.path(), &["revert", "HEAD~1"]);
+        assert_eq!(branch::operation(dir.path()).await, Some(Operation::Revert));
+        abort(dir.path()).await.unwrap();
+        assert_eq!(branch::operation(dir.path()).await, None);
+    }
+
+    #[tokio::test]
+    async fn aborting_with_nothing_in_progress_changes_nothing_and_says_so() {
+        let dir = conflicting();
+        write(dir.path(), "f.txt", "edited\n");
+        let Err(Error::Failed { stderr, .. }) = abort(dir.path()).await else {
+            panic!("nothing was aborted");
+        };
+        assert!(stderr.contains("in progress"), "{stderr}");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "edited\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn continuing_a_merge_waits_for_every_file_to_be_resolved_and_staged() {
+        let dir = conflicting();
+        failing(dir.path(), &["merge", "feature"]);
+        let Err(Error::Failed { stderr, .. }) = resume(dir.path()).await else {
+            panic!("a merge went on with a file in conflict");
+        };
+        assert!(stderr.contains("f.txt"), "{stderr}");
+        assert_eq!(branch::operation(dir.path()).await, Some(Operation::Merge));
+        write(dir.path(), "f.txt", "resolved\n");
+        git_in(dir.path(), &["add", "f.txt"]);
+        resume(dir.path()).await.unwrap();
+        assert_eq!(branch::operation(dir.path()).await, None);
+        assert!(log(dir.path()).first().unwrap().starts_with("Merge"));
+    }
+
+    #[tokio::test]
+    async fn continuing_a_rebase_that_meets_another_conflict_stops_there_without_failing() {
+        let dir = conflicting();
+        git_in(dir.path(), &["switch", "-q", "feature"]);
+        write(dir.path(), "f.txt", "feature again\n");
+        git_in(dir.path(), &["commit", "-q", "-am", "feature again"]);
+        failing(dir.path(), &["rebase", "main"]);
+        write(dir.path(), "f.txt", "first resolved\n");
+        git_in(dir.path(), &["add", "f.txt"]);
+        let told = resume(dir.path()).await.unwrap();
+        assert!(told.contains("CONFLICT"), "{told}");
+        assert_eq!(branch::operation(dir.path()).await, Some(Operation::Rebase));
+        write(dir.path(), "f.txt", "second resolved\n");
+        git_in(dir.path(), &["add", "f.txt"]);
+        resume(dir.path()).await.unwrap();
+        assert_eq!(branch::operation(dir.path()).await, None);
+        assert_eq!(
+            log(dir.path()),
+            ["feature again", "feature", "main", "first"]
+        );
+    }
+
+    #[tokio::test]
+    async fn continuing_with_nothing_in_progress_says_so() {
+        let dir = conflicting();
+        let Err(Error::Failed { stderr, .. }) = resume(dir.path()).await else {
+            panic!("nothing was continued");
+        };
+        assert!(stderr.contains("in progress"), "{stderr}");
+    }
+
+    #[tokio::test]
+    async fn pulling_and_amending_are_refused_while_an_operation_is_unfinished() {
+        let dir = conflicting();
+        failing(dir.path(), &["merge", "feature"]);
+        for failed in [
+            pull(dir.path()).await,
+            commit(dir.path(), "again", true).await,
+        ] {
+            let Err(Error::Failed { stderr, .. }) = failed else {
+                panic!("went on during a merge");
+            };
+            assert!(stderr.contains("merge is in progress"), "{stderr}");
+        }
+        // The merge itself is as it was left.
+        assert_eq!(statuses(dir.path()).await, [status("UU", "f.txt")]);
+        assert_eq!(branch::operation(dir.path()).await, Some(Operation::Merge));
+    }
+
+    #[tokio::test]
+    async fn a_base_is_chosen_for_the_branch_checked_out_and_given_up_again() {
+        let dir = conflicting();
+        choose_base(dir.path(), Some("feature")).await.unwrap();
+        assert_eq!(
+            branch::chosen(dir.path(), "main").await.as_deref(),
+            Some("feature")
+        );
+        assert_eq!(branch::chosen(dir.path(), "feature").await, None);
+        choose_base(dir.path(), None).await.unwrap();
+        assert_eq!(branch::chosen(dir.path(), "main").await, None);
+        // Giving up a base never chosen is not a failure.
+        choose_base(dir.path(), None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_base_that_is_not_a_commit_is_refused_and_the_one_chosen_stays() {
+        let dir = conflicting();
+        choose_base(dir.path(), Some("feature")).await.unwrap();
+        for bad in ["nowhere", "--output=x"] {
+            let Err(Error::Failed { stderr, .. }) = choose_base(dir.path(), Some(bad)).await else {
+                panic!("{bad} was chosen");
+            };
+            assert!(stderr.contains(bad), "{stderr}");
+        }
+        assert_eq!(
+            branch::chosen(dir.path(), "main").await.as_deref(),
+            Some("feature")
+        );
+        git_in(dir.path(), &["checkout", "-q", "--detach"]);
+        assert!(choose_base(dir.path(), Some("feature")).await.is_err());
     }
 }

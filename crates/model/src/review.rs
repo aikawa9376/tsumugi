@@ -286,6 +286,10 @@ pub fn prompt(comments: &[Judged]) -> String {
         let mut from = match rev {
             Rev::WorkingCopy => "uncommitted changes".to_owned(),
             Rev::Commit(id) => format!("commit {}", id.chars().take(7).collect::<String>()),
+            Rev::Branch(id) => format!(
+                "the branch since {}",
+                id.chars().take(7).collect::<String>()
+            ),
         };
         if j.freshness == Freshness::Outdated {
             from.push_str(", outdated: the code changed since this comment was made");

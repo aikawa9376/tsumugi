@@ -112,6 +112,9 @@ pub enum Rev {
     WorkingCopy,
     /// A commit by its [`Commit::id`].
     Commit(String),
+    /// What the branch committed since the commit named: the merge base the
+    /// branch is compared from.
+    Branch(String),
 }
 
 /// What a level of a sheet shows.
@@ -123,6 +126,9 @@ pub enum Spot {
     /// pinned to.
     Lines(Rev, Change),
     Log,
+    /// Where the branch stands: what it is checked out as, what is
+    /// unfinished in it, and how it compares with its base.
+    Branch,
 }
 
 /// What was read for a spot.
@@ -131,6 +137,86 @@ pub enum Listing {
     Files(Vec<Change>),
     Log(Vec<Commit>),
     Diff(Vec<DiffLine>),
+    Branch(Box<Branch>),
+}
+
+/// What HEAD is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Head {
+    /// A branch, which may have no commit yet.
+    Branch(String),
+    /// A commit checked out with no branch, by its short id.
+    Detached(String),
+}
+
+/// An operation Git began in a worktree and has not finished, which stops
+/// where a file is in conflict or a commit is to be made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Operation {
+    Merge,
+    Rebase,
+    CherryPick,
+    Revert,
+}
+
+impl Operation {
+    /// What Git calls it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Operation::Merge => "merge",
+            Operation::Rebase => "rebase",
+            Operation::CherryPick => "cherry-pick",
+            Operation::Revert => "revert",
+        }
+    }
+}
+
+/// Whether the branch could be compared with its base, and if not why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Compared {
+    /// The branch and its base were compared.
+    Ready,
+    /// No base was set or found, or the one named cannot be resolved.
+    NoBase(String),
+    /// The branch has no commit yet.
+    Unborn,
+    /// The branch and its base share no commit, as when a clone is too
+    /// shallow to reach where they parted.
+    Unrelated(String),
+    /// Git failed to compare them.
+    Failed(String),
+}
+
+/// How a branch compares with its base: what it committed since they parted,
+/// and how far each has gone since.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Comparison {
+    pub status: Compared,
+    /// The base as named, when there is one.
+    pub base: Option<String>,
+    /// The commit they parted at.
+    pub merge_base: Option<String>,
+    /// The commits the branch has that the base does not.
+    pub ahead: usize,
+    /// The commits the base has that the branch does not.
+    pub behind: usize,
+    /// The lines the branch added and took out since they parted.
+    pub added: usize,
+    pub removed: usize,
+    /// The files it changed since they parted.
+    pub files: Vec<Change>,
+}
+
+/// Where a worktree's branch stands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Branch {
+    pub head: Head,
+    /// What Git began and has not finished.
+    pub operation: Option<Operation>,
+    /// The base the user chose for this branch, which the comparison uses
+    /// before any Tsumugi would find.
+    pub chosen: Option<String>,
+    pub comparison: Comparison,
 }
 
 #[cfg(test)]

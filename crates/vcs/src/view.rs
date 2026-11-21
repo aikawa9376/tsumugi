@@ -24,10 +24,22 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
     let read = match spot {
         Spot::Files(Rev::WorkingCopy) => git::changes(worktree).await.map(Listing::Files),
         Spot::Files(Rev::Commit(id)) => git::commit_files(worktree, id).await.map(Listing::Files),
+        Spot::Files(Rev::Branch(since)) => {
+            git::since_files(worktree, since).await.map(Listing::Files)
+        }
+        Spot::Diff(Rev::Branch(since), change) | Spot::Lines(Rev::Branch(since), change) => {
+            git::since_diff(worktree, since, change, limits.diff_lines)
+                .await
+                .map(Listing::Diff)
+        }
+        Spot::Branch => crate::branch::branch(worktree)
+            .await
+            .map(|b| Listing::Branch(Box::new(b))),
         Spot::Diff(rev, change) => {
             let revision = match rev {
                 Rev::WorkingCopy => None,
                 Rev::Commit(id) => Some(id.as_str()),
+                Rev::Branch(_) => unreachable!("a branch diff is read above"),
             };
             crate::review::file_diff(worktree, revision, change, limits.diff_lines)
                 .await
@@ -39,6 +51,7 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
             let revision = match rev {
                 Rev::WorkingCopy => None,
                 Rev::Commit(id) => Some(id.as_str()),
+                Rev::Branch(_) => unreachable!("a branch diff is read above"),
             };
             git::file_diff(worktree, revision, change, limits.diff_lines)
                 .await
@@ -54,6 +67,7 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
                 let target = match rev {
                     Rev::WorkingCopy => "HEAD",
                     Rev::Commit(id) => id,
+                    Rev::Branch(_) => "HEAD",
                 };
                 git::revision(worktree, target).await.ok()
             }
