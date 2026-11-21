@@ -28,6 +28,9 @@ pub enum Command {
     Mcp(Vec<String>),
     Editor(Vec<String>),
     Session(Vec<String>),
+    /// List, read, install and update the skills tsumugi ships; it acts on
+    /// files alone, so it needs no host.
+    Skills(Vec<String>),
     /// Start an agent's program in a login of its own, as the last step
     /// of its launch; never typed by hand, so left out of the usage.
     InOwnLogin(Vec<String>),
@@ -261,7 +264,7 @@ impl Command {
     }
 }
 
-pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | mcp … | editor … | session … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
+pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | mcp … | editor … | session … | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
 
 /// The command `args` ask for; `None` for one tsumugi does not know, which
 /// must not open a window: a program that ran an older tsumugi's subcommand
@@ -301,6 +304,7 @@ pub fn command(args: &[String]) -> Option<Command> {
         Some("terminal") => Some(Command::Terminal(rest())),
         Some("editor") => Some(Command::Editor(rest())),
         Some("session") => Some(Command::Session(rest())),
+        Some("skills") => Some(Command::Skills(rest())),
         Some("remote") => remote(&args[1..]),
         Some(tsumugi_agents::own_login::SUBCOMMAND) => Some(Command::InOwnLogin(rest())),
         Some("daemon") => match &args[1..] {
@@ -421,6 +425,16 @@ mod tests {
         ] {
             assert!(!asked(words).unwrap().routed(), "{words:?}");
         }
+    }
+
+    #[test]
+    fn skills_take_the_arguments_after_them_and_need_no_host() {
+        let asked = asked(&["skills", "install", "--all", "--dry-run"]).unwrap();
+        assert_eq!(
+            asked,
+            Command::Skills(vec!["install".into(), "--all".into(), "--dry-run".into()])
+        );
+        assert!(!asked.routed());
     }
 
     #[test]

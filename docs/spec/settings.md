@@ -278,7 +278,8 @@ keeps none.
 
 A profile with a login of its own starts its agent's program, and asks it
 anything, with `home` as the program's state directory, which Tsumugi makes
-when it is missing and never puts anything in. None of the variables that
+when it is missing and puts nothing in itself, apart from the skills you
+install there with [`tsumugi skills`](skills.md). None of the variables that
 would carry another login, or move the program's state elsewhere, reaches
 it, even when the shell it is started through sets them again. Its launch
 cannot set them either, nor the state directory: a session of a profile

@@ -14,6 +14,7 @@ pub mod opencode;
 pub mod own_login;
 pub mod pi;
 pub mod rules;
+pub mod skills;
 mod tail;
 #[cfg(test)]
 mod testing;
