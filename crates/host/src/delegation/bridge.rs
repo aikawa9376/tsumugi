@@ -74,6 +74,31 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(super::protocol::CreateLocalIssue),
         ),
         tool(
+            "local_issues",
+            "List the local issues of this environment with their numbers, states and directories, newest last. Narrow them by `state` or `dir`. Call it to see what the user has queued, what finished and what waits for them.",
+            schemars::schema_for!(super::protocol::LocalIssues),
+        ),
+        tool(
+            "local_issue",
+            "Read one local issue with its request, state, session and error, by the number `local_issues` lists or the start of its id.",
+            schemars::schema_for!(super::protocol::LocalIssueName),
+        ),
+        tool(
+            "close_local_issue",
+            "Close a local issue whose work is finished or no longer wanted, keeping its request so it can be reopened. Active work cannot be closed; it is refused. Do it when the user asks you to, or once its work is done and checked.",
+            schemars::schema_for!(super::protocol::LocalIssueName),
+        ),
+        tool(
+            "reopen_local_issue",
+            "Reopen a done, closed, failed or cancelled local issue for another round of work. It stays saved until the user presses Start; reopening never starts a session.",
+            schemars::schema_for!(super::protocol::LocalIssueName),
+        ),
+        tool(
+            "cancel_local_issue",
+            "Take back a local issue that is open or queued, so that no session starts for it. Starting, retrying and deleting issues stay with the user.",
+            schemars::schema_for!(super::protocol::LocalIssueName),
+        ),
+        tool(
             "resources",
             "List the paths and addresses the user keeps in this project as its resources: the configuration, documents and sites they linked for the work. Only references are kept, never copies; read a path with your own tools and fetch an address as you would any. Call it, with the words the user used as `query`, when they point at something loosely — \"check the conf link\", \"see the docs I linked\" — or when you need material about the project that code does not hold. Call it without `query` to see them all.",
             schemars::schema_for!(super::protocol::Resources),
@@ -172,6 +197,19 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "send" => Command::Send(serde_json::from_value(arguments).map_err(parsed)?),
         "create_local_issue" => {
             Command::CreateLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
+        }
+        "local_issues" => Command::LocalIssues(serde_json::from_value(arguments).map_err(parsed)?),
+        "local_issue" => {
+            Command::ReadLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
+        }
+        "close_local_issue" => {
+            Command::CloseLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
+        }
+        "reopen_local_issue" => {
+            Command::ReopenLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
+        }
+        "cancel_local_issue" => {
+            Command::CancelLocalIssue(serde_json::from_value(arguments).map_err(parsed)?)
         }
         "resources" => Command::Resources(serde_json::from_value(arguments).map_err(parsed)?),
         "add_resource" => Command::AddResource(serde_json::from_value(arguments).map_err(parsed)?),
@@ -586,6 +624,11 @@ mod tests {
             [
                 "start_session",
                 "create_local_issue",
+                "local_issues",
+                "local_issue",
+                "close_local_issue",
+                "reopen_local_issue",
+                "cancel_local_issue",
                 "resources",
                 "add_resource",
                 "remove_resource",
@@ -635,6 +678,33 @@ mod tests {
         )
         .await;
         assert_eq!(out[1]["result"]["isError"], true);
+        assert_eq!(*daemon.asked.lock().unwrap(), ["context"]);
+    }
+
+    #[tokio::test]
+    async fn starting_retrying_and_deleting_a_local_issue_are_not_tools_an_agent_has() {
+        let daemon = Fake::new();
+        let calls: Vec<Value> = [
+            "start_local_issue",
+            "retry_local_issue",
+            "delete_local_issue",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(at, name)| {
+            rpc(
+                at as u64 + 2,
+                "tools/call",
+                json!({"name": name, "arguments": {"issue": "1"}}),
+            )
+        })
+        .collect();
+        let mut lines = vec![rpc(1, "initialize", json!({}))];
+        lines.extend(calls);
+        let out = exchange(daemon.clone(), false, &lines, Duration::from_millis(100)).await;
+        for answer in &out[1..] {
+            assert_eq!(answer["result"]["isError"], true);
+        }
         assert_eq!(*daemon.asked.lock().unwrap(), ["context"]);
     }
 

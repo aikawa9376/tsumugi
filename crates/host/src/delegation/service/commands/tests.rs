@@ -9,6 +9,7 @@ use crate::delegation::protocol::Command;
 use crate::delegation::service::fixtures::conversation_watch;
 use crate::settings::Settings;
 use crate::testing::record;
+use tsumugi_model::LocalIssueAction;
 
 #[tokio::test]
 async fn research_can_be_saved_as_a_local_issue_in_the_callers_directory_without_starting() {
@@ -552,4 +553,147 @@ async fn sessions_are_listed_with_their_codes_and_the_code_of_the_one_that_opene
     assert_eq!(listed[0]["code"], opener.code.as_str());
     assert_eq!(listed[1]["code"], opened.code.as_str());
     assert_eq!(listed[1]["opened_by"]["code"], opener.code.as_str());
+}
+
+async fn saved(context: &Context, caller: &Session, title: &str, dir: &Path) -> String {
+    let result = create_local_issue(
+        context,
+        caller,
+        protocol::CreateLocalIssue {
+            title: title.into(),
+            body: format!("About {title}"),
+            dir: Some(dir.into()),
+        },
+    )
+    .await
+    .unwrap();
+    serde_json::from_value::<tsumugi_model::LocalIssue>(result)
+        .unwrap()
+        .id
+}
+
+fn named(issue: &str) -> protocol::LocalIssueName {
+    protocol::LocalIssueName {
+        issue: issue.into(),
+    }
+}
+
+#[tokio::test]
+async fn an_agent_lists_the_environments_issues_by_state_and_reads_one_by_number() {
+    let (dir, context, caller, _) = conversation_watch("listing");
+    saved(&context, &caller, "first", dir.path()).await;
+    let second = saved(&context, &caller, "second", dir.path()).await;
+    change_local_issue(&context, LocalIssueAction::Close, named(&second))
+        .await
+        .unwrap();
+    let all = local_issues(&context, &caller, protocol::LocalIssues::default())
+        .await
+        .unwrap();
+    assert_eq!(all["issues"].as_array().unwrap().len(), 2);
+    let closed = local_issues(
+        &context,
+        &caller,
+        protocol::LocalIssues {
+            state: Some("closed".into()),
+            dir: Some(dir.path().into()),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(closed["issues"][0]["title"], "second");
+    assert_eq!(closed["issues"][0]["number"], 2);
+    let elsewhere = local_issues(
+        &context,
+        &caller,
+        protocol::LocalIssues {
+            state: None,
+            dir: Some(dir.path().join("nowhere")),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(elsewhere["issues"].as_array().unwrap().is_empty());
+    let bad = local_issues(
+        &context,
+        &caller,
+        protocol::LocalIssues {
+            state: Some("stuck".into()),
+            dir: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(bad.code, Code::Invalid);
+    let read = local_issue(&context, named("1")).await.unwrap();
+    assert_eq!(read["issue"]["body"], "About first");
+}
+
+#[tokio::test]
+async fn an_agent_closes_reopens_and_cancels_issues_but_never_starts_one() {
+    use LocalIssueAction as Action;
+    let (dir, context, caller, _) = conversation_watch("closing");
+    let id = saved(&context, &caller, "kept", dir.path()).await;
+    let state = |done: Value| done["issue"]["state"].as_str().unwrap().to_owned();
+    let act = |action, issue: String| {
+        let context = context.clone();
+        async move { change_local_issue(&context, action, named(&issue)).await }
+    };
+    assert_eq!(
+        state(act(Action::Close, id.clone()).await.unwrap()),
+        "closed"
+    );
+    assert_eq!(
+        state(act(Action::Reopen, id.clone()).await.unwrap()),
+        "open"
+    );
+    assert_eq!(
+        state(act(Action::Cancel, id.clone()).await.unwrap()),
+        "cancelled"
+    );
+    assert_eq!(
+        act(Action::Close, "9".into()).await.unwrap_err().code,
+        Code::NotFound
+    );
+    act(Action::Reopen, id.clone()).await.unwrap();
+    for action in [Action::Start, Action::Retry, Action::Delete] {
+        let error = act(action, id.clone()).await.unwrap_err();
+        assert_eq!(error.code, Code::Refused, "{}", action.word());
+    }
+    assert_eq!(
+        state(local_issue(&context, named(&id)).await.unwrap()),
+        "open"
+    );
+    assert!(
+        context
+            .store
+            .lock()
+            .unwrap()
+            .claim_local_issues()
+            .unwrap()
+            .is_empty()
+    );
+    for command in [
+        Command::CloseLocalIssue(named("1")),
+        Command::ReopenLocalIssue(named("1")),
+        Command::CancelLocalIssue(named("1")),
+    ] {
+        assert!(command.acts());
+    }
+    assert!(!Command::LocalIssues(Default::default()).acts());
+    assert!(!Command::ReadLocalIssue(named("1")).acts());
+}
+
+#[tokio::test]
+async fn an_issue_at_work_is_not_closed_by_an_agent() {
+    let (dir, context, caller, _) = conversation_watch("busy");
+    let id = saved(&context, &caller, "busy", dir.path()).await;
+    {
+        let mut store = context.store.lock().unwrap();
+        store.start_local_issue(&id).unwrap();
+        store.claim_local_issues().unwrap();
+    }
+    let error = change_local_issue(&context, LocalIssueAction::Close, named("1"))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, Code::Refused);
 }

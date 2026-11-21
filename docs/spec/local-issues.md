@@ -33,3 +33,37 @@ A start interrupted before it can be confirmed is not silently repeated.
 An environment begins processing its saved queue when its host serves it
 again. Issues belong to that environment on the work machine, so every
 window connected to it sees the same work.
+
+## From the command line
+
+`tsumugi issue` does from a terminal what the Issues window does, through the
+running work host of the environment, starting it where none runs; every
+window sees the change as it does one made there.
+
+```
+tsumugi issue list [--state <state>] [--dir <path>]
+tsumugi issue show <issue>
+tsumugi issue create --title <title> [--body <text|->] [--dir <path>]
+tsumugi issue start|cancel|retry|close|reopen|delete <issue>
+```
+
+Each takes `--json`, which prints `{"ok":true,"result":…}`, or on failure
+`{"ok":false,"error":{"code":…,"message":…}}`, and `--instance <name>` to act
+in the environment of another instance, as the other commands do. A command
+typed in a session acts in that session's environment.
+
+An issue is named by its number, which `list` shows and which is never given
+to another issue, or by the start of its id. A name that fits no issue or
+several issues is refused, and the several are listed. Saving leaves the issue
+open, as in the window; `create` takes the description from `--body`, or from
+standard input for `-`, and the directory from `--dir`, or else where it is
+typed. Active work cannot be closed or deleted, and the other changes the
+Issues window refuses are refused here. A failed command exits 1 and a command
+not understood exits 2.
+
+## From an agent
+
+Each session's agent can list and read local issues, and close, reopen and
+cancel them, as well as save them. Reopening and cancelling never start work.
+Starting, retrying and deleting are for the user, from the Issues window or
+the command line.

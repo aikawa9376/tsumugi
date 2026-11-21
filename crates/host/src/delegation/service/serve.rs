@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde_json::Value;
 use tokio::io::BufReader;
 use tsumugi_model::timeline::Timeline;
-use tsumugi_model::{Agent, SessionId};
+use tsumugi_model::{Agent, LocalIssueAction, SessionId};
 
 use super::Context;
 use super::commands::{close, listed, prompted, record_timeline, rename, start};
@@ -84,6 +84,17 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::StartSession(start) => self::start(context, &caller, start).await,
         Command::CreateLocalIssue(issue) => {
             super::commands::create_local_issue(context, &caller, issue).await
+        }
+        Command::LocalIssues(asked) => super::commands::local_issues(context, &caller, asked).await,
+        Command::ReadLocalIssue(asked) => super::commands::local_issue(context, asked).await,
+        Command::CloseLocalIssue(asked) => {
+            super::commands::change_local_issue(context, LocalIssueAction::Close, asked).await
+        }
+        Command::ReopenLocalIssue(asked) => {
+            super::commands::change_local_issue(context, LocalIssueAction::Reopen, asked).await
+        }
+        Command::CancelLocalIssue(asked) => {
+            super::commands::change_local_issue(context, LocalIssueAction::Cancel, asked).await
         }
         Command::Resources(asked) => super::commands::resources(context, &caller, asked).await,
         Command::AddResource(asked) => super::commands::add_resource(context, &caller, asked).await,

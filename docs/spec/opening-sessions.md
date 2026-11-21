@@ -69,6 +69,11 @@ cannot act as another.
   returns every tree as it now stands.
 - **`timeline`** returns every tree of the caller's timeline with its tasks'
   statuses, weights and notes, and each tree's progress.
+- **`create_local_issue`**, **`local_issues`**, **`local_issue`**,
+  **`close_local_issue`**, **`reopen_local_issue`** and
+  **`cancel_local_issue`** save, list, read, close, reopen and cancel local
+  issues of the environment ([local issues](local-issues.md#from-an-agent)).
+  An agent cannot start, retry or delete one.
 - **`sessions`** lists the sessions Tsumugi runs, each with its id, code, name,
   workspace, the directory it runs in, how it stands and which session opened
   it. It can be narrowed to one repository or directory.

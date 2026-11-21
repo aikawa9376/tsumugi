@@ -40,7 +40,60 @@ pub enum LocalIssueState {
     Cancelled,
 }
 
+/// What can be done to a saved issue, by its own word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalIssueAction {
+    Start,
+    Cancel,
+    Retry,
+    Close,
+    Reopen,
+    Delete,
+}
+
+impl LocalIssueAction {
+    pub const ALL: [Self; 6] = [
+        Self::Start,
+        Self::Cancel,
+        Self::Retry,
+        Self::Close,
+        Self::Reopen,
+        Self::Delete,
+    ];
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Cancel => "cancel",
+            Self::Retry => "retry",
+            Self::Close => "close",
+            Self::Reopen => "reopen",
+            Self::Delete => "delete",
+        }
+    }
+
+    pub fn parse(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|action| action.word() == word)
+    }
+}
+
 impl LocalIssueState {
+    pub const ALL: [Self; 9] = [
+        Self::Open,
+        Self::Queued,
+        Self::Starting,
+        Self::Running,
+        Self::Waiting,
+        Self::Done,
+        Self::Closed,
+        Self::Failed,
+        Self::Cancelled,
+    ];
+
+    pub fn parse(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|state| state.word() == word)
+    }
+
     pub fn word(self) -> &'static str {
         match self {
             Self::Open => "open",
@@ -71,5 +124,22 @@ impl LocalIssueState {
 
     pub fn can_delete(self) -> bool {
         !matches!(self, Self::Starting | Self::Running | Self::Waiting)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_state_and_action_is_read_back_from_its_word() {
+        for state in LocalIssueState::ALL {
+            assert_eq!(LocalIssueState::parse(state.word()), Some(state));
+        }
+        for action in LocalIssueAction::ALL {
+            assert_eq!(LocalIssueAction::parse(action.word()), Some(action));
+        }
+        assert_eq!(LocalIssueState::parse("Open"), None);
+        assert_eq!(LocalIssueAction::parse("remove"), None);
     }
 }
