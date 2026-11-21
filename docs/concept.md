@@ -35,8 +35,9 @@ conversation or an editor's unsaved buffer.
 
 ## Principles
 
-- **Keep the person in charge.** Sessions answer to the user. Opening another
-  conversation makes another visible piece of work with its own context.
+- **Keep the person in charge.** The user can see every session and step into
+  it. Opening another conversation makes another visible piece of work with its
+  own context, which its opener may supervise but the user still steers.
 - **Keep tools recognizable.** Agent interfaces, Neovim configuration and shell
   behavior remain familiar when brought into the workspace.
 - **Make movement cheap.** Keyboard navigation, tabs, splits and a project tree
