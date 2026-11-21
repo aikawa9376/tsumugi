@@ -108,6 +108,13 @@ pub(crate) fn perform(
         | Action::ViewerBack
         | Action::ViewerForward
         | Action::ViewerCopyPath
+        | Action::ReviewComment
+        | Action::ReviewSelect
+        | Action::ReviewEdit
+        | Action::ReviewDelete
+        | Action::ReviewResolve
+        | Action::ReviewSend
+        | Action::ReviewDraft
         | Action::OverlayClose
         | Action::OverlayDown
         | Action::OverlayUp

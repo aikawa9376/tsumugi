@@ -1,0 +1,31 @@
+/* A diff window's review: numbered lines, comments under them, the comment being written and the prompt being previewed. */
+.review { display:flex; flex-direction:column; min-height:100%; }
+.rv-lines { flex:1; font-family:var(--mono, monospace); }
+.rv-line { display:flex; gap:8px; white-space:pre-wrap; border-left:3px solid transparent; cursor:default; }
+.rv-line:hover { background:var(--select); }
+.rv-line.rv-cursor { border-left-color:#3989ff; background:var(--select); }
+.rv-line.rv-marked { background:rgba(57,137,255,.18); }
+.rv-line.rv-commented { border-left-color:#d9a400; }
+.rv-no { flex:none; width:3.5ch; text-align:right; color:var(--text-3); user-select:none; }
+.rv-thread { margin:4px 0 8px 9ch; padding:6px 10px; border:1px solid var(--line); border-left:3px solid #d9a400; border-radius:5px; background:var(--raised); font-family:inherit; }
+.rv-thread.rv-cursor { border-color:#3989ff; }
+.rv-thread.outdated { border-left-color:var(--fail); }
+.rv-thread.resolved { opacity:.65; }
+.rv-head { display:flex; gap:8px; align-items:center; color:var(--text-3); font-size:var(--ui-font-small); }
+.rv-badge { padding:0 6px; border:1px solid var(--line-strong); border-radius:8px; font-size:var(--ui-font-small); }
+.rv-quoted { margin-top:4px; padding-left:8px; border-left:2px solid var(--line-strong); color:var(--text-2); font-family:var(--mono, monospace); white-space:pre-wrap; }
+.rv-text { margin:4px 0 0; font:inherit; white-space:pre-wrap; }
+.rv-dim { color:var(--text-3); }
+.rv-outdated-title { margin:12px 0 4px; color:var(--fail); font-size:var(--ui-font-small); }
+.rv-composer, .rv-preview, .rv-bar { position:sticky; bottom:0; background:var(--raised); border-top:1px solid var(--line); padding:8px 12px; }
+.rv-composer { display:flex; flex-direction:column; gap:6px; }
+.rv-input { width:100%; padding:5px 8px; border:1px solid var(--line-strong); border-radius:5px; background:var(--bg, transparent); color:var(--text); font:inherit; }
+.rv-preview { max-height:60%; overflow:auto; }
+.rv-label { color:var(--text-2); font-size:var(--ui-font-small); }
+.rv-choice { padding:3px 8px; border-radius:4px; }
+.rv-choice.selected { background:#3989ff; color:#fff; }
+.rv-prompt { margin:8px 0; padding:8px; border:1px solid var(--line); border-radius:5px; white-space:pre-wrap; font-family:var(--mono, monospace); }
+.rv-hint { color:var(--text-3); font-size:var(--ui-font-small); }
+.rv-bar { display:flex; justify-content:space-between; gap:12px; padding:4px 12px; font-size:var(--ui-font-small); }
+.rv-notice { color:var(--fail); }
+.rv-count { color:var(--text-3); white-space:nowrap; }

@@ -57,6 +57,7 @@ mod panes;
 mod pictures;
 pub mod prompts;
 pub mod rename;
+mod review;
 use tsumugi_core::settings;
 mod scaling;
 mod serving_pane;

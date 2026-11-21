@@ -33,6 +33,17 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
                 .await
                 .map(Listing::Diff)
         }
+        // Review comments are pinned to line numbers, which only the line
+        // diff has, never difftastic's text.
+        Spot::Lines(rev, change) => {
+            let revision = match rev {
+                Rev::WorkingCopy => None,
+                Rev::Commit(id) => Some(id.as_str()),
+            };
+            git::file_diff(worktree, revision, change, limits.diff_lines)
+                .await
+                .map(Listing::Diff)
+        }
         Spot::Log => git::history(worktree, limits.log_commits)
             .await
             .map(Listing::Log),
@@ -127,5 +138,44 @@ mod tests {
             .await;
         assert!(matches!(view.listing, Ok(Listing::Files(ref files)) if files.len() == 1));
         assert!(view.revision.is_none());
+    }
+
+    #[tokio::test]
+    async fn the_lines_of_a_change_are_the_line_diff_whatever_the_structural_one_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(dir.path())
+                    .env("GIT_AUTHOR_NAME", "Test")
+                    .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+                    .env("GIT_COMMITTER_NAME", "Test")
+                    .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+                    .status()
+                    .unwrap()
+                    .success()
+            )
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.path().join("メモ.txt"), "one\ntwo\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "first"]);
+        std::fs::write(dir.path().join("メモ.txt"), "one\nTWO\n").unwrap();
+        let change = tsumugi_model::repository::Change {
+            status: " M".into(),
+            path: "メモ.txt".into(),
+            from: None,
+        };
+        let view = Repo::open(dir.path())
+            .load(&Spot::Lines(Rev::WorkingCopy, change), LIMITS)
+            .await;
+        let Ok(Listing::Diff(lines)) = view.listing else {
+            panic!("no diff: {:?}", view.listing);
+        };
+        let kinds: Vec<_> = lines.iter().map(|l| l.kind).collect();
+        assert!(kinds.contains(&tsumugi_model::repository::DiffKind::Hunk));
+        assert!(lines.iter().any(|l| l.text == "+TWO"));
+        assert!(!kinds.contains(&tsumugi_model::repository::DiffKind::Difft));
     }
 }

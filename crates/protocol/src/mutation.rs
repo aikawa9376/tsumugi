@@ -31,6 +31,7 @@ impl Ask {
             Self::TerminalHost
                 | Self::PathEntries { .. }
                 | Self::Drafts
+                | Self::Review { .. }
                 | Self::Picture { .. }
                 | Self::LoginStanding { .. }
                 | Self::Cloned { .. }

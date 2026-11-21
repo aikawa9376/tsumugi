@@ -28,6 +28,7 @@ pub mod picker;
 pub mod profiles;
 pub mod prompt;
 pub mod reference;
+pub mod review;
 pub mod scenario;
 pub mod settings;
 pub mod settle;

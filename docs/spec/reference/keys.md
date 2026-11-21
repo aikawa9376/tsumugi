@@ -145,6 +145,13 @@ changes them ([keys](../keys.md)).
 | `viewer.back` |  | in a viewer, seek a movie back | `viewer`: `h` |
 | `viewer.forward` |  | in a viewer, seek a movie forward | `viewer`: `l` |
 | `viewer.copy_path` |  | in a viewer, copy the path of the file it shows | `viewer`: `y` |
+| `review.comment` |  | in a diff of lines, write a comment on the line the cursor is on, or on the lines marked with `review.select`; `Enter` keeps it and `Escape` gives it up ([review](../review.md)) | `viewer`: `c` |
+| `review.select` |  | in a diff of lines, start marking lines from the cursor to comment on them together, or stop | `viewer`: `v` |
+| `review.edit` |  | in a diff of lines, change the comment on the line the cursor is on | `viewer`: `Enter` |
+| `review.delete` |  | in a diff of lines, delete the comment on the line the cursor is on | `viewer`: `d d` |
+| `review.resolve` |  | in a diff of lines, resolve the comment on the line the cursor is on, or open it again; only this resolves a comment | `viewer`: `r` |
+| `review.send` |  | in a diff of lines, show the prompt that carries every comment not resolved; shown, send it to the session chosen with the movement keys | `viewer`: `s` |
+| `review.draft` |  | in a diff of lines, or in the prompt shown, write the prompt in a new session's draft in the worktree instead of sending it | `viewer`: `S` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -443,6 +450,13 @@ changes them ([keys](../keys.md)).
 "h" = "viewer.back"
 "l" = "viewer.forward"
 "y" = "viewer.copy_path"
+"c" = "review.comment"
+"v" = "review.select"
+"Enter" = "review.edit"
+"d d" = "review.delete"
+"r" = "review.resolve"
+"s" = "review.send"
+"S" = "review.draft"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

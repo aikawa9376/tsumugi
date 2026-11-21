@@ -22,8 +22,22 @@ pub enum ViewerAction {
     SeekForward,
     CopyPath,
     Close,
+    /// What a diff of lines does with a comment.
+    Review(Review),
     /// Read what is shown again from where it comes from.
     Reload,
+}
+
+/// What a key does in a diff of lines to its comments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Review {
+    Comment,
+    Select,
+    Edit,
+    Delete,
+    Resolve,
+    Send,
+    Draft,
 }
 
 impl ViewerAction {
@@ -47,6 +61,13 @@ impl ViewerAction {
             Action::ViewerBack => V::SeekBack,
             Action::ViewerForward => V::SeekForward,
             Action::ViewerCopyPath => V::CopyPath,
+            Action::ReviewComment => V::Review(Review::Comment),
+            Action::ReviewSelect => V::Review(Review::Select),
+            Action::ReviewEdit => V::Review(Review::Edit),
+            Action::ReviewDelete => V::Review(Review::Delete),
+            Action::ReviewResolve => V::Review(Review::Resolve),
+            Action::ReviewSend => V::Review(Review::Send),
+            Action::ReviewDraft => V::Review(Review::Draft),
             Action::WindowQuit => V::Close,
             _ => return None,
         })
@@ -277,6 +298,8 @@ impl ViewerState {
             A::CopyPath => Effect::CopyPath,
             A::Close => Effect::Close,
             A::Reload => Effect::Reload,
+            // Only a diff of lines has comments to act on.
+            A::Review(_) => Effect::Nothing,
         }
     }
 }
