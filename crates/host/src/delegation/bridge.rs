@@ -60,7 +60,7 @@ impl Drop for Background {
 
 /// The tools every session has, whoever started it.
 fn tools() -> Vec<Value> {
-    use super::protocol::{Rename, Send, Sessions, Start};
+    use super::protocol::{Ports, Rename, Send, Sessions, Start};
     let tool = |name: &str, description: &str, schema: schemars::Schema| json!({"name": name, "description": description, "inputSchema": schema});
     vec![
         tool(
@@ -122,6 +122,11 @@ fn tools() -> Vec<Value> {
             "sessions",
             "List the sessions Tsumugi runs, each with the code it keeps, where it works and which session opened it.",
             schemars::schema_for!(Sessions),
+        ),
+        tool(
+            "ports",
+            "List the TCP ports the processes of sessions listen on, each with its address, the process that listens and the session it belongs to: dev servers and the like, to read where to open or to stop one. Only your own worktree's sessions are listed unless you name another worktree or ask for all.",
+            schemars::schema_for!(Ports),
         ),
         tool(
             "rename_session",
@@ -217,6 +222,7 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
             Command::RemoveResource(serde_json::from_value(arguments).map_err(parsed)?)
         }
         "sessions" => Command::Sessions(serde_json::from_value(arguments).map_err(parsed)?),
+        "ports" => Command::Ports(serde_json::from_value(arguments).map_err(parsed)?),
         "models" => Command::Models,
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
         "close_session" => Command::Close,
@@ -634,6 +640,7 @@ mod tests {
                 "remove_resource",
                 "send",
                 "sessions",
+                "ports",
                 "rename_session",
                 "close_session",
                 "timeline_tasks",

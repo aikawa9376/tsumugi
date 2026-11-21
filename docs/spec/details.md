@@ -21,7 +21,7 @@ no tabs are drawn.
 
 As Tsumugi comes, a window's panel has the tabs Overview (the session, its
 change, the branch's pull request, the three newest trees of its timeline,
-what runs for it and About), Code (changes and log), Timeline, Conversation (prompts,
+what runs for it, the ports it listens on and About), Code (changes and log), Timeline, Conversation (prompts,
 messages, subagents and sessions) and Resources (pinned resources, files,
 links, artifacts and images), over a foot of the conversation's context, the account's limits and
 the machine's load. An environment's has the tabs Overview (its connection,
@@ -51,6 +51,18 @@ window or such a row is described.
 - **running** — what works for the session right now: the subagents still at
   work, its live work processes, and the sessions tied to it that still run.
 - **processes** — its live work processes alone.
+- **ports** — the TCP ports its work processes listen on, each by its port,
+  the process that listens and that process's ID, as read on the machine the
+  session runs on. Only the session's own processes are counted, so another
+  worktree's servers are never listed. A port opens in the default browser
+  when the session runs on this computer, copies its address as the work
+  machine itself reaches it, and is stopped by killing the process that
+  listens, as a process of **processes** is. A port of a work machine is
+  opened through a forward: this computer listens on a port of its own
+  loopback and carries each connection over the paired connection to the work
+  machine's loopback, so `localhost` there is never taken for `localhost`
+  here. Forwards end with the connection to the work machine, and none opens
+  a port on the work machine's network. It lists nothing where nothing listens.
 - **about** — the facts that change little: the tokens the whole
   conversation has used, its prompt and tool call counts, the profile and the
   login it started from, the workspace and the worktree, and the

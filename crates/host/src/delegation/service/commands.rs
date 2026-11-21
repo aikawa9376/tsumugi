@@ -459,6 +459,20 @@ pub(super) async fn start(
     })
 }
 
+/// The ports the sessions of a worktree listen on: the caller's own unless
+/// another is named, or every session's.
+pub(super) async fn ports(caller: &Session, asked: protocol::Ports) -> Result<Value> {
+    let dir = (!asked.all).then(|| match asked.worktree {
+        Some(dir) if dir.is_absolute() => dir,
+        Some(dir) => caller.cwd.join(dir),
+        None => caller.cwd.clone(),
+    });
+    let listed = crate::ports::listed(dir)
+        .await
+        .map_err(|text| Error::new(Code::Storage, text))?;
+    answer(listed)
+}
+
 /// The sessions that have not ended, narrowed as `filter` asks.
 pub(super) async fn listed(all: Vec<Session>, filter: &protocol::Sessions) -> Result<Value> {
     let wanted_repo = match &filter.repo {

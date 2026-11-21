@@ -297,6 +297,7 @@ pub(crate) async fn type_prompt(
 async fn run(args: &[String], cwd: &std::path::Path, input: Option<String>) -> Answer {
     let output = match args.split_first() {
         Some((command, rest)) if command == "session" => crate::start::run(rest, cwd, input).await,
+        Some((command, rest)) if command == "ports" => crate::ports::run(rest, cwd).await,
         Some((command, rest)) if command == "terminal" => crate::terminals::run(rest, cwd).await,
         _ => crate::command::Output {
             wrote: Err(format!("the work host runs no command {args:?}")),

@@ -521,6 +521,8 @@ pub enum Group {
     Prompts,
     /// The live processes the session started.
     Processes,
+    /// The TCP ports the session's processes listen on.
+    Ports,
 }
 
 impl Group {
@@ -549,6 +551,7 @@ impl Group {
             Group::Log => "Log",
             Group::Prompts => "Prompts",
             Group::Processes => "Processes",
+            Group::Ports => "Ports",
         }
     }
 }
@@ -565,6 +568,8 @@ pub enum Entry {
     Message(Note),
     Agent(Agent),
     Process(tsumugi_model::Process),
+    /// A port a process of the session listens on.
+    Port(tsumugi_model::Port),
     Fact(Fact),
     Link(Link),
     /// A resource the user keeps in the project.
@@ -608,11 +613,13 @@ impl Entry {
                 Group::Log => "\0log",
                 Group::Prompts => "\0prompts",
                 Group::Processes => "\0processes",
+                Group::Ports => "\0ports",
             },
             Entry::Session(r) => r.name.as_str(),
             Entry::Message(n) => n.id.as_str(),
             Entry::Agent(a) => a.call.as_str(),
             Entry::Process(p) => &p.key,
+            Entry::Port(p) => &p.key,
             Entry::Fact(f) => f.label,
             Entry::Link(l) => l.target.as_str(),
             Entry::Pinned(r) => r.id.as_str(),
@@ -638,6 +645,7 @@ impl Entry {
                 Group::Log => "\0more log",
                 Group::Prompts => "\0more prompts",
                 Group::Processes => "\0more processes",
+                Group::Ports => "\0more ports",
             },
         }
     }
@@ -650,6 +658,7 @@ impl Entry {
             Entry::Message(_) => Group::Messages,
             Entry::Agent(_) => Group::Agents,
             Entry::Process(_) => Group::Running,
+            Entry::Port(_) => Group::Ports,
             Entry::Fact(_) => Group::About,
             Entry::Link(l) => Group::of(&l.kind),
             Entry::Pinned(_) => Group::Pinned,
@@ -1017,6 +1026,13 @@ pub fn said(group: Group, rows: &[Entry]) -> String {
             plural(n as u64, "process", "processes"),
             names(&|e| match e {
                 Entry::Process(p) => Some(p.name.clone()),
+                _ => None,
+            }),
+        ),
+        Group::Ports => line(
+            plural(n as u64, "port", "ports"),
+            names(&|e| match e {
+                Entry::Port(p) => Some(p.port.to_string()),
                 _ => None,
             }),
         ),

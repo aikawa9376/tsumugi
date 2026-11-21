@@ -363,6 +363,7 @@ impl Remote {
             remote: self.clone(),
             info,
             reached: net.address().to_string(),
+            ports: Arc::new(Ports::new(net)),
             _forwarding: forwarding,
         })
     }
@@ -426,7 +427,76 @@ pub struct Tunnel {
     info: RemoteInfo,
     /// The address the work machine answered at, which may not be the saved one.
     reached: String,
+    ports: Arc<Ports>,
     _forwarding: tsumugi_net::Forwarding,
+}
+
+impl Drop for Tunnel {
+    fn drop(&mut self) {
+        // The ports forwarded through it do not outlive it, whoever still
+        // holds them.
+        self.ports.close();
+    }
+}
+
+/// The ports of a work machine reached from this computer, one local port
+/// for each, for as long as the connection that made them lasts.
+pub struct Ports {
+    net: tsumugi_net::Remote,
+    /// The runtime that keeps the connection, which the forwards run on
+    /// whoever asks for one.
+    runtime: tokio::runtime::Handle,
+    open: std::sync::Mutex<Option<std::collections::BTreeMap<u16, tsumugi_net::PortForward>>>,
+}
+
+impl Ports {
+    fn new(net: tsumugi_net::Remote) -> Self {
+        Self {
+            net,
+            runtime: tokio::runtime::Handle::current(),
+            open: std::sync::Mutex::new(Some(Default::default())),
+        }
+    }
+
+    /// The port of this computer's loopback that reaches `port` of the work
+    /// machine, made when it is not yet.
+    pub fn forward(&self, port: u16) -> Result<u16, String> {
+        let mut open = self.open.lock().unwrap();
+        let open = open
+            .as_mut()
+            .ok_or("the work machine is no longer connected")?;
+        if let Some(forward) = open.get(&port) {
+            return Ok(forward.local());
+        }
+        let _entered = self.runtime.enter();
+        let forward = self.net.forward_port(port).map_err(|e| e.to_string())?;
+        let local = forward.local();
+        open.insert(port, forward);
+        Ok(local)
+    }
+
+    /// The ports forwarded, as (the work machine's, this computer's).
+    pub fn forwarded(&self) -> Vec<(u16, u16)> {
+        self.open
+            .lock()
+            .unwrap()
+            .iter()
+            .flatten()
+            .map(|(remote, forward)| (*remote, forward.local()))
+            .collect()
+    }
+
+    /// Stop forwarding `port` of the work machine.
+    pub fn stop(&self, port: u16) {
+        if let Some(open) = self.open.lock().unwrap().as_mut() {
+            open.remove(&port);
+        }
+    }
+
+    /// Stop forwarding every port, and forward none again.
+    fn close(&self) {
+        self.open.lock().unwrap().take();
+    }
 }
 
 impl Tunnel {
@@ -442,6 +512,12 @@ impl Tunnel {
 
     pub fn info(&self) -> &RemoteInfo {
         &self.info
+    }
+
+    /// The work machine's ports reached from here, which end with the
+    /// tunnel.
+    pub fn ports(&self) -> Arc<Ports> {
+        self.ports.clone()
     }
 
     /// The address the work machine answered at.
@@ -538,6 +614,76 @@ mod tests {
             .unwrap();
         let target = pairing_task.await.unwrap().unwrap();
         assert!(matches!(target, Target::Native { address: reached, .. } if reached == address));
+        listening.abort();
+    }
+
+    #[tokio::test]
+    async fn a_forwarded_port_reaches_the_work_machine_and_ends_when_the_connection_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = tsumugi_net::Identity::generate().unwrap();
+        let peers = Arc::new(tsumugi_net::PeerFile::open(dir.path().join("peers.json")).unwrap());
+        let client = tsumugi_net::Identity::generate().unwrap();
+        tsumugi_net::Enroll::enroll(peers.as_ref(), client.fingerprint(), "laptop").unwrap();
+        let pairing = Arc::new(tsumugi_net::Pairing::new(
+            server.fingerprint(),
+            peers.clone(),
+        ));
+        let gateway =
+            tsumugi_net::Gateway::new(&server, peers, pairing, Arc::new(NoHosts)).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let listening = tokio::spawn(async move {
+            let _ = gateway.listen(listener).await;
+        });
+        let server = server.fingerprint();
+        let echo = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let echoed = echo.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = echo.accept().await {
+                tokio::spawn(async move {
+                    let (mut read, mut write) = stream.split();
+                    let _ = tokio::io::copy(&mut read, &mut write).await;
+                });
+            }
+        });
+        let ports = Ports::new(tsumugi_net::Remote::new(client, server, address));
+        let local = ports.forward(echoed).unwrap();
+        assert_eq!(ports.forward(echoed), Ok(local), "one local port for each");
+        assert_eq!(ports.forwarded(), [(echoed, local)]);
+        {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut near = tokio::net::TcpStream::connect(("127.0.0.1", local))
+                .await
+                .unwrap();
+            near.write_all(b"ping").await.unwrap();
+            let mut back = [0u8; 4];
+            tokio::time::timeout(Duration::from_secs(5), near.read_exact(&mut back))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(&back, b"ping");
+        }
+        ports.stop(echoed);
+        assert!(ports.forwarded().is_empty());
+        let again = ports.forward(echoed).unwrap();
+        ports.close();
+        assert!(ports.forwarded().is_empty());
+        assert!(
+            ports.forward(echoed).is_err(),
+            "none is made after it closed"
+        );
+        let mut refused = false;
+        for _ in 0..50 {
+            if tokio::net::TcpStream::connect(("127.0.0.1", again))
+                .await
+                .is_err()
+            {
+                refused = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(refused, "the forwarded port still accepts connections");
         listening.abort();
     }
 

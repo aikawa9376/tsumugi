@@ -64,6 +64,8 @@ struct Shared {
     told: mpsc::Sender<Event>,
     journal: std::sync::Mutex<Option<Arc<Journal>>>,
     work: std::sync::Mutex<Option<Arc<Work>>>,
+    /// The work machine's ports reached from here, while it is connected.
+    ports: std::sync::Mutex<Option<Arc<tsumugi_connect::Ports>>>,
     busy: AtomicBool,
     storage_failed: AtomicBool,
 }
@@ -87,6 +89,7 @@ impl Shared {
             told,
             journal: std::sync::Mutex::new(None),
             work: std::sync::Mutex::new(None),
+            ports: std::sync::Mutex::new(None),
             busy: AtomicBool::new(false),
             storage_failed: AtomicBool::new(false),
         })
@@ -116,6 +119,14 @@ impl Sender {
             remote.moved_to(address);
             self.retry();
         }
+    }
+    /// The port of this computer's loopback that reaches `port` of the work
+    /// machine, made when it is not yet; refused while it is not connected.
+    pub fn forward_port(&self, port: u16) -> Result<u16, String> {
+        let ports = lock(&self.shared.ports).clone();
+        ports
+            .ok_or_else(|| "the work machine is not connected".to_string())?
+            .forward(port)
     }
     pub fn send(&self, request: Request, waiting: &Waiting) {
         self.send_prompt(request, None, waiting);
@@ -383,6 +394,7 @@ impl Keep {
             }
         }
         self.shared.refresh_changes();
+        *lock(&self.shared.ports) = Some(tunnel.ports());
         self.tunnel = Some(tunnel);
         Ok(connection)
     }
@@ -392,6 +404,7 @@ impl Keep {
         loop {
             self.shared.ready.store(false, Ordering::Release);
             *lock(&self.shared.work) = None;
+            *lock(&self.shared.ports) = None;
             self.shared.refresh_changes();
             self.phase(
                 if self.expected.is_some() {
@@ -420,6 +433,7 @@ impl Keep {
                 }
             }
             self.shared.ready.store(false, Ordering::Release);
+            *lock(&self.shared.ports) = None;
             self.tunnel = None;
             let fatal = lock(&self.shared.status).problem.as_ref().is_some_and(|p| {
                 p.contains("identity or generation changed")

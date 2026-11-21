@@ -31,11 +31,14 @@ pub enum Channel {
     Info = b'i',
     Work = b'w',
     Terminal = b't',
+    /// A TCP connection to a port on the work machine's own loopback,
+    /// named by the two bytes that follow the channel.
+    Port = b'p',
 }
 
 impl Channel {
     fn from_byte(byte: u8) -> Option<Self> {
-        [Self::Info, Self::Work, Self::Terminal]
+        [Self::Info, Self::Work, Self::Terminal, Self::Port]
             .into_iter()
             .find(|channel| *channel as u8 == byte)
     }
@@ -163,12 +166,23 @@ impl Gateway {
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
+        if channel == Channel::Port {
+            // Only the work machine's own loopback is reached, so no port
+            // opens beyond the gateway's; the hosts are not asked.
+            let port = tokio::time::timeout(HANDSHAKE, stream.read_u16())
+                .await
+                .map_err(|_| Error::Protocol)??;
+            let mut host = connect_loopback(port).await?;
+            let _ = tokio::io::copy_bidirectional(&mut stream, &mut host).await;
+            return Ok(());
+        }
         let hosts = self.hosts.current().map_err(|_| Error::Protocol)?;
         match channel {
             Channel::Info => {
                 stream.write_all(&hosts.info).await?;
                 stream.shutdown().await?;
             }
+            Channel::Port => unreachable!("served before the hosts are read"),
             Channel::Terminal => {
                 let mut host = tsumugi_sys::local::connect(&hosts.terminal).await?;
                 let _ = tokio::io::copy_bidirectional(&mut stream, &mut host).await;
@@ -187,6 +201,15 @@ impl Gateway {
             }
         }
         Ok(())
+    }
+}
+
+/// A connection to `port` on this machine's loopback, as a server bound to
+/// either of its addresses accepts it.
+async fn connect_loopback(port: u16) -> std::io::Result<TcpStream> {
+    match TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)).await {
+        Ok(stream) => Ok(stream),
+        Err(_) => TcpStream::connect((std::net::Ipv6Addr::LOCALHOST, port)).await,
     }
 }
 
@@ -284,6 +307,42 @@ impl Remote {
         Ok(forwarding)
     }
 
+    /// Listens on a port of this computer's loopback, and carries every
+    /// connection made there to `port` on the work machine's loopback.
+    /// The listener closes with the forward, whatever connections are open.
+    pub fn forward_port(&self, port: u16) -> Result<PortForward, Error> {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+        listener.set_nonblocking(true)?;
+        let local = listener.local_addr()?.port();
+        let listener = TcpListener::from_std(listener)?;
+        let remote = self.clone();
+        let task = tokio::spawn(async move {
+            while let Ok((mut near, _)) = listener.accept().await {
+                let remote = remote.clone();
+                tokio::spawn(async move {
+                    if let Ok(mut far) = remote.open_port(port).await {
+                        let _ = tokio::io::copy_bidirectional(&mut near, &mut far).await;
+                    }
+                });
+            }
+        });
+        Ok(PortForward {
+            local,
+            remote: port,
+            task,
+        })
+    }
+
+    async fn open_port(
+        &self,
+        port: u16,
+    ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, Error> {
+        let mut stream = self.open(Channel::Port).await?;
+        stream.write_u16(port).await?;
+        stream.flush().await?;
+        Ok(stream)
+    }
+
     async fn open(
         &self,
         channel: Channel,
@@ -309,6 +368,32 @@ impl Remote {
         })
         .await
         .map_err(|_| Error::Protocol)?
+    }
+}
+
+/// A port of the work machine reached at a port of this computer, closed
+/// when dropped.
+pub struct PortForward {
+    local: u16,
+    remote: u16,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl PortForward {
+    /// The port of this computer's loopback that reaches it.
+    pub fn local(&self) -> u16 {
+        self.local
+    }
+
+    /// The port of the work machine it reaches.
+    pub fn remote(&self) -> u16 {
+        self.remote
+    }
+}
+
+impl Drop for PortForward {
+    fn drop(&mut self) {
+        self.task.abort();
     }
 }
 
@@ -501,6 +586,87 @@ mod tests {
                 "{\"op\":\"environment\",\"id\":\"p\"}".to_string(),
                 "{\"ask\":1}".to_string()
             ]
+        );
+    }
+
+    /// A server on the loopback that echoes what it is sent, and its port.
+    async fn echo_server() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let (mut read, mut write) = tokio::io::split(stream);
+                    let _ = tokio::io::copy(&mut read, &mut write).await;
+                });
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn a_forwarded_port_carries_bytes_to_the_work_machine_s_loopback_and_back() {
+        let setup = setup().await;
+        let (_, remote) = paired(&setup);
+        let served = echo_server().await;
+        let forward = remote.forward_port(served).unwrap();
+        assert_eq!(forward.remote(), served);
+        let mut near = TcpStream::connect(("127.0.0.1", forward.local()))
+            .await
+            .unwrap();
+        let bytes: Vec<u8> = (0..=255).cycle().take(100_000).collect();
+        let (mut read, mut write) = near.split();
+        let (_, echoed) = tokio::join!(async { write.write_all(&bytes).await.unwrap() }, async {
+            let mut back = vec![0; bytes.len()];
+            tokio::time::timeout(Duration::from_secs(5), read.read_exact(&mut back))
+                .await
+                .expect("the echo comes back")
+                .unwrap();
+            back
+        });
+        assert_eq!(echoed, bytes);
+    }
+
+    #[tokio::test]
+    async fn a_dropped_port_forward_stops_listening() {
+        let setup = setup().await;
+        let (_, remote) = paired(&setup);
+        let forward = remote.forward_port(echo_server().await).unwrap();
+        let local = forward.local();
+        assert!(TcpStream::connect(("127.0.0.1", local)).await.is_ok());
+        drop(forward);
+        let mut closed = false;
+        for _ in 0..50 {
+            if TcpStream::connect(("127.0.0.1", local)).await.is_err() {
+                closed = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(closed, "the local port still accepts connections");
+    }
+
+    #[tokio::test]
+    async fn a_forward_to_a_port_nothing_listens_on_ends_the_connection_and_keeps_listening() {
+        let setup = setup().await;
+        let (_, remote) = paired(&setup);
+        let unused = {
+            let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            probe.local_addr().unwrap().port()
+        };
+        let forward = remote.forward_port(unused).unwrap();
+        let mut near = TcpStream::connect(("127.0.0.1", forward.local()))
+            .await
+            .unwrap();
+        let mut buffer = [0u8; 1];
+        let read = tokio::time::timeout(Duration::from_secs(5), near.read(&mut buffer))
+            .await
+            .expect("the connection ends");
+        assert!(matches!(read, Ok(0) | Err(_)));
+        assert!(
+            TcpStream::connect(("127.0.0.1", forward.local()))
+                .await
+                .is_ok()
         );
     }
 

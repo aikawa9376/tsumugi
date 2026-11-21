@@ -45,6 +45,7 @@ pub(super) fn Specimen(placed: Placed) -> Element {
         Component::Timeline => timeline(),
         Component::Running => running(),
         Component::Processes => processes(),
+        Component::Ports => ports(),
         Component::About => about(),
         Component::Sessions => links(
             "2 sessions · review-login-retry, docs-timeout",
@@ -275,6 +276,7 @@ fn folded_said(c: Component) -> String {
         Component::Files => "3 files · login.rs, retry.rs, README.md".into(),
         Component::Prompts => "2 prompts · latest: Add a test for the second timeout".into(),
         Component::Processes => "2 processes · cargo, node".into(),
+        Component::Ports => "2 ports · 3000, 5173".into(),
         Component::Changes => "3 files changed".into(),
         Component::Log => "24 changes · latest: fix: retry the login on timeout".into(),
         c => c.title().into(),
@@ -446,6 +448,29 @@ fn processes() -> Element {
                         r#type: "button",
                         title: "Kill process…",
                         aria_label: "Kill {name}",
+                        tabindex: "-1",
+                        IconView { icon: Icon::X, size: 12 }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn ports() -> Element {
+    rsx! {
+        div { class: "details-block details-links",
+            {heading("2 ports · 3000, 5173")}
+            for (port , tag) in [("3000", "node · 48190"), ("5173", "vite · 48201")] {
+                ListRow { key: "{port}", kind: "details-link", title: "localhost:{port}",
+                    IconView { icon: Icon::Server, size: 13 }
+                    span { class: "list-row-name", "{port}" }
+                    span { class: "details-link-tag", "{tag}" }
+                    button {
+                        class: "process-kill",
+                        r#type: "button",
+                        title: "Kill process…",
+                        aria_label: "Kill {port}",
                         tabindex: "-1",
                         IconView { icon: Icon::X, size: 12 }
                     }

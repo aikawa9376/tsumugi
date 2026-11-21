@@ -134,6 +134,7 @@ fn main() {
                 Command::Session(_)
                     | Command::Issue(_)
                     | Command::Terminal(_)
+                    | Command::Ports(_)
                     | Command::Mcp(_)
                     | Command::Editor(_)
                     | Command::Daemon(_)
@@ -239,6 +240,7 @@ fn main() {
             std::process::exit(tsumugi_host::delegation::bridge::cli(&rest))
         }
         Some(Command::Terminal(rest)) => std::process::exit(tsumugi_host::terminal_cli(&rest)),
+        Some(Command::Ports(rest)) => std::process::exit(tsumugi_host::ports_cli(&rest)),
         Some(Command::Editor(rest)) => std::process::exit(editor(&rest)),
         Some(Command::Daemon(asked)) => std::process::exit(tsumugi_host::daemon_cli(asked)),
         Some(Command::Host(asked)) => std::process::exit(tsumugi_host::host_cli(asked)),

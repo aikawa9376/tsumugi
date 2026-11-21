@@ -94,8 +94,13 @@ same window shows still open locally. A file of a work machine that a viewer
 would show opens in Neovim there when it is also text, such as an HTML page,
 and otherwise does not open. Image data
 pasted into the prompt is stored on the work machine. Native session,
-terminal and MCP commands run on the work machine; the client machine
-refuses them when a work machine is selected.
+terminal, ports and MCP commands run on the work machine; the client machine
+refuses them when a work machine is selected. The ports a session's processes
+listen on are read on the work machine, and a port there is reached from
+this computer only through a forward over the paired connection to the
+gateway, to the work machine's loopback alone; it opens no port on the work
+machine's network, and ends when the connection is lost, so none is left
+broken after a reconnection.
 
 ## Paired work machines
 

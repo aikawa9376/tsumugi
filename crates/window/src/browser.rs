@@ -117,6 +117,29 @@ fn address(typed: &str) -> Result<String, &'static str> {
     Ok(url)
 }
 
+/// `url` with a loopback address's port swapped for the port of this
+/// computer `forward` makes reach it: the loopback of an environment on a
+/// work machine is that machine's, which a page here cannot reach.
+fn through_forward(
+    url: &str,
+    forward: impl FnOnce(u16) -> Result<u16, String>,
+) -> Result<String, String> {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return Ok(url.to_string());
+    };
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, after) = rest.split_at(end);
+    let Some((host, port)) = authority.rsplit_once(':') else {
+        return Ok(url.to_string());
+    };
+    let loopback = host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "[::1]";
+    let Some(port) = port.parse::<u16>().ok().filter(|_| loopback) else {
+        return Ok(url.to_string());
+    };
+    let local = forward(port)?;
+    Ok(format!("{scheme}://{host}:{local}{after}"))
+}
+
 fn allowed(url: String) -> bool {
     url == "about:blank" || address(&url).is_ok_and(|a| a == url)
 }
@@ -571,8 +594,11 @@ pub(crate) fn BrowserWindow(
     });
     let navigate = {
         let page = page.clone();
+        let navigating = environment.clone();
         move || {
-            let url = address(&typed.peek());
+            let url = address(&typed.peek())
+                .map_err(str::to_string)
+                .and_then(|url| through_forward(&url, |port| app.forward_port(&navigating, port)));
             match url {
                 Ok(url) => match page.view.load_url(&url) {
                     Ok(()) => {
@@ -581,7 +607,7 @@ pub(crate) fn BrowserWindow(
                     }
                     Err(e) => error.set(e.to_string()),
                 },
-                Err(e) => error.set(e.into()),
+                Err(e) => error.set(e),
             }
         }
     };
@@ -811,6 +837,28 @@ mod tests {
         ] {
             assert_eq!(address(typed).as_deref(), Ok(expected));
         }
+    }
+
+    #[test]
+    fn a_loopback_address_goes_through_the_forward_and_any_other_stays_as_it_is() {
+        let forwarded = |url: &str| through_forward(url, |port| Ok(port + 1000));
+        for (url, want) in [
+            (
+                "http://localhost:3000/a?b=1#c",
+                "http://localhost:4000/a?b=1#c",
+            ),
+            ("http://127.0.0.1:8080", "http://127.0.0.1:9080"),
+            ("http://[::1]:5173/", "http://[::1]:6173/"),
+            ("http://example.com:3000/", "http://example.com:3000/"),
+            ("https://example.com/", "https://example.com/"),
+            ("http://localhost/", "http://localhost/"),
+        ] {
+            assert_eq!(forwarded(url).as_deref(), Ok(want), "{url}");
+        }
+        assert_eq!(
+            through_forward("http://localhost:3000", |_| Err("not connected".into())),
+            Err("not connected".into())
+        );
     }
 
     #[test]

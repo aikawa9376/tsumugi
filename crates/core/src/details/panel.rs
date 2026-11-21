@@ -196,6 +196,7 @@ fn group_of(component: Component) -> Option<Group> {
         Component::Timeline => Group::Timeline,
         Component::Running => Group::Running,
         Component::Processes => Group::Processes,
+        Component::Ports => Group::Ports,
         Component::About => Group::About,
         Component::Sessions => Group::Sessions,
         Component::Messages => Group::Messages,
@@ -757,6 +758,15 @@ fn used(details: &Details, entry: &Entry, how: Use) -> Vec<Effect> {
         ),
         Entry::Session(r) => use_related(r, how, &details.shown.environment),
         Entry::Process(p) => copied(how, &p.command, "Copied the process command".into()),
+        Entry::Port(p) => match how {
+            Use::Open(_) => vec![Effect::OpenPort {
+                environment: details.shown.environment.clone(),
+                port: p.port,
+                url: p.url(),
+            }],
+            Use::Reveal => Vec::new(),
+            Use::Copy => copied(how, &p.address(), format!("Copied {}", p.address())),
+        },
         Entry::Message(n) => copied(how, &n.body, "Copied the message".into()),
         Entry::Fact(f) => copied(how, &f.value, format!("Copied {}", f.value)),
         Entry::Agent(a) => copied(
@@ -1040,6 +1050,16 @@ fn rows_of(
                 opened,
                 first(d.links_shown),
             )
+        }
+        Component::Ports => {
+            let rows = read
+                .and_then(|r| r.ports.as_deref())
+                .unwrap_or_default()
+                .iter()
+                .cloned()
+                .map(Entry::Port)
+                .collect();
+            grouped(Group::Ports, rows, &folded, opened, first(d.links_shown))
         }
         Component::About => about(&details.shown.about, &folded),
         Component::Sessions => {
@@ -1378,6 +1398,7 @@ pub(crate) fn sight(details: &Details) -> Sight {
         Component::Prompts,
         Component::Running,
         Component::Processes,
+        Component::Ports,
         Component::Sessions,
         Component::Messages,
         Component::Subagents,
@@ -1880,6 +1901,113 @@ pub(crate) mod tests {
         assert!(
             !matches!(other, Some(Listing::Entries(e)) if e.iter().any(|e| matches!(e, Entry::Process(_))))
         );
+    }
+
+    fn listening(port: u16, host: &str) -> tsumugi_model::Port {
+        tsumugi_model::Port {
+            key: format!("\0port:{port}"),
+            port,
+            bind: "0.0.0.0".into(),
+            host: host.into(),
+            process: Process {
+                key: format!("process-{port}"),
+                pid: 100 + u32::from(port),
+                name: "node".into(),
+                ..Default::default()
+            },
+        }
+    }
+
+    const PORTS_TAB: &str =
+        "[[panel.session.tabs]]\ntitle = \"Mine\"\ncomponents = [\"ports\", \"about\"]\n";
+
+    fn ports_run(ports: Vec<tsumugi_model::Port>) -> Scenario {
+        let read_ports = SessionRead {
+            ports: Some(ports),
+            ..Default::default()
+        };
+        Scenario::new()
+            .event(crate::config::testing::configured(PORTS_TAB))
+            .event(work(read("a", read_ports)))
+            .send(shown(Some("a"), None))
+    }
+
+    #[test]
+    fn the_ports_a_session_listens_on_are_listed_under_a_heading_of_their_own() {
+        let run = ports_run(vec![
+            listening(3000, "localhost"),
+            listening(5173, "localhost"),
+        ]);
+        let Some(Listing::Entries(entries)) = entries_of(&run) else {
+            panic!("no entries");
+        };
+        let ports: Vec<_> = entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Port(p) => Some(p.port),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ports, [3000, 5173]);
+        assert!(entries.iter().any(|e| matches!(
+            e,
+            Entry::Heading {
+                group: Group::Ports,
+                count: 2,
+                ..
+            }
+        )));
+        // Ports are not what runs: the Running group does not count them.
+        assert!(!entries.iter().any(|e| matches!(
+            e,
+            Entry::Heading {
+                group: Group::Running,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn a_session_that_listens_on_nothing_has_no_ports_heading() {
+        let run = ports_run(Vec::new());
+        let Some(Listing::Entries(entries)) = entries_of(&run) else {
+            return;
+        };
+        assert!(!entries.iter().any(|e| matches!(
+            e,
+            Entry::Heading {
+                group: Group::Ports,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn a_port_opens_as_a_page_of_its_work_machine_and_copies_its_address() {
+        // Rows: the Ports heading, then the port.
+        let pressed = |key| {
+            local(
+                &ports_run(vec![listening(3000, "localhost")])
+                    .send(Msg::DetailsSelect(1))
+                    .send(Msg::DetailsKey(key)),
+            )
+        };
+        assert_eq!(
+            pressed(Key::Open),
+            [Effect::OpenPort {
+                environment: here(),
+                port: 3000,
+                url: "http://localhost:3000".into(),
+            }]
+        );
+        assert_eq!(
+            pressed(Key::Copy),
+            [Effect::Copy {
+                text: "localhost:3000".into(),
+                done: "Copied localhost:3000".into(),
+            }]
+        );
+        assert_eq!(pressed(Key::Reveal), []);
     }
 
     #[test]

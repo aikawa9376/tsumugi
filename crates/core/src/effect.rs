@@ -33,6 +33,13 @@ pub enum Effect {
         environment: EnvironmentId,
         target: String,
     },
+    /// Open the web page served on `port` of `environment`'s work machine,
+    /// which `url` names as that machine's own `localhost` does.
+    OpenPort {
+        environment: EnvironmentId,
+        port: u16,
+        url: String,
+    },
     /// Show the file at `path` of `environment` in the Finder.
     Reveal {
         environment: EnvironmentId,

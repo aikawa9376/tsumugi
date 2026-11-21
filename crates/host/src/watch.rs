@@ -29,6 +29,7 @@ mod offers;
 mod owners;
 mod past;
 mod place;
+mod ports;
 mod processes;
 mod repository;
 pub(crate) mod sessions;
@@ -314,6 +315,7 @@ pub fn start(watched: Watched) {
     crate::environment::spawn(context::watch(watched.clone()));
     crate::environment::spawn(usage::watch(watched.clone()));
     crate::environment::spawn(processes::watch(watched.clone()));
+    crate::environment::spawn(ports::watch(watched.clone()));
     crate::environment::spawn(timeline::watch(watched.clone()));
     crate::environment::spawn(system::watch(watched));
 }

@@ -24,6 +24,8 @@ pub enum Command {
     Discover,
     /// A subcommand, and the arguments that follow it.
     Terminal(Vec<String>),
+    /// List the TCP ports the sessions of a worktree listen on.
+    Ports(Vec<String>),
     /// Serve a session's `tsumugi` MCP server on standard input and output.
     Mcp(Vec<String>),
     Editor(Vec<String>),
@@ -272,6 +274,7 @@ impl Command {
             Command::Session(_)
                 | Command::Issue(_)
                 | Command::Terminal(_)
+                | Command::Ports(_)
                 | Command::Mcp(_)
                 | Command::Editor(_)
                 | Command::Connect
@@ -279,7 +282,7 @@ impl Command {
     }
 }
 
-pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
+pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
 
 /// The command `args` ask for; `None` for one tsumugi does not know, which
 /// must not open a window: a program that ran an older tsumugi's subcommand
@@ -317,6 +320,7 @@ pub fn command(args: &[String]) -> Option<Command> {
         },
         Some("mcp") => Some(Command::Mcp(rest())),
         Some("terminal") => Some(Command::Terminal(rest())),
+        Some("ports") => Some(Command::Ports(rest())),
         Some("editor") => Some(Command::Editor(rest())),
         Some("session") => Some(Command::Session(rest())),
         Some("skills") => Some(Command::Skills(rest())),
@@ -476,6 +480,11 @@ mod tests {
             asked(&["terminal", "screen", "dev"]),
             Some(Command::Terminal(vec!["screen".into(), "dev".into()]))
         );
+        assert_eq!(
+            asked(&["ports", "--all"]),
+            Some(Command::Ports(vec!["--all".into()]))
+        );
+        assert!(asked(&["ports"]).unwrap().routed());
         assert_eq!(
             asked(&["editor", "/tmp/p.md"]),
             Some(Command::Editor(vec!["/tmp/p.md".into()]))

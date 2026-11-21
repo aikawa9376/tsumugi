@@ -506,6 +506,15 @@ impl AppCtx {
     ) {
         self.link_of(environment).query_remote(stamp);
     }
+    /// The port of this computer that reaches `port` of `environment`'s
+    /// loopback: `port` itself where the environment is on this computer.
+    pub(crate) fn forward_port(
+        &self,
+        environment: &EnvironmentId,
+        port: u16,
+    ) -> Result<u16, String> {
+        self.link_of(environment).forward_port(port)
+    }
     pub(crate) fn remote_draft(
         &self,
         environment: &EnvironmentId,
@@ -791,6 +800,20 @@ impl AppCtx {
             // factor. Applying the raw adjustment here would briefly undo it.
             Effect::Zoom(_) => {}
             Effect::Open { target, .. } => open([target]),
+            Effect::OpenPort {
+                environment,
+                port,
+                url,
+            } => match self.forward_port(&environment, port) {
+                Ok(local) if local == port => open([url]),
+                Ok(local) => {
+                    self.notice(format!(
+                        "Forwarded port {port} of the work machine to localhost:{local}"
+                    ));
+                    open([format!("http://localhost:{local}")]);
+                }
+                Err(text) => self.notice(text),
+            },
             Effect::Reveal { path, .. } => open(["-R".into(), path]),
             Effect::PullWorktree {
                 environment,
@@ -1791,6 +1814,23 @@ mod tests {
                     action,
                 },
                 true,
+            ),
+            (
+                Effect::OpenPort {
+                    environment: here.clone(),
+                    port: 3000,
+                    url: "http://localhost:3000".into(),
+                },
+                false,
+            ),
+            // Forwarded, not refused.
+            (
+                Effect::OpenPort {
+                    environment: there.clone(),
+                    port: 3000,
+                    url: "http://localhost:3000".into(),
+                },
+                false,
             ),
         ];
         for (effect, want) in cases {
