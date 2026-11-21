@@ -3200,6 +3200,7 @@ pub(crate) mod tests {
             pull: Some(tsumugi_model::github::Pull {
                 head: head.into(),
                 base: "trunk".into(),
+                head_sha: String::new(),
                 additions: 0,
                 deletions: 0,
                 changed_files: 0,
@@ -3685,6 +3686,7 @@ pub(crate) mod tests {
             pull: Some(tsumugi_model::github::Pull {
                 head: "main".into(),
                 base: "trunk".into(),
+                head_sha: String::new(),
                 additions: 0,
                 deletions: 0,
                 changed_files: 0,

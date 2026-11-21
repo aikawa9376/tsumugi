@@ -457,6 +457,15 @@ pub enum Msg {
     GitHubCompose(crate::prompt::github_write::Aim),
     /// Write `write` on what the GitHub tab shown shows, at once.
     GitHubWrite(tsumugi_model::github::Write),
+    /// A request to fix a pull request was made in the GitHub tab shown.
+    GitHubFix(Box<crate::prompt::fix_request::Fix>),
+    /// What the work host read afresh for a request to fix a pull request.
+    GitHubFixRead {
+        environment: tsumugi_model::EnvironmentId,
+        repository: std::path::PathBuf,
+        fix: Box<crate::prompt::fix_request::Fix>,
+        result: Result<tsumugi_model::github::FixContext, String>,
+    },
     /// A write on the pull request or issue `number` of the repository was
     /// done by the work host.
     GitHubWritten {

@@ -64,6 +64,9 @@ pub struct Pull {
     /// The branch it merges, and the one it merges into.
     pub head: String,
     pub base: String,
+    /// The commit it ends at when it was read; empty when it was not.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub head_sha: String,
     pub additions: u64,
     pub deletions: u64,
     pub changed_files: u64,
@@ -193,6 +196,10 @@ pub struct ReviewThread {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u64>,
+    /// GitHub says the lines it was made on are no longer as they were in
+    /// the pull request's head: it was made on an older revision.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub outdated: bool,
 }
 
 /// What a review of a pull request says.
@@ -317,6 +324,35 @@ pub enum Outcome {
     Pending,
     Passed,
     Skipped,
+}
+
+/// What a pull request's head and its failed checks were when a request to
+/// fix them was made: read afresh, not taken from what the tab showed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixContext {
+    /// The commit the pull request ends at now.
+    pub head: String,
+    /// The checks on that commit that did not pass, with what could be read
+    /// of why; those still running are listed after them, with no log.
+    pub checks: Vec<FixCheck>,
+}
+
+/// A check that failed or is still running, with what its log said.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixCheck {
+    pub check: Check,
+    pub log: Log,
+}
+
+/// What could be read of a check's log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Log {
+    /// The end of the log, and whether earlier lines were left out of it.
+    Excerpt { text: String, cut: bool },
+    /// Why it could not be read: not run by GitHub Actions, no permission,
+    /// the network, still running.
+    Unread { why: String },
 }
 
 /// What came of reading one listing: what is open, or why `gh` could not

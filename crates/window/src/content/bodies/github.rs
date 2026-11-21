@@ -227,6 +227,7 @@ pub(crate) fn GitHubWindow(
                 match act(key, &thread, *selected.peek()) {
                     Ok(Act::Select(card)) => select(card),
                     Ok(Act::Compose(aim)) => app.dispatch(Msg::GitHubCompose(aim)),
+                    Ok(Act::Fix(fix)) => app.dispatch(Msg::GitHubFix(fix)),
                     Ok(Act::Write(write)) => app.dispatch(Msg::GitHubWrite(write)),
                     Err(why) => app.notice(why),
                 }

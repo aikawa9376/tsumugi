@@ -3,6 +3,7 @@
 //! sent before, which the work host reads.
 
 pub mod drafts;
+pub mod fix_request;
 pub mod github_write;
 pub mod images;
 pub mod pull_request;
@@ -236,6 +237,13 @@ pub(crate) fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         } => pull_request::created(state, environment, worktree, number),
         Msg::GitHubCompose(aim) => github_write::begin(state, aim),
         Msg::GitHubWrite(write) => github_write::at_once(state, write),
+        Msg::GitHubFix(fix) => fix_request::begin(state, *fix),
+        Msg::GitHubFixRead {
+            environment,
+            repository,
+            fix,
+            result,
+        } => fix_request::read(state, environment, repository, *fix, result),
         Msg::GitHubWritten {
             environment,
             repository,

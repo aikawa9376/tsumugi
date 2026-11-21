@@ -175,6 +175,8 @@ changes them ([keys](../keys.md)).
 | `github.resolve` |  | in a pull request's tab, resolve the thread of lines the card selected belongs to, or open it again | `github`: `R` |
 | `github.react` |  | in a pull request's or an issue's tab, react to the card selected: write `React:` and one of GitHub's eight reactions in the prompt, or `Unreact:` to take one back | `github`: `Plus` |
 | `github.review` |  | in a pull request's tab, write a review in the prompt: `Review:` and approve, request-changes or comment on its first line, then your words; sending the prompt submits it | `github`: `v` |
+| `github.fix_checks` |  | in a pull request's tab, prepare a request to fix its failed checks in the draft of a new session on the pull request, with the end of their logs read afresh; nothing is sent or posted until you send the prompt ([tree](../tree.md#asking-an-agent-to-fix-a-pull-request)) | `github`: `f` |
+| `github.fix_threads` |  | in a pull request's tab, prepare a request to fix the unresolved review threads, or the thread of the card selected, in the draft of a new session on the pull request; nothing is sent, replied to or resolved ([tree](../tree.md#asking-an-agent-to-fix-a-pull-request)) | `github`: `F` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -518,6 +520,8 @@ changes them ([keys](../keys.md)).
 "R" = "github.resolve"
 "Plus" = "github.react"
 "v" = "github.review"
+"f" = "github.fix_checks"
+"F" = "github.fix_threads"
 
 [lightbox]
 "l" = "lightbox.next"

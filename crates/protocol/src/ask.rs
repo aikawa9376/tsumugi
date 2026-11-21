@@ -244,6 +244,14 @@ pub enum Ask {
         listing: tsumugi_model::github::Listing,
         number: u64,
     },
+    /// Read afresh the commit the pull request `number` of the repository at
+    /// `repository` ends at, and, with `checks`, its checks that failed or
+    /// still run, the failed ones with the end of their logs. Reads only.
+    GitHubFixContext {
+        repository: PathBuf,
+        number: u64,
+        checks: bool,
+    },
     /// Write `write` on the pull request or the issue `number` of the
     /// repository at `repository`, as the login `gh` uses there.
     GitHubWrite {
@@ -444,6 +452,10 @@ pub enum Answer {
     /// The pull request or the issue asked for, read whole.
     Thread {
         thread: Box<tsumugi_model::github::Thread>,
+    },
+    /// What a request to fix a pull request needs, read afresh.
+    FixContext {
+        context: tsumugi_model::github::FixContext,
     },
     /// The image asked for, or none when it cannot be read or shown.
     Picture {
