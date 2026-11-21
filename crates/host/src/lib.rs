@@ -21,6 +21,7 @@ pub mod environment;
 pub mod execution;
 mod explain;
 pub mod gateway;
+mod generate;
 mod held;
 mod issue_cli;
 mod jobs;

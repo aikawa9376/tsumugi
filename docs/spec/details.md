@@ -188,8 +188,9 @@ prompt gives it up, sending nothing. A branch that has a pull request open
 already is not written one. A push Git refuses, a `gh` that is not installed
 or not logged in, and a pull request GitHub refuses fail with their own
 words, create nothing the failure came before, and leave the text in the
-prompt to be sent again. `A` asks the agent of the session shown to draft the
-title and body, which are then copied into the prompt. Once it is open, the
+prompt to be sent again. `A` asks an agent to draft the title and body, and
+`M` the message of a commit, each put in the prompt to read and edit before it
+is sent ([AI actions](ai-actions.md)). Once the pull request is open, the
 pull request is answered and reviewed from its tab
 ([tree](tree.md#writing-on-a-pull-request-or-an-issue)).
 
@@ -223,7 +224,9 @@ the changes, with how many files it waits on. Its files in conflict are marked
 are not; a rebase that meets another conflict stops there and says so. `Q`
 gives it up after asking, putting the worktree back as it was before it began.
 `I` opens a draft in the worktree whose prompt asks an agent to resolve the
-files in conflict, and sending it starts that session.
+files in conflict, and `H`, after a hook refused a commit, one that asks an
+agent to fix what it complained of; sending either starts that session
+([AI actions](ai-actions.md)).
 
 An operation in progress is never broken by what else the panel does: a pull
 and an amend are refused while one is unfinished, and a file in conflict can

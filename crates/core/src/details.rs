@@ -23,7 +23,7 @@ mod rows;
 mod system;
 mod timeline;
 
-pub(crate) use conflicts::{open_in_neovim, resolve};
+pub(crate) use conflicts::open_in_neovim;
 pub use environment::*;
 pub use layout::*;
 pub use panel::*;

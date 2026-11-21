@@ -10,6 +10,7 @@ mod delivery;
 mod integration;
 pub mod links;
 pub mod login;
+pub mod oneshot;
 pub mod opencode;
 pub mod own_login;
 pub mod pi;

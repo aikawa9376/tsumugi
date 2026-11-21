@@ -460,6 +460,26 @@ pub enum Msg {
     /// Ask the user whether to do `write` on the pull request the GitHub tab
     /// shown shows: a merge, a close or a change of its draft state.
     GitHubAsk(tsumugi_model::github::Write),
+    /// The text an agent was asked once to write for `action` in `worktree`:
+    /// a commit message or a pull request, or why there is none.
+    GeneratedText {
+        environment: tsumugi_model::EnvironmentId,
+        worktree: std::path::PathBuf,
+        action: tsumugi_model::AiAction,
+        result: Result<String, String>,
+    },
+    /// The commit of `message` in `worktree` was refused, saying `output`.
+    CommitRefused {
+        environment: tsumugi_model::EnvironmentId,
+        worktree: std::path::PathBuf,
+        message: String,
+        output: String,
+    },
+    /// A commit was made in `worktree`.
+    CommitMade {
+        environment: tsumugi_model::EnvironmentId,
+        worktree: std::path::PathBuf,
+    },
     /// A request to fix a pull request was made in the GitHub tab shown.
     GitHubFix(Box<crate::prompt::fix_request::Fix>),
     /// What the work host read afresh for a request to fix a pull request.

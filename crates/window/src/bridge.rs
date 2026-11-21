@@ -977,6 +977,12 @@ impl AppCtx {
                 op,
                 prompt,
             } => {
+                // What a commit was tried with, for Fix with AI to be made from
+                // when a hook refuses it.
+                let attempted = match &op {
+                    tsumugi_protocol::GitOp::Commit { message, .. } => Some(message.clone()),
+                    _ => None,
+                };
                 let made = self.ask_in(
                     &environment,
                     Ask::Git {
@@ -986,7 +992,22 @@ impl AppCtx {
                 );
                 let app = *self;
                 spawn(async move {
-                    match made.await {
+                    let made = made.await;
+                    if let Some(message) = attempted {
+                        app.dispatch(match &made {
+                            Answer::Failed { text } => Msg::CommitRefused {
+                                environment: environment.clone(),
+                                worktree: worktree.clone(),
+                                message,
+                                output: text.clone(),
+                            },
+                            _ => Msg::CommitMade {
+                                environment: environment.clone(),
+                                worktree: worktree.clone(),
+                            },
+                        });
+                    }
+                    match made {
                         Answer::Done => {
                             if prompt {
                                 app.dispatch(Msg::PromptWent(true));
@@ -1084,6 +1105,39 @@ impl AppCtx {
                             app.notice(format!("the work host answered {answer:?}"));
                         }
                     }
+                });
+            }
+            Effect::GenerateText {
+                environment,
+                worktree,
+                action,
+                profile,
+                args,
+                template,
+            } => {
+                let asked = self.ask_in(
+                    &environment,
+                    Ask::GenerateText {
+                        worktree: worktree.clone(),
+                        action,
+                        profile,
+                        args,
+                        template,
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::Told { text } => Ok(text),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::GeneratedText {
+                        environment,
+                        worktree,
+                        action,
+                        result,
+                    });
                 });
             }
             Effect::GitHubFixContext {

@@ -6,10 +6,10 @@ use std::path::PathBuf;
 
 use tsumugi_model::EnvironmentId;
 use tsumugi_model::github::Listing;
-use tsumugi_protocol::{GitOp, Typing};
+use tsumugi_protocol::GitOp;
 
 use super::send::Taken;
-use crate::content::{Area, Tab, shows_prompt};
+use crate::content::{Area, shows_prompt};
 use crate::effect::Effect;
 use crate::msg::Msg;
 use crate::state::ViewState;
@@ -96,6 +96,17 @@ pub(crate) fn begin(
     environment: EnvironmentId,
     worktree: PathBuf,
 ) -> Vec<Effect> {
+    begin_from(state, environment, worktree, None)
+}
+
+/// [`begin`] starting from `written`, a title and body an agent wrote for the
+/// user to read, in place of the last commit's message.
+pub(crate) fn begin_from(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    worktree: PathBuf,
+    written: Option<String>,
+) -> Vec<Effect> {
     let work = state.hosts.work(&environment);
     if let Some((_, number)) = crate::details::branch_pull(&state.details, work) {
         return vec![Effect::Notice(format!(
@@ -120,7 +131,7 @@ pub(crate) fn begin(
     let mut effects = step(state, Msg::Focus(Area::Prompt));
     effects.push(Effect::PromptRestore {
         tab: state.content.active().cloned(),
-        text: template(&last),
+        text: template(written.as_deref().unwrap_or(&last)),
         images: Vec::new(),
     });
     effects.push(Effect::Notice(
@@ -183,31 +194,6 @@ pub(crate) fn created(
         },
     ));
     effects
-}
-
-/// What the focused session's agent is asked to write.
-const ASK: &str = "Write the title and the body of a pull request for this branch, from its commits and its changes against the base branch. Answer with the title on the first line and the body after a blank line, and nothing else. Do not create the pull request.";
-
-/// Ask the agent of the session shown to draft the title and body, to be
-/// copied into the prompt `begin` gives.
-pub(crate) fn ask_agent(state: &mut ViewState) -> Vec<Effect> {
-    match state.content.active().cloned() {
-        Some(tab @ Tab::Session(..)) => vec![
-            Effect::TypeInto {
-                tab,
-                typing: vec![
-                    Typing::Paste { text: ASK.into() },
-                    Typing::Key {
-                        name: "Enter".into(),
-                    },
-                ],
-            },
-            Effect::Notice("Asked the agent to draft the pull request".into()),
-        ],
-        _ => vec![Effect::Notice(
-            "Show a session to ask its agent to draft the pull request".into(),
-        )],
-    }
 }
 
 #[cfg(test)]

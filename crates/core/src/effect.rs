@@ -207,6 +207,18 @@ pub enum Effect {
         checks: bool,
         fix: Box<crate::prompt::fix_request::Fix>,
     },
+    /// Run the agent of `profile` once in `worktree` of `environment` for
+    /// the text `action` asks for, made from `template` and what the worktree
+    /// holds, then tell [`crate::msg::Msg::GeneratedText`]. Commits, pushes
+    /// and sends nothing.
+    GenerateText {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        action: tsumugi_model::AiAction,
+        profile: Option<tsumugi_model::profile::ProfileId>,
+        args: Vec<String>,
+        template: String,
+    },
     /// Open a terminal running the CLI's own login where this profile runs
     /// it, and show it.
     OpenLogin {

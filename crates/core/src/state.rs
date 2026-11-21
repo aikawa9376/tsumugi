@@ -26,6 +26,7 @@ pub struct ViewState {
     pub overlays: Overlays,
     pub console: ConsoleView,
     pub prompt: PromptView,
+    pub ai: crate::ai::AiView,
 }
 
 impl Default for ViewState {
@@ -43,6 +44,7 @@ impl Default for ViewState {
             overlays: Overlays::default(),
             console: ConsoleView::default(),
             prompt: PromptView::default(),
+            ai: crate::ai::AiView::default(),
         };
         let settings = &state.config.settings;
         crate::details::follow_settings(

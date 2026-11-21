@@ -389,6 +389,12 @@ pub(crate) fn perform(
         Action::DetailsDraftPull if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::DraftPull))
         }
+        Action::DetailsGenerateCommit if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::GenerateCommit))
+        }
+        Action::DetailsFixCommit if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::FixCommit))
+        }
         Action::DetailsAbort if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::Abort))
         }
@@ -414,6 +420,8 @@ pub(crate) fn perform(
         | Action::DetailsForcePush
         | Action::DetailsCreatePull
         | Action::DetailsDraftPull
+        | Action::DetailsGenerateCommit
+        | Action::DetailsFixCommit
         | Action::DetailsAbort
         | Action::DetailsResume
         | Action::DetailsBase

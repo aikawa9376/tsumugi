@@ -125,6 +125,13 @@ impl Scenario {
         &self.state
     }
 
+    /// The window's state changed by `change`, as a setting the host did not
+    /// send, for a test to start from.
+    pub fn with_state(mut self, change: impl FnOnce(&mut ViewState)) -> Self {
+        change(&mut self.state);
+        self
+    }
+
     /// Every effect asked for, in order.
     pub fn effects(&self) -> &[Effect] {
         &self.effects

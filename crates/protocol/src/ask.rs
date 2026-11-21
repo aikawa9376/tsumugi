@@ -260,6 +260,18 @@ pub enum Ask {
         number: u64,
         write: tsumugi_model::github::Write,
     },
+    /// Run the agent of `profile`, the default profile when none, once in the
+    /// worktree on the prompt `template` makes for `action` from what the
+    /// worktree holds, with `args` added, and answer with the text it printed
+    /// as [`Answer::Told`]. Reads and runs the agent only: nothing is
+    /// committed, pushed or sent.
+    GenerateText {
+        worktree: PathBuf,
+        action: tsumugi_model::AiAction,
+        profile: Option<tsumugi_model::profile::ProfileId>,
+        args: Vec<String>,
+        template: String,
+    },
     /// Run the command `tsumugi <args>` as run in `cwd`, with `input` on its
     /// standard input.
     Run {

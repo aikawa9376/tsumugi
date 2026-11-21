@@ -390,6 +390,16 @@ mod tests {
             }),
         });
         round_trips(Request::Ask {
+            asked: 14,
+            ask: Box::new(crate::Ask::GenerateText {
+                worktree: "/w-wt/日本語".into(),
+                action: tsumugi_model::AiAction::PullRequest,
+                profile: Some("codex".parse().unwrap()),
+                args: vec!["--model".into(), "x y".into()],
+                template: "{basePrompt}\n日本語".into(),
+            }),
+        });
+        round_trips(Request::Ask {
             asked: 15,
             ask: Box::new(crate::Ask::GitHubFixContext {
                 repository: "/w".into(),
