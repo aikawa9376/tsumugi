@@ -980,28 +980,6 @@ impl AppCtx {
                 ));
             }
             Effect::Notice(text) => self.notice(text),
-            Effect::PinResource {
-                environment,
-                dir,
-                target,
-                label,
-            } => {
-                let app = *self;
-                let done = format!("Pinned {}", label.as_deref().unwrap_or(&target));
-                let pinned = app.ask_in(&environment, Ask::PinResource { dir, target, label });
-                spawn(async move { app.notice(resource_notice(pinned.await, done)) });
-            }
-            Effect::UnpinResource {
-                environment,
-                id,
-                title,
-            } => {
-                let app = *self;
-                let unpinned = app.ask_in(&environment, Ask::UnpinResource { id });
-                spawn(async move {
-                    app.notice(resource_notice(unpinned.await, format!("Unpinned {title}")))
-                });
-            }
             Effect::MakeEntry {
                 environment,
                 worktree,
@@ -1458,16 +1436,6 @@ fn open_shown(environment: &Environment) -> Result<(Link, Events), String> {
     let journal = journal_root(&instance_state(), Some(&route.environment));
     let (link, events, _) = Link::selected(route, work_host, journal);
     Ok((link, events))
-}
-
-/// What the status line says of an answer to pinning or unpinning: `done` when
-/// the host did it, and else why it did not.
-fn resource_notice(answer: Answer, done: String) -> String {
-    match answer {
-        Answer::Done => done,
-        Answer::Failed { text } | Answer::Unconfirmed { text } => text,
-        answer => format!("the work host answered {answer:?}"),
-    }
 }
 
 #[cfg(test)]

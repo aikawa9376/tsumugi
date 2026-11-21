@@ -13,22 +13,6 @@ sessions.
 The details panel's Resources tab lists them under Pinned
 ([details](details.md#components)).
 
-## Pinning and unpinning
-
-You keep and let go of resources from the details panel itself, without
-asking an agent. On a row of the panel's links, files or artifacts, pinning
-keeps what the row points at in the project the panel shows, by the title the
-conversation gave it. On a pinned row, unpinning stops keeping it, and
-editing changes its label and note. Pinning a path or an address you type, a
-relative path being taken from the directory the panel shows, is offered
-anywhere the panel shows a project. Each of them has an action with default
-keys ([keys](reference/keys.md)).
-
-Pinning what the project keeps already does not make another, and what the
-host refuses, as a target holding spaces, is said in the status line or the
-sheet where it was typed. Every window shows the change as soon as the host
-has made it.
-
 ## What agents do with them
 
 Every session is told to look the resources up when you point at material

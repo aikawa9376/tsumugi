@@ -328,13 +328,6 @@ pub(crate) fn perform(
         Action::ScrollHalfUp => vec![Effect::ScrollDetails(Scroll::HalfUp)],
         Action::ScrollTop => vec![Effect::ScrollDetails(Scroll::Top)],
         Action::ScrollBottom => vec![Effect::ScrollDetails(Scroll::Bottom)],
-        Action::ResourcePin
-        | Action::ResourceUnpin
-        | Action::ResourceAdd
-        | Action::ResourceEdit => match details_key(action) {
-            Some(key) if area == Area::Details => step(state, Msg::DetailsKey(key)),
-            _ => Vec::new(),
-        },
         Action::DetailsStage if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::Stage))
         }
@@ -674,10 +667,6 @@ fn details_key(action: Action) -> Option<details::Key> {
         Action::CursorFold => details::Key::Fold,
         Action::CursorCopy => details::Key::Copy,
         Action::CursorReveal => details::Key::Reveal,
-        Action::ResourcePin => details::Key::Pin,
-        Action::ResourceUnpin => details::Key::Unpin,
-        Action::ResourceAdd => details::Key::Add,
-        Action::ResourceEdit => details::Key::Edit,
         _ => return None,
     };
     Some(key)

@@ -30,8 +30,6 @@ pub enum Msg {
     SidebarFilter(String),
     SidebarFiltering(bool),
     LocalIssuesClose,
-    /// The sheet keeping a resource by hand or describing one was closed.
-    ResourceSheetClose,
     /// The window opened, with the home directory the paths it draws
     /// shorten to `~`.
     Opened {

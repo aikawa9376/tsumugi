@@ -94,9 +94,7 @@ window or such a row is described.
   they were kept, each by its title and its note or where it points. Opening
   one opens it as a link or file of the same kind opens, and a path can be
   revealed or copied like a file. It lists nothing where the project keeps
-  none. Rows of **links**, **files** and **artifacts** can be pinned to the
-  project, and a pinned row unpinned or described, as
-  [resources](resources.md#pinning-and-unpinning) says.
+  none.
 - **prompts** — what was said to the session in its turns, newest first, for
   Claude Code, Codex, Pi and OpenCode alike, each with how long ago; opening
   one shows it whole, and copying it copies its text. What Tsumugi or the

@@ -70,13 +70,6 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::CloseLocalIssue { id } => crate::local_issues::close(watched, id).await,
         Ask::ReopenLocalIssue { id } => crate::local_issues::reopen(watched, id).await,
         Ask::DeleteLocalIssue { id } => crate::local_issues::delete(watched, id).await,
-        Ask::PinResource { dir, target, label } => {
-            crate::resources::pin(watched, &dir, &target, label).await
-        }
-        Ask::UnpinResource { id } => crate::resources::unpin(watched, id).await,
-        Ask::DescribeResource { id, label, note } => {
-            crate::resources::describe(watched, id, label, note).await
-        }
         Ask::SaveCommand(new) => crate::saved_commands::save(watched, new).await,
         Ask::DeleteSavedCommand { id } => crate::saved_commands::delete(watched, id).await,
         Ask::PathEntries { root, typed } => crate::completion::read(root, typed)

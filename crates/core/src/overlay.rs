@@ -51,20 +51,9 @@ pub struct Overlays {
     pub adding: bool,
     /// Local issues are opened on this environment and directory.
     pub local_issues: Option<LocalIssues>,
-    /// A resource being kept by hand or described.
-    pub resource_sheet: Option<ResourceSheet>,
     /// A session's images looked at one at a time.
     pub lightbox: Option<Lightbox>,
     pub banner: Banner,
-}
-
-/// The sheet keeping a path or an address by hand in the project holding
-/// `dir`, or describing the resource `editing`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ResourceSheet {
-    pub environment: tsumugi_model::EnvironmentId,
-    pub dir: std::path::PathBuf,
-    pub editing: Option<tsumugi_model::Resource>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -130,7 +119,6 @@ pub fn menu_entries(menu: &Menu, hosts: &Hosts) -> Vec<MenuEntry> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Holder {
     LocalIssues,
-    ResourceSheet,
     Menu,
     KeysHelp,
     Picker,
@@ -153,7 +141,6 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (overlays.composer.is_some(), Holder::Composer),
         (overlays.adding, Holder::Adding),
         (overlays.local_issues.is_some(), Holder::LocalIssues),
-        (overlays.resource_sheet.is_some(), Holder::ResourceSheet),
         (overlays.confirm.is_some(), Holder::Confirm),
         (overlays.lightbox.is_some(), Holder::Lightbox),
     ]
@@ -190,7 +177,6 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
                 | Holder::Composer
                 | Holder::Adding
                 | Holder::LocalIssues
-                | Holder::ResourceSheet
                 | Holder::Confirm
                 | Holder::Lightbox
         )
@@ -208,8 +194,7 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
         | Holder::Picker
         | Holder::Composer
         | Holder::Adding
-        | Holder::LocalIssues
-        | Holder::ResourceSheet => &[Context::Overlay],
+        | Holder::LocalIssues => &[Context::Overlay],
     }
 }
 
@@ -262,13 +247,6 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
         Holder::LocalIssues => match action {
             Some(Action::OverlayClose) => {
                 state.overlays.local_issues = None;
-                Vec::new()
-            }
-            _ => Vec::new(),
-        },
-        Holder::ResourceSheet => match action {
-            Some(Action::OverlayClose) => {
-                state.overlays.resource_sheet = None;
                 Vec::new()
             }
             _ => Vec::new(),

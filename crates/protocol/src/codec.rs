@@ -121,17 +121,6 @@ mod tests {
         round_trips(Ask::CloseLocalIssue { id: new.id.clone() });
         round_trips(Ask::ReopenLocalIssue { id: new.id.clone() });
         round_trips(Ask::DeleteLocalIssue { id: new.id.clone() });
-        round_trips(Ask::PinResource {
-            dir: "/project with spaces/日本語".into(),
-            target: "https://example.com/a?b=c".into(),
-            label: Some("Guide".into()),
-        });
-        round_trips(Ask::UnpinResource { id: "r".into() });
-        round_trips(Ask::DescribeResource {
-            id: "r".into(),
-            label: None,
-            note: Some("Read first".into()),
-        });
         let command = tsumugi_model::NewSavedCommand {
             id: new.id.clone(),
             dir: "/project with spaces/日本語".into(),
