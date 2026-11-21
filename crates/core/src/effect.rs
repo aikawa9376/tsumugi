@@ -196,6 +196,17 @@ pub enum Effect {
         write: tsumugi_model::github::Write,
         prompt: bool,
     },
+    /// Read afresh from the work host of `environment` the head of the pull
+    /// request `number` of the repository at `repository` and, with
+    /// `checks`, its failed checks' logs, then tell
+    /// [`crate::msg::Msg::GitHubFixRead`] with `fix`. Reads only.
+    GitHubFixContext {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        number: u64,
+        checks: bool,
+        fix: Box<crate::prompt::fix_request::Fix>,
+    },
     /// Open a terminal running the CLI's own login where this profile runs
     /// it, and show it.
     OpenLogin {

@@ -89,7 +89,7 @@ pub async fn thread(root: &Path, listing: Listing, number: u64) -> Result<Thread
 /// What GitHub's API answers at `path`, the body of each text rendered as
 /// HTML beside its Markdown; with `items`, what that jq expression picks of
 /// every page, one JSON value after another.
-async fn api(root: &Path, path: &str, items: Option<&str>) -> Result<String, String> {
+pub(super) async fn api(root: &Path, path: &str, items: Option<&str>) -> Result<String, String> {
     let mut args = vec![
         "api",
         "-H",
@@ -197,6 +197,8 @@ fn read(
     struct Ref {
         #[serde(rename = "ref")]
         name: String,
+        #[serde(default)]
+        sha: String,
     }
     #[derive(Deserialize)]
     struct PullRead {
@@ -299,6 +301,7 @@ fn read(
             pull: pull.map(|p| Pull {
                 head: p.head.name,
                 base: p.base.name,
+                head_sha: p.head.sha,
                 additions: p.additions,
                 deletions: p.deletions,
                 changed_files: p.changed_files,
@@ -366,7 +369,7 @@ struct Graph {
 }
 
 /// The query for a [`Graph`].
-const GRAPH_QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id files(first:100){nodes{path viewerViewedState}} reviewThreads(first:100){nodes{id isResolved path line comments(first:50){nodes{id body bodyHTML createdAt author{login} reactionGroups{content reactors{totalCount}}}}}}}}}";
+const GRAPH_QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id files(first:100){nodes{path viewerViewedState}} reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:50){nodes{id body bodyHTML createdAt author{login} reactionGroups{content reactors{totalCount}}}}}}}}}";
 
 /// A [`Graph`] from what the query answered.
 fn graph(out: &str) -> Result<Graph, String> {
@@ -406,6 +409,8 @@ fn graph(out: &str) -> Result<Graph, String> {
         id: String,
         #[serde(rename = "isResolved")]
         resolved: bool,
+        #[serde(rename = "isOutdated", default)]
+        outdated: bool,
         path: String,
         line: Option<u64>,
         comments: Nodes<Comment>,
@@ -461,6 +466,7 @@ fn graph(out: &str) -> Result<Graph, String> {
                 resolved: t.resolved,
                 path: t.path,
                 line: t.line,
+                outdated: t.outdated,
             };
             let mut posts = Vec::new();
             let mut texts = Vec::new();
@@ -509,7 +515,7 @@ fn graph(out: &str) -> Result<Graph, String> {
 }
 
 /// The commit a pull request GitHub's API answered ends at.
-fn head_of(pull: &str) -> Option<String> {
+pub(super) fn head_of(pull: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct Head {
         sha: String,
@@ -555,7 +561,7 @@ fn files(out: &str) -> Vec<FileChange> {
 /// set on it, as GitHub's API lists them, each one JSON value after
 /// another; those that failed first, then those still running, then the
 /// rest, each by name.
-fn checks(runs: &str, statuses: &str) -> Vec<Check> {
+pub(super) fn checks(runs: &str, statuses: &str) -> Vec<Check> {
     #[derive(Deserialize)]
     struct App {
         name: String,
@@ -828,7 +834,7 @@ mod tests {
         "milestone": {"title": "v1"}
     }"#;
     const PULL: &str = r#"{"draft": false, "merged": false,
-        "head": {"ref": "fix-parser", "repo": {"full_name": "o/r"}}, "base": {"ref": "main"},
+        "head": {"ref": "fix-parser", "sha": "abc123", "repo": {"full_name": "o/r"}}, "base": {"ref": "main"},
         "additions": 10, "deletions": 2, "changed_files": 3,
         "requested_reviewers": [{"login": "rev"}]}"#;
 
@@ -892,6 +898,7 @@ mod tests {
             (10, 2, 3)
         );
         assert_eq!(pull.requested, ["rev"]);
+        assert_eq!(pull.head_sha, "abc123");
     }
 
     #[test]
@@ -927,7 +934,7 @@ mod tests {
             {"path": "src/b.rs", "viewerViewedState": "UNVIEWED"}
         ]},
         "reviewThreads": {"nodes": [{
-            "id": "PRRT_1", "isResolved": true, "path": "src/a.rs", "line": 12,
+            "id": "PRRT_1", "isResolved": true, "isOutdated": true, "path": "src/a.rs", "line": 12,
             "comments": {"nodes": [
                 {"id": "PRRC_1", "body": "Why?\r\n", "bodyHTML": "<p>Why?</p>",
                  "createdAt": "2026-11-02T12:00:00Z", "author": {"login": "erin"},
@@ -978,6 +985,7 @@ mod tests {
                 resolved: true,
                 path: "src/a.rs".into(),
                 line: Some(12),
+                outdated: true,
             })
         );
         assert_eq!(first.reactions.len(), 1);

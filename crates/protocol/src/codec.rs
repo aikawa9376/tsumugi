@@ -383,6 +383,38 @@ mod tests {
                 number: 3,
             }),
         });
+        round_trips(Request::Ask {
+            asked: 15,
+            ask: Box::new(crate::Ask::GitHubFixContext {
+                repository: "/w".into(),
+                number: 3,
+                checks: true,
+            }),
+        });
+        round_trips(Event::Answer {
+            asked: 15,
+            answer: crate::Answer::FixContext {
+                context: tsumugi_model::github::FixContext {
+                    head: "abc".into(),
+                    checks: vec![
+                        tsumugi_model::github::FixCheck {
+                            check: tsumugi_model::github::Check {
+                                name: "テスト".into(),
+                                ..Default::default()
+                            },
+                            log: tsumugi_model::github::Log::Excerpt {
+                                text: "error".into(),
+                                cut: true,
+                            },
+                        },
+                        tsumugi_model::github::FixCheck {
+                            check: Default::default(),
+                            log: tsumugi_model::github::Log::Unread { why: "no".into() },
+                        },
+                    ],
+                },
+            },
+        });
         for write in [
             tsumugi_model::github::Write::Comment {
                 body: "日本語 -x".into(),

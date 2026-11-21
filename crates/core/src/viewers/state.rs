@@ -40,6 +40,8 @@ pub enum Github {
     Resolve,
     React,
     Review,
+    FixChecks,
+    FixThreads,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -89,6 +91,8 @@ impl ViewerAction {
             Action::GithubResolve => V::Github(Github::Resolve),
             Action::GithubReact => V::Github(Github::React),
             Action::GithubReview => V::Github(Github::Review),
+            Action::GithubFixChecks => V::Github(Github::FixChecks),
+            Action::GithubFixThreads => V::Github(Github::FixThreads),
             Action::WindowQuit => V::Close,
             _ => return None,
         })

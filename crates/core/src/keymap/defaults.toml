@@ -320,6 +320,8 @@
 "R" = "github.resolve"
 "Plus" = "github.react"
 "v" = "github.review"
+"f" = "github.fix_checks"
+"F" = "github.fix_threads"
 
 [lightbox]
 "l" = "lightbox.next"

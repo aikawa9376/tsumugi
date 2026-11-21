@@ -9,9 +9,11 @@ use tsumugi_model::github::{Checks, Counts, Item, Label, Listing, Pull, Read, Re
 use crate::{Error, run};
 
 mod create;
+mod fix;
 mod thread;
 mod write;
 pub use create::*;
+pub use fix::fix_context;
 pub use thread::*;
 pub use write::write;
 
@@ -412,6 +414,7 @@ fn items(out: &str) -> Read {
             pull: l.head_ref_name.map(|head| Pull {
                 head,
                 base: l.base_ref_name,
+                head_sha: String::new(),
                 additions: l.additions,
                 deletions: l.deletions,
                 changed_files: l.changed_files,
@@ -671,6 +674,7 @@ mod tests {
             Some(Pull {
                 head: "fix".into(),
                 base: "main".into(),
+                head_sha: String::new(),
                 additions: 10,
                 deletions: 2,
                 changed_files: 3,

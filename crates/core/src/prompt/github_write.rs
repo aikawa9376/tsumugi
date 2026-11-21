@@ -165,6 +165,9 @@ pub enum Act {
     Select(usize),
     /// Write in the prompt for this aim.
     Compose(Aim),
+    /// Ask an agent to fix what a pull request's checks or review threads
+    /// say.
+    Fix(Box<super::fix_request::Fix>),
     /// Write at once.
     Write(Write),
 }
@@ -184,6 +187,9 @@ pub fn act(key: Github, thread: &Thread, selected: Option<usize>) -> Result<Act,
         Github::Prev => Act::Select(selected.map_or(0, |i| i.saturating_sub(1).min(last))),
         Github::Comment => Act::Compose(Aim::Comment),
         Github::Review => Act::Compose(Aim::Review),
+        Github::FixChecks | Github::FixThreads => Act::Fix(Box::new(super::fix_request::collect(
+            key, thread, selected,
+        )?)),
         Github::Reply => {
             let post = card()?;
             Act::Compose(Aim::Reply {
@@ -474,6 +480,7 @@ mod tests {
                 id: "PRRT_1".into(),
                 resolved: false,
                 path: "a.rs".into(),
+                outdated: false,
                 line: Some(3),
             });
             Thread {

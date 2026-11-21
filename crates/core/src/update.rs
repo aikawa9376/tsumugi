@@ -354,6 +354,8 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         | Msg::PullCreated { .. }
         | Msg::GitHubCompose(_)
         | Msg::GitHubWrite(_)
+        | Msg::GitHubFix(_)
+        | Msg::GitHubFixRead { .. }
         | Msg::GitHubWritten { .. }
         | Msg::PromptRetained
         | Msg::ComposeLapsed(_)) => prompt::update(state, msg),

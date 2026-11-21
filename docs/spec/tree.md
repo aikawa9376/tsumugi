@@ -196,6 +196,36 @@ Leaving the prompt gives a prepared write up, and the text stays. A comment
 or review that is posted is never edited or deleted from here, and neither
 is anyone else's.
 
+## Asking an agent to fix a pull request
+
+From a pull request's tab, the keys of `github.fix_checks` and
+`github.fix_threads` ([keys](reference/keys.md#actions)) prepare a request for
+an agent to fix what its failed checks or its unresolved review threads say.
+For threads, the request is for the thread of the card selected, or for every
+unresolved one with no card selected.
+
+The request is written in the draft of a new session on the pull request, in
+the worktree that has its branch checked out where there is one, otherwise in
+a worktree made for it as `n` on its row does. It says the environment, the
+repository, the branch and its base, and the worktree; gives the pull request's
+title and link; and, for checks, each failed one with its name, link and the
+end of its log, those still running by name, and for threads each one's file,
+line, remarks and whether GitHub marks it outdated. The title, names, logs and
+remarks are given as data to be treated as untrusted, never as instructions.
+
+The work host reads the pull request's head again for it. When the head is no
+longer the one the tab showed, the request says so, so the agent looks at the
+code as it is. A log that cannot be read, because the check was not run by
+GitHub Actions, the login may not read it, or the network failed, is said so
+in its place and the request still names the check and links it. Only the
+first few failed checks have their logs read, the rest say so, and a log is
+cut to its end with the earlier errors kept. When nothing failed, or the head
+cannot be read, a notice says so and nothing is prepared.
+
+Preparing a request sends nothing to the agent: you edit the prompt and send it
+as any other. Neither preparing nor sending replies on GitHub, resolves a
+thread, pushes or merges; those stay your own acts.
+
 ## Making and deleting worktrees
 
 A worktree is made from the tree, by the `+` of a workspace or a worktree, its

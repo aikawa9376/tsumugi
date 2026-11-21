@@ -122,6 +122,8 @@ pub(crate) fn perform(
         | Action::GithubResolve
         | Action::GithubReact
         | Action::GithubReview
+        | Action::GithubFixChecks
+        | Action::GithubFixThreads
         | Action::OverlayClose
         | Action::OverlayDown
         | Action::OverlayUp

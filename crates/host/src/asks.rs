@@ -178,6 +178,13 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             .map(|thread| Answer::Thread {
                 thread: Box::new(thread),
             }),
+        Ask::GitHubFixContext {
+            repository,
+            number,
+            checks,
+        } => tsumugi_vcs::github::fix_context(&repository, number, checks)
+            .await
+            .map(|context| Answer::FixContext { context }),
         Ask::GitHubWrite {
             repository,
             listing,

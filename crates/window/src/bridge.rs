@@ -1086,6 +1086,36 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::GitHubFixContext {
+                environment,
+                repository,
+                number,
+                checks,
+                fix,
+            } => {
+                let read = self.ask_in(
+                    &environment,
+                    Ask::GitHubFixContext {
+                        repository: repository.clone(),
+                        number,
+                        checks,
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match read.await {
+                        Answer::FixContext { context } => Ok(context),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::GitHubFixRead {
+                        environment,
+                        repository,
+                        fix,
+                        result,
+                    });
+                });
+            }
             Effect::Copy { text, done } => {
                 let told = match crate::clipboard::copy_to_clipboard(&text) {
                     Ok(()) => done,

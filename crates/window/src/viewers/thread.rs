@@ -535,6 +535,7 @@ mod tests {
             resolved: true,
             path: "src/<a>.rs".into(),
             line: Some(12),
+            outdated: false,
         });
         on_lines.said[1].reactions = vec![
             Reaction {
