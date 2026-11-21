@@ -21,12 +21,19 @@ pub struct Fresh {
     limits: Option<Vec<Limit>>,
     asked: Option<Instant>,
     asking: bool,
+    failed: bool,
 }
 
 impl Fresh {
     /// The limits last heard, however old; `None` before the first answer.
     pub fn get(&self) -> Option<&[Limit]> {
         self.limits.as_deref()
+    }
+
+    /// Whether the last ask got no answer, so the limits shown, if any,
+    /// are not current.
+    pub fn failed(&self) -> bool {
+        self.failed
     }
 
     /// Whether to ask now, at `now`: never asked, or asked longer than
@@ -48,6 +55,7 @@ impl Fresh {
     pub fn settle(&mut self, now: Instant, got: Option<Vec<Limit>>) {
         self.asking = false;
         self.asked = Some(now);
+        self.failed = got.is_none();
         if got.is_some() {
             self.limits = got;
         }
@@ -95,6 +103,20 @@ mod tests {
         assert_eq!(fresh.get(), Some(&[limit(3.0)][..]));
         fresh.settle(later, Some(vec![limit(9.0)]));
         assert_eq!(fresh.get(), Some(&[limit(9.0)][..]));
+    }
+
+    #[test]
+    fn a_failed_ask_is_told_until_an_answer_comes() {
+        let mut fresh = Fresh::default();
+        let t = Instant::now();
+        assert!(!fresh.failed(), "nothing asked is not a failure");
+        fresh.want(t);
+        fresh.settle(t, None);
+        assert!(fresh.failed());
+        let later = t + USAGE_TTL;
+        fresh.want(later);
+        fresh.settle(later, Some(Vec::new()));
+        assert!(!fresh.failed());
     }
 
     #[test]

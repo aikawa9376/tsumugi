@@ -96,6 +96,10 @@ pub struct DetailsWork {
     /// Each account's usage limits.
     #[serde(with = "crate::wire::pairs")]
     pub usage: BTreeMap<Account, Vec<Limit>>,
+    /// The accounts whose last ask for their limits failed, so that no
+    /// answer is told apart from limits of none.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub unavailable: BTreeSet<Account>,
     /// The whole machine's usage.
     pub system: Option<SystemUsage>,
 }
@@ -228,6 +232,10 @@ pub enum DetailsChange {
         account: Account,
         limits: Vec<Limit>,
     },
+    /// The host asked for `account`'s limits and got no answer.
+    UsageUnavailable {
+        account: Account,
+    },
     System {
         usage: SystemUsage,
     },
@@ -290,8 +298,10 @@ impl DetailsWork {
                 changed
             }
             DetailsChange::Usage { account, limits } => {
-                self.usage.insert(account, limits.clone()) != Some(limits)
+                let was_unavailable = self.unavailable.remove(&account);
+                self.usage.insert(account, limits.clone()) != Some(limits) || was_unavailable
             }
+            DetailsChange::UsageUnavailable { account } => self.unavailable.insert(account),
             DetailsChange::System { usage } => set(&mut self.system, Some(usage)),
         }
     }
@@ -432,6 +442,26 @@ mod tests {
         };
         assert!(work.apply(usage()));
         assert!(!work.apply(usage()));
+    }
+
+    #[test]
+    fn an_account_whose_ask_failed_is_told_apart_until_its_limits_arrive() {
+        let mut work = DetailsWork::default();
+        let account = Account {
+            agent: Agent::Claude,
+            home: None,
+        };
+        let failed = || DetailsChange::UsageUnavailable {
+            account: account.clone(),
+        };
+        assert!(work.apply(failed()));
+        assert!(!work.apply(failed()));
+        assert!(work.unavailable.contains(&account));
+        assert!(work.apply(DetailsChange::Usage {
+            account: account.clone(),
+            limits: Vec::new(),
+        }));
+        assert!(!work.unavailable.contains(&account));
     }
 
     #[test]

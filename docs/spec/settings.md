@@ -257,7 +257,9 @@ characters long; no two profiles share one. `agent` is `claude`, `codex`,
 `[profiles.pi]` for Pi, `[profiles.opencode]` for OpenCode,
 `[profiles.cursor]` for Cursor CLI, each left out
 for the agent's options with nothing chosen. `[profiles.launch]` says how
-the agent is started, as `[neovim]` does for Neovim.
+the agent is started, as `[neovim]` does for Neovim. `poll_usage = false`
+stops every ask for the usage limits of the profile's login; left out, they
+are asked.
 
 Each agent has a default profile of its own: the default profile when it
 starts that agent, else the agent's first profile, in the order

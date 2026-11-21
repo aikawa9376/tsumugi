@@ -127,7 +127,9 @@ window or such a row is described.
   whether it is the default, whether its login is logged in, as that
   environment's machine says, and, for an agent whose account has usage
   limits, what is left of them for that login with a link to the agent's
-  usage page.
+  usage page, the login nearest its limits first. A login that is logged
+  out, whose usage could not be read or that is set not to poll says so in
+  place of numbers ([below](#usage)).
 - **github** — the pull request or issue selected, or, of what a window shows,
   the pull request open for the branch its worktree has checked out, as last
   read: its title,
@@ -317,6 +319,17 @@ of it. A meter that
 cannot be read is marked unavailable. The meters have distinct colors; high
 usage overrides those colors with a warning. Memory and storage include used
 and total capacity; CPU and GPU include hardware information when available.
+
+A limit that has passed 80% used is marked, in every list that shows it,
+and **Show usage left** in Settings chooses whether the limits show what is
+left or what is used. A profile whose **Poll usage** is off is never asked:
+no window or session of its login asks its agent for its limits, and its
+rows say it is not polled. A login that is logged out, and one whose ask got
+no answer, are shown as such rather than with the numbers last read.
+
+A conversation whose agent records its tokens, with a model Tsumugi knows the
+prices of, shows an estimated cost beside them, marked as inferred from those
+prices; a model it does not know is not priced.
 
 A link over the limits opens the shown agent's account usage
 settings in the default browser, where available resets and account limits can be managed.

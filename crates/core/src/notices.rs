@@ -18,6 +18,7 @@ use crate::state::ViewState;
 
 pub mod mute;
 pub use mute::Mutes;
+pub(crate) mod usage;
 
 /// The notices this window has read, by the environment keeping them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -93,6 +94,9 @@ pub struct NoticeView {
     /// window, or passed over as old when its host was first heard from;
     /// none while its host has kept none.
     told: BTreeMap<EnvironmentId, Option<u64>>,
+    /// The limits of each environment's accounts over the warning threshold
+    /// when last heard from it; none before its host first said.
+    usage_warned: BTreeMap<EnvironmentId, BTreeSet<usage::Warned>>,
 }
 
 /// The list open: what is typed to narrow it, and where the cursor is.

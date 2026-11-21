@@ -26,12 +26,20 @@ pub(crate) struct Preferences {
     notify_failed: bool,
     #[serde(default)]
     notify_done: bool,
+    #[serde(default = "on")]
+    notify_usage: bool,
+    #[serde(default = "on")]
+    usage_left: bool,
     console: ConsoleSettings,
     appearance: Appearance,
     light_theme: String,
     dark_theme: String,
     #[serde(default)]
     pub(crate) panel: DetailsLayout,
+}
+
+fn on() -> bool {
+    true
 }
 
 /// The appearance and its themes, which every environment's work host is
@@ -72,6 +80,8 @@ impl Preferences {
             notify_waiting: settings.notify_waiting,
             notify_failed: settings.notify_failed,
             notify_done: settings.notify_done,
+            notify_usage: settings.notify_usage,
+            usage_left: settings.usage_left,
             console: settings.console.clone(),
             appearance: settings.appearance,
             light_theme: settings.light_theme.clone(),
@@ -90,6 +100,8 @@ impl Preferences {
         settings.notify_waiting = self.notify_waiting;
         settings.notify_failed = self.notify_failed;
         settings.notify_done = self.notify_done;
+        settings.notify_usage = self.notify_usage;
+        settings.usage_left = self.usage_left;
         settings.console = self.console.clone();
         settings.panel = self.panel.clone();
         self.looks().apply(settings);

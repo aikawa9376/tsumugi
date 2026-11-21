@@ -242,6 +242,11 @@ pub struct Settings {
     /// Show a notification when a session finishes its turn while the window
     /// is not in front, as `notify_waiting` does.
     pub notify_done: bool,
+    /// Show a notification when a limit of an agent account passes 80%
+    /// used while the window is not in front, as `notify_waiting` does.
+    pub notify_usage: bool,
+    /// Show how much of each usage limit is left; off, how much is used.
+    pub usage_left: bool,
     /// Let a session's agent name its session once it has answered the first
     /// prompt, and again when the work turns to something else; a name given
     /// by hand, above the prompt or by renaming, is kept all the same.
@@ -330,6 +335,8 @@ impl Default for Settings {
             notify_waiting: true,
             notify_failed: true,
             notify_done: true,
+            notify_usage: true,
+            usage_left: true,
             rename_sessions: true,
             restore_sessions: RestoreSessions::Ask,
             close_successful_commands: true,

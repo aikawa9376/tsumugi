@@ -536,6 +536,11 @@ mod tests {
                     },
                     Vec::new(),
                 )]),
+                unavailable: [crate::Account {
+                    agent: tsumugi_model::Agent::Codex,
+                    home: None,
+                }]
+                .into(),
                 system: Some(SystemUsage::default()),
                 ..Default::default()
             },
@@ -626,6 +631,12 @@ mod tests {
                         spot: Spot::Log,
                         listing: Ok(Listing::Log(Vec::new())),
                         revision: None,
+                    },
+                }),
+                details(DetailsChange::UsageUnavailable {
+                    account: crate::Account {
+                        agent: tsumugi_model::Agent::Codex,
+                        home: None,
                     },
                 }),
                 details(DetailsChange::Usage {
