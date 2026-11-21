@@ -27,6 +27,7 @@ pub const CSS: &str = concat!(
     include_str!("../assets/css/sidebar.css"),
     include_str!("../assets/css/content.css"),
     include_str!("../assets/css/browser.css"),
+    include_str!("../assets/css/review.css"),
     include_str!("../assets/css/console.css"),
     include_str!("../assets/css/prompt.css"),
     include_str!("../assets/css/details.css"),

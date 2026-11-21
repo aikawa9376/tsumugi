@@ -123,6 +123,24 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 .await
                 .map(|()| Answer::Done)
         }
+        Ask::Review { worktree } => {
+            let (dir, kept) = (crate::paths::instance_state(), worktree.clone());
+            match blocking(move || crate::review_comments::load(&dir, &kept)).await {
+                Ok(comments) => Ok(Answer::Review {
+                    comments: crate::review_comments::judge(&worktree, comments).await,
+                }),
+                Err(text) => Err(text),
+            }
+        }
+        Ask::ChangeReview { worktree, change } => {
+            let (dir, kept) = (crate::paths::instance_state(), worktree.clone());
+            match blocking(move || crate::review_comments::change(&dir, &kept, *change)).await {
+                Ok(comments) => Ok(Answer::Review {
+                    comments: crate::review_comments::judge(&worktree, comments).await,
+                }),
+                Err(text) => Err(text),
+            }
+        }
         Ask::ConsumeDraft { key, text, images } => {
             let dir = crate::paths::instance_state();
             blocking(move || crate::drafts::consume(&dir, &key, &text, &images))

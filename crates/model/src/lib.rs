@@ -26,6 +26,7 @@ mod process;
 pub mod profile;
 pub mod repository;
 mod resource;
+pub mod review;
 mod session;
 pub mod subagents;
 mod terminal;

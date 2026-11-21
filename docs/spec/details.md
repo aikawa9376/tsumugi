@@ -89,7 +89,7 @@ window or such a row is described.
   agent put into a turn, as a command's output, is not a prompt.
 - **changes** — the HEAD commit's full message in Git, alongside the files
   the worktree changes.
-  Opening a file shows its diff.
+  Opening a file shows its diff, which you can comment on ([review](review.md)).
 - **log** — the changes that lead to the worktree, drawn as a graph: each
   change is joined by lines to its parents, so forks and merges show. A line
   running off the end leads to a change not listed. Opening a change lists

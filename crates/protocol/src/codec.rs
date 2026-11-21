@@ -56,6 +56,52 @@ mod tests {
     }
 
     #[test]
+    fn review_comments_asked_and_changed_round_trip_and_only_changing_them_mutates() {
+        use crate::{Answer, Ask};
+        use tsumugi_model::repository::Rev;
+        use tsumugi_model::review::{Anchor, Change, Comment, Freshness, Judged, NewComment, Side};
+        let anchor = Anchor {
+            path: "日本語/メモ 1.md".into(),
+            side: Side::Old,
+            start: 3,
+            end: 4,
+        };
+        let worktree: std::path::PathBuf = "/project with spaces/日本語".into();
+        assert!(
+            !Ask::Review {
+                worktree: worktree.clone()
+            }
+            .mutates()
+        );
+        let change = Ask::ChangeReview {
+            worktree: worktree.clone(),
+            change: Box::new(Change::Add(NewComment {
+                rev: Rev::Commit("abc".into()),
+                anchor: anchor.clone(),
+                quoted: vec!["a\tb".into(), "".into()],
+                text: "なぜ?\n理由".into(),
+            })),
+        };
+        assert!(change.mutates());
+        round_trips(change);
+        round_trips(Ask::Review { worktree });
+        round_trips(Answer::Review {
+            comments: vec![Judged {
+                comment: Comment {
+                    id: 7,
+                    rev: Rev::WorkingCopy,
+                    anchor,
+                    quoted: vec!["x".into()],
+                    text: "t".into(),
+                    resolved: true,
+                    sent: true,
+                },
+                freshness: Freshness::Outdated,
+            }],
+        });
+    }
+
+    #[test]
     fn local_issue_requests_and_progress_round_trip_without_losing_the_request() {
         use crate::Ask;
         use tsumugi_model::{LocalIssue, LocalIssueState, NewLocalIssue};

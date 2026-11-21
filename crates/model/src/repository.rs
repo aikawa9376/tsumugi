@@ -99,6 +99,9 @@ pub enum Rev {
 pub enum Spot {
     Files(Rev),
     Diff(Rev, Change),
+    /// A file's diff as lines of the line diff, which review comments are
+    /// pinned to.
+    Lines(Rev, Change),
     Log,
 }
 

@@ -91,6 +91,17 @@ pub enum Ask {
     },
     /// What is written in the prompts, as kept.
     Drafts,
+    /// The review comments kept for a worktree, each judged against its
+    /// file's diff as it is now.
+    Review {
+        worktree: PathBuf,
+    },
+    /// Change the review comments kept for a worktree; answered as `Review`
+    /// is, after the change.
+    ChangeReview {
+        worktree: PathBuf,
+        change: Box<tsumugi_model::review::Change>,
+    },
     /// Keep what a window changed of what is written in the prompts.
     KeepDrafts(Box<DraftChanges>),
     ConsumeDraft {
@@ -317,6 +328,10 @@ pub enum Answer {
     },
     /// What is written in the prompts, as kept.
     Drafts(Box<Drafts>),
+    /// The review comments of a worktree, in the order they were made.
+    Review {
+        comments: Vec<tsumugi_model::review::Judged>,
+    },
     Done,
     /// It failed, for this reason, said to the user.
     Failed {
