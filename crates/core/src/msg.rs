@@ -509,6 +509,29 @@ pub enum Msg {
         dx: f64,
         dy: f64,
     },
+    /// The panel of floating shells has the keys: it was clicked.
+    FloatingFocus,
+    /// The floating terminal was closed with its own button, its shells left
+    /// running.
+    FloatingClose,
+    /// Something outside the floating terminal was clicked: it keeps open and
+    /// gives up the keys.
+    FloatingBlur,
+    /// The tab of the floating shell by this id, in `environment`, was
+    /// clicked.
+    FloatingSelect {
+        environment: EnvironmentId,
+        id: u128,
+    },
+    /// The work host started the floating shell by this id for `environment`.
+    FloatingStarted {
+        environment: EnvironmentId,
+        id: u128,
+    },
+    /// The work host could not start a floating shell for `environment`.
+    FloatingFailed {
+        environment: EnvironmentId,
+    },
     /// Open the sheet adding an environment, holding the keys until it
     /// closes.
     AddingOpen,

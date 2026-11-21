@@ -181,6 +181,7 @@ async fn a_script_s_end_is_read_from_the_status_its_terminal_is_tagged_with() {
         &daemon,
         &shell,
         TerminalStartRequest {
+            floating: false,
             name: "Setup".into(),
             cwd: dir.path().into(),
             ..Default::default()
@@ -216,6 +217,7 @@ async fn a_terminal_stopped_before_its_script_ended_ends_the_wait_without_a_stat
         &daemon,
         &shell,
         TerminalStartRequest {
+            floating: false,
             name: "Setup".into(),
             cwd: dir.path().into(),
             ..Default::default()

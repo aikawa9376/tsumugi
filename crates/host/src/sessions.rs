@@ -46,6 +46,8 @@ const CONNECTION: &str = "tsumugi.connection";
 /// The daemon id of the interrupted session or terminal this one was
 /// brought back for.
 const RESTORED: &str = "tsumugi.restored";
+/// Marks a floating terminal.
+const FLOATING: &str = "tsumugi.floating";
 
 /// A session the daemon holds, as what it runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +159,7 @@ pub fn read_any_environment(session: &tsumugi_term::Session) -> Option<Kept> {
             opener: tags::value(t, PARENT_TAG).and_then(|id| id.parse().ok()),
             show: tags::value(t, SHOW_TAG).is_some(),
             exit: tags::value(t, EXIT).and_then(|code| code.parse().ok()),
+            floating: tags::value(t, FLOATING).is_some(),
             restored_from: tags::value(t, RESTORED),
         })),
         None => None,
@@ -269,6 +272,9 @@ pub fn terminal_tags(terminal: &TerminalSession) -> Vec<String> {
     }
     if terminal.show {
         out.extend(tags::tagged(SHOW_TAG, "1"));
+    }
+    if terminal.floating {
+        out.extend(tags::tagged(FLOATING, "1"));
     }
     out
 }
@@ -835,6 +841,21 @@ mod tests {
     }
 
     #[test]
+    fn a_floating_terminal_stays_floating_in_what_the_terminal_host_keeps() {
+        let terminal = TerminalSession {
+            floating: true,
+            ..tsumugi_model::testing::shell(9, "/home/me")
+        };
+        let s = kept(9, terminal_tags(&terminal));
+        assert_eq!(read(&s), Some(Kept::Terminal(terminal)));
+        let plain = tsumugi_model::testing::shell(9, "/api");
+        let Some(Kept::Terminal(plain)) = read(&kept(9, terminal_tags(&plain))) else {
+            panic!("a terminal")
+        };
+        assert!(!plain.floating);
+    }
+
+    #[test]
     fn a_command_terminal_whose_program_ended_says_how() {
         let terminal = TerminalSession {
             id: 9,
@@ -862,6 +883,7 @@ mod tests {
         let launch = resolve_terminal(
             &settings,
             TerminalStartRequest {
+                floating: false,
                 name: "claude".into(),
                 cwd: "/api".into(),
                 program: TerminalProgram::Command,
@@ -898,6 +920,7 @@ mod tests {
         let launch = resolve_terminal(
             &crate::settings::Settings::default(),
             TerminalStartRequest {
+                floating: false,
                 name: "main.rs".into(),
                 cwd: "/api".into(),
                 program: TerminalProgram::Neovim,
@@ -921,6 +944,26 @@ mod tests {
                 ..launch.terminal
             }
         );
+    }
+
+    #[test]
+    fn a_floating_shell_is_started_marked_so_in_its_tags() {
+        use crate::execution::{TerminalStartRequest, resolve_terminal};
+        let launch = resolve_terminal(
+            &crate::settings::Settings::default(),
+            TerminalStartRequest {
+                name: "floating".into(),
+                cwd: "/home/me".into(),
+                floating: true,
+                ..Default::default()
+            },
+            "/bin/sh",
+        );
+        assert!(launch.terminal.floating);
+        let Some(Kept::Terminal(read)) = read(&kept(9, launch.spawn.tags)) else {
+            panic!("a terminal")
+        };
+        assert!(read.floating);
     }
 
     #[test]
@@ -995,6 +1038,7 @@ mod gui_launch_tests {
         let launch = resolve_terminal(
             &crate::settings::Settings::default(),
             TerminalStartRequest {
+                floating: false,
                 program: TerminalProgram::Neovim,
                 cwd: "/repo".into(),
                 file: Some("/repo/日本語 file.txt".into()),

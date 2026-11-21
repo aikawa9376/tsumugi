@@ -48,6 +48,8 @@ pub enum Context {
     GitHub,
     /// The lightbox over the window, while it is open.
     Lightbox,
+    /// The floating terminal over the window, while it has the keys.
+    Floating,
     /// What else is drawn over the window and holds the keys: a picker, a
     /// menu, a question, the keys help, the sheet adding an environment.
     Overlay,
@@ -62,7 +64,7 @@ pub enum Context {
 }
 
 impl Context {
-    pub const ALL: [Context; 18] = [
+    pub const ALL: [Context; 19] = [
         Context::Global,
         Context::Tree,
         Context::Agents,
@@ -74,6 +76,7 @@ impl Context {
         Context::Viewer,
         Context::GitHub,
         Context::Lightbox,
+        Context::Floating,
         Context::Overlay,
         Context::Confirm,
         Context::Agent(Agent::Claude),
@@ -95,6 +98,7 @@ impl Context {
             Context::Viewer => "viewer",
             Context::GitHub => "github",
             Context::Lightbox => "lightbox",
+            Context::Floating => "floating",
             Context::Overlay => "overlay",
             Context::Confirm => "confirm",
             Context::Filer => "filer",
@@ -118,6 +122,7 @@ impl Context {
             Context::Viewer => "Viewer",
             Context::GitHub => "Pull request or issue",
             Context::Lightbox => "Lightbox",
+            Context::Floating => "Floating terminal",
             Context::Overlay => "Over the window",
             Context::Confirm => "Question",
             Context::Filer => "Files",
@@ -145,6 +150,9 @@ impl Context {
             }
             Context::Lightbox => {
                 "The lightbox of a session's images, while it is open over the window."
+            }
+            Context::Floating => {
+                "The floating terminal, while it has the keys; every other key goes to its shell."
             }
             Context::Overlay => {
                 "A picker, a menu, a question, the keys help or the sheet adding an environment, while it is open over the window; a text field there types the keys it takes."

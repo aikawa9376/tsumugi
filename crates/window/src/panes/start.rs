@@ -176,6 +176,7 @@ impl Ui {
             script,
             file,
             diff,
+            floating: false,
             cols: size.cols,
             rows: size.rows,
         };
@@ -218,6 +219,47 @@ impl Ui {
             if take_keys {
                 app.dispatch(Msg::Focus(Area::Console));
             }
+        });
+    }
+
+    /// Start a shell for the floating terminal of `environment`, where that
+    /// host's settings say, and attach to it without showing it anywhere
+    /// else or moving the keys.
+    pub(crate) fn start_floating(&self, environment: EnvironmentId) {
+        let (app, hub) = (self.app, self.hub.clone());
+        let size = *self.local.console_size.peek();
+        let start = TerminalStart {
+            name: "floating".into(),
+            floating: true,
+            cols: size.cols,
+            rows: size.rows,
+            ..TerminalStart::default()
+        };
+        spawn(async move {
+            let failed = |text: String| {
+                app.status(Some(format!("cannot start the floating terminal: {text}")));
+                app.dispatch(Msg::FloatingFailed {
+                    environment: environment.clone(),
+                });
+            };
+            let terminal = match app
+                .ask_in(&environment, Ask::StartTerminal(Box::new(start)))
+                .await
+            {
+                Answer::Terminal { terminal } => terminal,
+                Answer::Failed { text } => return failed(text),
+                answer => return failed(format!("{answer:?}")),
+            };
+            let id = terminal.id;
+            let tab = Tab::Terminal(environment.clone(), id);
+            if let Err(e) = attach_held(app, &hub, id, tab, size).await {
+                return failed(e.to_string());
+            }
+            app.dispatch(Msg::TerminalOpened {
+                environment: environment.clone(),
+                terminal,
+            });
+            app.dispatch(Msg::FloatingStarted { environment, id });
         });
     }
 

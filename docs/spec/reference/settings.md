@@ -61,6 +61,14 @@ How much the details panel reads and shows.
 | `details.links_shown` | integer | `5` | The links of each kind the overview shows before a row that shows them all. |
 | `details.log_commits` | integer | `50` | The changes Log lists. |
 
+## `[floating_terminal]`
+
+The shell that floats over the window.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `floating_terminal.directory` | string | `"~"` | The folder its shells start in, `~` standing for the home folder of the machine they run on; empty for that home folder. |
+
 ## `[neovim]`
 
 How a Neovim tab's Neovim starts, as an agent does; an empty command runs `nvim`.

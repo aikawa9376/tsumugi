@@ -165,6 +165,12 @@ impl Ui {
         let tab = self.app.active()?;
         self.hub.panes.borrow().get(&tab).cloned()
     }
+
+    /// The pane of the shell the floating terminal shows, if it has one.
+    pub(crate) fn floating_pane(&self) -> Option<Arc<Pane>> {
+        let tab = self.app.floating_tab()?;
+        self.hub.panes.borrow().get(&tab).cloned()
+    }
 }
 
 #[cfg(test)]

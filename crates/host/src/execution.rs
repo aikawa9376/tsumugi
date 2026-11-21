@@ -105,6 +105,8 @@ pub struct TerminalStartRequest {
     pub show: bool,
     /// The daemon id of the interrupted terminal it is opened again for.
     pub restored_from: Option<String>,
+    /// Whether it floats over the window instead of belonging to a worktree.
+    pub floating: bool,
 }
 
 pub struct ResolvedTerminalLaunch {
@@ -189,6 +191,7 @@ pub fn resolve_terminal(
         show: request.show,
         exit: None,
         restored_from: request.restored_from,
+        floating: request.floating,
     };
     let mut env = env;
     if let Some(spot) = request.diff {

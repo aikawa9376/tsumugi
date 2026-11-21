@@ -24,6 +24,7 @@ pub struct ViewState {
     pub picker: PickerView,
     pub notices: crate::notices::NoticeView,
     pub overlays: Overlays,
+    pub floating: crate::floating::Floating,
     pub console: ConsoleView,
     pub prompt: PromptView,
 }
@@ -41,6 +42,7 @@ impl Default for ViewState {
             picker: PickerView::default(),
             notices: crate::notices::NoticeView::default(),
             overlays: Overlays::default(),
+            floating: crate::floating::Floating::default(),
             console: ConsoleView::default(),
             prompt: PromptView::default(),
         };

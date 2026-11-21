@@ -32,6 +32,7 @@ pub(crate) fn perform(
     key: Option<Key>,
     probe: &Probe,
 ) -> Vec<Effect> {
+    crate::floating::leave_for(state, &action);
     let area = state.content.focus;
     let pane = probe.pane
         && matches!(area, Area::Console | Area::Prompt)
@@ -135,6 +136,11 @@ pub(crate) fn perform(
         | Action::OverlayDown
         | Action::OverlayUp
         | Action::OverlayChoose => Vec::new(),
+        Action::FloatingToggle
+        | Action::FloatingNew
+        | Action::FloatingCloseTab
+        | Action::FloatingNext
+        | Action::FloatingPrev => step(state, Msg::Window(action)),
         Action::LightboxNext
         | Action::LightboxPrev
         | Action::LightboxZoomIn

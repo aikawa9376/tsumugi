@@ -123,6 +123,7 @@ pub(crate) struct AppCtx {
     pub(crate) picker: Signal<PickerView>,
     pub(crate) notices: Signal<tsumugi_core::notices::NoticeView>,
     pub(crate) overlays: Signal<Overlays>,
+    pub(crate) floating: Signal<tsumugi_core::floating::Floating>,
     pub(crate) console: Signal<ConsoleView>,
     pub(crate) prompt: Signal<PromptView>,
     pub(crate) drafts_ready: Signal<bool>,
@@ -263,6 +264,7 @@ pub(crate) fn use_app() -> AppCtx {
             picker: Signal::new(view.picker.clone()),
             notices: Signal::new(view.notices.clone()),
             overlays: Signal::new(view.overlays.clone()),
+            floating: Signal::new(view.floating.clone()),
             console: Signal::new(view.console.clone()),
             prompt: Signal::new(view.prompt.clone()),
             drafts_ready: Signal::new(false),
@@ -659,6 +661,7 @@ impl AppCtx {
         set_changed(self.picker, &view.picker);
         set_changed(self.notices, &view.notices);
         set_changed(self.overlays, &view.overlays);
+        set_changed(self.floating, &view.floating);
         set_changed(self.console, &view.console);
         set_changed(self.prompt, &view.prompt);
     }
@@ -1316,6 +1319,9 @@ impl AppCtx {
             | Effect::PromptCommands(_)
             | Effect::Palette(_)
             | Effect::PromptRoot(_)
+            | Effect::StartFloating { .. }
+            | Effect::FloatingKey(_)
+            | Effect::FloatingText { .. }
             | Effect::StartTerminal(_)
             | Effect::SavedCommand(_)
             | Effect::StartDiffEditor { .. }
@@ -1554,6 +1560,21 @@ impl AppCtx {
     /// What the content's focused window shows now.
     pub(crate) fn active(&self) -> Option<Tab> {
         self.content.peek().active().cloned()
+    }
+
+    /// The tabs of the floating terminal of the environment shown, and the
+    /// one it shows.
+    pub(crate) fn floating_tabs(&self) -> (Vec<Tab>, Option<Tab>) {
+        let view = self.view.peek();
+        (
+            tsumugi_core::floating::tabs(&view),
+            tsumugi_core::floating::shown(&view),
+        )
+    }
+
+    /// The tab the floating terminal shows now, if it shows one.
+    pub(crate) fn floating_tab(&self) -> Option<Tab> {
+        tsumugi_core::floating::shown(&self.view.peek())
     }
 
     /// The area that has the keys now.

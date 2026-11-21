@@ -45,6 +45,7 @@ async fn terminal_resources_can_be_started_read_and_stopped_without_a_window() {
         &daemon,
         &settings,
         TerminalStartRequest {
+            floating: false,
             name: "server".into(),
             cwd: dir.path().into(),
             ..Default::default()
@@ -103,6 +104,7 @@ async fn a_terminal_started_without_a_window_is_told_the_theme_s_background_howe
         &daemon,
         &settings,
         TerminalStartRequest {
+            floating: false,
             name: "asks".into(),
             cwd: dir.path().into(),
             ..Default::default()
@@ -142,6 +144,7 @@ async fn neovim_on_a_file(
         daemon,
         &settings,
         TerminalStartRequest {
+            floating: false,
             name: "notes.txt".into(),
             cwd: dir.into(),
             program: tsumugi_model::TerminalProgram::Neovim,
@@ -240,6 +243,7 @@ async fn shell_running(daemon: &Daemon, dir: &std::path::Path, script: &str) -> 
         daemon,
         &settings,
         TerminalStartRequest {
+            floating: false,
             name: "server".into(),
             cwd: dir.into(),
             ..Default::default()
@@ -443,6 +447,7 @@ PROMPT='ready> '
         &daemon,
         &settings,
         TerminalStartRequest {
+            floating: false,
             cwd: dir.path().into(),
             ..Default::default()
         },

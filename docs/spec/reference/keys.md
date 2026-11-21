@@ -199,6 +199,11 @@ changes them ([keys](../keys.md)).
 | `lightbox.pan_up` |  | in the lightbox, move the view of the image up | `lightbox`: `K` |
 | `lightbox.pan_down` |  | in the lightbox, move the view of the image down | `lightbox`: `J` |
 | `lightbox.close` |  | close the lightbox | `lightbox`: `Escape`, `q` |
+| `floating.toggle` |  | open the floating terminal, a shell over the window that every worktree shares; with it open, give it the keys; with it having them, close it, leaving its shells running ([details](../content.md#the-floating-terminal)) | `global`: `Ctrl+Alt+a` |
+| `floating.new` |  | in the floating terminal, open another shell in a tab of its own | `floating`: `Ctrl+Alt+t` |
+| `floating.close_tab` |  | in the floating terminal, end the shell of the tab shown; the panel closes with the last | `floating`: `Ctrl+Alt+w` |
+| `floating.next` |  | in the floating terminal, show the next tab, going round at the end | `floating`: `Ctrl+Alt+]` |
+| `floating.prev` |  | in the floating terminal, show the previous tab, going round at the start | `floating`: `Ctrl+Alt+[` |
 | `overlay.close` |  | close what is open over the window: a picker, a menu, the keys help or the sheet adding an environment; a question is answered no ([keys](../keys.md#over-the-window)) | `overlay`: `Escape`, `Ctrl+c`, `q`<br>`confirm`: `n` |
 | `overlay.down` |  | over the window, move to the next row of a picker's list, a menu or the sheet adding an environment, going round at the end; scroll the keys help down a line | `overlay`: `Ctrl+n`, `Ctrl+j`, `ArrowDown`, `Tab`, `j` |
 | `overlay.up` |  | over the window, move to the previous row, as `overlay.down` moves to the next; scroll the keys help up a line | `overlay`: `Ctrl+p`, `Ctrl+k`, `ArrowUp`, `Shift+Tab`, `k` |
@@ -311,6 +316,7 @@ changes them ([keys](../keys.md)).
 "Mod+0" = "zoom.reset"
 "Mod+b" = "tree.toggle"
 "Mod+d" = "details.toggle"
+"Ctrl+Alt+a" = "floating.toggle"
 "F1" = "keys.help"
 
 [draft]
@@ -562,6 +568,12 @@ changes them ([keys](../keys.md)).
 "J" = "lightbox.pan_down"
 "Escape" = "lightbox.close"
 "q" = "lightbox.close"
+
+[floating]
+"Ctrl+Alt+t" = "floating.new"
+"Ctrl+Alt+w" = "floating.close_tab"
+"Ctrl+Alt+]" = "floating.next"
+"Ctrl+Alt+[" = "floating.prev"
 
 [overlay]
 "Escape" = "overlay.close"

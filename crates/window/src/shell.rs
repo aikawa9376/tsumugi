@@ -6,6 +6,7 @@ mod app;
 mod body;
 mod composer;
 mod effects;
+mod floating;
 mod footer;
 pub(crate) mod header;
 mod lightbox;

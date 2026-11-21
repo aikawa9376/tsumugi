@@ -419,6 +419,9 @@ fn settings_written_read_back_the_same() {
             env: BTreeMap::new(),
         },
         scratch_dir: "~/notes".into(),
+        floating_terminal: FloatingTerminalSettings {
+            directory: "~/work".into(),
+        },
         picker: PickerSettings {
             ghq: false,
             roots: vec!["~/src".into()],
@@ -1123,7 +1126,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`, `worktree_setup`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),
@@ -1157,6 +1160,23 @@ fn a_new_worktrees_setup_script_is_asked_about_unless_the_user_said_otherwise() 
     assert_eq!(settings.worktree_setup.policy_for("/r/api".as_ref()), Run);
     assert_eq!(settings.worktree_setup.policy_for("/r/web".as_ref()), Skip);
     assert_eq!(written_and_read(&settings), settings);
+}
+
+#[test]
+fn the_floating_terminal_starts_in_the_home_folder_unless_a_directory_is_chosen() {
+    let home = std::path::Path::new("/h");
+    let at = |text: &str| Settings::parse(text).unwrap().floating_dir(home);
+    assert_eq!(at(""), std::path::PathBuf::from("/h"));
+    assert_eq!(at("[floating_terminal]\ndirectory = \"\"\n"), home);
+    assert_eq!(
+        at("[floating_terminal]\ndirectory = \"~/notes\"\n"),
+        std::path::PathBuf::from("/h/notes")
+    );
+    assert_eq!(
+        at("[floating_terminal]\ndirectory = \"/srv\"\n"),
+        std::path::PathBuf::from("/srv")
+    );
+    assert!(Settings::parse("[floating_terminal]\nnonsense = 1\n").is_err());
 }
 
 #[test]

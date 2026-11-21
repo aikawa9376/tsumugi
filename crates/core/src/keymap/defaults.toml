@@ -99,6 +99,7 @@
 "Mod+0" = "zoom.reset"
 "Mod+b" = "tree.toggle"
 "Mod+d" = "details.toggle"
+"Ctrl+Alt+a" = "floating.toggle"
 "F1" = "keys.help"
 
 [draft]
@@ -350,6 +351,12 @@
 "J" = "lightbox.pan_down"
 "Escape" = "lightbox.close"
 "q" = "lightbox.close"
+
+[floating]
+"Ctrl+Alt+t" = "floating.new"
+"Ctrl+Alt+w" = "floating.close_tab"
+"Ctrl+Alt+]" = "floating.next"
+"Ctrl+Alt+[" = "floating.prev"
 
 [overlay]
 "Escape" = "overlay.close"
