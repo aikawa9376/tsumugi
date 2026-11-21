@@ -117,6 +117,13 @@ async fn record(
     })
 }
 
+/// Tells the sessions that supervise workers how the workers stand, as the
+/// tree shows them.
+pub async fn follow_workers(sessions: &[tsumugi_model::Session]) -> Result<()> {
+    let sessions = sessions.to_vec();
+    with_store(&root(), move |store| store.follow_workers(&sessions)).await
+}
+
 /// Records that the user ended `id`.
 pub async fn ended(root: &Path, id: SessionId) -> Result<()> {
     with_store(root, move |store| store.end(id)).await

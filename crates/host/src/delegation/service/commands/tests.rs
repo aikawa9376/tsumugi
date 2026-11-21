@@ -697,3 +697,185 @@ async fn an_issue_at_work_is_not_closed_by_an_agent() {
         .unwrap_err();
     assert_eq!(error.code, Code::Refused);
 }
+
+/// A session `caller` opened and supervises.
+async fn worker_of(context: &Context, caller: &Session) -> Session {
+    let (opener, worker) = (caller.id, "worker");
+    context
+        .call(move |store| {
+            let (id, _) = store.register(crate::delegation::store::NewSession {
+                parent: Some(opener),
+                agent: tsumugi_model::Agent::Claude,
+                profile: tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude),
+                home: None,
+                name: worker.into(),
+                cwd: "/repo".into(),
+                launch: Settings::default(),
+                model: None,
+                permissions: Default::default(),
+                started_ms: 1,
+                name_given: false,
+                code: None,
+            })?;
+            store.supervise(id)?;
+            store.known(id)
+        })
+        .await
+        .unwrap()
+}
+
+fn done(outcome: protocol::Outcome, summary: &str) -> protocol::ReportDone {
+    protocol::ReportDone {
+        outcome,
+        summary: summary.into(),
+        files: vec!["src/lib.rs".into()],
+    }
+}
+
+#[test]
+fn reporting_and_waiting_act_for_the_session() {
+    assert!(Command::ReportDone(done(protocol::Outcome::Succeeded, "done")).acts());
+    assert!(Command::Wait(protocol::Wait::default()).acts());
+}
+
+#[tokio::test]
+async fn a_worker_reports_done_to_the_session_that_opened_it() {
+    let (_dir, context, supervisor, _) = conversation_watch("lead");
+    let worker = worker_of(&context, &supervisor).await;
+
+    report_done(
+        &context,
+        &worker,
+        done(protocol::Outcome::Succeeded, "Fixed it"),
+    )
+    .await
+    .unwrap();
+
+    let heard = context
+        .call(move |store| store.next_undelivered(supervisor.id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(heard.sender, worker.id);
+    assert!(heard.body.contains("outcome: succeeded"), "{}", heard.body);
+}
+
+#[tokio::test]
+async fn a_second_report_is_refused_and_tells_the_opener_nothing_more() {
+    let (_dir, context, supervisor, _) = conversation_watch("lead");
+    let worker = worker_of(&context, &supervisor).await;
+    report_done(&context, &worker, done(protocol::Outcome::Failed, "stuck"))
+        .await
+        .unwrap();
+
+    let refused = report_done(&context, &worker, done(protocol::Outcome::Succeeded, "ok"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(refused.code, Code::Refused);
+    let count = context
+        .call(move |store| Ok(store.messages_of(supervisor.id)?.len()))
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn waiting_answers_with_the_oldest_message_and_takes_it_for_good() {
+    let (_dir, context, supervisor, _) = conversation_watch("lead");
+    let worker = worker_of(&context, &supervisor).await;
+    report_done(
+        &context,
+        &worker,
+        done(protocol::Outcome::Succeeded, "Fixed it"),
+    )
+    .await
+    .unwrap();
+
+    let first = wait(
+        &context,
+        &supervisor,
+        protocol::Wait {
+            timeout_seconds: Some(0),
+        },
+    )
+    .await
+    .unwrap();
+    let again = wait(
+        &context,
+        &supervisor,
+        protocol::Wait {
+            timeout_seconds: Some(0),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(first["timed_out"], false);
+    assert_eq!(first["message"]["from"], json!(worker.id));
+    assert!(
+        first["message"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Fixed it")
+    );
+    assert_eq!(again["timed_out"], true);
+    assert_eq!(again["message"], Value::Null);
+}
+
+#[tokio::test]
+async fn a_session_waiting_is_woken_by_a_report_made_meanwhile() {
+    let (_dir, context, supervisor, _) = conversation_watch("lead");
+    let worker = worker_of(&context, &supervisor).await;
+    let waiting = {
+        let (context, supervisor) = (context.clone(), supervisor.clone());
+        tokio::spawn(async move {
+            wait(
+                &context,
+                &supervisor,
+                protocol::Wait {
+                    timeout_seconds: Some(20),
+                },
+            )
+            .await
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    report_done(
+        &context,
+        &worker,
+        done(protocol::Outcome::Failed, "no luck"),
+    )
+    .await
+    .unwrap();
+
+    let woken = waiting.await.unwrap().unwrap();
+    assert_eq!(woken["timed_out"], false);
+    assert!(
+        woken["message"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("outcome: failed")
+    );
+}
+
+#[test]
+fn a_worker_is_told_who_supervises_it_and_to_report_when_done() {
+    let supervisor = record("lead").build();
+
+    let brief = supervised_prompt("Fix the flaky test", &supervisor);
+
+    assert!(brief.starts_with("Fix the flaky test"), "{brief}");
+    assert!(brief.contains("report_done"), "{brief}");
+    assert!(brief.contains(supervisor.code.as_str()), "{brief}");
+    assert!(brief.contains("user"), "{brief}");
+}
+
+#[test]
+fn a_start_supervises_only_when_asked_to() {
+    let start = |value: Value| serde_json::from_value::<protocol::Start>(value).unwrap();
+
+    assert!(!start(json!({"prompt": "go"})).supervised);
+    assert!(start(json!({"prompt": "go", "supervised": true})).supervised);
+}

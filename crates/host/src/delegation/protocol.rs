@@ -75,6 +75,10 @@ pub enum Command {
     Rename(Rename),
     /// End the caller's own session, once its user agreed.
     Close,
+    /// Tell the session that supervises the caller how its work ended.
+    ReportDone(ReportDone),
+    /// Block until a message arrives for the caller, and take it.
+    Wait(Wait),
     /// What the caller's agent is to weigh as a prompt arrives, or once its
     /// conversation was cleared. Still read under its former name, which
     /// hooks of an Tsumugi installed before send to a work host started since.
@@ -108,6 +112,8 @@ impl Command {
                 | Self::Send(_)
                 | Self::Rename(_)
                 | Self::Close
+                | Self::ReportDone(_)
+                | Self::Wait(_)
         )
     }
 }
@@ -213,6 +219,47 @@ pub struct Start {
     /// Keep it out of the user's sight: it is only listed, and no tab opens for it. Otherwise it opens in a tab, with the keys while the user is looking at you.
     #[serde(default)]
     pub background: bool,
+    /// Supervise it as a worker: it reports to you with `report_done` once its work is done, and you are told when it stops without one, so you can `wait` for it instead of polling. The user still sees and steers it.
+    #[serde(default)]
+    pub supervised: bool,
+}
+
+/// How a worker's work ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    Succeeded,
+    Failed,
+}
+
+impl Outcome {
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Tell the session that opened you to supervise you how your work ended.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReportDone {
+    pub outcome: Outcome,
+    /// What was done, what was found, and what is left, in a few lines.
+    pub summary: String,
+    /// The files you modified, as paths.
+    #[serde(default)]
+    pub files: Vec<String>,
+}
+
+/// Wait for a message to reach you.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Wait {
+    /// How long to wait at most; 300 when omitted, and no more than 3600.
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
 }
 
 /// Send a message to another session.
@@ -337,6 +384,20 @@ pub struct Delivery {
     pub from: SessionId,
     /// The message as its recipient's agent reads it.
     pub content: String,
+}
+
+/// The answer to [`Command::ReportDone`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Reported {
+    pub reported: MessageId,
+}
+
+/// The answer to [`Command::Wait`]: the oldest message waiting, now taken, or
+/// none when the time ran out.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Waited {
+    pub message: Option<Delivery>,
+    pub timed_out: bool,
 }
 
 /// The answer to [`Command::Rename`]: the name taken.
