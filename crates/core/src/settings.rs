@@ -280,6 +280,9 @@ pub struct Settings {
     pub panel: crate::details::DetailsLayout,
     /// Whether the setup script a repository lists runs in its new worktrees.
     pub worktree_setup: WorktreeSetupSettings,
+    /// The agents asked for commit messages, pull requests, hook failures and
+    /// conflicts from the Changes list, and how.
+    pub ai_actions: AiActionsSettings,
 }
 
 impl Serialize for Settings {
@@ -386,6 +389,7 @@ impl Default for Settings {
             usage: UsageSettings::default(),
             panel: crate::details::DetailsLayout::default(),
             worktree_setup: WorktreeSetupSettings::default(),
+            ai_actions: AiActionsSettings::default(),
         }
     }
 }
@@ -668,7 +672,9 @@ pub fn reread(current: &Settings, text: &str) -> Option<Settings> {
     Settings::parse(text).ok().filter(|s| s != current)
 }
 
+mod ai_actions;
 mod earlier;
+pub use ai_actions::{AiActionsSettings, Recipe, RepositoryRecipe, Resolved};
 
 #[cfg(test)]
 pub(crate) mod tests;

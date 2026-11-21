@@ -7,6 +7,7 @@ use tokio::process::Command;
 
 pub mod branch;
 mod discover;
+pub mod generate;
 pub mod ghq;
 pub mod git;
 pub mod github;

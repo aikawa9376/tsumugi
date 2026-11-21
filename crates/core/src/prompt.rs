@@ -142,6 +142,18 @@ pub(crate) fn begin_commit(
     worktree: PathBuf,
     amend: bool,
 ) -> Vec<Effect> {
+    begin_commit_from(state, environment, worktree, amend, None)
+}
+
+/// [`begin_commit`] starting from `text`, a message written for the user to
+/// read, in place of the last commit's.
+pub(crate) fn begin_commit_from(
+    state: &mut ViewState,
+    environment: tsumugi_model::EnvironmentId,
+    worktree: PathBuf,
+    amend: bool,
+    text: Option<String>,
+) -> Vec<Effect> {
     if !crate::content::shows_prompt(state.content.active()) {
         return vec![Effect::Notice(
             "Open a session or a draft to write the commit message in its prompt".into(),
@@ -157,7 +169,7 @@ pub(crate) fn begin_commit(
         amend,
     });
     let mut effects = step(state, Msg::Focus(Area::Prompt));
-    if amend && let Some(text) = last {
+    if let Some(text) = text.or_else(|| last.filter(|_| amend)) {
         effects.push(Effect::PromptRestore {
             tab: state.content.active().cloned(),
             text,

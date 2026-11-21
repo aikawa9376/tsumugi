@@ -123,8 +123,15 @@ pub enum Key {
     ForcePush,
     /// Write a pull request in the prompt, and open it with what is sent.
     CreatePull,
-    /// Ask the session's agent to draft the pull request.
+    /// Ask the recipe's agent to write the pull request, which is put in the
+    /// prompt to be read and sent.
     DraftPull,
+    /// Ask the recipe's agent to write the commit message, which is put in the
+    /// prompt to be read and sent.
+    GenerateCommit,
+    /// Open a draft in the worktree whose prompt asks the recipe's agent to fix
+    /// what refused the last commit.
+    FixCommit,
     /// Give up the merge, rebase, cherry-pick or revert in progress, once
     /// asked.
     Abort,
@@ -427,6 +434,8 @@ pub(crate) fn press(details: &mut Details, work: Option<&WorkSnapshot>, key: Key
             | Key::ForcePush
             | Key::CreatePull
             | Key::DraftPull
+            | Key::GenerateCommit
+            | Key::FixCommit
             | Key::Abort
             | Key::Resume
             | Key::Base
@@ -482,6 +491,8 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::ForcePush
         | Key::CreatePull
         | Key::DraftPull
+        | Key::GenerateCommit
+        | Key::FixCommit
         | Key::Abort
         | Key::Resume
         | Key::Base
@@ -3829,14 +3840,238 @@ pub(crate) mod tests {
         )));
     }
 
+    fn generating(run: &Scenario) -> Vec<Effect> {
+        run.last_effects()
+            .iter()
+            .filter(|e| matches!(e, Effect::GenerateText { .. }))
+            .cloned()
+            .collect()
+    }
+
+    fn with_recipes(text: &str) -> impl FnOnce(&mut crate::state::ViewState) + '_ {
+        move |state| state.config.settings = crate::settings::Settings::parse(text).unwrap()
+    }
+
+    fn written(run: &Scenario) -> Option<String> {
+        run.last_effects().iter().find_map(|e| match e {
+            Effect::PromptRestore { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+    }
+
     #[test]
-    fn a_asks_the_agent_of_the_session_shown_to_draft_without_creating_anything() {
-        let asked = changing(&[]).send(Msg::DetailsKey(Key::DraftPull));
-        assert!(asked.last_effects().iter().any(|e| matches!(
-            e,
-            Effect::TypeInto { tab: Tab::Session(..), typing } if typing.len() == 2
-        )));
+    fn m_asks_the_recipe_s_agent_for_the_commit_message_and_commits_nothing() {
+        use tsumugi_model::AiAction;
+        let asked = changing(&[("M ", "a.rs")]).send(Msg::DetailsKey(Key::GenerateCommit));
+        assert_eq!(
+            generating(&asked),
+            [Effect::GenerateText {
+                environment: here(),
+                worktree: "/w".into(),
+                action: AiAction::CommitMessage,
+                profile: None,
+                args: Vec::new(),
+                template: "{basePrompt}".into(),
+            }]
+        );
         assert_eq!(git_effects(&asked), []);
+        assert!(asked.state().prompt.committing.is_none());
+        // One press at a time: the agent is still writing.
+        let again = asked.send(Msg::DetailsKey(Key::GenerateCommit));
+        assert_eq!(generating(&again), []);
+    }
+
+    #[test]
+    fn a_commit_message_is_not_asked_for_when_nothing_is_staged() {
+        let asked =
+            changing(&[(" M", "a.rs"), ("??", "b.rs")]).send(Msg::DetailsKey(Key::GenerateCommit));
+        assert_eq!(generating(&asked), []);
+        assert!(
+            asked
+                .last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::Notice(text) if text.contains("Nothing is staged")))
+        );
+    }
+
+    #[test]
+    fn the_repository_s_recipe_decides_the_agent_arguments_and_template_asked_with() {
+        let settings = "[ai_actions.commit_message]\nprofile = 'codex'\nargs = '--model x'\n\
+             template = 'Be brief. {basePrompt}'\n\
+             [[ai_actions.repositories]]\npath = '/w'\naction = 'commit_message'\n\
+             template = 'Japanese. {basePrompt}'\n";
+        let asked = changing(&[("M ", "a.rs")])
+            .with_state(with_recipes(settings))
+            .send(Msg::DetailsKey(Key::GenerateCommit));
+        assert!(matches!(
+            generating(&asked).as_slice(),
+            [Effect::GenerateText { profile: Some(p), args, template, .. }]
+                if p.as_str() == "codex"
+                    && args == &["--model".to_string(), "x".to_string()]
+                    && template == "Japanese. {basePrompt}"
+        ));
+        let undefined = changing(&[("M ", "a.rs")])
+            .with_state(with_recipes(
+                "[ai_actions.commit_message]\nprofile = 'nope'\n",
+            ))
+            .send(Msg::DetailsKey(Key::GenerateCommit));
+        assert_eq!(generating(&undefined), []);
+        assert!(
+            undefined
+                .last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::Notice(text) if text.contains("`nope`")))
+        );
+    }
+
+    #[test]
+    fn what_the_agent_wrote_waits_in_the_prompt_until_the_user_sends_it() {
+        use tsumugi_model::AiAction;
+        use tsumugi_protocol::GitOp;
+        let wrote = |text: &str| Msg::GeneratedText {
+            environment: here(),
+            worktree: "/w".into(),
+            action: AiAction::CommitMessage,
+            result: Ok(text.into()),
+        };
+        let run = changing(&[("M ", "a.rs")])
+            .send(Msg::DetailsKey(Key::GenerateCommit))
+            .send(wrote("core: add a\n\nWhy."));
+        assert_eq!(written(&run).as_deref(), Some("core: add a\n\nWhy."));
+        assert!(run.state().prompt.committing.is_some());
+        assert_eq!(git_effects(&run), []);
+        assert!(!run.state().ai.is_writing());
+        // Only sending it from the prompt commits, with what the user left there.
+        let sent = run.send(Msg::PromptSend).send(taken("core: add a, edited"));
+        assert_eq!(
+            git_effects(&sent),
+            [Effect::Git {
+                environment: here(),
+                worktree: "/w".into(),
+                op: GitOp::Commit {
+                    message: "core: add a, edited".into(),
+                    amend: false,
+                },
+                prompt: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn an_agent_that_failed_writes_nothing_and_says_why() {
+        use tsumugi_model::AiAction;
+        let run = changing(&[("M ", "a.rs")])
+            .send(Msg::DetailsKey(Key::GenerateCommit))
+            .send(Msg::GeneratedText {
+                environment: here(),
+                worktree: "/w".into(),
+                action: AiAction::CommitMessage,
+                result: Err("codex ended with status 1: not logged in".into()),
+            });
+        assert!(written(&run).is_none());
+        assert!(run.state().prompt.committing.is_none());
+        assert!(
+            run.last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::Notice(text) if text.contains("not logged in")))
+        );
+        assert!(!run.state().ai.is_writing());
+    }
+
+    #[test]
+    fn a_asks_for_the_pull_request_and_puts_it_under_the_headers_to_read() {
+        use tsumugi_model::AiAction;
+        let asked = committed("core: x").send(Msg::DetailsKey(Key::DraftPull));
+        assert!(matches!(
+            generating(&asked).as_slice(),
+            [Effect::GenerateText {
+                action: AiAction::PullRequest,
+                ..
+            }]
+        ));
+        assert_eq!(git_effects(&asked), []);
+        let run = asked.send(Msg::GeneratedText {
+            environment: here(),
+            worktree: "/w".into(),
+            action: AiAction::PullRequest,
+            result: Ok("core: add x\n\nProblem.".into()),
+        });
+        assert_eq!(
+            written(&run).as_deref(),
+            Some("Base: \nDraft: no\n\ncore: add x\n\nProblem.")
+        );
+        assert!(run.state().prompt.pulling.is_some());
+        assert_eq!(git_effects(&run), []);
+    }
+
+    #[test]
+    fn h_without_a_refused_commit_says_there_is_nothing_to_fix() {
+        let run = changing(&[("M ", "a.rs")]).send(Msg::DetailsKey(Key::FixCommit));
+        assert!(
+            run.last_effects().iter().any(
+                |e| matches!(e, Effect::Notice(text) if text.contains("No commit was refused"))
+            )
+        );
+        assert_eq!(written(&run), None);
+    }
+
+    #[test]
+    fn a_refused_commit_is_fixed_in_a_draft_the_user_sends_and_never_by_bypassing_the_hook() {
+        let refused = changing(&[("M ", "a.rs"), (" M", "other.rs")])
+            .send(Msg::CommitRefused {
+                environment: here(),
+                worktree: "/w".into(),
+                message: "core: add a".into(),
+                output: "eslint: a.rs:1 no-unused".into(),
+            })
+            .with_state(with_recipes(
+                "[ai_actions.fix_commit_failure]\nprofile = 'pi'\n",
+            ))
+            .send(Msg::DetailsKey(Key::FixCommit));
+        let text = written(&refused).expect("no prompt was written");
+        assert!(text.contains("eslint: a.rs:1 no-unused"), "{text}");
+        assert!(text.contains("\"core: add a\""), "{text}");
+        assert!(
+            text.contains("\"a.rs\"") && !text.contains("other.rs"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Do not bypass hooks with --no-verify"),
+            "{text}"
+        );
+        assert!(text.contains("Do not commit, push"), "{text}");
+        assert_eq!(git_effects(&refused), []);
+        // The session is of the recipe's profile, and starts only once sent.
+        let draft = refused.state().content.active().cloned().unwrap();
+        assert!(matches!(draft, Tab::Draft { .. }));
+        assert_eq!(
+            refused
+                .state()
+                .content
+                .drafts
+                .options
+                .get(&draft)
+                .and_then(|o| o.profile.as_ref())
+                .map(|p| p.as_str()),
+            Some("pi")
+        );
+    }
+
+    #[test]
+    fn a_commit_that_went_through_forgets_the_refusal() {
+        let run = changing(&[("M ", "a.rs")])
+            .send(Msg::CommitRefused {
+                environment: here(),
+                worktree: "/w".into(),
+                message: "m".into(),
+                output: "x".into(),
+            })
+            .send(Msg::CommitMade {
+                environment: here(),
+                worktree: "/w".into(),
+            })
+            .send(Msg::DetailsKey(Key::FixCommit));
+        assert_eq!(written(&run), None);
     }
 
     /// The Changes tab of `/w` once the host read where the branch stands.
@@ -4041,9 +4276,10 @@ pub(crate) mod tests {
             })
             .expect("no prompt was written");
         assert!(
-            text.contains("- a.rs") && !text.contains("fine.rs"),
+            text.contains("\"a.rs\" (Both modified)") && !text.contains("fine.rs"),
             "{text}"
         );
+        assert!(text.contains("Do not push"), "{text}");
         assert!(text.contains("git merge --continue"), "{text}");
         let none = changing(&[(" M", "fine.rs")]).send(Msg::DetailsKey(Key::Resolve));
         assert!(

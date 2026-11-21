@@ -151,11 +151,13 @@ changes them ([keys](../keys.md)).
 | `details.push` |  | in the details panel, push the branch, setting its upstream when it has none ([details](../details.md#changes)) | `details`: `P` |
 | `details.force_push` |  | in the details panel, after asking, push the branch over the remote's, but only if nobody else pushed to it since it was fetched ([details](../details.md#changes)) | `details`: `F` |
 | `details.create_pull` |  | in the details panel, write a pull request for the branch in the prompt: the title on its first line, the body after it, and the base branch and whether it is a draft as headers above; sending pushes the branch and opens the pull request, and leaving the prompt gives it up ([details](../details.md#changes)) | `details`: `R` |
-| `details.draft_pull` |  | in the details panel, ask the agent of the session shown to draft the title and body of a pull request for the branch ([details](../details.md#changes)) | `details`: `A` |
+| `details.draft_pull` |  | in the details panel, ask the agent the pull request recipe names to write the title and body of a pull request for the branch, once, and put them in the prompt to read, edit and send; nothing is pushed or opened until you send ([ai actions](../ai-actions.md)) | `details`: `A` |
+| `details.generate_commit` |  | in the details panel, ask the agent the commit message recipe names to write the message of a commit of what is staged, once, and put it in the prompt to read, edit and send; nothing is committed until you send ([ai actions](../ai-actions.md)) | `details`: `M` |
+| `details.fix_commit` |  | in the details panel, after a hook refused a commit, open a draft in the worktree whose prompt asks the agent the hook failure recipe names to fix what it complained of without bypassing the hook, committing or pushing; sending it starts the session ([ai actions](../ai-actions.md)) | `details`: `H` |
 | `details.abort` |  | in the details panel, after asking, give up the merge, rebase, cherry-pick or revert in progress and put the worktree back as it was before it began ([details](../details.md#branch-and-conflicts)) | `details`: `Q` |
 | `details.resume` |  | in the details panel, go on with the merge, rebase, cherry-pick or revert in progress once every conflict is resolved and staged ([details](../details.md#branch-and-conflicts)) | `details`: `m` |
 | `details.base` |  | in the details panel, write the base the branch is compared with in the prompt, an empty one giving up the choice for the one Tsumugi finds; sending chooses it ([details](../details.md#branch-and-conflicts)) | `details`: `b` |
-| `details.resolve` |  | in the details panel, open a draft in the worktree whose prompt asks an agent to resolve the files in conflict ([details](../details.md#branch-and-conflicts)) | `details`: `I` |
+| `details.resolve` |  | in the details panel, open a draft in the worktree whose prompt asks the agent the conflict recipe names to resolve the files in conflict, without pushing; sending it starts the session ([ai actions](../ai-actions.md)) | `details`: `I` |
 | `details.neovim` |  | in the details panel, open the diff of the selected change in your Neovim, a file in conflict in its Diffview where it has one ([details](../details.md#branch-and-conflicts)) | `details`: `E` |
 | `viewer.zoom_in` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](../content.md#viewers)) | `viewer`: `Plus`, `=` |
 | `viewer.zoom_out` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller | `viewer`: `-` |
@@ -438,6 +440,8 @@ changes them ([keys](../keys.md)).
 "F" = "details.force_push"
 "R" = "details.create_pull"
 "A" = "details.draft_pull"
+"M" = "details.generate_commit"
+"H" = "details.fix_commit"
 "Q" = "details.abort"
 "m" = "details.resume"
 "b" = "details.base"

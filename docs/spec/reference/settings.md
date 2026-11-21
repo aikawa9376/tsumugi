@@ -32,6 +32,65 @@ when the file does not name it, and what it does
 | `usage_left` | boolean | `true` | Show how much of each usage limit is left; off, how much is used. |
 | `zoom` | number | `1.0` | The user's zoom adjustment, multiplied by the display scale when automatic scaling is enabled. |
 
+## `[ai_actions]`
+
+The agents asked for commit messages, pull requests, hook failures and conflicts from the Changes list, and how.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+
+### `[ai_actions.commit_message]`
+
+Writes a commit message, run once; the user reads it before it commits.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai_actions.commit_message.args` | string | `""` | Arguments added to the agent's command when it is run once for text, split as a shell would, such as `--model sonnet`. They are not given to the sessions the other actions start. |
+| `ai_actions.commit_message.profile` | string |  | The profile whose agent is asked; the profile new sessions start from when left out. |
+| `ai_actions.commit_message.template` | string | `""` | The prompt, in which `{basePrompt}` stands for the built-in prompt of the action. A template that leaves it out replaces the built-in prompt, including what it tells the agent not to do. The other variables an action takes are in the [reference](../ai-actions.md#recipes). |
+
+### `[ai_actions.fix_commit_failure]`
+
+Starts a session that fixes what refused a commit; it does not bypass the hook, commit or push.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai_actions.fix_commit_failure.args` | string | `""` | Arguments added to the agent's command when it is run once for text, split as a shell would, such as `--model sonnet`. They are not given to the sessions the other actions start. |
+| `ai_actions.fix_commit_failure.profile` | string |  | The profile whose agent is asked; the profile new sessions start from when left out. |
+| `ai_actions.fix_commit_failure.template` | string | `""` | The prompt, in which `{basePrompt}` stands for the built-in prompt of the action. A template that leaves it out replaces the built-in prompt, including what it tells the agent not to do. The other variables an action takes are in the [reference](../ai-actions.md#recipes). |
+
+### `[ai_actions.pull_request]`
+
+Writes a pull request's title and body, run once; the user reads them before they are sent.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai_actions.pull_request.args` | string | `""` | Arguments added to the agent's command when it is run once for text, split as a shell would, such as `--model sonnet`. They are not given to the sessions the other actions start. |
+| `ai_actions.pull_request.profile` | string |  | The profile whose agent is asked; the profile new sessions start from when left out. |
+| `ai_actions.pull_request.template` | string | `""` | The prompt, in which `{basePrompt}` stands for the built-in prompt of the action. A template that leaves it out replaces the built-in prompt, including what it tells the agent not to do. The other variables an action takes are in the [reference](../ai-actions.md#recipes). |
+
+### `[[ai_actions.repositories]]`
+
+The recipes that differ in a repository, each `[[ai_actions.repositories]]` table one action of one repository.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai_actions.repositories.action` |  | `null` | The action it is the recipe of: `commit_message`, `pull_request`, `fix_commit_failure` or `resolve_conflicts`. |
+| `ai_actions.repositories.args` | string | `""` | Arguments added to the agent's command; left out, those for every repository. |
+| `ai_actions.repositories.path` | string | `""` | The repository's primary checkout, the directory holding its `.git`. |
+| `ai_actions.repositories.profile` | string |  | The profile whose agent is asked; left out, the one for every repository. |
+| `ai_actions.repositories.template` | string | `""` | The prompt; left out, the one for every repository. |
+
+### `[ai_actions.resolve_conflicts]`
+
+Starts a session that resolves the files in conflict; it does not push.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ai_actions.resolve_conflicts.args` | string | `""` | Arguments added to the agent's command when it is run once for text, split as a shell would, such as `--model sonnet`. They are not given to the sessions the other actions start. |
+| `ai_actions.resolve_conflicts.profile` | string |  | The profile whose agent is asked; the profile new sessions start from when left out. |
+| `ai_actions.resolve_conflicts.template` | string | `""` | The prompt, in which `{basePrompt}` stands for the built-in prompt of the action. A template that leaves it out replaces the built-in prompt, including what it tells the agent not to do. The other variables an action takes are in the [reference](../ai-actions.md#recipes). |
+
 ## `[console]`
 
 How the console takes keys and draws its cursor.

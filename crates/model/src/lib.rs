@@ -2,6 +2,7 @@
 //! what tsumugi's daemon reports of the shells it runs, and what git says
 //! about the directories they run in.
 
+mod ai_action;
 mod clone;
 mod code;
 mod command;
@@ -42,6 +43,7 @@ mod tree;
 pub mod usage;
 mod worktree;
 
+pub use ai_action::*;
 pub use clone::*;
 pub use code::*;
 pub use command::*;

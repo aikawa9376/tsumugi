@@ -264,7 +264,29 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             }
             None => Vec::new(),
         },
-        Msg::DetailsKey(details::Key::DraftPull) => prompt::pull_request::ask_agent(state),
+        Msg::DetailsKey(details::Key::DraftPull) => {
+            crate::ai::generate(state, tsumugi_model::AiAction::PullRequest)
+        }
+        Msg::DetailsKey(details::Key::GenerateCommit) => {
+            crate::ai::generate(state, tsumugi_model::AiAction::CommitMessage)
+        }
+        Msg::DetailsKey(details::Key::FixCommit) => crate::ai::fix_commit_failure(state),
+        Msg::GeneratedText {
+            environment,
+            worktree,
+            action,
+            result,
+        } => crate::ai::generated(state, environment, worktree, action, result),
+        Msg::CommitRefused {
+            environment,
+            worktree,
+            message,
+            output,
+        } => crate::ai::commit_refused(state, environment, worktree, message, output),
+        Msg::CommitMade {
+            environment,
+            worktree,
+        } => crate::ai::commit_made(state, environment, worktree),
         Msg::DetailsKey(details::Key::Abort) => overlay::ask_abort(state),
         Msg::DetailsKey(details::Key::Base) => match state.details.shown.worktree.clone() {
             Some(worktree) => {
@@ -273,7 +295,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             }
             None => Vec::new(),
         },
-        Msg::DetailsKey(details::Key::Resolve) => details::resolve(state),
+        Msg::DetailsKey(details::Key::Resolve) => crate::ai::resolve_conflicts(state),
         Msg::DetailsKey(details::Key::Neovim) => details::open_in_neovim(state),
         Msg::DetailsKey(details::Key::Commit) => match state.details.shown.worktree.clone() {
             Some(worktree) => {
