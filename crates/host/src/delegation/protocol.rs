@@ -56,6 +56,10 @@ pub enum Command {
     Context,
     StartSession(Start),
     CreateLocalIssue(CreateLocalIssue),
+    /// The resources the user keeps in the caller's project.
+    Resources(Resources),
+    AddResource(AddResource),
+    RemoveResource(RemoveResource),
     Send(Send),
     Sessions(Sessions),
     Models,
@@ -88,6 +92,8 @@ impl Command {
             self,
             Self::StartSession(_)
                 | Self::CreateLocalIssue(_)
+                | Self::AddResource(_)
+                | Self::RemoveResource(_)
                 | Self::Send(_)
                 | Self::Rename(_)
                 | Self::Close
@@ -105,6 +111,43 @@ pub struct CreateLocalIssue {
     /// The working directory on this work machine; the caller's when omitted.
     #[serde(default)]
     pub dir: Option<PathBuf>,
+}
+
+/// Look up the paths and addresses the user keeps in the project.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Resources {
+    /// Words each resource's title, path or address, or note must hold, in any case, for example `nginx conf`; every resource when omitted.
+    #[serde(default)]
+    pub query: Option<String>,
+    /// A directory of another project on this work machine; your own project when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+}
+
+/// Keep a path or an address in the project, where the user and other sessions find it.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AddResource {
+    /// An address, or the path of a file or folder, absolute or relative to your directory. Only the reference is kept, never a copy.
+    pub target: String,
+    /// A short title, such as the site's or the file's name in the user's words.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// What it is for, so a later search by words finds it.
+    #[serde(default)]
+    pub note: Option<String>,
+    /// A directory of another project on this work machine; your own project when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+}
+
+/// Stop keeping a resource.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveResource {
+    /// Its id, as `resources` lists it.
+    pub id: String,
 }
 
 /// Open a session beside you with a first prompt.

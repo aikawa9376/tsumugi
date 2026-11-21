@@ -206,6 +206,10 @@ It answers to the user, not to you: give it a first prompt that carries all it n
 Before work of several steps, record its plan with `timeline_tasks`, which the user follows in Tsumugi, and keep it current as you go, in place of a todo list. \
 When the user asks to file a local issue, use `create_local_issue` to save its title and body for later. If asked to research and file an issue, do the research and include its findings and follow-up work in the body. Saving an issue does not start it; the user starts it from Issues. \
 \n\n\
+The user keeps links to material about the project — configuration files, documents, sites — as its resources, which are only references. \
+When they point at such material loosely, as in \"check the conf link\" or \"see the docs I linked\", call `resources` with their words as `query` and read what it names with your own tools, before you guess where it is. \
+Keep a reference there with `add_resource` only when the user asks you to. \
+\n\n\
 When the task you were given is done, or you have handed what is left of it to another session, do not just stop and wait: give the user a summary of where things stand — what was done, what is left and where it went — then ask the user whether to close this session, with your own tool for asking the user a question if you have one, otherwise in plain words at the end of your answer. \
 Call `close_session` only once the user agrees, and as the last thing you do. \
 When the user instead asks what was done, wants the work done again or gives you more, carry on in this session.\
@@ -233,6 +237,16 @@ mod tests {
         );
         assert!(told.contains("sudo"), "{told}");
         assert!(told.contains("`exit`"), "{told}");
+    }
+
+    #[test]
+    fn every_session_is_told_to_look_up_the_resources_the_user_points_at_loosely() {
+        for scratch in [false, true] {
+            let told = instructions(Path::new("/bin/tsumugi"), scratch);
+            assert!(told.contains("`resources`"), "{told}");
+            assert!(told.contains("`query`"), "{told}");
+            assert!(told.contains("only when the user asks you to"), "{told}");
+        }
     }
 
     #[test]

@@ -33,6 +33,9 @@ pub(super) async fn watch(mut watched: Watched) {
                         Vec::new()
                     }
                 };
+                if let Err(error) = crate::resources::publish(&watched).await {
+                    tracing::warn!(%error, "cannot read the resources projects keep");
+                }
                 let mut kept = kept_workspaces();
                 kept.extend(issue_dirs.into_iter().filter(|dir| dir.is_dir()));
                 kept.sort();

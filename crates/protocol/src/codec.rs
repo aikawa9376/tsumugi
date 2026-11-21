@@ -75,6 +75,15 @@ mod tests {
         round_trips(Ask::CloseLocalIssue { id: new.id.clone() });
         round_trips(Ask::ReopenLocalIssue { id: new.id.clone() });
         round_trips(Ask::DeleteLocalIssue { id: new.id.clone() });
+        round_trips(TreeChange::Resources {
+            resources: vec![tsumugi_model::Resource {
+                id: "r".into(),
+                project: "/project with spaces/日本語".into(),
+                target: "https://example.com/a?b=c".into(),
+                label: Some("Guide".into()),
+                note: None,
+            }],
+        });
         round_trips(TreeChange::LocalIssues {
             issues: vec![LocalIssue {
                 id: new.id,
