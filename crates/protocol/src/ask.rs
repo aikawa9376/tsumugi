@@ -268,6 +268,14 @@ pub enum GitOp {
     Push { lease: bool },
     /// Pull the branch's upstream.
     Pull,
+    /// Push the branch and open a pull request for it on GitHub, into `base`
+    /// or the repository's default branch.
+    CreatePull {
+        base: Option<String>,
+        title: String,
+        body: String,
+        draft: bool,
+    },
 }
 
 /// A session to start.
@@ -389,6 +397,11 @@ pub enum Answer {
     /// What Git told of a commit, push or pull that went through.
     Told {
         text: String,
+    },
+    /// The pull request that was opened.
+    PullCreated {
+        number: u64,
+        url: String,
     },
     /// The worktree was made here.
     Worktree {

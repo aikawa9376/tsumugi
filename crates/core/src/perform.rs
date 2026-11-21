@@ -367,6 +367,12 @@ pub(crate) fn perform(
         Action::DetailsForcePush if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::ForcePush))
         }
+        Action::DetailsCreatePull if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::CreatePull))
+        }
+        Action::DetailsDraftPull if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::DraftPull))
+        }
         Action::DetailsStage
         | Action::DetailsStageAll
         | Action::DetailsDiscard
@@ -374,7 +380,9 @@ pub(crate) fn perform(
         | Action::DetailsAmend
         | Action::DetailsPull
         | Action::DetailsPush
-        | Action::DetailsForcePush => Vec::new(),
+        | Action::DetailsForcePush
+        | Action::DetailsCreatePull
+        | Action::DetailsDraftPull => Vec::new(),
         Action::CursorDown
         | Action::CursorUp
         | Action::CursorFirst

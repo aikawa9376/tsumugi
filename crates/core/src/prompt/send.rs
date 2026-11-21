@@ -71,6 +71,9 @@ pub(crate) fn nothing_taken(state: &mut ViewState) -> Vec<Effect> {
 /// in front, usually Yes. The prompt waits for it to be answered, and the
 /// keys go where the answer is given.
 pub(crate) fn taken(state: &mut ViewState, taken: Taken) -> Vec<Effect> {
+    if let Some(pulling) = state.prompt.pulling.clone() {
+        return super::pull_request::taken(state, pulling, taken);
+    }
     if let Some(commit) = state.prompt.committing.clone() {
         state.prompt.sending = Some(Sending::Handed(taken.clone()));
         return vec![Effect::Git {
@@ -273,6 +276,7 @@ pub(crate) fn sent(state: &mut ViewState, ok: bool) -> Vec<Effect> {
     };
     if ok {
         state.prompt.committing = None;
+        state.prompt.pulling = None;
         vec![Effect::PromptSent]
     } else {
         vec![restore(taken)]
