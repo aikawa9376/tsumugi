@@ -81,6 +81,8 @@ changes them ([keys](../keys.md)).
 | `session.bring_back` | Bring Back Sessions… | list what the terminal host took with it when it went, to bring a session or a shell back ([details](../sessions.md#when-the-terminal-host-goes)) |  |
 | `session.stop` | End… | end a session Tsumugi runs after asking; Claude Code keeps its conversation, for `/resume` in a session started later; on a terminal's row, end that terminal | `global`: `Mod+Backspace`<br>`tree`: `X`<br>`agents`: `X`<br>`console`: `X` |
 | `session.rename` | Rename… | edit the name of a session Tsumugi runs in place; the tree shows it, and the session is sent Claude Code's `/rename` so its own interface says it too | `tree`: `R`<br>`agents`: `R` |
+| `session.mark_unread` |  | mark a session unread, as if it had finished out of view: its row is drawn bold and counted in the window's title until a window in front shows it anew ([details](../sessions.md#unread-sessions)) | `tree`: `U`<br>`agents`: `U` |
+| `notifications.mute` |  | silence the notifications outside the window of the workspace or worktree of the selected row, or tell them again; its rows keep showing how its sessions stand ([details](../notices.md#outside-the-window)) | `tree`: `M` |
 | `session.profile_next` | Next Profile of New Session | while a session not started yet is shown, switch the profile it is to start from to the next one ([details](../sessions.md#agents)) | `draft`: `Ctrl+g p` |
 | `session.profile_prev` | Previous Profile of New Session | while a session not started yet is shown, switch the profile it is to start from to the previous one ([details](../sessions.md#agents)) | `draft`: `Ctrl+g P` |
 | `shell.open` | Open Shell | open a shell in the worktree | `global`: `Mod+s`<br>`tree`: `$` |
@@ -316,6 +318,8 @@ changes them ([keys](../keys.md)).
 "x" = "cursor.close"
 "X" = "session.stop"
 "R" = "session.rename"
+"U" = "session.mark_unread"
+"M" = "notifications.mute"
 "y" = "cursor.copy"
 "g x" = "cursor.browse"
 "i" = "prompt.write"
@@ -361,6 +365,7 @@ changes them ([keys](../keys.md)).
 "t" = "cursor.tab"
 "X" = "session.stop"
 "R" = "session.rename"
+"U" = "session.mark_unread"
 "n" = "session.new"
 "i" = "prompt.write"
 "a" = "prompt.write"

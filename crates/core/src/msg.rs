@@ -323,6 +323,19 @@ pub enum Msg {
     NoticesOpen,
     /// What the window read of the notices when it last closed.
     ReadsRestored(crate::notices::Reads),
+    /// What the window silenced when it last closed.
+    MutesRestored(crate::notices::Mutes),
+    /// Mark a session unread, as if it had finished out of view.
+    SessionMarkUnread {
+        environment: EnvironmentId,
+        id: String,
+    },
+    /// Silence the notifications of a workspace or a worktree, or let them
+    /// be told again.
+    NotificationsMute {
+        environment: EnvironmentId,
+        path: std::path::PathBuf,
+    },
     PickerClose,
     /// Its query field now holds this.
     PickerQuery(String),

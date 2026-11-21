@@ -37,6 +37,7 @@ pub fn launch(build: crate::Build) {
                 .with_decorations(!cfg!(target_os = "linux"))
                 .with_title(tsumugi_core::chrome::title(
                     crate::build::described().filter(|_| cfg!(debug_assertions)),
+                    0,
                 ))
                 .with_inner_size(LogicalSize::new(1440.0, 900.0)),
         )
@@ -65,6 +66,7 @@ fn App() -> Element {
     use_console_sizes(&ui);
     use_redraws_told(app, local);
     use_scroll_into_view(app);
+    use_window_title(app);
     use_effects(&ui);
     use_input(&ui);
     crate::browser::use_browsers(app);
@@ -91,6 +93,19 @@ fn App() -> Element {
             super::lightbox::Lightbox {}
         }
     }
+}
+
+/// The window's title counts what is unread, so the taskbar or the tab bar
+/// of the desktop shows it while the window is behind others.
+fn use_window_title(app: AppCtx) {
+    let unread = use_memo(move || app.tree.read().completions.unread_count());
+    use_effect(move || {
+        let title = tsumugi_core::chrome::title(
+            crate::build::described().filter(|_| cfg!(debug_assertions)),
+            unread(),
+        );
+        dioxus::desktop::window().set_title(&title);
+    });
 }
 
 /// The theme's colours and the console's font, over the stylesheet's own.

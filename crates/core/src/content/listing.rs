@@ -16,15 +16,21 @@ use crate::tree::Place;
 use crate::tree::nav::{self, Item};
 
 /// The sessions waiting in `next` that were not waiting in `prev`, each as
-/// its name and what it waits for.
-pub fn newly_waiting(prev: &Tree, next: &Tree) -> Vec<(String, String)> {
+/// its name and what it waits for, but for those `silenced` names by id.
+pub fn newly_waiting(
+    prev: &Tree,
+    next: &Tree,
+    silenced: &dyn Fn(&str) -> bool,
+) -> Vec<(String, String)> {
     let waited = |id: &str| {
         prev.sessions()
             .any(|(_, s)| s.id == id && matches!(s.state, State::Waiting(_)))
     };
     next.sessions()
         .filter_map(|(_, s)| match &s.state {
-            State::Waiting(why) if !waited(&s.id) => Some((s.name.clone(), why.to_string())),
+            State::Waiting(why) if !waited(&s.id) && !silenced(&s.id) => {
+                Some((s.name.clone(), why.to_string()))
+            }
             _ => None,
         })
         .collect()
@@ -349,7 +355,8 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
     // Told only of what changed since the window first read the sessions,
     // and only when the settings ask for it.
     if seen && state.config.settings.notify_waiting {
-        let waiting = newly_waiting(&was, next);
+        let mutes = &state.notices.mutes;
+        let waiting = newly_waiting(&was, next, &|id| mutes.silences(environment, next, id));
         if !waiting.is_empty() {
             effects.push(Effect::NotifyWaiting(waiting));
         }
@@ -432,12 +439,16 @@ mod tests {
             ("c", State::Waiting(Wait::Input)),
         ]);
         assert_eq!(
-            newly_waiting(&before, &after),
+            newly_waiting(&before, &after, &|_| false),
             [
                 ("a-name".to_string(), "permission prompt".to_string()),
                 ("c-name".to_string(), "waiting for input".to_string()),
             ]
         );
-        assert!(newly_waiting(&after, &after).is_empty());
+        assert!(newly_waiting(&after, &after, &|_| false).is_empty());
+        assert_eq!(
+            newly_waiting(&before, &after, &|id| id == "a"),
+            [("c-name".to_string(), "waiting for input".to_string())]
+        );
     }
 }

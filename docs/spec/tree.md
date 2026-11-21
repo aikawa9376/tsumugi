@@ -37,6 +37,10 @@ that state as a session is, done until it is viewed; one whose program
 reports nothing carries no such mark. A heading folds, and the row of one for
 what runs counts what it holds and shows how that work stands, folded too.
 Workspace and worktree rows summarize the work they hold without opening them.
+A row of what is unread, and the rows that hold it, are drawn bold
+([unread sessions](sessions.md#unread-sessions)); a workspace or worktree whose
+notifications are muted is marked
+([muting](notices.md#outside-the-window)).
 Where a workspace has no worktree row, the headings are its checkout's.
 
 The browser pages opened in a worktree are listed under its Browser heading

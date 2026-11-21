@@ -16,6 +16,9 @@ use crate::host::Hosts;
 use crate::picker::ListState;
 use crate::state::ViewState;
 
+pub mod mute;
+pub use mute::Mutes;
+
 /// The notices this window has read, by the environment keeping them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Reads(BTreeMap<EnvironmentId, BTreeSet<u64>>);
@@ -84,6 +87,8 @@ impl Reads {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NoticeView {
     pub reads: Reads,
+    /// The workspaces and worktrees whose notifications are off.
+    pub mutes: Mutes,
     /// The newest notice of each environment already told of outside the
     /// window, or passed over as old when its host was first heard from;
     /// none while its host has kept none.
@@ -274,6 +279,12 @@ pub(crate) fn heard(state: &mut ViewState, environment: &EnvironmentId) -> Vec<E
             .iter()
             // A host whose file was lost counts again from the first.
             .filter(|n| told.is_none_or(|t| n.id > t || newest < Some(t)))
+            .filter(|n| {
+                !state
+                    .notices
+                    .mutes
+                    .silences(environment, work.tree.tree(), &n.session)
+            })
             .filter(|n| match n.kind {
                 NoticeKind::Waiting => false,
                 NoticeKind::Failed => settings.notify_failed,

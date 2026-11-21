@@ -250,11 +250,11 @@ fn a_failure_and_a_completion_are_told_of_once_as_the_settings_say() {
             ],
         ),
         (
-            "notify_failed = true\n",
+            "notify_failed = true\nnotify_done = false\n",
             vec![("a-name".to_string(), "failed: the reason".to_string())],
         ),
         (
-            "notify_done = true\n",
+            "notify_failed = false\nnotify_done = true\n",
             vec![("a-name".to_string(), "done: the reason".to_string())],
         ),
     ] {
@@ -275,13 +275,19 @@ fn keeping_nothing() -> tsumugi_protocol::testing::SnapshotBuilder {
 }
 
 #[test]
-fn nothing_is_told_by_default() {
+fn failures_and_completions_are_told_by_default_and_nothing_when_turned_off() {
+    let new = vec![
+        notice(0, NoticeKind::Failed, "a", 1),
+        notice(1, NoticeKind::Done, "a", 2),
+    ];
     let run = Scenario::new()
         .event(keeping_nothing())
-        .event(patch(2).change(told(vec![
-            notice(0, NoticeKind::Failed, "a", 1),
-            notice(1, NoticeKind::Done, "a", 2),
-        ])));
+        .event(patch(2).change(told(new.clone())));
+    assert_eq!(told_of(&run)[0].len(), 2);
+    let run = Scenario::new()
+        .event(configured("notify_failed = false\nnotify_done = false\n"))
+        .event(keeping_nothing())
+        .event(patch(2).change(told(new)));
     assert!(told_of(&run).is_empty());
 }
 
@@ -320,4 +326,98 @@ fn listing_alone_tells_nothing_of_the_notices() {
         .event(configured("notify_failed = true\n"))
         .event(listing([session("a").cwd("/r")]));
     assert!(told_of(&run).is_empty());
+}
+
+fn finished_a() -> tsumugi_protocol::testing::SnapshotBuilder {
+    snapshot().listed(
+        tsumugi_protocol::testing::listed().session(session("a").cwd("/r").state(State::Done)),
+    )
+}
+
+fn muting(path: &str) -> Msg {
+    Msg::NotificationsMute {
+        environment: here(),
+        path: path.into(),
+    }
+}
+
+fn kept_mutes(run: &Scenario) -> Vec<Mutes> {
+    run.last_effects()
+        .iter()
+        .filter_map(|e| match e {
+            Effect::KeepMutes(mutes) => Some(mutes.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_muted_workspace_is_not_told_of_while_its_rows_stand_as_they_do() {
+    let new = vec![notice(0, NoticeKind::Done, "a", 1)];
+    let told_after = |mute: Option<&str>| {
+        let run = Scenario::new()
+            .event(configured("notify_done = true\n"))
+            .event(finished_a());
+        let run = match mute {
+            Some(path) => run.send(muting(path)),
+            None => run,
+        };
+        run.event(patch(2).change(told(new.clone())))
+    };
+    assert_eq!(told_of(&told_after(None)).len(), 1);
+    let run = told_after(Some("/r"));
+    assert!(told_of(&run).is_empty());
+    // The finished session still shows its check and is still noticed.
+    let state = run.state();
+    let tree = state.hosts.own().work.as_ref().unwrap().tree.tree();
+    let (_, _, s) = tree.find("a").unwrap();
+    assert_eq!(state.tree.completions.state(s), &State::Done);
+    assert_eq!(
+        state.hosts.own().work.as_ref().unwrap().tree.notices.len(),
+        1
+    );
+    // Muting something else leaves it told.
+    assert_eq!(told_of(&told_after(Some("/elsewhere"))).len(), 1);
+}
+
+#[test]
+fn muting_again_lets_the_notifications_be_told_and_each_toggle_is_kept() {
+    let run = Scenario::new()
+        .event(configured("notify_done = true\n"))
+        .event(finished_a())
+        .send(muting("/r"));
+    assert!(run.state().notices.mutes.is_muted(&here(), "/r".as_ref()));
+    assert_eq!(kept_mutes(&run).len(), 1);
+    let run = run.send(muting("/r"));
+    assert!(!run.state().notices.mutes.is_muted(&here(), "/r".as_ref()));
+    assert_eq!(kept_mutes(&run), [Mutes::default()]);
+    let run = run.event(patch(2).change(told(vec![notice(0, NoticeKind::Done, "a", 1)])));
+    assert_eq!(told_of(&run).len(), 1);
+}
+
+#[test]
+fn a_worktree_or_its_workspace_silences_a_session_by_its_place() {
+    let tree = tsumugi_model::testing::tree()
+        .session(tsumugi_model::testing::session("a").cwd("/r/w"))
+        .session(tsumugi_model::testing::session("b").cwd("/r"))
+        .checkout("/r/w", "/r", "feat")
+        .checkout("/r", "/r", "main")
+        .build();
+    let mut mutes = Mutes::default();
+    mutes.toggle(&here(), "/r/w".as_ref());
+    assert!(mutes.silences(&here(), &tree, "a"));
+    assert!(!mutes.silences(&here(), &tree, "b"));
+    mutes.toggle(&here(), "/r".as_ref());
+    assert!(mutes.silences(&here(), &tree, "b"));
+    assert!(!mutes.silences(&here(), &tree, "gone"));
+}
+
+#[test]
+fn what_was_muted_comes_back() {
+    let mut mutes = Mutes::default();
+    mutes.toggle(&here(), "/r".as_ref());
+    mutes.toggle(&EnvironmentId::new("elsewhere"), "/w".as_ref());
+    assert_eq!(Mutes::from_json(mutes.to_json().as_bytes()).unwrap(), mutes);
+    let run = Scenario::new().send(Msg::MutesRestored(mutes));
+    assert!(run.state().notices.mutes.is_muted(&here(), "/r".as_ref()));
 }

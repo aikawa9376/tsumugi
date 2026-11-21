@@ -55,6 +55,7 @@ icons! {
     ArrowsExchange2 => "arrows-exchange-2",
     Bell => "bell",
     BellDown => "bell-down",
+    BellOff => "bell-off",
     BellUp => "bell-up",
     Book => "book",
     BrandGithub => "brand-github",

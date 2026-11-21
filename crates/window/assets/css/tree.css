@@ -5,6 +5,8 @@
 .agent-badge { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-2); font-size: var(--ui-font-tiny); line-height: 18px; }
 .list-row.selected { background: var(--select); }
 .list-row.shown { box-shadow: inset 3px 0 0 var(--run); background: var(--run-tint-soft); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.list-row.unread .list-row-name { color: var(--text); font-weight: 700; }
+.muted-mark { color: var(--text-3); flex: none; display: inline-flex; align-items: center; }
 .list-row.shown.selected { background: var(--select); }
 .list-row.shown .list-row-name { color: var(--text); font-weight: 600; }
 .app-panel.focused .list-row.selected.shown { box-shadow: inset 3px 0 0 var(--run), inset 0 0 0 1px var(--focus-line); }

@@ -539,13 +539,13 @@ fn what_a_terminal_host_took_with_it_is_offered_back_unless_the_settings_say_oth
 }
 
 #[test]
-fn a_session_starting_to_wait_is_told_of_only_when_the_settings_ask() {
-    assert!(!Settings::parse("").unwrap().notify_waiting);
-    assert!(
-        Settings::parse("notify_waiting = true\n")
-            .unwrap()
-            .notify_waiting
-    );
+fn a_session_waiting_failing_or_finishing_is_told_of_unless_the_settings_say_not() {
+    let told = Settings::parse("").unwrap();
+    assert!(told.notify_waiting && told.notify_failed && told.notify_done);
+    let off =
+        Settings::parse("notify_waiting = false\nnotify_failed = false\nnotify_done = false\n")
+            .unwrap();
+    assert!(!off.notify_waiting && !off.notify_failed && !off.notify_done);
 }
 
 #[test]

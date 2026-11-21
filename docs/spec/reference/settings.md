@@ -19,9 +19,9 @@ when the file does not name it, and what it does
 | `font_weight` | integer | `400` | The font's weight, from 100 to 900; Tsumugi's own comes in regular and bold, and draws other weights in the nearer of them. |
 | `keep_awake` | boolean | `true` | Keep the Mac from idle sleep while a session or a shell runs, the window open or not; the display still sleeps. |
 | `light_theme` | string | `"Solarized Light"` | The theme drawn while the appearance is light, by name: one tsumugi comes with, or one in `themes/` beside `settings.toml`. |
-| `notify_done` | boolean | `false` | Show a notification when a session finishes its turn while the window is not in front, as `notify_waiting` does. |
-| `notify_failed` | boolean | `false` | Show a notification when a session fails while the window is not in front, as `notify_waiting` does. |
-| `notify_waiting` | boolean | `false` | Show a notification when a session starts waiting on you while the window is not in front; with several windows open, the one holding the lowest number tells. |
+| `notify_done` | boolean | `true` | Show a notification when a session finishes its turn while the window is not in front, as `notify_waiting` does. |
+| `notify_failed` | boolean | `true` | Show a notification when a session fails while the window is not in front, as `notify_waiting` does. |
+| `notify_waiting` | boolean | `true` | Show a notification when a session starts waiting on you while the window is not in front; with several windows open, the one holding the lowest number tells. |
 | `profile` | string | `"claude"` | The profile a new session starts from, by id, when it names neither a profile nor an agent; left out, the first profile. A session not started yet can be switched to another agent for the current run of the window. |
 | `prompt_max_rows` | integer | `12` | The most lines the prompt grows to before it scrolls inside. |
 | `prompt_min_rows` | integer | `3` | The fewest lines the prompt shows. |

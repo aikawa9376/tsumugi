@@ -293,6 +293,11 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::InterruptedOpen(environment) => picker::open_interrupted(state, environment),
         Msg::NoticesOpen => crate::notices::open(state),
         Msg::ReadsRestored(reads) => crate::notices::restore(state, reads),
+        Msg::MutesRestored(mutes) => crate::notices::mute::restore(state, mutes),
+        Msg::SessionMarkUnread { environment: _, id } => crate::unread::mark(state, &id),
+        Msg::NotificationsMute { environment, path } => {
+            crate::notices::mute::toggle(state, &environment, &path)
+        }
         Msg::PickerClose => picker::close(&mut state.picker),
         Msg::PickerQuery(text) => picker::query(&mut state.picker, text),
         Msg::PickerKey(key) => picker::press(state, &key),

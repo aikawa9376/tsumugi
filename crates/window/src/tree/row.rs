@@ -508,6 +508,39 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
     } else {
         kind
     };
+    // What finished or was marked unread, or holds what did, is drawn bold
+    // until it is seen.
+    let unread = {
+        let marks = context.completions.read();
+        match &own {
+            Item::Session(_, id) => nav::find(t, id).is_some_and(|(_, s)| marks.unread(s)),
+            Item::Terminal(_, id) => t.terminal(*id).is_some_and(|(_, _, s)| {
+                marks.terminal_state(s) == Some(&tsumugi_model::State::Done)
+            }),
+            Item::Worktree(_, path) => t
+                .worktrees()
+                .find(|w| &w.worktree.path == path)
+                .is_some_and(|w| w.sessions.iter().any(|s| marks.unread(s))),
+            Item::Workspace(_, root) => t
+                .workspace_of(root)
+                .is_some_and(|w| w.sessions().any(|s| marks.unread(s))),
+            _ => false,
+        }
+    };
+    let kind = if unread {
+        format!("{kind} unread")
+    } else {
+        kind
+    };
+    let muted = {
+        let notices = app.notices.read();
+        match &own {
+            Item::Workspace(environment, path) | Item::Worktree(environment, path) => {
+                notices.mutes.is_muted(environment, path)
+            }
+            _ => false,
+        }
+    };
     let kind = if has_summary {
         format!("{kind} with-summary")
     } else {
@@ -576,6 +609,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 } else { "{text}" }
             }
             SessionMark { mark }
+            if muted {
+                span { class: "muted-mark", title: "Notifications are off; the row still shows how its work stands",
+                    IconView { icon: Icon::BellOff, size: 12 }
+                }
+            }
             if has_draft {
                 DraftMark {}
             }

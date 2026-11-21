@@ -373,6 +373,19 @@ and in the strip of a window showing it, until it is viewed in this window;
 viewed, it shows as idle. A later turn finished out of view is marked done
 again. A window in the background views nothing, so its marks stay.
 
+## Unread sessions
+
+A session whose turn finished out of view is **unread**, and so is one you
+marked unread: its row is drawn bold, and so are the rows of the worktree and
+the workspace that hold it, until the session is read. It is read once a
+window that is in front shows it, never while the window is in the background
+or its tab is not shown. **Mark as unread** (`session.mark_unread`), on a
+session's row or its tab, marks a session unread by hand, whatever its state:
+it stays unread until it is shown anew, so marking the session being looked at
+leaves it unread until you look away and back, or the window comes to the front
+again. The number of unread sessions and terminals leads the window's title. Read or unread changes how a row is drawn and what the title
+counts; the state a session stands in is not changed by it.
+
 ## A session's code
 
 Every session carries a short code of letters and digits, given when it starts
