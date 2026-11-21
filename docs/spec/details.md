@@ -154,6 +154,15 @@ Discarding asks first, because what it loses cannot be had back: a tracked
 file goes back to the last commit, staged or not, and an untracked or newly
 staged file is deleted. Nothing in the panel discards without that answer.
 
+`c` writes the message of a commit in the prompt: sending it commits what is
+staged, and leaving the prompt gives the commit up. A hook or Git refusing
+the commit says why with what it printed, and the message stays in the
+prompt to be sent again. `C` writes a commit that replaces the last one,
+starting from its message. Pull and push work the branch's upstream, and a
+first push sets it; a force push overwrites the remote's branch only if
+nobody else pushed to it since it was fetched. An amend and a force push ask
+first, like a discard.
+
 These work wherever the work host runs, and name each file by its path as it
 is, whatever characters it holds. When Git refuses, the panel says why.
 

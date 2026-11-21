@@ -330,7 +330,29 @@ pub(crate) fn perform(
         Action::DetailsDiscard if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::Discard))
         }
-        Action::DetailsStage | Action::DetailsStageAll | Action::DetailsDiscard => Vec::new(),
+        Action::DetailsCommit if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Commit))
+        }
+        Action::DetailsAmend if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Amend))
+        }
+        Action::DetailsPull if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Pull))
+        }
+        Action::DetailsPush if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Push))
+        }
+        Action::DetailsForcePush if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::ForcePush))
+        }
+        Action::DetailsStage
+        | Action::DetailsStageAll
+        | Action::DetailsDiscard
+        | Action::DetailsCommit
+        | Action::DetailsAmend
+        | Action::DetailsPull
+        | Action::DetailsPush
+        | Action::DetailsForcePush => Vec::new(),
         Action::CursorDown
         | Action::CursorUp
         | Action::CursorFirst

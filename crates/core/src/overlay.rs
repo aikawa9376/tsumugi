@@ -384,6 +384,26 @@ pub(crate) fn ask_discard(state: &mut ViewState) -> Vec<Effect> {
     Vec::new()
 }
 
+/// Ask to force push, or to amend, the worktree the details panel shows.
+pub(crate) fn ask_rewrite(state: &mut ViewState, amend: bool) -> Vec<Effect> {
+    let Some(worktree) = state.details.shown.worktree.clone() else {
+        return Vec::new();
+    };
+    let environment = state.details.shown.environment.clone();
+    state.overlays.confirm = Some(if amend {
+        Ask::AmendCommit {
+            environment,
+            worktree,
+        }
+    } else {
+        Ask::ForcePush {
+            environment,
+            worktree,
+        }
+    });
+    Vec::new()
+}
+
 /// The question answered: yes asks done what it asked about.
 pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
     let Some(ask) = state.overlays.confirm.take() else {
@@ -416,7 +436,21 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
             environment,
             worktree,
             op: tsumugi_protocol::GitOp::Discard { changes },
+            prompt: false,
         }],
+        Ask::ForcePush {
+            environment,
+            worktree,
+        } => vec![Effect::Git {
+            environment,
+            worktree,
+            op: tsumugi_protocol::GitOp::Push { lease: true },
+            prompt: false,
+        }],
+        Ask::AmendCommit {
+            environment,
+            worktree,
+        } => crate::prompt::begin_commit(state, environment, worktree, true),
         Ask::RemoveEnvironment(environment, _) => vec![Effect::ArchiveEnvironment(environment)],
         Ask::RemoveWorkspace {
             environment,

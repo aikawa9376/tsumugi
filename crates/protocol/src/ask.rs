@@ -195,6 +195,13 @@ pub enum GitOp {
     },
     /// Put every change of the worktree in the index.
     StageAll,
+    /// Commit what is staged, or with `amend` replace the last commit.
+    Commit { message: String, amend: bool },
+    /// Push the branch, overwriting the remote's only if it has not moved
+    /// since it was fetched when `lease` is set.
+    Push { lease: bool },
+    /// Pull the branch's upstream.
+    Pull,
 }
 
 /// A session to start.
@@ -308,6 +315,10 @@ pub enum Answer {
     /// The image was kept here.
     Kept {
         path: PathBuf,
+    },
+    /// What Git told of a commit, push or pull that went through.
+    Told {
+        text: String,
     },
     /// The worktree was made here.
     Worktree {

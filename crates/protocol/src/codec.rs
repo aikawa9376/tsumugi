@@ -216,6 +216,12 @@ mod tests {
                 changes: vec![change],
             },
             crate::GitOp::StageAll,
+            crate::GitOp::Commit {
+                message: "subject\n\n日本語 body".into(),
+                amend: true,
+            },
+            crate::GitOp::Push { lease: true },
+            crate::GitOp::Pull,
         ] {
             round_trips(Request::Ask {
                 asked: 14,

@@ -34,6 +34,16 @@ pub enum Ask {
         sessions: Vec<Session>,
         terminals: Vec<u128>,
     },
+    /// Replace the last commit of a worktree.
+    AmendCommit {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+    },
+    /// Push a worktree's branch over what the remote has of it.
+    ForcePush {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+    },
     /// Lose these changes of a worktree, staged or not.
     DiscardChanges {
         environment: EnvironmentId,
@@ -110,6 +120,18 @@ impl Ask {
                 format!("Ending its {} takes it out of the tree; the workspace stays listed. Conversations remain in the provider's history.", running(sessions, terminals)),
                 "End and close",
             ),
+            Self::AmendCommit { .. } => (
+                Icon::Pencil,
+                "Amend the last commit?".into(),
+                "The last commit is replaced by a new one holding what is staged now, with the message you write. If it was pushed, pushing it again needs a force push.".into(),
+                "Amend",
+            ),
+            Self::ForcePush { .. } => (
+                Icon::ArrowBarToUp,
+                "Force push?".into(),
+                "The remote's branch is overwritten with this one, unless somebody else pushed to it since you last fetched. Commits only the remote has are lost.".into(),
+                "Force push",
+            ),
             Self::DiscardChanges { changes, .. } => (
                 Icon::Trash,
                 match changes.as_slice() {
@@ -125,7 +147,11 @@ impl Ask {
     /// Whether answering yes loses what cannot be had back.
     pub fn destroys(&self) -> bool {
         match self {
-            Self::KillProcess(..) | Self::RestartDaemon(_) | Self::DiscardChanges { .. } => true,
+            Self::KillProcess(..)
+            | Self::RestartDaemon(_)
+            | Self::DiscardChanges { .. }
+            | Self::AmendCommit { .. }
+            | Self::ForcePush { .. } => true,
             Self::RemoveWorkspace { terminals, .. } | Self::CloseWorktree { terminals, .. } => {
                 !terminals.is_empty()
             }

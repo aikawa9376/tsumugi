@@ -71,6 +71,18 @@ pub(crate) fn nothing_taken(state: &mut ViewState) -> Vec<Effect> {
 /// in front, usually Yes. The prompt waits for it to be answered, and the
 /// keys go where the answer is given.
 pub(crate) fn taken(state: &mut ViewState, taken: Taken) -> Vec<Effect> {
+    if let Some(commit) = state.prompt.committing.clone() {
+        state.prompt.sending = Some(Sending::Handed(taken.clone()));
+        return vec![Effect::Git {
+            environment: commit.environment,
+            worktree: commit.worktree,
+            op: tsumugi_protocol::GitOp::Commit {
+                message: taken.text,
+                amend: commit.amend,
+            },
+            prompt: true,
+        }];
+    }
     let waits = match &taken.tab {
         Some(Tab::Session(environment, id)) => state
             .hosts
@@ -260,6 +272,7 @@ pub(crate) fn sent(state: &mut ViewState, ok: bool) -> Vec<Effect> {
         return Vec::new();
     };
     if ok {
+        state.prompt.committing = None;
         vec![Effect::PromptSent]
     } else {
         vec![restore(taken)]

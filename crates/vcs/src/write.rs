@@ -1,10 +1,13 @@
 //! What tsumugi makes in a Git worktree: the changes it stages, unstages and
-//! discards. Every function takes the worktree's path and the [`Change`]s as
+//! discards, the commits it makes, and what it pushes and pulls. Every
+//! function takes the worktree's path and the [`Change`]s as
 //! `git status` listed them, and names files only by literal path, so a name
 //! with spaces, a glob character or non-ASCII letters is the file it names
 //! and nothing else.
 
 use std::path::Path;
+
+use tokio::process::Command;
 
 use crate::git::{git, git_dir};
 use crate::{Change, Error, run};
@@ -134,6 +137,102 @@ pub async fn discard(path: &Path, changes: &[Change]) -> Result<(), Error> {
         sources(&back),
     )
     .await
+}
+
+/// What git, asked `args` in `path`, tells on both its outputs, or why it
+/// failed, told on both of them as well: the hooks of a commit or a push and
+/// the remote's refusals speak on either, and what the user needs to fix a
+/// failure is all of it. Git is never left waiting for a person: it may not
+/// ask for a password, and a merge is not edited.
+async fn tell(path: &Path, args: &[&str]) -> Result<String, Error> {
+    let spawn_error = |source| Error::Spawn {
+        program: "git".into(),
+        source,
+    };
+    let out = Command::new("git")
+        .args(["-C", git_dir(path)?, "--literal-pathspecs"])
+        .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_EDITOR", "true")
+        .output()
+        .await
+        .map_err(spawn_error)?;
+    let said = |bytes: &[u8]| String::from_utf8_lossy(bytes).trim().to_string();
+    let told = [said(&out.stdout), said(&out.stderr)]
+        .into_iter()
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if out.status.success() {
+        Ok(told)
+    } else {
+        Err(Error::Failed {
+            program: "git".into(),
+            stderr: told,
+        })
+    }
+}
+
+/// Commit what is staged with `message`, or with `amend` take the last
+/// commit's place with it, its changes and what is staged now. What git told
+/// comes back, the hooks' words included; a hook that refuses fails it with
+/// those words, and nothing is lost: the index stays as it was.
+pub async fn commit(path: &Path, message: &str, amend: bool) -> Result<String, Error> {
+    if message.trim().is_empty() {
+        return Err(Error::Failed {
+            program: "git".into(),
+            stderr: "the commit message is empty".into(),
+        });
+    }
+    let mut args = vec!["commit"];
+    if amend {
+        args.push("--amend");
+    }
+    args.extend(["--message", message]);
+    tell(path, &args).await
+}
+
+/// The remote the branch checked out pushes to: the one its upstream is on,
+/// or else `origin`.
+async fn remote(path: &Path) -> Result<String, Error> {
+    let branch = git(path, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .await
+        .map_err(|_| Error::Failed {
+            program: "git".into(),
+            stderr: "HEAD is not on a branch; check one out before you push".into(),
+        })?;
+    let key = format!("branch.{}.remote", branch.trim());
+    Ok(git(path, &["config", "--get", &key])
+        .await
+        .map(|remote| remote.trim().to_string())
+        .ok()
+        .filter(|remote| !remote.is_empty() && remote != ".")
+        .unwrap_or_else(|| "origin".into()))
+}
+
+/// Push the branch checked out, setting its upstream where it has none. With
+/// `lease` it overwrites the remote's branch, but only if nobody pushed to
+/// it since it was last fetched, so a push of someone else's is not lost.
+pub async fn push(path: &Path, lease: bool) -> Result<String, Error> {
+    let remote = remote(path).await?;
+    let mut args = vec!["push"];
+    if lease {
+        args.push("--force-with-lease");
+    }
+    args.extend(["--set-upstream", &remote, "HEAD"]);
+    tell(path, &args).await
+}
+
+/// Pull the upstream of the branch checked out, as git is configured to. Where
+/// git would not choose between merging and rebasing diverged branches, they
+/// are merged.
+pub async fn pull(path: &Path) -> Result<String, Error> {
+    match tell(path, &["pull", "--no-edit"]).await {
+        Err(Error::Failed { stderr, .. }) if stderr.contains("divergent branches") => {
+            tell(path, &["pull", "--no-edit", "--no-rebase"]).await
+        }
+        done => done,
+    }
 }
 
 #[cfg(test)]
@@ -397,5 +496,188 @@ mod tests {
         assert_eq!(statuses(dir.path()).await, [status("UU", "a.txt")]);
         stage(dir.path(), &[change]).await.unwrap();
         assert_eq!(statuses(dir.path()).await, [status("M ", "a.txt")]);
+    }
+
+    /// A clone of a bare repository standing for the remote, and the remote.
+    fn cloned() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+        let root = tempfile::tempdir().unwrap();
+        let remote = root.path().join("remote.git");
+        git_in(
+            root.path(),
+            &["init", "-q", "--bare", "-b", "main", "remote.git"],
+        );
+        let work = root.path().join("work");
+        git_in(root.path(), &["clone", "-q", "remote.git", "work"]);
+        git_in(&work, &["config", "user.name", "a"]);
+        git_in(&work, &["config", "user.email", "a@b"]);
+        git_in(&work, &["checkout", "-q", "-b", "main"]);
+        write(&work, "a.txt", "1\n");
+        git_in(&work, &["add", "--all"]);
+        git_in(&work, &["commit", "-q", "-m", "first"]);
+        (root, work, remote)
+    }
+
+    fn log(dir: &Path) -> Vec<String> {
+        let out = std::process::Command::new("git")
+            .args(["log", "--format=%s"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .map(String::from)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_commit_takes_the_staged_changes_and_leaves_the_rest() {
+        let dir = repo();
+        git_in(dir.path(), &["config", "user.name", "a"]);
+        git_in(dir.path(), &["config", "user.email", "a@b"]);
+        write(dir.path(), "staged.txt", "x\n");
+        write(dir.path(), "left.txt", "x\n");
+        git_in(dir.path(), &["add", "staged.txt"]);
+        commit(dir.path(), "add staged\n\nWhy: 日本語 \"quoted\" -x", false)
+            .await
+            .unwrap();
+        assert_eq!(log(dir.path()), ["add staged"]);
+        assert_eq!(statuses(dir.path()).await, [status("??", "left.txt")]);
+    }
+
+    #[tokio::test]
+    async fn an_empty_message_and_nothing_staged_are_refused_with_the_reason() {
+        let dir = repo();
+        git_in(dir.path(), &["config", "user.name", "a"]);
+        git_in(dir.path(), &["config", "user.email", "a@b"]);
+        committed(dir.path(), &[("a.txt", "1\n")]);
+        write(dir.path(), "a.txt", "2\n");
+        let Err(Error::Failed { stderr, .. }) = commit(dir.path(), "  \n", false).await else {
+            panic!("an empty message was taken");
+        };
+        assert!(stderr.contains("message is empty"), "{stderr}");
+        git_in(dir.path(), &["add", "a.txt"]);
+        commit(dir.path(), "second", false).await.unwrap();
+        let Err(Error::Failed { stderr, .. }) = commit(dir.path(), "third", false).await else {
+            panic!("an empty commit was made");
+        };
+        assert!(stderr.contains("nothing to commit"), "{stderr}");
+    }
+
+    #[tokio::test]
+    async fn amending_replaces_the_last_commit_with_its_changes_and_what_is_staged() {
+        let dir = repo();
+        git_in(dir.path(), &["config", "user.name", "a"]);
+        git_in(dir.path(), &["config", "user.email", "a@b"]);
+        committed(dir.path(), &[("a.txt", "1\n")]);
+        write(dir.path(), "b.txt", "x\n");
+        git_in(dir.path(), &["add", "b.txt"]);
+        commit(dir.path(), "first, better", true).await.unwrap();
+        assert_eq!(log(dir.path()), ["first, better"]);
+        let files = crate::git::commit_files(dir.path(), "HEAD").await.unwrap();
+        assert_eq!(files.len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_hook_that_refuses_a_commit_has_its_words_returned_and_the_index_kept() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = repo();
+        git_in(dir.path(), &["config", "user.name", "a"]);
+        git_in(dir.path(), &["config", "user.email", "a@b"]);
+        let hook = dir.path().join(".git/hooks/pre-commit");
+        std::fs::write(
+            &hook,
+            "#!/bin/sh\necho 'lint said no'\necho 'and on stderr' >&2\nexit 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write(dir.path(), "a.txt", "x\n");
+        git_in(dir.path(), &["add", "a.txt"]);
+        let Err(Error::Failed { stderr, .. }) = commit(dir.path(), "msg", false).await else {
+            panic!("the hook did not refuse");
+        };
+        assert!(stderr.contains("lint said no"), "{stderr}");
+        assert!(stderr.contains("and on stderr"), "{stderr}");
+        assert_eq!(statuses(dir.path()).await, [status("A ", "a.txt")]);
+    }
+
+    #[tokio::test]
+    async fn the_first_push_sets_the_upstream_and_later_ones_follow_it() {
+        let (_root, work, remote) = cloned();
+        push(&work, false).await.unwrap();
+        assert_eq!(log(&remote), ["first"]);
+        write(&work, "a.txt", "2\n");
+        git_in(&work, &["commit", "-q", "-am", "second"]);
+        push(&work, false).await.unwrap();
+        assert_eq!(log(&remote), ["second", "first"]);
+        let upstream = git(&work, &["rev-parse", "--abbrev-ref", "@{upstream}"])
+            .await
+            .unwrap();
+        assert_eq!(upstream.trim(), "origin/main");
+    }
+
+    #[tokio::test]
+    async fn a_rewritten_branch_is_pushed_only_with_the_lease_and_only_if_nobody_else_pushed() {
+        let (root, work, remote) = cloned();
+        push(&work, false).await.unwrap();
+        commit(&work, "first, reworded", true).await.unwrap();
+        let Err(Error::Failed { stderr, .. }) = push(&work, false).await else {
+            panic!("a rewritten branch was pushed plain");
+        };
+        assert!(stderr.contains("rejected"), "{stderr}");
+        // Someone else pushes first: the lease holds the push back.
+        let other = root.path().join("other");
+        git_in(root.path(), &["clone", "-q", "remote.git", "other"]);
+        git_in(&other, &["config", "user.name", "o"]);
+        git_in(&other, &["config", "user.email", "o@b"]);
+        write(&other, "o.txt", "x\n");
+        git_in(&other, &["add", "--all"]);
+        git_in(&other, &["commit", "-q", "-m", "theirs"]);
+        git_in(&other, &["push", "-q"]);
+        assert!(push(&work, true).await.is_err());
+        assert_eq!(log(&remote), ["theirs", "first"]);
+        // Once it is fetched and rewritten again, the lease lets it by.
+        git_in(&work, &["fetch", "-q"]);
+        push(&work, true).await.unwrap();
+        assert_eq!(log(&remote), ["first, reworded"]);
+    }
+
+    #[tokio::test]
+    async fn pulling_brings_in_what_the_remote_has_and_merges_diverged_branches() {
+        let (root, work, remote) = cloned();
+        push(&work, false).await.unwrap();
+        let other = root.path().join("other");
+        git_in(root.path(), &["clone", "-q", "remote.git", "other"]);
+        git_in(&other, &["config", "user.name", "o"]);
+        git_in(&other, &["config", "user.email", "o@b"]);
+        write(&other, "o.txt", "x\n");
+        git_in(&other, &["add", "--all"]);
+        git_in(&other, &["commit", "-q", "-m", "theirs"]);
+        git_in(&other, &["push", "-q"]);
+        pull(&work).await.unwrap();
+        assert_eq!(log(&work), ["theirs", "first"]);
+        write(&work, "mine.txt", "x\n");
+        git_in(&work, &["add", "--all"]);
+        git_in(&work, &["commit", "-q", "-m", "mine"]);
+        write(&other, "o2.txt", "x\n");
+        git_in(&other, &["add", "--all"]);
+        git_in(&other, &["commit", "-q", "-m", "theirs 2"]);
+        git_in(&other, &["push", "-q"]);
+        pull(&work).await.unwrap();
+        let history = log(&work);
+        assert!(history.contains(&"mine".to_string()), "{history:?}");
+        assert!(history.contains(&"theirs 2".to_string()), "{history:?}");
+        let _ = remote;
+    }
+
+    #[tokio::test]
+    async fn pushing_with_a_detached_head_says_so() {
+        let (_root, work, _remote) = cloned();
+        git_in(&work, &["checkout", "-q", "--detach"]);
+        let Err(Error::Failed { stderr, .. }) = push(&work, false).await else {
+            panic!("a detached head was pushed");
+        };
+        assert!(stderr.contains("not on a branch"), "{stderr}");
     }
 }

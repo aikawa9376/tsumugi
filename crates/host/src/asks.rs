@@ -105,7 +105,7 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             let made = git_op(&worktree, op).await;
             // The listing shows what was made without waiting on the disk's watch.
             watched.read_again();
-            made.map(|()| Answer::Done).map_err(|e| e.to_string())
+            made.map_err(|e| e.to_string())
         }
         Ask::GitHubThread {
             repository,
@@ -505,13 +505,25 @@ fn save_settings_checked(text: String, expected: FileText) -> Result<Answer, Str
 }
 
 /// Make `op` in the Git worktree at `worktree`.
-async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<(), tsumugi_vcs::Error> {
+async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<Answer, tsumugi_vcs::Error> {
     use tsumugi_vcs::write;
+    let told = |text| Answer::Told { text };
     match op {
-        GitOp::Stage { changes } => write::stage(worktree, &changes).await,
-        GitOp::Unstage { changes } => write::unstage(worktree, &changes).await,
-        GitOp::Discard { changes } => write::discard(worktree, &changes).await,
-        GitOp::StageAll => write::stage_all(worktree).await,
+        GitOp::Stage { changes } => write::stage(worktree, &changes)
+            .await
+            .map(|()| Answer::Done),
+        GitOp::Unstage { changes } => write::unstage(worktree, &changes)
+            .await
+            .map(|()| Answer::Done),
+        GitOp::Discard { changes } => write::discard(worktree, &changes)
+            .await
+            .map(|()| Answer::Done),
+        GitOp::StageAll => write::stage_all(worktree).await.map(|()| Answer::Done),
+        GitOp::Commit { message, amend } => {
+            write::commit(worktree, &message, amend).await.map(told)
+        }
+        GitOp::Push { lease } => write::push(worktree, lease).await.map(told),
+        GitOp::Pull => write::pull(worktree).await.map(told),
     }
 }
 
