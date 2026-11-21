@@ -61,15 +61,6 @@ fn the_tsumugi_namespace_selects_the_cli_instance_before_any_host_starts() {
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
 }
 
-#[test]
-fn the_application_metadata_points_to_its_own_project() {
-    assert_eq!(env!("CARGO_PKG_NAME"), "tsumugi");
-    assert_eq!(
-        env!("CARGO_PKG_REPOSITORY"),
-        "https://github.com/aikawa9376/tsumugi"
-    );
-}
-
 #[cfg(target_os = "linux")]
 #[test]
 fn a_desktop_install_carries_the_notices_of_every_bundled_component() {

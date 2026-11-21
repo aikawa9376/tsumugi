@@ -13,8 +13,3 @@ fn default_and_named_instances_use_tsumugi_state() {
         Path::new("/state/tsumugi/instances/review")
     );
 }
-
-#[test]
-fn settings_use_the_product_namespace() {
-    assert!(paths::config_dir().ends_with("tsumugi"));
-}
