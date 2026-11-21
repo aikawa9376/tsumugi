@@ -420,6 +420,7 @@ fn settings_written_read_back_the_same() {
         picker: PickerSettings {
             ghq: false,
             roots: vec!["~/src".into()],
+            ..PickerSettings::default()
         },
         console: ConsoleSettings {
             option_as_alt: OptionAsAlt::Right,
@@ -492,6 +493,64 @@ fn the_file_read_again_is_taken_in_only_when_it_reads_and_says_something_new() {
     assert_eq!(reread(&now, &toml::to_string_pretty(&now).unwrap()), None);
     assert_eq!(reread(&now, "zoom = "), None);
     assert_eq!(reread(&now, "colour = \"red\"\n"), None);
+}
+
+#[test]
+fn the_picker_starts_with_one_scope_going_to_sessions_and_directories_and_others_one_prefix_away() {
+    let scopes = Settings::parse("").unwrap().picker.scopes;
+    let first = &scopes[0];
+    assert_eq!(first.prefix, "");
+    assert_eq!(
+        first.sources,
+        [PickerSource::Sessions, PickerSource::Directories]
+    );
+    let reached: Vec<(&str, &PickerSource)> = scopes
+        .iter()
+        .skip(1)
+        .map(|s| (s.prefix.as_str(), &s.sources[0]))
+        .collect();
+    assert_eq!(
+        reached,
+        [
+            (">", &PickerSource::Actions),
+            (";", &PickerSource::Files),
+            ("*", &PickerSource::Resources),
+            (":", &PickerSource::Worktrees),
+            ("&", &PickerSource::Worktrees),
+        ]
+    );
+}
+
+#[test]
+fn scopes_written_in_the_settings_replace_the_scopes_it_starts_with() {
+    let text = "[[picker.scopes]]\nname = \"Docs\"\nsources = [\"resources\", \"files\"]\n\n\
+                [[picker.scopes]]\nname = \"Do\"\nprefix = \" > \"\nsources = [\"actions\"]\n";
+    let scopes = Settings::parse(text).unwrap().picker.scopes;
+    let named: Vec<(&str, &str)> = scopes
+        .iter()
+        .map(|s| (s.name.as_str(), s.prefix.as_str()))
+        .collect();
+    assert_eq!(named, [("Docs", ""), ("Do", ">")]);
+    assert_eq!(
+        scopes[0].sources,
+        [PickerSource::Resources, PickerSource::Files]
+    );
+}
+
+#[test]
+fn a_scope_without_sources_or_a_name_is_dropped_and_none_left_starts_over() {
+    let kept = |text: &str| Settings::parse(text).unwrap().picker.scopes;
+    let scopes = kept(
+        "[[picker.scopes]]\nname = \"Empty\"\nsources = []\n\n[[picker.scopes]]\nname = \" \"\nsources = [\"files\"]\n\n[[picker.scopes]]\nname = \"Dup\"\nsources = [\"files\", \"files\", \"actions\"]\n",
+    );
+    assert_eq!(scopes.len(), 1);
+    assert_eq!(
+        scopes[0].sources,
+        [PickerSource::Files, PickerSource::Actions],
+        "a source is listed once"
+    );
+    let scopes = kept("[[picker.scopes]]\nname = \"Empty\"\nsources = []\n");
+    assert_eq!(scopes, PickerSettings::default().scopes);
 }
 
 #[test]
@@ -976,7 +1035,7 @@ fn a_file_that_cannot_be_read_says_which_setting_and_why() {
         ),
         (
             "[picker]\nnonsense = 1\n",
-            "unknown field `nonsense`, expected `ghq` or `roots`\nin `picker`\n",
+            "unknown field `nonsense`, expected one of `ghq`, `roots`, `scopes`\nin `picker`\n",
         ),
         (
             "profile = 3\n",

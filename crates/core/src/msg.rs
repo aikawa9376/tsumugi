@@ -331,6 +331,9 @@ pub enum Msg {
     PickerKey(Key),
     /// A row was chosen, by its place among those drawn.
     PickerChoose(usize),
+    /// A scope of the picker going to a session was clicked, by its place
+    /// counted from 0.
+    PickerScope(usize),
     /// A directory was chosen in the directory tree.
     PickerDir(PathBuf),
     /// List every directory's conversations, or the directory's again.

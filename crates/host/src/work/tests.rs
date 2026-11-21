@@ -952,6 +952,33 @@ fn what_github_listed_for_the_picker_reaches_the_window_while_it_is_open_and_lea
 }
 
 #[test]
+fn a_worktrees_files_reach_only_the_pickers_searching_it_and_leave_as_it_closes() {
+    let searching = |worktree: &str| {
+        Request::Watch(Box::new(Sight {
+            pick: Some(PickSight {
+                files: [worktree.into()].into(),
+                ..PickSight::default()
+            }),
+            ..Default::default()
+        }))
+    };
+    let files = |worktree: &str| PickChange::Files {
+        worktree: worktree.into(),
+        files: vec!["a.rs".into()],
+    };
+    let mut host = Host::default();
+    host.on(searching("/w"));
+    assert_eq!(
+        patched(host.read([files("/other"), files("/w")])),
+        vec![Change::Pick(files("/w"))]
+    );
+    assert_eq!(
+        patched(host.on(watch(None, None))),
+        vec![Change::Pick(PickChange::Left)]
+    );
+}
+
+#[test]
 fn a_history_asked_for_is_read_and_reaches_the_window_whatever_it_shows() {
     let mut host = Host::default();
     let mut asked = host.take_histories().expect("taken once");

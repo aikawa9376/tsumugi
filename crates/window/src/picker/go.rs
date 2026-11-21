@@ -34,17 +34,31 @@ pub(super) fn Go(picker: GoPicker) -> Element {
     let adding = picker.purpose == Purpose::Add;
     let title = match adding {
         true => "Add a directory to the tree",
-        false => "Go to a session, or start one",
+        false => "Search sessions, directories and more",
     };
     rsx! {
         Dialog { kind: "picker-dialog", onclose: move |_| app.dispatch(Msg::PickerClose), title: "{title}",
             match picker.mode {
                 Mode::List => {
-                    let query = Query::new(&Narrowing::new(&picker.list.query).text);
+                    let query = Query::new(&Narrowing::new(picker.aim().query).text);
                     let rows = go_lines(&picker, &home, &hosts, &tree);
+                    let aim = picker.aim();
                     rsx! {
                         div { class: "filter-field",
                             QueryField { query: picker.list.query.clone() }
+                        }
+                        if !adding && picker.scopes.len() > 1 {
+                            div { class: "picker-scopes",
+                                for (i, scope) in picker.scopes.iter().enumerate() {
+                                    button {
+                                        key: "{i}",
+                                        class: if i == aim.scope { "picker-scope selected" } else { "picker-scope" },
+                                        title: "{scope.prefix}",
+                                        onclick: move |_| app.dispatch(Msg::PickerScope(i)),
+                                        "{scope.name}"
+                                    }
+                                }
+                            }
                         }
                         div { class: "list-rows",
                             if rows.is_empty() {
@@ -56,10 +70,10 @@ pub(super) fn Go(picker: GoPicker) -> Element {
                                         div { class: "picker-heading", "{heading}" }
                                     }
                                     ListRow {
-                                        kind: if matches!(line.mark, Mark::Directory | Mark::Clone) { "mono" } else { "" },
+                                        kind: if matches!(line.mark, Mark::Directory | Mark::Clone | Mark::File) { "mono" } else { "" },
                                         selected: i == picker.list.cursor,
                                         onclick: move |_| app.dispatch(Msg::PickerChoose(i)),
-                                        PlaceMark { icon: match line.mark { Mark::Scratch => Icon::Notes, Mark::Session => Icon::Message, Mark::Directory => Icon::Folder, Mark::Clone => Icon::FolderDown, Mark::Owner => Icon::BrandGithub, Mark::Help => Icon::InfoCircle } }
+                                        PlaceMark { icon: match line.mark { Mark::Scratch => Icon::Notes, Mark::Session => Icon::Message, Mark::Directory => Icon::Folder, Mark::Clone => Icon::FolderDown, Mark::Owner => Icon::BrandGithub, Mark::Help => Icon::InfoCircle, Mark::Worktree => Icon::GitBranch, Mark::NewWorktree => Icon::FolderPlus, Mark::Resource => Icon::Link, Mark::File => Icon::File, Mark::Action => Icon::Keyboard } }
                                         span { class: "list-row-name",
                                             {marked(&query, &line.name)}
                                             if let Some(place) = &line.place {

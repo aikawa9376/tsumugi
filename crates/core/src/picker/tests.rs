@@ -967,3 +967,319 @@ fn a_repository_once_cloned_is_kept_in_the_tree_and_taken_as_its_row_was_chosen(
         Some(("/g/github.com/o/r".into(), TerminalProgram::Shell))
     );
 }
+
+/// A window with session `a` in `/r/a`, the settings as `settings` says,
+/// that shows the session, the picker open.
+fn scoped(settings: &str) -> Scenario {
+    Scenario::new()
+        .send(Msg::Opened {
+            environment: here(),
+            home: HOME.into(),
+        })
+        .event(listing([session("a")]).with(|w| {
+            w.config.settings = Some(crate::config::testing::settings_file(settings));
+        }))
+        .send(show_in(session_tab("a"), "/r/a"))
+        .send(Msg::PickerOpen)
+}
+
+fn scope_name(run: &Scenario) -> String {
+    let p = picker(run);
+    p.scopes[p.scope].name.clone()
+}
+
+#[test]
+fn the_picker_opens_on_the_first_scope_and_ctrl_g_steps_through_the_rest_and_round() {
+    let mut run = scoped("");
+    let mut seen = vec![scope_name(&run)];
+    for _ in 0..6 {
+        run = run.send(ctrl("g"));
+        seen.push(scope_name(&run));
+    }
+    assert_eq!(
+        seen,
+        [
+            "Go",
+            "Actions",
+            "Files",
+            "Resources",
+            "Worktrees",
+            "Project",
+            "Go"
+        ]
+    );
+}
+
+#[test]
+fn stepping_to_another_scope_puts_the_cursor_back_on_the_first_row_and_keeps_what_is_typed() {
+    let run = scoped("")
+        .send(Msg::PickerQuery("tree".into()))
+        .send(key("ArrowDown"))
+        .send(ctrl("g"));
+    assert_eq!(picker(&run).list.cursor, 0);
+    assert_eq!(picker(&run).list.query, "tree");
+    assert!(
+        names(&run).contains(&"Toggle Tree".to_string()),
+        "{:?}",
+        names(&run)
+    );
+}
+
+#[test]
+fn a_prefix_typed_first_enters_its_scope_and_what_follows_it_is_what_is_searched() {
+    let run = scoped("").send(Msg::PickerQuery(">toggle tree".into()));
+    assert_eq!(names(&run).first().map(String::as_str), Some("Toggle Tree"));
+    assert!(!names(&run).contains(&"a-name".to_string()));
+    let run = scoped("").send(Msg::PickerQuery("toggle tree".into()));
+    assert!(
+        !names(&run).contains(&"Toggle Tree".to_string()),
+        "without a prefix the actions are not searched"
+    );
+}
+
+#[test]
+fn a_prefix_wins_over_the_scope_stepped_to() {
+    let run = scoped("")
+        .send(ctrl("g"))
+        .send(ctrl("g"))
+        .send(Msg::PickerQuery(">toggle".into()));
+    assert!(names(&run).contains(&"Toggle Tree".to_string()));
+}
+
+#[test]
+fn choosing_an_action_closes_the_picker_and_runs_it() {
+    let run = scoped("").send(Msg::PickerQuery(">toggle tree".into()));
+    assert!(run.state().chrome.panels.layout.show_sidebar);
+    let run = run.send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    assert!(!run.state().chrome.panels.layout.show_sidebar);
+}
+
+#[test]
+fn the_actions_are_listed_under_their_name_and_leave_out_those_that_need_a_number() {
+    let run = scoped("").send(Msg::PickerQuery(">".into()));
+    let lines = go_lines(
+        picker(&run),
+        &run.state().picker.home,
+        &run.state().hosts,
+        &run.state().tree,
+    );
+    assert!(lines.iter().all(|l| l.mark == Mark::Action));
+    assert_eq!(lines[0].heading, Some("Actions"));
+    let all = |q: &str| names(&run.send(Msg::PickerQuery(q.into())));
+    assert!(all(">tab.go").iter().all(|n| !n.ends_with("tab.go")));
+}
+
+#[test]
+fn worktrees_are_listed_by_their_branch_and_choosing_one_selects_its_row() {
+    let run = scoped("").send(Msg::PickerQuery(":".into()));
+    assert_eq!(names(&run), ["main"], "{:?}", names(&run));
+    let run = run.send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    assert!(matches!(
+        &run.state().tree.selected,
+        Some(crate::tree::nav::Item::Worktree(_, w)) if w == &PathBuf::from("/r/a")
+    ));
+}
+
+fn resources(items: &[(&str, &str, Option<&str>)]) -> TreeChange {
+    TreeChange::Resources {
+        resources: items
+            .iter()
+            .enumerate()
+            .map(|(i, (project, target, label))| tsumugi_model::Resource {
+                id: format!("r{i}"),
+                project: (*project).into(),
+                target: (*target).into(),
+                label: label.map(Into::into),
+                note: None,
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn resources_are_listed_by_their_title_those_of_the_project_shown_first() {
+    let run = scoped("")
+        .tell(resources(&[
+            ("/other", "https://other.example/docs", None),
+            ("/r", "/r/a/docs/design.md", None),
+            ("/r", "https://example.com/conf", Some("Conf link")),
+        ]))
+        .send(Msg::PickerQuery("*".into()));
+    assert_eq!(
+        names(&run),
+        ["design.md", "Conf link", "other.example/docs"],
+        "{:?}",
+        names(&run)
+    );
+    let run = run.send(Msg::PickerQuery("*conf".into()));
+    assert_eq!(names(&run), ["Conf link"]);
+}
+
+#[test]
+fn choosing_a_resource_opens_it_as_the_details_panel_does() {
+    let run = scoped("")
+        .tell(resources(&[("/r", "/r/a/docs/design.md", None)]))
+        .send(Msg::PickerQuery("*design".into()))
+        .send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    assert!(
+        run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::OpenFile { path, .. } if path == &PathBuf::from("/r/a/docs/design.md")
+        )),
+        "{:?}",
+        run.last_effects()
+    );
+}
+
+fn files_of(worktree: &str, names: &[&str]) -> PickChange {
+    PickChange::Files {
+        worktree: worktree.into(),
+        files: names.iter().map(|n| n.to_string()).collect(),
+    }
+}
+
+#[test]
+fn the_files_of_the_project_shown_are_asked_of_the_host_only_while_a_scope_searches_them() {
+    let run = scoped("");
+    assert_eq!(
+        asked(&run).flatten().map(|s| s.files),
+        Some(BTreeSet::new())
+    );
+    let run = run.send(Msg::PickerQuery(";".into()));
+    assert_eq!(
+        asked(&run).flatten().map(|s| s.files),
+        Some(BTreeSet::from([PathBuf::from("/r/a")]))
+    );
+    let run = run.send(Msg::PickerQuery("".into()));
+    assert_eq!(
+        asked(&run).flatten().map(|s| s.files),
+        Some(BTreeSet::new())
+    );
+}
+
+#[test]
+fn files_are_ranked_by_the_fuzzy_match_on_their_path_and_choosing_one_opens_it() {
+    let run = scoped("")
+        .tell(files_of(
+            "/r/a",
+            &["src/main.rs", "README.md", "src/picker.rs"],
+        ))
+        .send(Msg::PickerQuery(";pick".into()));
+    assert_eq!(names(&run), ["picker.rs"]);
+    let run = run.send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    assert!(
+        run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::OpenFile { path, .. } if path == &PathBuf::from("/r/a/src/picker.rs")
+        )),
+        "{:?}",
+        run.last_effects()
+    );
+}
+
+#[test]
+fn a_scope_mixing_sources_lists_their_rows_in_the_order_it_names_them() {
+    let run = scoped("")
+        .tell(resources(&[(
+            "/r",
+            "https://example.com/conf",
+            Some("a conf"),
+        )]))
+        .tell(files_of("/r/a", &["a.rs"]))
+        .send(Msg::PickerQuery("&a".into()));
+    let lines = go_lines(
+        picker(&run),
+        &run.state().picker.home,
+        &run.state().hosts,
+        &run.state().tree,
+    );
+    let headings: Vec<_> = lines.iter().filter_map(|l| l.heading).collect();
+    assert_eq!(headings, ["Worktrees", "Resources", "Files"]);
+}
+
+#[test]
+fn scopes_the_settings_write_replace_those_the_picker_starts_with() {
+    let run = scoped(
+        "[[picker.scopes]]\nname = \"Everything\"\nsources = [\"sessions\", \"actions\"]\n\n\
+         [[picker.scopes]]\nname = \"Docs\"\nprefix = \"d \"\nsources = [\"resources\"]\n",
+    )
+    .tell(resources(&[("/r", "/r/a/docs/design.md", None)]));
+    let run = run.send(Msg::PickerQuery("tree".into()));
+    assert!(names(&run).contains(&"Toggle Tree".to_string()));
+    let run = run.send(Msg::PickerQuery("d design".into()));
+    assert_eq!(names(&run), ["design.md"]);
+    let run = run.send(Msg::PickerQuery(">tree".into()));
+    assert!(
+        !names(&run).contains(&"Toggle Tree".to_string()),
+        "the prefixes the picker starts with are gone"
+    );
+}
+
+#[test]
+fn the_picker_adding_to_the_tree_keeps_to_directories_whatever_the_scopes_say() {
+    let run = adding().send(Msg::PickerQuery(">tree".into()));
+    assert!(!names(&run).contains(&"Toggle Tree".to_string()));
+    let run = run.send(ctrl("g"));
+    assert_eq!(picker(&run).scope, 0);
+}
+
+#[test]
+fn a_name_no_worktree_has_is_offered_as_a_worktree_to_create_after_the_matches() {
+    let run = scoped("").send(Msg::PickerQuery(":ma".into()));
+    assert_eq!(
+        names(&run),
+        ["main", "Create worktree ma"],
+        "the matches stay first, so Enter still goes to one"
+    );
+    let run = scoped("").send(Msg::PickerQuery(":main".into()));
+    assert_eq!(
+        names(&run),
+        ["main"],
+        "a worktree of that name stands for it"
+    );
+    let run = scoped("").send(Msg::PickerQuery(":".into()));
+    assert_eq!(
+        names(&run),
+        ["main"],
+        "nothing typed offers nothing to create"
+    );
+}
+
+#[test]
+fn choosing_the_row_creating_a_worktree_opens_the_dialog_for_the_project_shown_with_the_name() {
+    let run = scoped("")
+        .send(Msg::PickerQuery(":feature".into()))
+        .send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    let composer = run
+        .state()
+        .overlays
+        .composer
+        .as_ref()
+        .expect("the dialog is open");
+    assert_eq!(composer.name, "feature");
+    assert_eq!(composer.project, "r");
+}
+
+#[test]
+fn clicking_a_scope_searches_it_and_takes_off_the_prefix_that_named_another() {
+    let run = scoped("")
+        .send(Msg::PickerQuery(">tree".into()))
+        .send(Msg::PickerScope(0));
+    assert_eq!(picker(&run).list.query, "tree");
+    assert_eq!(scope_name(&run), "Go");
+    let run = run.send(Msg::PickerScope(99));
+    assert_eq!(scope_name(&run), "Go", "no such scope");
+}
+
+#[test]
+fn ctrl_shift_g_steps_back_round_to_the_last_scope() {
+    let run = scoped("").send(Msg::PickerKey(Key::new("G").ctrl().shift()));
+    assert_eq!(scope_name(&run), "Project");
+    let run = run.send(Msg::PickerKey(Key::new("G").ctrl().shift()));
+    assert_eq!(scope_name(&run), "Worktrees");
+}

@@ -23,3 +23,6 @@
 .composer-field { border-color: var(--line); }
 .confirm-lines { display: flex; flex-direction: column; gap: 4px; }
 .confirm-option { display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer; }
+.picker-scopes { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 12px 6px; }
+.picker-scope { padding: 1px 8px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-3); font-size: var(--ui-font-caption); cursor: pointer; }
+.picker-scope.selected { color: var(--text); border-color: var(--line-strong); background: var(--select); }

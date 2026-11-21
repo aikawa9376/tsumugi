@@ -232,6 +232,7 @@ mod tests {
                 listed: BTreeSet::from(["/home".into()]),
                 owners: BTreeSet::from(["aikawa9376".into()]),
                 accounts: true,
+                files: BTreeSet::from(["/w".into()]),
             }),
             place: Some(crate::HostPath::local("/w")),
             commands: Some(CommandsSight {
@@ -506,6 +507,7 @@ mod tests {
                 offers: Some(Offers::default()),
                 owned: [("aikawa9376".into(), vec!["tsumugi".into()])].into(),
                 accounts: Some(vec!["aikawa9376".into()]),
+                files: [("/w".into(), vec!["src/main.rs".into()])].into(),
             },
             place: PlaceWork {
                 read: Some(PlaceRead::default()),

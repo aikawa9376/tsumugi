@@ -2,7 +2,7 @@
 //! for a new one, the rows of those being made, and the question asked
 //! before one is deleted.
 
-mod composer;
+pub(crate) mod composer;
 mod delete;
 mod pending;
 

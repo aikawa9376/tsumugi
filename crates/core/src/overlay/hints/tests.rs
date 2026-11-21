@@ -29,6 +29,7 @@ fn the_picker_going_to_a_session_hints_at_the_keys_bound_over_the_window_and_its
             ("Ctrl+s", "shell"),
             ("Ctrl+e", "Neovim"),
             ("Ctrl+t", "add to tree"),
+            ("Ctrl+g", "next scope"),
             ("Ctrl+f", "file tree"),
             ("Esc", "close"),
         ]

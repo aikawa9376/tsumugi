@@ -97,6 +97,11 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
                 ]
                 .into_iter()
                 .chain(there)
+                .chain(
+                    (!adding)
+                        .then(|| Hint::new("Ctrl+g", "next scope"))
+                        .map(Some),
+                )
                 .chain([Some(Hint::new("Ctrl+f", "file tree")), close()])
                 .collect(),
                 Mode::Tree => {

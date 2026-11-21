@@ -317,6 +317,43 @@ where it was opened and can be changed before queuing the request.
 picker. `Ctrl+q }` and `Ctrl+q {` open a session of the next and the
 previous workspace without asking, the one last shown there.
 
+## Searching more than sessions and directories
+
+The picker searches in **scopes**: each is a mix of sources, and the rows of
+every source of the scope are listed in the order the scope names them, each
+group under its heading. The picker opens on the first scope, which goes to a
+session or starts one as above. The sources are:
+
+- **sessions**, with the scratch row, and **directories**, with the rows
+  that clone, as above;
+- **worktrees**, every worktree the tree lists, by its branch and workspace.
+  A name no worktree has is offered last as **Create worktree**, which opens
+  the dialog for a new worktree ([worktrees](#making-and-deleting-worktrees))
+  of the project shown with that name filled in; the matches stay first, so
+  `Enter` still goes to a worktree that exists. Going to one selects its row
+  in the tree and leaves the keys where they were;
+- **resources**, what projects keep ([resources](resources.md)), those of the
+  project shown first; choosing one opens it as the details panel's row
+  does;
+- **files**, those git tracks or would track in the worktree shown, ranked by
+  their path; choosing one opens it as a row of the file tree does. They are
+  read only while a scope that searches them is in use;
+- **actions**, everything the keys and menus run
+  ([keys](reference/keys.md#actions)), by the name the menus give it or the
+  name bindings use; choosing one closes the picker and runs it as its key
+  would.
+
+`Ctrl+g` steps to the next scope and `Ctrl+Shift+g` to the previous, going
+round, and the scopes are listed above the rows, where a click goes to one.
+What is typed stays. A scope with a prefix is entered by typing the prefix
+first, and what follows is what is searched for, as `>` for the actions: the
+prefix wins over the scope stepped to. A prefix of letters stands alone as a
+word. The picker starts with scopes for going to a session or a directory,
+for the actions, the files, the resources and the worktrees each alone, and
+for the last three together; the settings replace them with any mix and any
+prefixes ([settings](reference/settings.md#picker)). Adding to the tree
+offers directories alone, whatever the scopes say.
+
 ## Scratch sessions
 
 A **scratch session** is for talking to Claude about something no project

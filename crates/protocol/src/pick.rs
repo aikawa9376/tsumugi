@@ -20,6 +20,9 @@ pub struct PickSight {
     /// and the organizations they belong to.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub accounts: bool,
+    /// The worktrees whose files the picker searches.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub files: BTreeSet<PathBuf>,
 }
 
 /// The directories offered, by where each was found, in the order each
@@ -54,6 +57,10 @@ pub struct PickWork {
     /// none until they are listed, and once the picker closes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accounts: Option<Vec<String>>,
+    /// The files of each worktree asked for, as paths from its root; none of
+    /// a worktree until they are listed, and once the picker closes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub files: BTreeMap<PathBuf, Vec<String>>,
 }
 
 /// One change to what the host listed for the picker.
@@ -72,6 +79,11 @@ pub enum PickChange {
     Accounts {
         owners: Vec<String>,
     },
+    /// The files of the worktree `worktree`.
+    Files {
+        worktree: PathBuf,
+        files: Vec<String>,
+    },
     /// The host no longer lists them.
     Left,
 }
@@ -89,11 +101,17 @@ impl PickWork {
                 was.as_ref() != Some(&repositories)
             }
             PickChange::Accounts { owners } => set(&mut self.accounts, Some(owners)),
+            PickChange::Files { worktree, files } => {
+                let was = self.files.insert(worktree, files.clone());
+                was.as_ref() != Some(&files)
+            }
             PickChange::Left => {
                 let owned = !self.owned.is_empty();
+                let files = !self.files.is_empty();
                 self.owned.clear();
+                self.files.clear();
                 let accounts = set(&mut self.accounts, None);
-                set(&mut self.offers, None) | owned | accounts
+                set(&mut self.offers, None) | owned | accounts | files
             }
         }
     }
@@ -101,6 +119,8 @@ impl PickWork {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     #[test]
@@ -122,6 +142,21 @@ mod tests {
         assert!(work.apply(PickChange::Left));
         assert!(!work.apply(PickChange::Left));
         assert_eq!(work.offers, None);
+    }
+
+    #[test]
+    fn a_worktrees_files_are_kept_by_worktree_until_the_picker_closes() {
+        let mut work = PickWork::default();
+        let listed = |worktree: &str, names: &[&str]| PickChange::Files {
+            worktree: worktree.into(),
+            files: names.iter().map(|n| n.to_string()).collect(),
+        };
+        assert!(work.apply(listed("/w", &["a.rs", "b/c.rs"])));
+        assert!(!work.apply(listed("/w", &["a.rs", "b/c.rs"])));
+        assert!(work.apply(listed("/v", &[])));
+        assert_eq!(work.files[Path::new("/w")], ["a.rs", "b/c.rs"]);
+        assert!(work.apply(PickChange::Left));
+        assert!(work.files.is_empty());
     }
 
     #[test]

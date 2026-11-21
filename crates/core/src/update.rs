@@ -297,6 +297,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::PickerQuery(text) => picker::query(&mut state.picker, text),
         Msg::PickerKey(key) => picker::press(state, &key),
         Msg::PickerChoose(at) => picker::choose(state, at),
+        Msg::PickerScope(at) => picker::scope(&mut state.picker, at),
         Msg::PickerDir(dir) => picker::start_in(state, dir),
         Msg::PickerEvery => picker::every(&mut state.picker),
         Msg::CommandsOpen => picker::commands::open(state),
