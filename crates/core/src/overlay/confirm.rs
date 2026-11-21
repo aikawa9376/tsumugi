@@ -73,6 +73,14 @@ pub enum Ask {
         worktree: PathBuf,
         operation: tsumugi_model::repository::Operation,
     },
+    /// Merge, close or mark ready the pull request `number` of the repository
+    /// at `repository`, as `write` says.
+    PullWrite {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        number: u64,
+        write: tsumugi_model::github::Write,
+    },
     /// Lose these changes of a worktree, staged or not.
     DiscardChanges {
         environment: EnvironmentId,
@@ -208,6 +216,15 @@ impl Ask {
                 ),
                 "Abort",
             ),
+            Self::PullWrite { number, write, .. } => {
+                let (title, body, yes, _) = crate::pull_change::question(*number, write);
+                let icon = match write {
+                    tsumugi_model::github::Write::Close { .. } => Icon::X,
+                    tsumugi_model::github::Write::Draft { .. } => Icon::BrandGithub,
+                    _ => Icon::GitBranch,
+                };
+                (icon, title, body, yes)
+            }
             Self::DiscardChanges { changes, .. } => (
                 Icon::Trash,
                 match changes.as_slice() {
@@ -265,6 +282,7 @@ impl Ask {
                     || !terminals.is_empty()
                     || (*delete_branch && standing.unmerged > 0)
             }
+            Self::PullWrite { number, write, .. } => crate::pull_change::question(*number, write).3,
             Self::Stop(..) | Self::RemoveEnvironment(..) | Self::SetupWorktree { .. } => false,
         }
     }

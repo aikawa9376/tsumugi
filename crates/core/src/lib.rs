@@ -28,6 +28,7 @@ pub mod perform;
 pub mod picker;
 pub mod profiles;
 pub mod prompt;
+pub mod pull_change;
 pub mod reference;
 mod resources;
 pub mod review;

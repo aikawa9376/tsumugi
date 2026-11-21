@@ -365,6 +365,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         | Msg::PullCreated { .. }
         | Msg::GitHubCompose(_)
         | Msg::GitHubWrite(_)
+        | Msg::GitHubAsk(_)
         | Msg::GitHubFix(_)
         | Msg::GitHubFixRead { .. }
         | Msg::GitHubWritten { .. }

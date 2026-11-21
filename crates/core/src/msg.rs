@@ -457,6 +457,9 @@ pub enum Msg {
     GitHubCompose(crate::prompt::github_write::Aim),
     /// Write `write` on what the GitHub tab shown shows, at once.
     GitHubWrite(tsumugi_model::github::Write),
+    /// Ask the user whether to do `write` on the pull request the GitHub tab
+    /// shown shows: a merge, a close or a change of its draft state.
+    GitHubAsk(tsumugi_model::github::Write),
     /// A request to fix a pull request was made in the GitHub tab shown.
     GitHubFix(Box<crate::prompt::fix_request::Fix>),
     /// What the work host read afresh for a request to fix a pull request.

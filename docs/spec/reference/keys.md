@@ -182,6 +182,13 @@ changes them ([keys](../keys.md)).
 | `github.review` |  | in a pull request's tab, write a review in the prompt: `Review:` and approve, request-changes or comment on its first line, then your words; sending the prompt submits it | `github`: `v` |
 | `github.fix_checks` |  | in a pull request's tab, prepare a request to fix its failed checks in the draft of a new session on the pull request, with the end of their logs read afresh; nothing is sent or posted until you send the prompt ([tree](../tree.md#asking-an-agent-to-fix-a-pull-request)) | `github`: `f` |
 | `github.fix_threads` |  | in a pull request's tab, prepare a request to fix the unresolved review threads, or the thread of the card selected, in the draft of a new session on the pull request; nothing is sent, replied to or resolved ([tree](../tree.md#asking-an-agent-to-fix-a-pull-request)) | `github`: `F` |
+| `github.merge` |  | in a pull request's tab, merge it with the method its repository prefers, after asking; what GitHub would refuse, such as a missing approval, a failed required check or a conflict, is said instead of asked ([tree](../tree.md#merging-and-closing-a-pull-request)) | `github`: `M` |
+| `github.merge_squash` |  | in a pull request's tab, squash and merge it, after asking; refused where the repository does not allow it | `github`: `m s` |
+| `github.merge_commit` |  | in a pull request's tab, merge it with a merge commit, after asking; refused where the repository does not allow it | `github`: `m m` |
+| `github.merge_rebase` |  | in a pull request's tab, rebase and merge it, after asking; refused where the repository does not allow it | `github`: `m r` |
+| `github.auto_merge` |  | in a pull request's tab, have GitHub merge it once what it waits on is met, or stop it where that is on, after asking; offered only while something holds the merge back | `github`: `m a` |
+| `github.close` |  | in a pull request's tab, close it, or open it again where it is closed, after asking | `github`: `m c` |
+| `github.ready` |  | in a pull request's tab, mark a draft ready for review, or make an open one a draft, after asking | `github`: `m d` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -532,6 +539,13 @@ changes them ([keys](../keys.md)).
 "v" = "github.review"
 "f" = "github.fix_checks"
 "F" = "github.fix_threads"
+"M" = "github.merge"
+"m s" = "github.merge_squash"
+"m m" = "github.merge_commit"
+"m r" = "github.merge_rebase"
+"m a" = "github.auto_merge"
+"m c" = "github.close"
+"m d" = "github.ready"
 
 [lightbox]
 "l" = "lightbox.next"

@@ -229,6 +229,7 @@ pub(crate) fn GitHubWindow(
                     Ok(Act::Compose(aim)) => app.dispatch(Msg::GitHubCompose(aim)),
                     Ok(Act::Fix(fix)) => app.dispatch(Msg::GitHubFix(fix)),
                     Ok(Act::Write(write)) => app.dispatch(Msg::GitHubWrite(write)),
+                    Ok(Act::Ask(write)) => app.dispatch(Msg::GitHubAsk(write)),
                     Err(why) => app.notice(why),
                 }
                 return;

@@ -243,6 +243,7 @@ pub(crate) fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         } => pull_request::created(state, environment, worktree, number),
         Msg::GitHubCompose(aim) => github_write::begin(state, aim),
         Msg::GitHubWrite(write) => github_write::at_once(state, write),
+        Msg::GitHubAsk(write) => github_write::ask(state, write),
         Msg::GitHubFix(fix) => fix_request::begin(state, *fix),
         Msg::GitHubFixRead {
             environment,
