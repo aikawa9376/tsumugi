@@ -201,7 +201,7 @@
 "G" = "cursor.last"
 "Escape" = "cursor.fold"
 "y" = "cursor.copy"
-"p" = "resource.pin"
+"m" = "resource.pin"
 "x" = "resource.unpin"
 "a" = "resource.add"
 "e" = "resource.edit"

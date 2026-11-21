@@ -465,7 +465,7 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::Unpin
         | Key::Add
         | Key::Edit => {}
-        | Key::Stage
+        Key::Stage
         | Key::StageAll
         | Key::Discard
         | Key::Commit
