@@ -815,6 +815,21 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::Git {
+                environment,
+                worktree,
+                op,
+            } => {
+                let made = self.ask_in(&environment, Ask::Git { worktree, op });
+                let app = *self;
+                spawn(async move {
+                    match made.await {
+                        Answer::Done => {}
+                        Answer::Failed { text } => app.status(Some(text)),
+                        answer => app.notice(format!("the work host answered {answer:?}")),
+                    }
+                });
+            }
             Effect::Copy { text, done } => {
                 let told = match crate::clipboard::copy_to_clipboard(&text) {
                     Ok(()) => done,

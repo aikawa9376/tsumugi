@@ -12,6 +12,7 @@ pub mod github;
 mod review;
 mod view;
 pub mod worktree;
+pub mod write;
 
 pub use discover::*;
 pub use tsumugi_model::repository::*;

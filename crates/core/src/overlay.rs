@@ -359,6 +359,31 @@ pub(crate) fn ask_stop(state: &mut ViewState, selection: bool) -> Vec<Effect> {
     Vec::new()
 }
 
+/// Ask to discard the change the details panel's cursor is on; a file in
+/// conflict is told it cannot be.
+pub(crate) fn ask_discard(state: &mut ViewState) -> Vec<Effect> {
+    let environment = crate::content::shown_environment(state);
+    let work = state.hosts.work(&environment);
+    let Some(change) = crate::details::selected_change(&state.details, work) else {
+        return Vec::new();
+    };
+    if change.is_conflicted() {
+        return vec![Effect::Notice(format!(
+            "{} is in conflict; resolve it before you discard it",
+            change.path
+        ))];
+    }
+    let Some(worktree) = state.details.shown.worktree.clone() else {
+        return Vec::new();
+    };
+    state.overlays.confirm = Some(Ask::DiscardChanges {
+        environment,
+        worktree,
+        changes: vec![change],
+    });
+    Vec::new()
+}
+
 /// The question answered: yes asks done what it asked about.
 pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
     let Some(ask) = state.overlays.confirm.take() else {
@@ -383,6 +408,15 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
             },
         }],
         Ask::RestartDaemon(environment) => vec![Effect::RestartDaemon(environment)],
+        Ask::DiscardChanges {
+            environment,
+            worktree,
+            changes,
+        } => vec![Effect::Git {
+            environment,
+            worktree,
+            op: tsumugi_protocol::GitOp::Discard { changes },
+        }],
         Ask::RemoveEnvironment(environment, _) => vec![Effect::ArchiveEnvironment(environment)],
         Ask::RemoveWorkspace {
             environment,

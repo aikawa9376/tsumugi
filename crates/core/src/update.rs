@@ -236,6 +236,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::DetailsTab(tab) => details::show_tab(&mut state.details, tab),
         Msg::DetailsTabStep(delta) => details::step_tab(&mut state.details, delta),
         Msg::DetailsShowComponent(c) => details::show_component(&mut state.details, c),
+        Msg::DetailsKey(details::Key::Discard) => overlay::ask_discard(state),
         Msg::DetailsKey(key) => {
             let environment = content::shown_environment(state);
             details::press(&mut state.details, state.hosts.work(&environment), key)

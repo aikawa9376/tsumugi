@@ -200,6 +200,31 @@ mod tests {
                 number: 7,
             }),
         });
+        let change = tsumugi_model::repository::Change {
+            status: "R ".into(),
+            path: "新しい name.rs".into(),
+            from: Some("old.rs".into()),
+        };
+        for op in [
+            crate::GitOp::Stage {
+                changes: vec![change.clone()],
+            },
+            crate::GitOp::Unstage {
+                changes: vec![change.clone()],
+            },
+            crate::GitOp::Discard {
+                changes: vec![change],
+            },
+            crate::GitOp::StageAll,
+        ] {
+            round_trips(Request::Ask {
+                asked: 14,
+                ask: Box::new(crate::Ask::Git {
+                    worktree: "/w".into(),
+                    op,
+                }),
+            });
+        }
         round_trips(Request::Ask {
             asked: 13,
             ask: Box::new(crate::Ask::GitHubThread {

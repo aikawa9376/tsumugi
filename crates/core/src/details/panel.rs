@@ -107,6 +107,12 @@ pub enum Key {
     Fold,
     Copy,
     Reveal,
+    /// Stage the change selected, or unstage it when only staged.
+    Stage,
+    /// Stage every change of the worktree.
+    StageAll,
+    /// Discard the change selected, once asked.
+    Discard,
 }
 
 /// How the panel scrolls what is not a list.
@@ -384,6 +390,9 @@ pub(crate) fn click(details: &mut Details, work: Option<&WorkSnapshot>, at: usiz
 /// `key` pressed on the panel: the cursor moves through a list shown and
 /// scrolls anything else.
 pub(crate) fn press(details: &mut Details, work: Option<&WorkSnapshot>, key: Key) -> Vec<Effect> {
+    if matches!(key, Key::Stage | Key::StageAll | Key::Discard) {
+        return staged(details, work, key);
+    }
     let shown = list(details, work);
     match (key, &shown) {
         // A row opened from the entries shows no list: the keys scroll,
@@ -420,9 +429,62 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         Key::Up => details.drill.step(l, -1),
         Key::First => details.drill.first(l),
         Key::Last => details.drill.last(l),
-        Key::Open | Key::OpenIn(_) | Key::Fold | Key::Copy | Key::Reveal => {}
+        Key::Open
+        | Key::OpenIn(_)
+        | Key::Fold
+        | Key::Copy
+        | Key::Reveal
+        | Key::Stage
+        | Key::StageAll
+        | Key::Discard => {}
     }
     Vec::new()
+}
+
+/// The change of the worktree the cursor is on: a row of the changes, or a
+/// file of the working copy's change opened.
+pub fn selected_change(
+    details: &Details,
+    work: Option<&WorkSnapshot>,
+) -> Option<tsumugi_model::repository::Change> {
+    let shown = list(details, work)?;
+    let at = details.drill.selected(&shown)?;
+    match (&shown, details.drill.spot()) {
+        (Listing::Entries(entries), None) => match entries.get(at)? {
+            Entry::Changed(change) => Some(change.clone()),
+            _ => None,
+        },
+        (Listing::Files(files), Some(Spot::Files(Rev::WorkingCopy))) => files.get(at).cloned(),
+        _ => None,
+    }
+}
+
+/// What a key of the index asks: the change selected staged or unstaged,
+/// or everything staged. Discarding is asked of the user first, which the
+/// update does with [`selected_change`].
+fn staged(details: &Details, work: Option<&WorkSnapshot>, key: Key) -> Vec<Effect> {
+    use tsumugi_protocol::GitOp;
+    let Some(worktree) = details.shown.worktree.clone() else {
+        return Vec::new();
+    };
+    let op = match key {
+        Key::StageAll => GitOp::StageAll,
+        Key::Stage => match selected_change(details, work) {
+            Some(change) if change.is_unstaged() => GitOp::Stage {
+                changes: vec![change],
+            },
+            Some(change) => GitOp::Unstage {
+                changes: vec![change],
+            },
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    vec![Effect::Git {
+        environment: details.shown.environment.clone(),
+        worktree,
+        op,
+    }]
 }
 
 fn scrolled(key: Key) -> Vec<Effect> {
@@ -2996,5 +3058,140 @@ pub(crate) mod tests {
             e,
             Effect::Copy { text, .. } if text == "fix the login"
         )));
+    }
+
+    /// The Changes tab of `/w`, listing files git says have these statuses.
+    fn changing(files: &[(&str, &str)]) -> Scenario {
+        let listed = files
+            .iter()
+            .map(|(status, path)| tsumugi_model::repository::Change {
+                status: (*status).into(),
+                path: (*path).into(),
+                from: None,
+            })
+            .collect();
+        scenario()
+            .event(work(DetailsWork::default()))
+            .send_all([shown(Some("a"), Some("/w")), Msg::DetailsTab(CHANGES)])
+            .event(patch(2).change(DetailsChange::Repository {
+                worktree: "/w".into(),
+                read: RepositoryRead {
+                    spot: Spot::Files(Rev::WorkingCopy),
+                    listing: Ok(Read::Files(listed)),
+                    revision: None,
+                },
+            }))
+    }
+
+    fn change_of(status: &str, path: &str) -> tsumugi_model::repository::Change {
+        tsumugi_model::repository::Change {
+            status: status.into(),
+            path: path.into(),
+            from: None,
+        }
+    }
+
+    fn git_effects(run: &Scenario) -> Vec<Effect> {
+        run.last_effects()
+            .iter()
+            .filter(|e| matches!(e, Effect::Git { .. }))
+            .cloned()
+            .collect()
+    }
+
+    fn git(op: tsumugi_protocol::GitOp) -> Effect {
+        Effect::Git {
+            environment: here(),
+            worktree: "/w".into(),
+            op,
+        }
+    }
+
+    #[test]
+    fn s_stages_what_is_not_staged_and_unstages_what_is_only_staged() {
+        use tsumugi_protocol::GitOp;
+        for (status, stages) in [
+            (" M", true),
+            ("??", true),
+            (" D", true),
+            ("MM", true),
+            ("UU", true),
+            ("M ", false),
+            ("A ", false),
+            ("D ", false),
+        ] {
+            let run = changing(&[(status, "a b.rs")]).send(Msg::DetailsKey(Key::Stage));
+            let changes = vec![change_of(status, "a b.rs")];
+            let op = if stages {
+                GitOp::Stage { changes }
+            } else {
+                GitOp::Unstage { changes }
+            };
+            assert_eq!(git_effects(&run), [git(op)], "{status:?}");
+        }
+    }
+
+    #[test]
+    fn s_works_on_the_row_the_cursor_is_on() {
+        use tsumugi_protocol::GitOp;
+        let run = changing(&[(" M", "a.rs"), ("M ", "b.rs")])
+            .send(Msg::DetailsKey(Key::Down))
+            .send(Msg::DetailsKey(Key::Stage));
+        assert_eq!(
+            git_effects(&run),
+            [git(GitOp::Unstage {
+                changes: vec![change_of("M ", "b.rs")]
+            })]
+        );
+    }
+
+    #[test]
+    fn capital_s_stages_everything_and_nothing_is_staged_where_no_change_is_selected() {
+        use tsumugi_protocol::GitOp;
+        let run = changing(&[(" M", "a.rs")]).send(Msg::DetailsKey(Key::StageAll));
+        assert_eq!(git_effects(&run), [git(GitOp::StageAll)]);
+        let nothing = changing(&[])
+            .send(Msg::DetailsKey(Key::Stage))
+            .send(Msg::DetailsKey(Key::Discard));
+        assert_eq!(git_effects(&nothing), []);
+        assert_eq!(nothing.state().overlays.confirm, None);
+        let overview = scenario()
+            .event(work(DetailsWork::default()))
+            .send(shown(Some("a"), Some("/w")))
+            .send(Msg::DetailsKey(Key::Stage));
+        assert_eq!(git_effects(&overview), []);
+    }
+
+    #[test]
+    fn discarding_is_asked_first_and_only_a_yes_discards() {
+        use tsumugi_protocol::GitOp;
+        let asked = changing(&[("MM", "a.rs")]).send(Msg::DetailsKey(Key::Discard));
+        assert_eq!(git_effects(&asked), []);
+        assert!(matches!(
+            asked.state().overlays.confirm,
+            Some(crate::overlay::confirm::Ask::DiscardChanges { .. })
+        ));
+        let yes = asked.send(Msg::ConfirmAnswer(true));
+        assert_eq!(
+            git_effects(&yes),
+            [git(GitOp::Discard {
+                changes: vec![change_of("MM", "a.rs")]
+            })]
+        );
+        let no = changing(&[("MM", "a.rs")])
+            .send(Msg::DetailsKey(Key::Discard))
+            .send(Msg::ConfirmAnswer(false));
+        assert_eq!(git_effects(&no), []);
+    }
+
+    #[test]
+    fn a_file_in_conflict_cannot_be_discarded_and_says_so_without_asking() {
+        let run = changing(&[("UU", "a.rs")]).send(Msg::DetailsKey(Key::Discard));
+        assert_eq!(run.state().overlays.confirm, None);
+        assert!(
+            run.last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::Notice(text) if text.contains("in conflict")))
+        );
     }
 }

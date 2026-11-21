@@ -34,6 +34,12 @@ pub enum Ask {
         sessions: Vec<Session>,
         terminals: Vec<u128>,
     },
+    /// Lose these changes of a worktree, staged or not.
+    DiscardChanges {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
 }
 
 impl Ask {
@@ -104,13 +110,22 @@ impl Ask {
                 format!("Ending its {} takes it out of the tree; the workspace stays listed. Conversations remain in the provider's history.", running(sessions, terminals)),
                 "End and close",
             ),
+            Self::DiscardChanges { changes, .. } => (
+                Icon::Trash,
+                match changes.as_slice() {
+                    [one] => format!("Discard changes to {}?", one.path),
+                    many => format!("Discard {} changes?", many.len()),
+                },
+                "Staged and unstaged changes go back to the last commit, and a new file is deleted. This cannot be undone.".into(),
+                "Discard",
+            ),
         }
     }
 
     /// Whether answering yes loses what cannot be had back.
     pub fn destroys(&self) -> bool {
         match self {
-            Self::KillProcess(..) | Self::RestartDaemon(_) => true,
+            Self::KillProcess(..) | Self::RestartDaemon(_) | Self::DiscardChanges { .. } => true,
             Self::RemoveWorkspace { terminals, .. } | Self::CloseWorktree { terminals, .. } => {
                 !terminals.is_empty()
             }

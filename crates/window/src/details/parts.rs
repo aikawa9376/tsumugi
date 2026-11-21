@@ -347,7 +347,7 @@ fn Changed(
                                         kind: "mono",
                                         selected: selected == Some(at),
                                         onclick: move |_| app.dispatch(Msg::DetailsClick(at)),
-                                        span { class: "details-file-status", "{f.status}" }
+                                        super::changes::FileStatus { status: f.status.clone(), conflicted: f.is_conflicted() }
                                         span { class: "list-row-name", "{f.shown()}" }
                                     }
                                 },

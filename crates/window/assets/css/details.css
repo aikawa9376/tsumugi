@@ -1,5 +1,7 @@
 .list-rows.details-git { flex: 1; user-select: text; }
 .details-file-status { color: var(--wait); white-space: pre; flex: none; }
+.details-file-status .staged { color: var(--done); }
+.details-file-status .conflicted { color: var(--fail); }
 .commit { display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 8px 0 4px; font-size: var(--ui-font-size); border-radius: 6px; cursor: default; }
 .revision-description { padding: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
 .revision-heading { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }

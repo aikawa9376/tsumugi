@@ -321,6 +321,16 @@ pub(crate) fn perform(
         Action::ScrollHalfUp => vec![Effect::ScrollDetails(Scroll::HalfUp)],
         Action::ScrollTop => vec![Effect::ScrollDetails(Scroll::Top)],
         Action::ScrollBottom => vec![Effect::ScrollDetails(Scroll::Bottom)],
+        Action::DetailsStage if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Stage))
+        }
+        Action::DetailsStageAll if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::StageAll))
+        }
+        Action::DetailsDiscard if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Discard))
+        }
+        Action::DetailsStage | Action::DetailsStageAll | Action::DetailsDiscard => Vec::new(),
         Action::CursorDown
         | Action::CursorUp
         | Action::CursorFirst

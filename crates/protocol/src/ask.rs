@@ -156,6 +156,11 @@ pub enum Ask {
         repository: PathBuf,
         number: u64,
     },
+    /// Make `op` in the Git worktree at `worktree`.
+    Git {
+        worktree: PathBuf,
+        op: GitOp,
+    },
     /// Read the pull request or the issue `number` of the repository at
     /// `repository` whole, with what was said on it and the images shown.
     GitHubThread {
@@ -170,6 +175,26 @@ pub enum Ask {
         cwd: PathBuf,
         input: Option<String>,
     },
+}
+
+/// What is made in a Git worktree, each over the files `git status` listed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GitOp {
+    /// Put these changes in the index.
+    Stage {
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
+    /// Take these changes out of the index.
+    Unstage {
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
+    /// Lose these changes, staged or not.
+    Discard {
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
+    /// Put every change of the worktree in the index.
+    StageAll,
 }
 
 /// A session to start.

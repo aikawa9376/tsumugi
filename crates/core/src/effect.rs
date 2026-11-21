@@ -93,6 +93,13 @@ pub enum Effect {
         number: u64,
         prompt: String,
     },
+    /// Make `op` in the Git worktree at `worktree` of `environment`, and
+    /// say why when it cannot be made.
+    Git {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        op: tsumugi_protocol::GitOp,
+    },
     /// Open a terminal running the CLI's own login where this profile runs
     /// it, and show it.
     OpenLogin {
