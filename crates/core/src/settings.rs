@@ -236,6 +236,12 @@ pub struct Settings {
     /// is not in front; with several windows open, the one holding the lowest
     /// number tells.
     pub notify_waiting: bool,
+    /// Show a notification when a session fails while the window is not in
+    /// front, as `notify_waiting` does.
+    pub notify_failed: bool,
+    /// Show a notification when a session finishes its turn while the window
+    /// is not in front, as `notify_waiting` does.
+    pub notify_done: bool,
     /// Let a session's agent name its session once it has answered the first
     /// prompt, and again when the work turns to something else; a name given
     /// by hand, above the prompt or by renaming, is kept all the same.
@@ -322,6 +328,8 @@ impl Default for Settings {
             theme: None,
             keep_awake: true,
             notify_waiting: false,
+            notify_failed: false,
+            notify_done: false,
             rename_sessions: true,
             restore_sessions: RestoreSessions::Ask,
             close_successful_commands: true,

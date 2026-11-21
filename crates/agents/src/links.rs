@@ -177,6 +177,18 @@ impl Collector {
         out
     }
 
+    /// The assistant called tool `name` with `input`, for an agent whose
+    /// records are not in Claude Code's shape.
+    pub(crate) fn called(&mut self, id: &str, name: &str, input: &Value, timestamp: &Value) {
+        let at_ms = timestamp.as_str().and_then(crate::time::epoch_ms);
+        self.conversation.call(id, name, input, at_ms);
+    }
+
+    /// Call `id` returned `content`.
+    pub(crate) fn returned(&mut self, id: &str, content: &Value, failed: bool) {
+        self.conversation.returned(id, content, failed);
+    }
+
     pub fn messages(&self) -> Vec<tsumugi_model::conversation::Message> {
         self.conversation.messages.clone()
     }

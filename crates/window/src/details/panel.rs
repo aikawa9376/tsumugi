@@ -133,6 +133,16 @@ pub(crate) fn DetailsPanel(
             }
         }
         div { class: "details-scroll",
+            oncontextmenu: move |e: Event<MouseData>| {
+                e.prevent_default();
+                let p = e.client_coordinates();
+                app.dispatch(Msg::MenuOpen {
+                    x: p.x,
+                    y: p.y,
+                    target: tsumugi_core::overlay::context_menu::Target::Panel,
+                    reach: tsumugi_core::overlay::context_menu::Reach::Here,
+                });
+            },
             if opened_repository {
                 Repository { drill: details.drill.clone(), view, worktree: shown_kind, back_keys: back_keys.clone() }
             } else if opened_row {

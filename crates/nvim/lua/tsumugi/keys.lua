@@ -51,11 +51,14 @@ end
 -- modes when it is not used in both insert and normal mode.
 M.KEYS = {
   { "<C-CR>", "prompt.send", false, "Send the prompt" },
+  { "<C-s>", "prompt.send", false, "Send the prompt" },
   { "<Tab>", "prompt.take_suggestion", true, "Take the session's suggested prompt into an empty prompt" },
   { "<S-Tab>", "console.send Shift+Tab", true, "Pass Shift+Tab to the session" },
   { "<C-c>", "console.send Escape", false, "Pass Escape to the session" },
   { "<C-p>", "prompt.history_prev", true, "Put the prompt sent before in the prompt", { "n" } },
   { "<C-n>", "prompt.history_next", true, "Put the prompt sent after in the prompt", { "n" } },
+  { "]]", "window.next", false, "Go to the next window", { "n" } },
+  { "[[", "window.prev", false, "Go to the previous window", { "n" } },
 }
 
 --- Make `:Tsumugi` and put tsumugi's actions on their keys.

@@ -13,6 +13,30 @@ sessions.
 The details panel's Resources tab lists them under Pinned
 ([details](details.md#components)).
 
+## Keeping and opening them
+
+You keep a resource from the details panel as well as by asking an agent:
+
+- **Add resource…** (`resource.add`, from the panel's right-click menu, the
+  menu bar or its key) opens a sheet for a path or an address, a label and a
+  note. A relative path is taken from the worktree shown. Keeping a target
+  the project keeps already keeps one resource.
+- **Keep as resource** (`resource.keep`) on a link, a file or an image file
+  the session came across keeps that. It says so when the project keeps it
+  already.
+- **Screenshot of the page** (`resource.screenshot`) keeps a picture of the
+  visible part of the browser page shown, with the page's address as its note.
+  The picture is a file on the work machine, which nothing removes, and the
+  resource points at it. It works where the browser can capture a page
+  ([content](content.md#browsing)).
+- **Edit label and note…** and **Remove from resources** are on a pinned row's
+  right-click menu. Removing leaves what the resource points at as it is.
+
+Opening a pinned row shows it in the content, where it opens in the tab shown,
+a new tab or a split as the keys say. A path opens as a row of the file tree
+does: in its viewer, or in Neovim. A web address opens a page of the browser
+under the worktree shown. Any other address is left to the system to open.
+
 ## What agents do with them
 
 Every session is told to look the resources up when you point at material

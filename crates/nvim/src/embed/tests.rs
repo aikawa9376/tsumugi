@@ -798,16 +798,30 @@ fn asks(ev: &Event, action: &str) -> bool {
 async fn the_prompt_s_keys_ask_the_window_for_tsumugi_s_actions() {
     for (keys, action) in [
         ("<C-CR>", "prompt.send"),
+        ("<C-s>", "prompt.send"),
         ("<Tab>", "prompt.take_suggestion"),
         ("<S-Tab>", "console.send Shift+Tab"),
         ("<C-c>", "console.send Escape"),
         ("<Esc><C-p>", "prompt.history_prev"),
         ("<Esc><C-n>", "prompt.history_next"),
         ("<Esc><C-CR>", "prompt.send"),
+        ("<Esc><C-s>", "prompt.send"),
+        ("<Esc>]]", "window.next"),
+        ("<Esc>[[", "window.prev"),
     ] {
         let (e, mut rx) = start().await;
         e.input(keys).await.unwrap();
         wait(&mut rx, |ev| asks(ev, action)).await;
+    }
+}
+
+#[tokio::test]
+async fn double_brackets_typed_while_writing_are_text() {
+    let (e, mut rx) = start().await;
+    e.input("a[b[0]]").await.unwrap();
+    assert!(e.settles("getline(1)", Value::from("a[b[0]]")).await);
+    while let Ok(event) = rx.try_recv() {
+        assert!(!matches!(event, Event::Action(_)), "{event:?}");
     }
 }
 

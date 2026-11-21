@@ -28,6 +28,8 @@ pub(crate) struct LinkMenu {
     pub y: f64,
     pub at: usize,
     pub file: bool,
+    /// Whether the row is a resource the project keeps.
+    pub pinned: bool,
 }
 
 /// The session's name, state, model and times.
@@ -220,7 +222,7 @@ pub(super) fn GroupedRows(
                 }
                 for r in section.rows.into_iter() {
                     {
-                        let (local, file) = (r.at, r.file);
+                        let (local, file, pinned) = (r.at, r.file, r.pinned);
                         let at = base + local;
                         let kill = killable(local);
                         let kind = match (facts, r.thumb.is_some()) {
@@ -237,8 +239,9 @@ pub(super) fn GroupedRows(
                                 oncontextmenu: move |e: Event<MouseData>| {
                                     e.prevent_default();
                                     if !facts {
+                                        e.stop_propagation();
                                         let p = e.client_coordinates();
-                                        on_menu.call(LinkMenu { x: p.x, y: p.y, at, file });
+                                        on_menu.call(LinkMenu { x: p.x, y: p.y, at, file, pinned });
                                     }
                                 },
                                 if facts {

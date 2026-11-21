@@ -80,9 +80,10 @@ window or such a row is described.
 - **pinned** — the paths and addresses you keep in the project of what the
   window shows, as its resources ([resources](resources.md)), in the order
   they were kept, each by its title and its note or where it points. Opening
-  one opens it as a link or file of the same kind opens, and a path can be
-  revealed or copied like a file. It lists nothing where the project keeps
-  none.
+  one shows it in the content, and a path can be revealed or copied like a
+  file. Resources can be kept, edited and removed from here
+  ([resources](resources.md#keeping-and-opening-them)). It lists nothing where
+  the project keeps none; its right-click menu still offers to add one.
 - **prompts** — what was said to the session in its turns, newest first, for
   Claude Code, Codex, Pi and OpenCode alike, each with how long ago; opening
   one shows it whole, and copying it copies its text. What Tsumugi or the

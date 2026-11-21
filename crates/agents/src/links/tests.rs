@@ -23,7 +23,11 @@ fn conversation_keeps_only_human_text_and_replies_in_order() {
     ] {
         c.feed(&line, &|_| false);
     }
-    let messages = c.messages();
+    let messages: Vec<_> = c
+        .messages()
+        .into_iter()
+        .filter(|m| m.tool.is_none())
+        .collect();
     assert_eq!(
         messages.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
         [
@@ -40,6 +44,52 @@ fn conversation_keeps_only_human_text_and_replies_in_order() {
     );
     c.clear();
     assert!(c.messages().is_empty());
+}
+
+#[test]
+fn conversation_records_each_tool_call_in_order_with_what_it_returned() {
+    let mut c = Collector::new("/w", "/home/me");
+    for line in [
+        said("Looking."),
+        tool(
+            "a",
+            "Bash",
+            json!({"command":"ls -la\nwc","description":"list"}),
+        ),
+        tool("b", "Read", json!({"file_path":"/w/file"})),
+        result("a", json!([{"type":"text","text":"total 0"}])),
+        user(
+            json!([{"type":"tool_result","tool_use_id":"b","is_error":true,
+            "content":"no such file"}]),
+        ),
+        result("unknown", json!("ignored")),
+        said("Done."),
+    ] {
+        c.feed(&line, &|_| false);
+    }
+    let messages = c.messages();
+    assert_eq!(messages.len(), 4);
+    let first = messages[1].tool.as_ref().unwrap();
+    assert_eq!(
+        (first.name.as_str(), first.summary.as_str()),
+        ("Bash", "ls -la")
+    );
+    assert_eq!(first.output.as_deref(), Some("total 0"));
+    assert!(!first.failed);
+    let second = messages[2].tool.as_ref().unwrap();
+    assert_eq!(second.summary, "/w/file");
+    assert!(second.failed);
+    assert_eq!(second.output.as_deref(), Some("no such file"));
+    assert_eq!(messages[3].text, "Done.");
+}
+
+#[test]
+fn a_long_tool_output_is_cut_and_says_so() {
+    let mut c = Collector::new("/w", "/home/me");
+    c.feed(&tool("a", "Bash", json!({"command":"cat big"})), &|_| false);
+    c.feed(&result("a", json!("x".repeat(10_000))), &|_| false);
+    let out = c.messages()[0].tool.clone().unwrap().output.unwrap();
+    assert!(out.chars().count() < 4_100 && out.ends_with("… cut"));
 }
 
 #[test]

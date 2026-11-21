@@ -128,6 +128,13 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
             bound(keymap, &over, &Action::OverlayChoose, "bring back"),
             close(),
         ],
+        Picking::Notices(_) => vec![
+            moving(keymap, "move"),
+            bound(keymap, &over, &Action::OverlayChoose, "go to"),
+            Some(Hint::new("Ctrl+u", "read or unread")),
+            Some(Hint::new("Ctrl+a", "all read")),
+            close(),
+        ],
     };
     hints.into_iter().flatten().collect()
 }

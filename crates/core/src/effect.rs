@@ -33,6 +33,38 @@ pub enum Effect {
         environment: EnvironmentId,
         target: String,
     },
+    /// Open `path` of `environment` in the content as `how` says, as its row
+    /// in the tree opens: in its viewer, or in Neovim.
+    OpenFile {
+        environment: EnvironmentId,
+        path: PathBuf,
+        how: Opening,
+    },
+    /// Open `url` in a new page of the browser of `environment`, hung under
+    /// `worktree`, as `how` says.
+    OpenAddress {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        url: String,
+        how: Opening,
+    },
+    /// Ask the work host of `environment` to keep `target`, an address or a
+    /// path, in the project holding `dir`, under `label` when one is given.
+    KeepResource {
+        environment: EnvironmentId,
+        dir: PathBuf,
+        target: String,
+        label: Option<String>,
+    },
+    /// Take a screenshot of the page of the browser the window by this id
+    /// shows, and keep it in the project of the worktree the page hangs under.
+    Screenshot(WindowId),
+    /// Ask the work host of `environment` to keep the resource of `id` no
+    /// more.
+    DropResource {
+        environment: EnvironmentId,
+        id: String,
+    },
     /// Show the file at `path` of `environment` in the Finder.
     Reveal {
         environment: EnvironmentId,
@@ -143,6 +175,12 @@ pub enum Effect {
     /// Tell the user, outside the window, that these sessions started
     /// waiting, each by its name and what it waits for.
     NotifyWaiting(Vec<(String, String)>),
+    /// Tell the user, outside the window, of these sessions that failed or
+    /// finished, each by its name and what happened.
+    NotifyNotices(Vec<(String, String)>),
+    /// Keep what the window has read of the notices, for when it opens
+    /// again.
+    KeepReads(crate::notices::Reads),
 
     // The tree.
     /// Give the filter's field the keys, or take them from it.

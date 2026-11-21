@@ -55,9 +55,13 @@ follows the conversation as the agent records it, for Claude Code, Codex, Pi
 and OpenCode.
 
 The conversation shows the user's words and the assistant's replies, without
-tool calls, tool results or injected instructions. All replies addressed to the
-user remain visible, including progress reports. Recorded thinking folds away
-and can be opened separately. Each message can be copied as it was written.
+injected instructions. All replies addressed to the user remain visible,
+including progress reports. Each tool call the assistant made is one folded
+line naming the tool and what it was given, marked running, done or failed;
+opening it shows its input and what it returned. Recorded thinking folds away
+and can be opened separately. A message can be copied as it was written. A
+Codex session whose terminal title does not name its conversation is
+matched to the one it began in its directory, when that is unambiguous.
 
 Reading keys move through the conversation rather than reaching the hidden
 console. Choices and approvals in the agent's interface are answered by
@@ -104,10 +108,6 @@ viewer, a session not started yet. With nothing left, the content opens
 empty, and something opened before the sessions are first listed takes the
 kept content's place.
 
-## Terminals
-
-A terminal runs a shell, Neovim or any other program, apart from agent
-conversations, and is listed beside the sessions of the worktree it runs in
 ## Browsing
 
 Open Browser in the application menu or a row's start menu opens a new page
@@ -150,6 +150,10 @@ text and attachments are preserved. The user reviews the prompt and sends it
 as usual. Notes stay with the page when switching tabs until they are added to
 a prompt or removed; closing the page ends its unsent notes.
 
+## Terminals
+
+A terminal runs a shell, Neovim or any other program, apart from agent
+conversations, and is listed beside the sessions of the worktree it runs in
 ([the tree](tree.md)). A shell is the account's login shell unless configured
 otherwise; Neovim reads the user's own configuration. A command terminal runs
 its program through the shell, as an interactive login shell would run it,

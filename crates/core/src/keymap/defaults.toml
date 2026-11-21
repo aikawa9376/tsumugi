@@ -15,6 +15,7 @@
 "Ctrl+q v" = "window.vsplit"
 "Ctrl+q s" = "window.split"
 "Ctrl+q n" = "window.new"
+"Ctrl+q i" = "notices.open"
 "Ctrl+q c" = "window.quit"
 "Ctrl+q o" = "window.only"
 "Ctrl+q H" = "window.move_left"
@@ -144,11 +145,15 @@
 
 "Tab" = "sidebar.next"
 "Shift+Tab" = "sidebar.next"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 
 [agents]
 "g t" = "agents.reveal"
 "Tab" = "sidebar.next"
 "Shift+Tab" = "sidebar.next"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "j" = "cursor.down"
 "ArrowDown" = "cursor.down"
 "k" = "cursor.up"
@@ -190,6 +195,8 @@
 "Escape Escape" = "tree.focus"
 "Tab" = "tab.next"
 "Shift+Tab" = "tab.prev"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "j" = "cursor.down"
 "ArrowDown" = "cursor.down"
 "k" = "cursor.up"
@@ -198,6 +205,10 @@
 "G" = "cursor.last"
 "Escape" = "cursor.fold"
 "y" = "cursor.copy"
+"a" = "resource.add"
+"e" = "resource.edit"
+"D" = "resource.remove"
+"p" = "resource.keep"
 "Backspace" = "cursor.fold"
 "1" = "details.tab 1"
 "2" = "details.tab 2"
@@ -213,6 +224,8 @@
 
 [console]
 "Escape Escape" = "tree.focus"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "Enter" = "console.send"
 "Ctrl+Enter" = "console.send Enter"
 "ArrowUp" = "prompt.history_prev"
@@ -252,6 +265,8 @@
 
 [viewer]
 "Escape Escape" = "tree.focus"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "j" = "scroll.down"
 "ArrowDown" = "scroll.down"
 "k" = "scroll.up"

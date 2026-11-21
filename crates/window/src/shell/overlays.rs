@@ -55,7 +55,9 @@ pub(crate) fn ContextMenu() -> Element {
         Target::Agent(..) => &[Context::Global, Context::Agents],
         Target::Row(_) | Target::Start(_) => &[Context::Global, Context::Tree],
         Target::Tab(_) => &[Context::Global, Context::Console, Context::Tree],
-        Target::Link { .. } => &[Context::Details, Context::Tree, Context::Global],
+        Target::Link { .. } | Target::Pinned { .. } | Target::Panel => {
+            &[Context::Details, Context::Tree, Context::Global]
+        }
     };
     let entries: Vec<(MenuEntry, Option<String>)> = listed
         .into_iter()

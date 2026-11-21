@@ -23,6 +23,7 @@ pub(super) async fn watch(mut watched: Watched) {
     let mut cache: HashMap<PathBuf, (Instant, Option<Worktree>)> = HashMap::new();
     let mut lists: HashMap<PathBuf, (Instant, Vec<Worktree>)> = HashMap::new();
     let mut ran = Ran::default();
+    let mut notices = crate::notices::Kept::open(&crate::paths::instance_state());
     loop {
         match read_sessions(&daemon, &watched.inputs()).await {
             Ok((sessions, terminals)) => {
@@ -45,6 +46,13 @@ pub(super) async fn watch(mut watched: Watched) {
                 let tree = |listed: &[Worktree]| {
                     build(&sessions, &terminals, &found, listed, &kept, Some(&scratch))
                 };
+                // Looked at only while the sessions can be listed, so a
+                // listing that fails is not read as every session gone and
+                // back.
+                notices.look(&tree(&[]), tsumugi_model::time::now_ms());
+                watched.record([TreeChange::Notices {
+                    notices: notices.list().to_vec(),
+                }]);
                 let started = ran.started(&tree(&[]), &sessions, &terminals);
                 if !started.is_empty()
                     && let Err(error) =

@@ -343,6 +343,7 @@ mod tests {
             reader
                 .messages()
                 .iter()
+                .filter(|m| m.tool.is_none())
                 .map(|m| m.text.as_str())
                 .collect::<Vec<_>>(),
             [

@@ -321,6 +321,19 @@ pub trait AgentAdapter: Sync {
         Box::pin(async { None })
     }
 
+    /// The conversation begun in `cwd` since `since_ms`, for a session whose
+    /// terminal title never names it, none of `taken` being it.
+    fn discover_conversation(
+        &self,
+        _context: AgentContext,
+        _home: PathBuf,
+        _cwd: PathBuf,
+        _since_ms: u64,
+        _taken: Vec<String>,
+    ) -> ConversationLookup {
+        Box::pin(async { None })
+    }
+
     fn developer_instructions(
         &self,
         _context: AgentContext,

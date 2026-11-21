@@ -246,13 +246,14 @@ impl Watcher {
         native: &tsumugi_term::Session,
     ) -> Result<bool> {
         let adapter = tsumugi_agents::adapter(record.agent);
-        let Some(title) = native.title.as_deref() else {
-            return Ok(false);
-        };
-        if record
-            .conversation
-            .as_deref()
-            .is_some_and(|known| adapter.conversation_matches_title(title, known))
+        // A title that never names the conversation still leaves the rollout
+        // it began to find it by.
+        let title = native.title.as_deref().unwrap_or_default();
+        if !title.is_empty()
+            && record
+                .conversation
+                .as_deref()
+                .is_some_and(|known| adapter.conversation_matches_title(title, known))
         {
             self.resolved.remove(&record.id);
             return Ok(true);
@@ -271,9 +272,13 @@ impl Watcher {
             record.conversation = Some(conversation);
             return Ok(true);
         }
-        if adapter.conversation_title_needs_lookup(title) && self.looking.insert(id) {
+        let discovering = record.conversation.is_none();
+        if (discovering || adapter.conversation_title_needs_lookup(title))
+            && self.looking.insert(id)
+        {
             let (context, title, cwd) = (context.clone(), title.to_owned(), record.cwd.clone());
             let (profile, home) = (record.profile.clone(), record.home.clone());
+            let started_ms = record.started_ms;
             self.lookups.spawn(async move {
                 let Ok(Some(launch)) = context.call(move |store| store.launch(id)).await else {
                     return (id, title, None);
@@ -282,9 +287,30 @@ impl Watcher {
                 else {
                     return (id, title, None);
                 };
-                let conversation = adapter
-                    .resolve_conversation(started, cwd, title.clone())
+                let mut conversation = adapter
+                    .resolve_conversation(started.clone(), cwd.clone(), title.clone())
                     .await;
+                if conversation.is_none() && discovering {
+                    let taken = context
+                        .call(|store| {
+                            Ok(store
+                                .sessions()?
+                                .into_iter()
+                                .filter_map(|s| s.conversation)
+                                .collect::<Vec<_>>())
+                        })
+                        .await
+                        .unwrap_or_default();
+                    conversation = adapter
+                        .discover_conversation(
+                            started,
+                            crate::paths::home(),
+                            cwd,
+                            started_ms,
+                            taken,
+                        )
+                        .await;
+                }
                 (id, title, conversation)
             });
         }

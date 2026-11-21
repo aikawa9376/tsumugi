@@ -35,6 +35,8 @@ pub struct LinkRow {
     pub tag: String,
     pub target: String,
     pub file: bool,
+    /// Whether it is a resource the project keeps.
+    pub pinned: bool,
     /// A small copy of an image, drawn in place of the icon.
     pub thumb: Option<Arc<str>>,
 }
@@ -51,6 +53,7 @@ impl LinkRow {
             tag,
             target,
             file: false,
+            pinned: false,
             thumb: None,
         }
     }
@@ -210,6 +213,7 @@ pub fn link_sections(
                 });
                 Some(LinkRow {
                     file: path,
+                    pinned: true,
                     ..LinkRow::plain(
                         at,
                         if path { Icon::File } else { Icon::Link },

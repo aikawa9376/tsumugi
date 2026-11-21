@@ -49,6 +49,8 @@ pub struct Overlays {
     pub adding: bool,
     /// Local issues are opened on this environment and directory.
     pub local_issues: Option<LocalIssues>,
+    /// The sheet that takes a resource to keep, or one to describe anew.
+    pub resources: Option<ResourceSheet>,
     /// A session's images looked at one at a time.
     pub lightbox: Option<Lightbox>,
     pub banner: Banner,
@@ -58,6 +60,16 @@ pub struct Overlays {
 pub struct LocalIssues {
     pub place: crate::tree::Place,
     pub selected: Option<String>,
+}
+
+/// The sheet of the resources a project keeps, opened on the place whose
+/// project they belong to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResourceSheet {
+    pub place: crate::tree::Place,
+    /// The resource whose label and note are being changed; none while a new
+    /// one is typed.
+    pub editing: Option<tsumugi_model::Resource>,
 }
 
 /// A menu a right click opened, where it was clicked and on what.
@@ -117,6 +129,7 @@ pub fn menu_entries(menu: &Menu, hosts: &Hosts) -> Vec<MenuEntry> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Holder {
     LocalIssues,
+    Resources,
     Menu,
     KeysHelp,
     Picker,
@@ -137,6 +150,7 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (overlays.naming.is_some(), Holder::Naming),
         (overlays.adding, Holder::Adding),
         (overlays.local_issues.is_some(), Holder::LocalIssues),
+        (overlays.resources.is_some(), Holder::Resources),
         (overlays.confirm.is_some(), Holder::Confirm),
         (overlays.lightbox.is_some(), Holder::Lightbox),
     ]
@@ -172,6 +186,7 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
                 | Holder::Naming
                 | Holder::Adding
                 | Holder::LocalIssues
+                | Holder::Resources
                 | Holder::Confirm
                 | Holder::Lightbox
         )
@@ -184,9 +199,12 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
         Holder::Confirm => &[Context::Confirm, Context::Overlay],
         Holder::Lightbox => &[Context::Lightbox],
         Holder::Rename | Holder::Naming => &[],
-        Holder::Menu | Holder::KeysHelp | Holder::Picker | Holder::Adding | Holder::LocalIssues => {
-            &[Context::Overlay]
-        }
+        Holder::Menu
+        | Holder::KeysHelp
+        | Holder::Picker
+        | Holder::Adding
+        | Holder::LocalIssues
+        | Holder::Resources => &[Context::Overlay],
     }
 }
 
@@ -234,6 +252,13 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
         Holder::LocalIssues => match action {
             Some(Action::OverlayClose) => {
                 state.overlays.local_issues = None;
+                Vec::new()
+            }
+            _ => Vec::new(),
+        },
+        Holder::Resources => match action {
+            Some(Action::OverlayClose) => {
+                state.overlays.resources = None;
                 Vec::new()
             }
             _ => Vec::new(),
@@ -313,7 +338,10 @@ pub(crate) fn run_menu(state: &mut ViewState, target: Target, action: Action) ->
         ),
         Target::Row(item) | Target::Start(item) => (Msg::TreeSelect(Some(item)), Area::Sidebar),
         Target::Tab(tab) => (Msg::TabReveal(tab), Area::Console),
-        Target::Link { at, .. } => (Msg::DetailsSelect(at), Area::Details),
+        Target::Link { at, .. } | Target::Pinned { at, .. } => {
+            (Msg::DetailsSelect(at), Area::Details)
+        }
+        Target::Panel => (Msg::Focus(Area::Details), Area::Details),
     };
     effects.extend(step(state, at));
     effects.extend(step(state, Msg::Focus(area)));

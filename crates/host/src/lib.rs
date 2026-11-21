@@ -28,6 +28,7 @@ mod local_issues;
 mod making;
 mod mutation;
 mod neovim;
+mod notices;
 pub mod pasted;
 pub mod paths;
 pub mod pictures;

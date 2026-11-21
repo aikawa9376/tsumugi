@@ -159,6 +159,18 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn double_brackets_ask_the_window_for_the_next_and_the_previous_window() {
+        for (keys, action) in [("]]", "window.next"), ("[[", "window.prev")] {
+            let (e, mut rx) = start().await;
+            e.show(&lines(&["a", "b"]), &[], (0, 0), true, "#101010")
+                .await
+                .unwrap();
+            e.input(keys).await.unwrap();
+            wait(&mut rx, |ev| *ev == Event::Action(action.to_string())).await;
+        }
+    }
+
     async fn start_configured(init: &str) -> (Embedded, crate::embed::UserConfig) {
         let config = crate::embed::UserConfig::new(init);
         let args = config.args();

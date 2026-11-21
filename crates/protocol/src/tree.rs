@@ -35,6 +35,9 @@ pub struct TreeWork {
     /// What each project keeps as its resources.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<tsumugi_model::Resource>,
+    /// What needed the user, as the host keeps it, the oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<tsumugi_model::Notice>,
     /// The sessions and terminals as last listed; none before the first
     /// list.
     pub listed: Option<Box<Listed>>,
@@ -105,6 +108,10 @@ pub enum TreeChange {
     Resources {
         resources: Vec<tsumugi_model::Resource>,
     },
+    /// What needed the user, as the host keeps it, the oldest first.
+    Notices {
+        notices: Vec<tsumugi_model::Notice>,
+    },
     Listed {
         listed: Box<Listed>,
     },
@@ -143,6 +150,7 @@ impl TreeWork {
         match change {
             TreeChange::LocalIssues { issues } => set(&mut self.local_issues, issues),
             TreeChange::Resources { resources } => set(&mut self.resources, resources),
+            TreeChange::Notices { notices } => set(&mut self.notices, notices),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),
             TreeChange::Failing { error } => set(&mut self.failing, error),
             TreeChange::Marks { worktree, marks } => {
@@ -211,6 +219,23 @@ mod tests {
         }
     }
 
+    fn notices(ids: &[u64]) -> TreeChange {
+        TreeChange::Notices {
+            notices: ids
+                .iter()
+                .map(|id| tsumugi_model::Notice {
+                    id: *id,
+                    kind: tsumugi_model::NoticeKind::Done,
+                    session: "a".into(),
+                    name: "a".into(),
+                    workspace: "w".into(),
+                    at_ms: 0,
+                    reason: String::new(),
+                })
+                .collect(),
+        }
+    }
+
     fn entries(dir: &str, names: &[&str]) -> TreeChange {
         TreeChange::Entries {
             dir: dir.into(),
@@ -239,6 +264,9 @@ mod tests {
                 },
                 true,
             ),
+            (notices(&[1]), true),
+            (notices(&[1]), false),
+            (notices(&[1, 2]), true),
             (entries("/w", &["a.rs"]), true),
             (entries("/w", &["a.rs"]), false),
             (entries("/w", &["b.rs"]), true),

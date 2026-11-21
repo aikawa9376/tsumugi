@@ -404,6 +404,18 @@ fn keys_begun_in_one_area_do_not_carry_over_to_another() {
 }
 
 #[test]
+fn double_brackets_in_a_session_s_console_go_round_the_windows() {
+    let run = window().send_all([key("]"), key("]"), key("["), key("[")]);
+    assert_eq!(performed(&run), [Action::WindowNext, Action::WindowPrev]);
+    // One `]` and another key is no binding: it starts reading, with both.
+    let run = window().send_all([key("]"), key("j")]);
+    assert_eq!(
+        run.last_effects(),
+        [Effect::ReadConsole(vec![Key::new("]"), Key::new("j")])]
+    );
+}
+
+#[test]
 fn an_unbound_key_in_a_session_s_console_starts_reading_it_with_the_keys_before() {
     let run = window().send(key("j"));
     assert_eq!(
@@ -911,30 +923,34 @@ fn the_user_s_own_sequence_repeats_by_its_last_key_as_well() {
 
 #[test]
 fn a_key_that_steps_through_something_else_ends_the_repeating() {
-    // `Ctrl+q Ctrl+q` is `Ctrl+q q`, `window.next`, which repeats too: it
-    // steps through the windows, not the tabs, so `Ctrl+q` begins a sequence.
+    // `Ctrl+q }` steps through the workspaces, not the tabs, so `Ctrl+q`
+    // begins a sequence.
     let run = bound("[global]\n\"Ctrl+q n\" = \"tab.next\"\n\"Ctrl+q p\" = \"tab.prev\"\n")
-        .send_all([ctrl_q(), key("n"), ctrl_q(), key("n"), key("p")]);
+        .send_all([ctrl_q(), key("}"), ctrl_q(), key("n"), key("p")]);
     assert_eq!(
         performed(&run),
-        [Action::TabNext, Action::TabNext, Action::TabPrev]
+        [Action::WorkspaceNext, Action::TabNext, Action::TabPrev]
     );
 }
 
 #[test]
 fn a_key_held_with_ctrl_repeats_only_as_it_is_bound() {
-    // `Ctrl+q Ctrl+q` begun anew is `Ctrl+q q`, but after `Ctrl+q q` the
+    // `Ctrl+q Ctrl+}` begun anew is `Ctrl+q }`, but after `Ctrl+q }` the
     // second `Ctrl+q` begins a sequence instead of stepping again.
     let run = bound("[global]\n\"Ctrl+q n\" = \"tab.next\"\n").send_all([
         ctrl_q(),
-        key("q"),
-        key("q"),
+        key("}"),
+        key("}"),
         ctrl_q(),
         key("n"),
     ]);
     assert_eq!(
         performed(&run),
-        [Action::WindowNext, Action::WindowNext, Action::TabNext]
+        [
+            Action::WorkspaceNext,
+            Action::WorkspaceNext,
+            Action::TabNext
+        ]
     );
 }
 
@@ -949,6 +965,17 @@ fn a_key_that_repeats_nothing_ends_the_repeating_and_does_what_it_does() {
     assert_eq!(run.state().console.repeat, None);
     let run = run.send(key("}"));
     assert_eq!(performed(&run), [Action::WorkspaceNext]);
+}
+
+#[test]
+fn going_round_the_windows_does_not_repeat() {
+    // `]]` is as plain as `Ctrl+q l`: a third `]` begins `]]` again, so the
+    // key is not taken from what the window takes it for.
+    let run = window().send_all([key("]"), key("]"), key("]")]);
+    assert_eq!(performed(&run), [Action::WindowNext]);
+    assert_eq!(run.state().console.repeat, None);
+    let run = window().send_all([ctrl_q(), key("q"), key("q")]);
+    assert_eq!(performed(&run), [Action::WindowNext]);
 }
 
 #[test]

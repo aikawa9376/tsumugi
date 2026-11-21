@@ -80,7 +80,7 @@ pub(crate) fn use_ui(app: AppCtx, hub: Hub, local: Local) -> Ui {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     });
-    let reader = use_reader(app, &hub, local.frame, local.console_size);
+    let reader = use_reader(app, &hub, local.frame, local.console_size, asked);
     // Each Neovim, as it starts and as the theme changes, is told whether
     // the theme is light, or its text keeps the colours of its dark default.
     use_effect({

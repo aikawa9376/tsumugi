@@ -75,6 +75,24 @@ mod tests {
         round_trips(Ask::CloseLocalIssue { id: new.id.clone() });
         round_trips(Ask::ReopenLocalIssue { id: new.id.clone() });
         round_trips(Ask::DeleteLocalIssue { id: new.id.clone() });
+        round_trips(Ask::KeepResource {
+            dir: "/project with spaces/日本語".into(),
+            target: "docs/設計.md".into(),
+            label: Some("設計".into()),
+            note: None,
+        });
+        round_trips(Ask::DescribeResource {
+            id: "r".into(),
+            label: None,
+            note: Some("first line\nsecond".into()),
+        });
+        round_trips(Ask::DropResource { id: "r".into() });
+        round_trips(Ask::KeepScreenshot {
+            dir: "/project".into(),
+            data: "iVBORw0KGgo=".into(),
+            label: Some("Screenshot".into()),
+            note: Some("https://example.com/".into()),
+        });
         round_trips(TreeChange::Resources {
             resources: vec![tsumugi_model::Resource {
                 id: "r".into(),
@@ -82,6 +100,17 @@ mod tests {
                 target: "https://example.com/a?b=c".into(),
                 label: Some("Guide".into()),
                 note: None,
+            }],
+        });
+        round_trips(TreeChange::Notices {
+            notices: vec![tsumugi_model::Notice {
+                id: 7,
+                kind: tsumugi_model::NoticeKind::Failed,
+                session: "ffff".into(),
+                name: "日本語 name".into(),
+                workspace: "api".into(),
+                at_ms: 1_700_000_000_000,
+                reason: "line\nbreak".into(),
             }],
         });
         round_trips(TreeChange::LocalIssues {

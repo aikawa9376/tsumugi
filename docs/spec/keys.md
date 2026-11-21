@@ -57,6 +57,13 @@ tree, are its own
 
 ## Where the keys go
 
+`]]` and `[[` go to the next and the previous window as `window.next` and
+`window.prev` do, round from the sidebar through the content's windows to the
+details panel and back to the sidebar. They work in the sidebar, the details
+panel, a viewer, a session's console and its reader, and in the prompt's
+normal mode. A prompt being written in types them, and a Neovim or a shell
+that takes every key keeps them for itself.
+
 Outside the left sidebar, two consecutive Escapes focus the file tree,
 showing the sidebar if it was hidden. The first Escape keeps its ordinary
 meaning in the prompt, console or viewer. Other input or moving to another
@@ -202,7 +209,7 @@ first or last line scrolls the program instead, and the reader follows; `gg` scr
 for the live console, or moving to the prompt, returns the session to its
 latest output.
 The prompt's own keys are its Neovim's mappings
-([Neovim](settings.md#neovim)): `Ctrl+Enter` sends, `Ctrl+c` sends `Escape`
+([Neovim](settings.md#neovim)): `Ctrl+Enter` and `Ctrl+s` send, `Ctrl+c` sends `Escape`
 to the agent, `Shift+Tab` is sent to it as it is, `Tab` on an empty prompt
 takes the prompt the agent suggests, and `Ctrl+p` and `Ctrl+n` recall the
 prompts sent in normal mode. Insert mode uses Control-key cursor movement

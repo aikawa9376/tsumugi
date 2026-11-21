@@ -2,7 +2,7 @@
 
 The prompt under the focused window's console is where messages to the
 session or draft it shows are written, in Neovim
-([content](content.md)). Ctrl+Enter sends what it holds there: a session gets
+([content](content.md)). Ctrl+Enter, or Ctrl+s, sends what it holds there: a session gets
 it as its next message, and a draft starts its session with it.
 The prompt is left empty, in Neovim's normal mode. Sent
 empty, it passes Ctrl+Enter itself to the session, as Claude Code's own

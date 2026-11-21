@@ -9,3 +9,12 @@
 .conversation-progress>summary{cursor:pointer;font-size:.8125em;margin-bottom:12px}
 .conversation-progress .conversation-message{padding-left:16px;border-left:2px solid var(--borderColor-default)}
 .conversation-empty{color:var(--fgColor-muted);text-align:center;margin-top:48px}
+.conversation-tool{margin:0 0 12px;border:1px solid var(--borderColor-default);border-radius:6px;background:var(--bgColor-muted);font-size:.8125em}
+.conversation-tool>summary{display:flex;gap:8px;align-items:baseline;padding:6px 10px;cursor:pointer;overflow:hidden}
+.conversation-tool-name{font-weight:600;flex:none}
+.conversation-tool-summary{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fgColor-muted);font-family:ui-monospace,monospace}
+.conversation-tool-state{flex:none;color:var(--fgColor-muted)}
+.conversation-tool.failed .conversation-tool-state{color:var(--fgColor-danger,#d1242f)}
+.conversation-tool-part{padding:0 10px 8px}
+.conversation-tool-part>b{display:block;margin:4px 0;color:var(--fgColor-muted);font-weight:500}
+.conversation-tool-part>pre{margin:0;padding:8px;max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:4px;background:var(--bgColor-default)}

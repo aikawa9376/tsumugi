@@ -121,6 +121,7 @@ pub(crate) struct AppCtx {
     pub(crate) sidebar: Signal<tsumugi_core::sidebar::Sidebar>,
     pub(crate) details: Signal<Details>,
     pub(crate) picker: Signal<PickerView>,
+    pub(crate) notices: Signal<tsumugi_core::notices::NoticeView>,
     pub(crate) overlays: Signal<Overlays>,
     pub(crate) console: Signal<ConsoleView>,
     pub(crate) prompt: Signal<PromptView>,
@@ -209,6 +210,18 @@ pub(crate) fn use_app() -> AppCtx {
             &mut events,
             [Msg::ContentOpened { kept, scratch }],
         ));
+        // What this window read of the notices before it closed.
+        if let Some(reads) = std::fs::read(reads_path())
+            .ok()
+            .and_then(|bytes| tsumugi_core::notices::Reads::from_json(&bytes).ok())
+        {
+            effects.extend(pump(
+                &mut view,
+                &links,
+                &mut events,
+                [Msg::ReadsRestored(reads)],
+            ));
+        }
         // This computer's details panel, over whatever the hosts read.
         let chosen = crate::client_settings::chosen().map(|p| Msg::PanelChosen(p.panel));
         effects.extend(pump(
@@ -236,6 +249,7 @@ pub(crate) fn use_app() -> AppCtx {
             sidebar: Signal::new(view.sidebar.clone()),
             details: Signal::new(view.details.clone()),
             picker: Signal::new(view.picker.clone()),
+            notices: Signal::new(view.notices.clone()),
             overlays: Signal::new(view.overlays.clone()),
             console: Signal::new(view.console.clone()),
             prompt: Signal::new(view.prompt.clone()),
@@ -622,6 +636,7 @@ impl AppCtx {
         set_changed(self.sidebar, &view.sidebar);
         set_changed(self.details, &view.details);
         set_changed(self.picker, &view.picker);
+        set_changed(self.notices, &view.notices);
         set_changed(self.overlays, &view.overlays);
         set_changed(self.console, &view.console);
         set_changed(self.prompt, &view.prompt);
@@ -871,6 +886,63 @@ impl AppCtx {
                 place: None,
                 how: Some(how),
             }),
+            Effect::OpenFile {
+                environment,
+                path,
+                how,
+            } => self.dispatch(Msg::OpenFileIn(environment, path, how)),
+            Effect::OpenAddress {
+                environment,
+                worktree,
+                url,
+                how,
+            } => {
+                let thing = Tab::browser(environment.clone(), worktree.clone());
+                if let Tab::Browser { id, .. } = &thing {
+                    crate::browser::start_at(*id, url);
+                }
+                self.dispatch(Msg::Show {
+                    thing,
+                    place: Some(tsumugi_core::tree::Place::at(&environment, worktree)),
+                    how: Some(how),
+                });
+            }
+            Effect::KeepResource {
+                environment,
+                dir,
+                target,
+                label,
+            } => {
+                let app = *self;
+                let kept = app.ask_in(
+                    &environment,
+                    Ask::KeepResource {
+                        dir,
+                        target: target.clone(),
+                        label,
+                        note: None,
+                    },
+                );
+                spawn(async move {
+                    match kept.await {
+                        Answer::Done => app.notice(format!("Kept {target} in resources")),
+                        Answer::Failed { text } | Answer::Unconfirmed { text } => app.notice(text),
+                        answer => app.notice(format!("the work host answered {answer:?}")),
+                    }
+                });
+            }
+            Effect::Screenshot(window) => crate::browser::ask_screenshot(window),
+            Effect::DropResource { environment, id } => {
+                let app = *self;
+                let dropped = app.ask_in(&environment, Ask::DropResource { id });
+                spawn(async move {
+                    match dropped.await {
+                        Answer::Done => app.notice("Removed from resources".into()),
+                        Answer::Failed { text } | Answer::Unconfirmed { text } => app.notice(text),
+                        answer => app.notice(format!("the work host answered {answer:?}")),
+                    }
+                });
+            }
             Effect::Lightbox(thing) => self.dispatch(Msg::LightboxOpen(thing)),
             Effect::KeepContent(kept) => {
                 let path = content_path();
@@ -883,16 +955,25 @@ impl AppCtx {
             }
             // Told only while the window is not in front, and by one window
             // of the instance alone.
-            Effect::NotifyWaiting(waiting) => {
+            Effect::NotifyWaiting(told) | Effect::NotifyNotices(told) => {
                 if !dioxus::desktop::window().is_focused()
                     && crate::window_socket::first_open(
                         &crate::window_socket::windows(),
                         crate::window_socket::number(),
                     )
                 {
-                    for (name, why) in waiting {
+                    for (name, why) in told {
                         spawn(crate::alerts::notify_waiting(&name, &why));
                     }
+                }
+            }
+            Effect::KeepReads(reads) => {
+                let path = reads_path();
+                if let Some(dir) = path.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if let Err(error) = std::fs::write(&path, reads.to_json()) {
+                    tracing::warn!(%error, "cannot keep what was read of the notices");
                 }
             }
             Effect::OpenSettings(environment) => self.open_settings(&environment),
@@ -1144,6 +1225,11 @@ fn open_another_window() -> std::io::Result<()> {
 /// Where this window keeps its content, under its number.
 fn content_path() -> std::path::PathBuf {
     crate::window_socket::kept_path("content.json")
+}
+
+/// Where this window keeps which notices it has read, under its number.
+fn reads_path() -> std::path::PathBuf {
+    crate::window_socket::kept_path("notice-reads.json")
 }
 
 /// Where this window kept the one tab its focused window showed, before it

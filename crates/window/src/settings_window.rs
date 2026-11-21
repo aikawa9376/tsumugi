@@ -888,6 +888,18 @@ fn WindowPane(now: Settings, change: Callback<Change>) -> Element {
                     onchange: move |on| change(Box::new(move |s: &mut Settings| s.notify_waiting = on)),
                 }
             }
+            SettingRow { label: "Notify when a session fails", hint: "A notification when a session fails while the window is not in front.",
+                Toggle {
+                    checked: now.notify_failed,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.notify_failed = on)),
+                }
+            }
+            SettingRow { label: "Notify when a session finishes", hint: "A notification when a session finishes its turn while the window is not in front.",
+                Toggle {
+                    checked: now.notify_done,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.notify_done = on)),
+                }
+            }
     }
     }
 }

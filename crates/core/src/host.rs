@@ -273,6 +273,7 @@ pub(crate) fn told(state: &mut ViewState, environment: EnvironmentId, event: Eve
             if is_patch {
                 effects.extend(show_asked(state, &environment, &before));
             }
+            effects.extend(crate::notices::heard(state, &environment));
             effects
         }
     }
