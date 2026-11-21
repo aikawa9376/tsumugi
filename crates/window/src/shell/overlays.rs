@@ -147,9 +147,25 @@ pub(crate) fn ConfirmDialog() -> Element {
     };
     let (icon, title, body, act) = ask.dialog();
     let (no, yes) = hints::answers(&app.chrome.read().keymap);
+    let option = ask.option();
     rsx! {
         Dialog { icon, title, onclose: move |_| app.dispatch(Msg::ConfirmAnswer(false)),
-            div { "{body}" }
+            div { class: "confirm-lines",
+                for line in body.lines() {
+                    div { "{line}" }
+                }
+            }
+            if let Some((label, chosen)) = option {
+                label { class: "confirm-option",
+                    input {
+                        r#type: "checkbox",
+                        checked: chosen,
+                        onchange: move |_| app.dispatch(Msg::ConfirmToggle),
+                    }
+                    span { "{label}" }
+                    Keys { keys: "b" }
+                }
+            }
             div { class: "dialog-actions",
                 Button { onclick: move |_| app.dispatch(Msg::ConfirmAnswer(false)),
                     if let Some(keys) = no {

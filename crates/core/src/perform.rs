@@ -384,6 +384,13 @@ pub(crate) fn perform(
         Action::FilerOut => perform(state, Action::CursorFold, key, probe),
         Action::FilerOpen => perform(state, Action::CursorGo, key, probe),
         Action::FilerHidden => step(state, Msg::TreeKey(TreeKey::Hidden)),
+        // A worktree that failed to be made has its row put away.
+        Action::CursorClose if on_list && matches!(cur, Some(Item::Pending(..))) => {
+            let Some(Item::Pending(_, _, id)) = cur else {
+                return Vec::new();
+            };
+            step(state, Msg::WorktreeDismiss(id))
+        }
         Action::CursorClose => step(state, Msg::Window(action)),
         Action::CursorCopy => {
             let copied = cur.as_ref().and_then(|item| {
@@ -576,6 +583,14 @@ pub(crate) fn perform(
                 step(state, Msg::Confirm(Box::new(ask)))
             }
             _ => Vec::new(),
+        },
+        Action::WorktreeNew => match cur.filter(|_| on_list) {
+            Some(row) => step(state, Msg::ComposerOpen(row)),
+            None => Vec::new(),
+        },
+        Action::WorktreeDelete => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::delete(state, &row),
+            None => Vec::new(),
         },
         Action::TreeToggle => step(state, Msg::PanelToggle(Side::Sidebar)),
         Action::TreeFocus => crate::sidebar::switch(state, crate::sidebar::Panel::Tree),

@@ -68,6 +68,42 @@ pub(crate) fn row_tip(item: &Item) -> &'static str {
         }
         Item::LocalIssue(..) => "A local issue. Enter shows its description; ▸ starts work on it",
         Item::GitHubFailed(..) => "Why gh could not say what is open on GitHub",
+        Item::Pending(..) => {
+            "A worktree being made. It goes once a session's draft opens in it; one that failed stays until x puts it away"
+        }
+    }
+}
+
+/// What the row of a worktree being made says: its name, the step it is
+/// at or why one failed, and a mark of how it stands.
+fn pending_look(
+    pending: &tsumugi_core::worktree::Pending,
+) -> (
+    &'static str,
+    String,
+    String,
+    Option<(&'static str, Icon, &'static str)>,
+) {
+    use tsumugi_core::worktree::{PIPELINE, Progress};
+    let steps = pending.steps();
+    let at = steps
+        .iter()
+        .position(|(_, progress)| matches!(progress, Progress::Running | Progress::Failed))
+        .unwrap_or(0);
+    let counted = format!("{}/{}", at + 1, PIPELINE.len());
+    match &pending.failed {
+        Some(why) => (
+            "dim pending failed",
+            pending.new.name.clone(),
+            format!("{} failed · {why}", PIPELINE[at].doing()),
+            Some(("state-glyph fail", Icon::X, "It could not be made")),
+        ),
+        None => (
+            "dim pending",
+            pending.new.name.clone(),
+            format!("{} · {counted}", PIPELINE[at].doing()),
+            Some(("state-glyph run", Icon::Loader, "Being made")),
+        ),
     }
 }
 
@@ -398,6 +434,10 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 None,
             )
         }
+        Item::Pending(_, _, id) => match view.making.iter().find(|p| p.id == *id) {
+            Some(pending) => pending_look(pending),
+            None => ("dim", String::new(), String::new(), None),
+        },
         Item::Environment(_) | Item::File { .. } | Item::Waiting(_, _) | Item::Gathered(_) => {
             ("", String::new(), String::new(), None)
         }
@@ -485,6 +525,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             .find(|w| &w.worktree.path == path)
             .filter(|w| !w.sessions.is_empty() || !w.terminals.is_empty())
             .map(|_| "Close: end what runs here"),
+        Item::Pending(_, _, id) => view
+            .making
+            .iter()
+            .find(|p| p.id == *id && p.failed.is_some())
+            .map(|_| "Put this row away"),
         _ => None,
     };
     let has_draft = match &own {

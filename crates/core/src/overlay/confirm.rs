@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use tsumugi_model::{EnvironmentId, Process, Session};
+use tsumugi_model::{EnvironmentId, Process, Session, WorktreeStanding};
 
 use crate::details::Entry;
 use crate::icons::Icon;
@@ -33,6 +33,18 @@ pub enum Ask {
         name: String,
         sessions: Vec<Session>,
         terminals: Vec<u128>,
+    },
+    /// Delete the worktree at `path` by this name, as it stands: its
+    /// directory goes, after ending these sessions and the terminals by these
+    /// ids, and its branch too when `delete_branch`.
+    DeleteWorktree {
+        environment: EnvironmentId,
+        path: PathBuf,
+        name: String,
+        standing: WorktreeStanding,
+        sessions: Vec<Session>,
+        terminals: Vec<u128>,
+        delete_branch: bool,
     },
 }
 
@@ -104,6 +116,54 @@ impl Ask {
                 format!("Ending its {} takes it out of the tree; the workspace stays listed. Conversations remain in the provider's history.", running(sessions, terminals)),
                 "End and close",
             ),
+            Self::DeleteWorktree {
+                path,
+                name,
+                standing,
+                sessions,
+                terminals,
+                ..
+            } => {
+                let mut lines = vec![format!("Its directory, {}, is deleted.", path.display())];
+                if let Some(running) = Some(running(sessions, terminals)).filter(|r| !r.is_empty()) {
+                    lines.push(format!("Its {running} end first. Conversations remain in the provider's history."));
+                }
+                if standing.dirty() {
+                    lines.push(format!("{} with changes not committed will be lost.", counted(standing.changed, "file").unwrap_or_default()));
+                }
+                if standing.unpushed > 0 {
+                    lines.push(format!("{} not pushed anywhere.", counted(standing.unpushed, "commit").unwrap_or_default()));
+                }
+                (
+                    Icon::Trash,
+                    format!("Delete {name}?"),
+                    lines.join("\n"),
+                    if standing.dirty() { "Delete and discard changes" } else { "Delete" },
+                )
+            }
+        }
+    }
+
+    /// The choice the question holds besides yes and no: what it says, and
+    /// whether it is chosen.
+    pub fn option(&self) -> Option<(String, bool)> {
+        match self {
+            Self::DeleteWorktree {
+                standing,
+                delete_branch,
+                ..
+            } => {
+                let branch = standing.branch.as_deref()?;
+                let lost = match standing.unmerged {
+                    0 => String::new(),
+                    n => format!(", losing {}", counted(n, "commit").unwrap_or_default()),
+                };
+                Some((
+                    format!("Delete the branch {branch} too{lost}"),
+                    *delete_branch,
+                ))
+            }
+            _ => None,
         }
     }
 
@@ -113,6 +173,16 @@ impl Ask {
             Self::KillProcess(..) | Self::RestartDaemon(_) => true,
             Self::RemoveWorkspace { terminals, .. } | Self::CloseWorktree { terminals, .. } => {
                 !terminals.is_empty()
+            }
+            Self::DeleteWorktree {
+                standing,
+                terminals,
+                delete_branch,
+                ..
+            } => {
+                standing.dirty()
+                    || !terminals.is_empty()
+                    || (*delete_branch && standing.unmerged > 0)
             }
             Self::Stop(..) | Self::RemoveEnvironment(..) => false,
         }

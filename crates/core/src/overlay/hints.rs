@@ -132,6 +132,20 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
     hints.into_iter().flatten().collect()
 }
 
+/// What the dialog asking for a new worktree names along its foot.
+pub fn composer(keymap: &Keymap) -> Vec<Hint> {
+    let over = [Context::Overlay];
+    [
+        Some(Hint::new("Tab", "next field")),
+        moving(keymap, "start from"),
+        bound(keymap, &over, &Action::OverlayChoose, "make it"),
+        bound(keymap, &over, &Action::OverlayClose, "cancel"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
 /// What the keys help names along its foot.
 pub fn keys_help(keymap: &Keymap) -> Vec<Hint> {
     [

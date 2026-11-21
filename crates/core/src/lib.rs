@@ -39,4 +39,5 @@ pub mod testing;
 pub mod tree;
 pub mod update;
 pub mod viewers;
+pub mod worktree;
 pub mod zoom;

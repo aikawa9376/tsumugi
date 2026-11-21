@@ -39,7 +39,9 @@ cannot act as another.
   It never starts from the caller's profile unless it names it. A profile that
   is not defined or starts another agent is refused, and a
   refused start leaves no record and runs nothing.
-  A new worktree is a Git worktree; it starts from the given revision, or from
+  A new worktree is a Git worktree, made where the tree makes its own
+  ([worktrees](tree.md#making-and-deleting-worktrees)), in a directory and on a
+  branch no other has; it starts from the given revision, or from
   the caller's current commit. Outside Git, a new worktree is
   refused. A worktree that cannot be made refuses the start; the session never
   falls back to the caller's directory. A start refused or failed after its

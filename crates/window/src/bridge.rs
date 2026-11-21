@@ -815,6 +815,87 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::WorktreeStarts {
+                environment,
+                repository,
+            } => {
+                let asked = self.ask_in(
+                    &environment,
+                    Ask::WorktreeStarts {
+                        repository: repository.clone(),
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::WorktreeStarts { starts } => Ok(starts),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeStarts {
+                        environment,
+                        repository,
+                        result,
+                    });
+                });
+            }
+            Effect::WorktreeCreate {
+                environment,
+                repository,
+                id,
+                new,
+            } => {
+                let asked = self.ask_in(&environment, Ask::CreateWorktree { repository, new });
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::Worktree { path } => Ok(path),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeMade { id, result });
+                });
+            }
+            Effect::WorktreeInspect { environment, path } => {
+                let asked = self.ask_in(&environment, Ask::WorktreeStanding { path: path.clone() });
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::WorktreeStanding { standing } => Ok(standing),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeInspected {
+                        environment,
+                        path,
+                        result,
+                    });
+                });
+            }
+            Effect::WorktreeDelete {
+                environment,
+                path,
+                force,
+                branch,
+            } => {
+                let asked = self.ask_in(
+                    &environment,
+                    Ask::DeleteWorktree {
+                        path: path.clone(),
+                        force,
+                        branch,
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::WorktreeRemoved { removed } => Ok(removed),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeDeleted { path, result });
+                });
+            }
             Effect::Copy { text, done } => {
                 let told = match crate::clipboard::copy_to_clipboard(&text) {
                     Ok(()) => done,

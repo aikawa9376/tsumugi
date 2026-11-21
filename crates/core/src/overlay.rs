@@ -45,6 +45,8 @@ pub struct Overlays {
     pub rename: Option<Rename>,
     /// A new file or directory being named in the tree's files.
     pub naming: Option<Naming>,
+    /// A new worktree being asked for.
+    pub composer: Option<crate::worktree::Composer>,
     /// The sheet adding an environment is open.
     pub adding: bool,
     /// Local issues are opened on this environment and directory.
@@ -122,6 +124,7 @@ pub enum Holder {
     Picker,
     Rename,
     Naming,
+    Composer,
     Adding,
     Confirm,
     Lightbox,
@@ -135,6 +138,7 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (picker.open.is_some(), Holder::Picker),
         (overlays.rename.is_some(), Holder::Rename),
         (overlays.naming.is_some(), Holder::Naming),
+        (overlays.composer.is_some(), Holder::Composer),
         (overlays.adding, Holder::Adding),
         (overlays.local_issues.is_some(), Holder::LocalIssues),
         (overlays.confirm.is_some(), Holder::Confirm),
@@ -170,6 +174,7 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
             Holder::Picker
                 | Holder::Rename
                 | Holder::Naming
+                | Holder::Composer
                 | Holder::Adding
                 | Holder::LocalIssues
                 | Holder::Confirm
@@ -184,9 +189,12 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
         Holder::Confirm => &[Context::Confirm, Context::Overlay],
         Holder::Lightbox => &[Context::Lightbox],
         Holder::Rename | Holder::Naming => &[],
-        Holder::Menu | Holder::KeysHelp | Holder::Picker | Holder::Adding | Holder::LocalIssues => {
-            &[Context::Overlay]
-        }
+        Holder::Menu
+        | Holder::KeysHelp
+        | Holder::Picker
+        | Holder::Composer
+        | Holder::Adding
+        | Holder::LocalIssues => &[Context::Overlay],
     }
 }
 
@@ -207,9 +215,14 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
     match holder {
         Holder::Menu => menu_key(state, action),
         Holder::Picker => picker::press(state, &key),
+        Holder::Composer => crate::worktree::composer_key(state, &key),
         Holder::Confirm => match action {
             Some(Action::OverlayChoose) => answer(state, true),
             Some(Action::OverlayClose) => answer(state, false),
+            // The choice a question holds is flipped by its own letter.
+            None if key.key == "b" && !key.ctrl && !key.alt && !key.meta => {
+                crate::worktree::toggle(state)
+            }
             _ => Vec::new(),
         },
         Holder::KeysHelp => {
@@ -406,6 +419,7 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
                 .chain([dropped])
                 .collect()
         }
+        ask @ Ask::DeleteWorktree { .. } => crate::worktree::confirmed(ask),
         Ask::CloseWorktree {
             environment,
             sessions,

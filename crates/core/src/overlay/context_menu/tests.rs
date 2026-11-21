@@ -125,7 +125,7 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
         [
             &[Action::CursorGo, Action::CursorCopy][..],
             &starts,
-            &[Action::WorkspaceRemove]
+            &[Action::WorktreeNew, Action::WorkspaceRemove]
         ]
         .concat()
     );
@@ -135,10 +135,31 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
             &OPENS[..],
             &[Action::CursorCopy],
             &starts,
-            &[Action::WorktreeClose]
+            &[
+                Action::WorktreeNew,
+                Action::WorktreeClose,
+                Action::WorktreeDelete
+            ]
         ]
         .concat()
     );
+}
+
+#[test]
+fn the_plus_of_a_workspace_or_worktree_offers_a_new_worktree_beside_what_starts_work() {
+    for row in [
+        Item::Workspace(here(), "/api".into()),
+        Item::Worktree(here(), "/api".into()),
+    ] {
+        let offered = actions(Target::Start(row), None);
+        assert_eq!(offered.last(), Some(&Action::WorktreeNew));
+    }
+}
+
+#[test]
+fn the_row_of_a_worktree_being_made_offers_nothing() {
+    let row = Item::Pending(here(), "/api".into(), 1);
+    assert_eq!(actions(Target::Row(row), None), Vec::<Action>::new());
 }
 
 #[test]

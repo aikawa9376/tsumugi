@@ -156,6 +156,27 @@ pub enum Ask {
         repository: PathBuf,
         number: u64,
     },
+    /// Where a worktree of the repository at `repository` may start: its
+    /// checkout's commit and its branches.
+    WorktreeStarts {
+        repository: PathBuf,
+    },
+    /// Make the worktree `new` asks for in the repository at `repository`.
+    CreateWorktree {
+        repository: PathBuf,
+        new: tsumugi_model::NewWorktree,
+    },
+    /// How the worktree at `path` stands, as far as deleting it loses work.
+    WorktreeStanding {
+        path: PathBuf,
+    },
+    /// Delete the worktree at `path`; one with changes only when `force`,
+    /// and its branch as `branch` says.
+    DeleteWorktree {
+        path: PathBuf,
+        force: bool,
+        branch: tsumugi_model::BranchFate,
+    },
     /// Read the pull request or the issue `number` of the repository at
     /// `repository` whole, with what was said on it and the images shown.
     GitHubThread {
@@ -287,6 +308,18 @@ pub enum Answer {
     /// The worktree was made here.
     Worktree {
         path: PathBuf,
+    },
+    /// Where a worktree may start.
+    WorktreeStarts {
+        starts: Vec<tsumugi_model::StartChoice>,
+    },
+    /// How a worktree stands.
+    WorktreeStanding {
+        standing: tsumugi_model::WorktreeStanding,
+    },
+    /// The worktree was deleted, with what became of its branch.
+    WorktreeRemoved {
+        removed: tsumugi_model::WorktreeRemoved,
     },
     /// The pull request or the issue asked for, read whole.
     Thread {

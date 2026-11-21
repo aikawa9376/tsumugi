@@ -118,13 +118,18 @@ pub fn entries(
             .into_iter()
             .chain([copy_path])
             .chain(here)
-            .chain([offer(Action::WorktreeClose)])
+            .chain([
+                offer(Action::WorktreeNew),
+                offer(Action::WorktreeClose),
+                offer(Action::WorktreeDelete),
+            ])
             .collect(),
         Target::Row(Item::Workspace(_, _)) => [fold, copy_path]
             .into_iter()
             .chain(here)
-            .chain([offer(Action::WorkspaceRemove)])
+            .chain([offer(Action::WorktreeNew), offer(Action::WorkspaceRemove)])
             .collect(),
+        Target::Row(Item::Pending(..)) => Vec::new(),
         Target::Row(Item::File { dir: true, .. }) => [fold, copy_path]
             .into_iter()
             .chain(here)
@@ -162,6 +167,10 @@ pub fn entries(
         Target::Start(Item::Environment(_)) => here
             .into_iter()
             .chain([offer(Action::WorkspaceAdd)])
+            .collect(),
+        Target::Start(Item::Workspace(..) | Item::Worktree(..)) => here
+            .into_iter()
+            .chain([offer(Action::WorktreeNew)])
             .collect(),
         Target::Start(_) => here.into_iter().collect(),
         Target::Tab(Tab::Session(_, _)) => [close_tab]

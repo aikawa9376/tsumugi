@@ -201,6 +201,40 @@ mod tests {
             }),
         });
         round_trips(Request::Ask {
+            asked: 14,
+            ask: Box::new(crate::Ask::CreateWorktree {
+                repository: "/w".into(),
+                new: tsumugi_model::NewWorktree {
+                    name: "fix login".into(),
+                    start: tsumugi_model::StartPoint::Remote {
+                        remote: "origin".into(),
+                        branch: "main".into(),
+                    },
+                    branch: Some("feat/login".into()),
+                },
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 15,
+            ask: Box::new(crate::Ask::DeleteWorktree {
+                path: "/w-wt/fix-login".into(),
+                force: true,
+                branch: tsumugi_model::BranchFate::DeleteUnmerged,
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 16,
+            ask: Box::new(crate::Ask::WorktreeStarts {
+                repository: "/w".into(),
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 17,
+            ask: Box::new(crate::Ask::WorktreeStanding {
+                path: "/w-wt/fix-login".into(),
+            }),
+        });
+        round_trips(Request::Ask {
             asked: 13,
             ask: Box::new(crate::Ask::GitHubThread {
                 repository: "/w".into(),

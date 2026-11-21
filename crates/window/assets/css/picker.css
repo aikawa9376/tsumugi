@@ -10,3 +10,8 @@
 .picker-heading:first-child { padding-top: 0; }
 .picker-place { margin-left: 10px; color: var(--text-3); font-size: var(--ui-font-small); }
 .picker-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 8px 0; border-top: 1px solid var(--line); font-size: var(--ui-font-small); color: var(--text-3); }
+.dialog.composer-dialog { height: min(560px, calc(100% - 48px)); }
+.composer-label { padding: 2px 8px 0; color: var(--text-3); font-size: var(--ui-font-small); }
+.composer-field { border-color: var(--line); }
+.confirm-lines { display: flex; flex-direction: column; gap: 4px; }
+.confirm-option { display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer; }

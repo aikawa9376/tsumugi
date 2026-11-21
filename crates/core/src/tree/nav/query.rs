@@ -86,7 +86,8 @@ pub fn place_of(tree: &Tree, item: &Item) -> Option<Place> {
         | Item::Across(_, root, _)
         | Item::GitHub(_, root, _)
         | Item::GitHubItem(_, root, ..)
-        | Item::GitHubFailed(_, root, _) => {
+        | Item::GitHubFailed(_, root, _)
+        | Item::Pending(_, root, _) => {
             let ws = tree.workspaces.iter().find(|ws| &ws.root == root)?;
             let main = ws.worktrees.iter().find(|w| w.worktree.is_main());
             main.or(ws.worktrees.first()).map(|w| at(&w.worktree.path))

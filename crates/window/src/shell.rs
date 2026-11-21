@@ -4,6 +4,7 @@
 
 mod app;
 mod body;
+mod composer;
 mod effects;
 mod footer;
 pub(crate) mod header;

@@ -63,6 +63,9 @@ pub enum Item {
     LocalIssue(EnvironmentId, PathBuf, String),
     /// Why what is open on GitHub could not be read.
     GitHubFailed(EnvironmentId, PathBuf, Listing),
+    /// A worktree being made, by the root of the workspace it is made in and
+    /// its number.
+    Pending(EnvironmentId, PathBuf, u64),
 }
 
 /// What a worktree's heading holds.
@@ -111,7 +114,8 @@ impl Item {
             | Item::GitHub(environment, ..)
             | Item::GitHubItem(environment, ..)
             | Item::LocalIssue(environment, ..)
-            | Item::GitHubFailed(environment, ..) => environment,
+            | Item::GitHubFailed(environment, ..)
+            | Item::Pending(environment, ..) => environment,
             Item::Gathered(own) => own.environment(),
         }
     }
