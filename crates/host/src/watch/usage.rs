@@ -178,7 +178,7 @@ mod tests {
             ..Sight::default()
         };
         assert_eq!(
-            wanted(&[listing.clone()], &profiles, limited),
+            wanted(std::slice::from_ref(&listing), &profiles, limited),
             [
                 account(Agent::Claude, Some("/p/claude-work")),
                 account(Agent::Claude, None),
