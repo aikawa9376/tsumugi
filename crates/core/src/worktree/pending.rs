@@ -4,12 +4,13 @@
 
 use std::path::PathBuf;
 
-use tsumugi_model::{EnvironmentId, NewWorktree};
+use tsumugi_model::{EnvironmentId, NewWorktree, SetupChoice, SetupOutcome, WorktreeSetup};
 
 use super::Composer;
 use crate::chrome::status_line;
 use crate::content;
 use crate::effect::Effect;
+use crate::overlay::confirm::Ask;
 use crate::state::ViewState;
 use crate::tree::nav::Item;
 
@@ -18,6 +19,10 @@ use crate::tree::nav::Item;
 pub enum Step {
     /// The work host makes the worktree and its branch.
     Create,
+    /// The work host gives it the ignored files its repository lists and runs
+    /// its repository's setup script as the user's policy says, asking the
+    /// person first when the policy is to ask.
+    Setup,
     /// A new session's draft opens in it.
     Start,
 }
@@ -27,6 +32,7 @@ impl Step {
     pub fn doing(self) -> &'static str {
         match self {
             Step::Create => "Creating the worktree",
+            Step::Setup => "Setting up the worktree",
             Step::Start => "Starting a session",
         }
     }
@@ -35,7 +41,7 @@ impl Step {
 /// The steps every new worktree goes through, in order. A step is added by
 /// naming it here and saying in [`run`] what it asks for and in [`made`]
 /// what comes of its answer; the rows draw whatever is listed.
-pub const PIPELINE: &[Step] = &[Step::Create, Step::Start];
+pub const PIPELINE: &[Step] = &[Step::Create, Step::Setup, Step::Start];
 
 /// How far a step of a worktree being made has come.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,6 +138,18 @@ fn run(state: &mut ViewState, id: u64) -> Vec<Effect> {
             id,
             new: pending.new.clone(),
         }],
+        Step::Setup => {
+            let Some(worktree) = pending.made.clone() else {
+                return Vec::new();
+            };
+            vec![Effect::WorktreeSetup {
+                environment: pending.environment.clone(),
+                repository: pending.repository.clone(),
+                worktree,
+                id,
+                choice: SetupChoice::Inherit,
+            }]
+        }
         Step::Start => {
             let Some(pending) = remove(state, id) else {
                 return Vec::new();
@@ -168,6 +186,92 @@ pub(crate) fn made(state: &mut ViewState, id: u64, result: Result<PathBuf, Strin
             status_line::notice(&mut state.chrome.status, told)
         }
     }
+}
+
+/// The host answered the setup step of `id`: what was left out of the files
+/// given to the worktree is told; a script the person is to say yes or no to
+/// is asked about, and the next step waits for that answer; otherwise the
+/// next step runs. A setup that failed keeps the worktree, and the row says
+/// why.
+pub(crate) fn set_up(
+    state: &mut ViewState,
+    id: u64,
+    result: Result<WorktreeSetup, String>,
+) -> Vec<Effect> {
+    let Some(pending) = state.tree.making.iter_mut().find(|p| p.id == id) else {
+        return Vec::new();
+    };
+    let setup = match result {
+        Ok(setup) => setup,
+        Err(why) => {
+            let told = format!("cannot set up {}: {why}", pending.new.name);
+            pending.failed = Some(why);
+            return status_line::notice(&mut state.chrome.status, told);
+        }
+    };
+    let name = pending.new.name.clone();
+    let asked = match setup.outcome {
+        SetupOutcome::Asked { script } => Some((
+            pending.environment.clone(),
+            pending.repository.clone(),
+            pending.made.clone().unwrap_or_default(),
+            script,
+        )),
+        SetupOutcome::Nothing | SetupOutcome::Ran => {
+            pending.at += 1;
+            None
+        }
+    };
+    let mut effects = if let Some(warning) = setup.warnings.first() {
+        let more = setup.warnings.len() - 1;
+        let told = match more {
+            0 => format!("{name}: {warning}"),
+            more => format!("{name}: {warning} (and {more} more)"),
+        };
+        status_line::notice(&mut state.chrome.status, told)
+    } else {
+        Vec::new()
+    };
+    match asked {
+        Some((environment, repository, worktree, script)) => {
+            state.overlays.confirm = Some(Ask::SetupWorktree {
+                environment,
+                repository,
+                worktree,
+                id,
+                name,
+                script,
+            });
+        }
+        None => effects.extend(run(state, id)),
+    }
+    effects
+}
+
+/// The person answered what a setup script asked: the host is asked again,
+/// with their choice, which the next step goes on from.
+pub(crate) fn answered(ask: Ask, yes: bool) -> Vec<Effect> {
+    let Ask::SetupWorktree {
+        environment,
+        repository,
+        worktree,
+        id,
+        ..
+    } = ask
+    else {
+        return Vec::new();
+    };
+    vec![Effect::WorktreeSetup {
+        environment,
+        repository,
+        worktree,
+        id,
+        choice: if yes {
+            SetupChoice::Run
+        } else {
+            SetupChoice::Skip
+        },
+    }]
 }
 
 /// The row of a worktree that failed is put away.

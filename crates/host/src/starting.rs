@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use tsumugi_model::SessionId;
+use tsumugi_model::{SessionId, SetupChoice};
 use tsumugi_term::Daemon;
 use tsumugi_vcs::worktree::Worktree;
 
@@ -21,6 +21,9 @@ pub(crate) enum Stage {
     NotStarted,
     /// Its agent may be running on the work machine all the same.
     MayHaveRun,
+    /// Its worktree was made but its setup failed, so its agent was not
+    /// asked to run. The worktree stays, with what the setup left in it.
+    SetupFailed,
 }
 
 /// Why a start failed.
@@ -107,6 +110,31 @@ pub(crate) async fn start(
     } else {
         None
     };
+    if let Some(made) = &worktree {
+        // No person is there to ask, so a policy of `ask` runs nothing.
+        let set_up = crate::worktree_setup::set_up(
+            host.daemon,
+            settings,
+            &place.dir,
+            &made.path,
+            SetupChoice::Inherit,
+            false,
+        )
+        .await;
+        match set_up {
+            Ok(done) => {
+                for warning in done.warnings {
+                    tracing::warn!(worktree = %made.path.display(), "{warning}");
+                }
+            }
+            Err(error) => {
+                return Err(Failure::new(
+                    Stage::SetupFailed,
+                    format!("cannot start {}: {error}", request.name),
+                ));
+            }
+        }
+    }
     request.cwd = worktree
         .as_ref()
         .map_or(place.dir, |made| made.path.clone());
@@ -157,14 +185,15 @@ async fn launch(
 }
 
 /// `launched`, with the worktree made for it taken back unless its agent may
-/// have run, so a start that never ran leaves no directory or branch
-/// behind.
+/// have run or its setup failed, so a start that never ran leaves no
+/// directory or branch behind, and what a setup that stopped left in a
+/// worktree is the user's to look at.
 pub(crate) async fn settled<T>(
     worktree: Option<Worktree>,
     launched: Result<T, Failure>,
 ) -> Result<T, Failure> {
     match launched {
-        Err(mut failure) if failure.stage != Stage::MayHaveRun => {
+        Err(mut failure) if !matches!(failure.stage, Stage::MayHaveRun | Stage::SetupFailed) => {
             if let Some(worktree) = worktree
                 && let Err(left) = tsumugi_vcs::worktree::remove(&worktree).await
             {

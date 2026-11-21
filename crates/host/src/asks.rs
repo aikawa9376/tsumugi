@@ -131,6 +131,25 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             watched.read_again();
             made.map(|path| Answer::Worktree { path })
         }
+        Ask::SetupWorktree {
+            repository,
+            worktree,
+            choice,
+        } => {
+            let settings = settings::current();
+            let done = crate::worktree_setup::set_up(
+                &daemon::daemon(),
+                &settings,
+                &repository,
+                &worktree,
+                choice,
+                true,
+            )
+            .await;
+            // The listing shows what was given without waiting on the disk's watch.
+            watched.read_again();
+            done.map(|setup| Answer::WorktreeSetup { setup })
+        }
         Ask::WorktreeStanding { path } => tsumugi_vcs::worktree::standing(&path)
             .await
             .map(|standing| Answer::WorktreeStanding { standing }),

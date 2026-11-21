@@ -273,6 +273,8 @@ pub struct Settings {
     /// What the details panel is made of, chosen once for every environment;
     /// see [details](details.md#components).
     pub panel: crate::details::DetailsLayout,
+    /// Whether the setup script a repository lists runs in its new worktrees.
+    pub worktree_setup: WorktreeSetupSettings,
 }
 
 impl Serialize for Settings {
@@ -301,6 +303,41 @@ impl Default for DelegationSettings {
     fn default() -> Self {
         Self { enabled: true }
     }
+}
+
+/// Whether the setup script a repository's `tsumugi.toml` lists runs in its
+/// new worktrees. A repository cannot say so itself: a file in it never runs
+/// anything by being there.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorktreeSetupSettings {
+    /// What a repository with no `[[worktree_setup.repositories]]` table of
+    /// its own gets: `run`, `ask` to show the script and run it when you say
+    /// so, or `skip`.
+    pub run_policy: tsumugi_model::SetupRunPolicy,
+    /// The repositories that differ, each `[[worktree_setup.repositories]]`
+    /// table one of them.
+    pub repositories: Vec<RepositorySetup>,
+}
+
+impl WorktreeSetupSettings {
+    /// The policy of the repository whose primary checkout is `primary`.
+    pub fn policy_for(&self, primary: &Path) -> tsumugi_model::SetupRunPolicy {
+        self.repositories
+            .iter()
+            .find(|repository| Path::new(&repository.path) == primary)
+            .map_or(self.run_policy, |repository| repository.run_policy)
+    }
+}
+
+/// How one repository's new worktrees are set up.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct RepositorySetup {
+    /// The repository's primary checkout, the directory holding its `.git`.
+    pub path: String,
+    /// What its new worktrees' setup script does.
+    pub run_policy: tsumugi_model::SetupRunPolicy,
 }
 
 /// The fonts the console falls back to: tsumugi's own first, for the Nerd Font
@@ -341,6 +378,7 @@ impl Default for Settings {
             details: DetailsSettings::default(),
             usage: UsageSettings::default(),
             panel: crate::details::DetailsLayout::default(),
+            worktree_setup: WorktreeSetupSettings::default(),
         }
     }
 }

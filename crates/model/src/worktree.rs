@@ -105,3 +105,53 @@ pub enum BranchFate {
     /// The branch goes with its commits.
     DeleteUnmerged,
 }
+
+/// Whether the setup script of a new worktree runs, as the user set it for a
+/// repository. A repository's own file never decides this.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SetupRunPolicy {
+    /// Run it in every new worktree.
+    Run,
+    /// Show it and run it only when the person says so.
+    #[default]
+    Ask,
+    /// Never run it.
+    Skip,
+}
+
+/// What is decided for one new worktree's setup script.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SetupChoice {
+    /// What the repository's [`SetupRunPolicy`] says.
+    #[default]
+    Inherit,
+    Run,
+    Skip,
+}
+
+/// What came of setting up a new worktree.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorktreeSetup {
+    /// What was left out of the files given to the worktree, and why. None
+    /// stops the rest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    pub outcome: SetupOutcome,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SetupOutcome {
+    /// There was no script, or it was skipped.
+    #[default]
+    Nothing,
+    /// The script ran in a terminal of the worktree and ended well, or runs
+    /// on while the agent starts.
+    Ran,
+    /// The script waits for the person to say whether it runs.
+    Asked { script: String },
+}

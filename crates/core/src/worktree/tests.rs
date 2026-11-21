@@ -1,6 +1,6 @@
 use tsumugi_model::{
-    BranchFate, KeptBranch, Key, NewWorktree, StartChoice, StartPoint, WorktreeRemoved,
-    WorktreeStanding,
+    BranchFate, KeptBranch, Key, NewWorktree, SetupChoice, SetupOutcome, StartChoice, StartPoint,
+    WorktreeRemoved, WorktreeSetup, WorktreeStanding,
 };
 
 use super::*;
@@ -301,6 +301,7 @@ fn enter_closes_the_dialog_and_makes_the_worktree_in_the_background_as_asked() {
         pending[0].steps(),
         [
             (Step::Create, Progress::Running),
+            (Step::Setup, Progress::Waiting),
             (Step::Start, Progress::Waiting)
         ]
     );
@@ -317,23 +318,174 @@ fn a_branch_left_blank_is_left_to_the_host_to_name() {
     assert_eq!(created(&run).1.branch, None);
 }
 
-#[test]
-fn once_the_host_made_it_a_session_s_draft_opens_in_it_and_the_row_goes() {
+/// A worktree being made, which the host made at `/r-wt/review`.
+fn made() -> (Scenario, u64) {
     let run = typed(composing(vec![]), Field::Name, "review");
     let run = pressed(run, "Enter");
     let (id, _) = created(&run);
-
-    let run = run.send(Msg::WorktreeMade {
+    (
+        run.send(Msg::WorktreeMade {
+            id,
+            result: Ok("/r-wt/review".into()),
+        }),
         id,
-        result: Ok("/r-wt/review".into()),
+    )
+}
+
+fn set_up(run: Scenario, id: u64, setup: WorktreeSetup) -> Scenario {
+    run.send(Msg::WorktreeSetUp {
+        id,
+        result: Ok(setup),
+    })
+}
+
+fn draft_is_open(run: &Scenario) -> bool {
+    run.state().tree.making.is_empty()
+        && run.state().content.focus == Area::Prompt
+        && matches!(
+            run.state().content.active(),
+            Some(crate::content::Tab::Draft { worktree, .. }) if worktree == std::path::Path::new("/r-wt/review")
+        )
+}
+
+#[test]
+fn once_the_host_made_it_the_host_is_asked_to_set_it_up_as_its_policy_says() {
+    let (run, id) = made();
+
+    assert_eq!(
+        run.last_effects(),
+        [Effect::WorktreeSetup {
+            environment: here(),
+            repository: "/r".into(),
+            worktree: "/r-wt/review".into(),
+            id,
+            choice: SetupChoice::Inherit,
+        }]
+    );
+    assert_eq!(
+        run.state().tree.making[0].steps()[1],
+        (Step::Setup, Progress::Running)
+    );
+}
+
+#[test]
+fn once_it_is_set_up_a_session_s_draft_opens_in_it_and_the_row_goes() {
+    let (run, id) = made();
+
+    let run = set_up(run, id, WorktreeSetup::default());
+
+    assert!(draft_is_open(&run));
+}
+
+#[test]
+fn a_script_that_ran_does_not_keep_the_draft_from_opening() {
+    let (run, id) = made();
+
+    let run = set_up(
+        run,
+        id,
+        WorktreeSetup {
+            outcome: SetupOutcome::Ran,
+            ..WorktreeSetup::default()
+        },
+    );
+
+    assert!(draft_is_open(&run));
+}
+
+#[test]
+fn what_could_not_be_given_to_the_worktree_is_told_and_the_draft_still_opens() {
+    let (run, id) = made();
+
+    let run = set_up(
+        run,
+        id,
+        WorktreeSetup {
+            warnings: vec![".env is not ignored by Git, so it is not given".into()],
+            outcome: SetupOutcome::Nothing,
+        },
+    );
+
+    assert!(draft_is_open(&run));
+    let told = run.state().chrome.status.line.clone().unwrap();
+    assert!(told.contains(".env is not ignored"), "{told}");
+}
+
+fn asked(script: &str) -> WorktreeSetup {
+    WorktreeSetup {
+        warnings: Vec::new(),
+        outcome: SetupOutcome::Asked {
+            script: script.into(),
+        },
+    }
+}
+
+#[test]
+fn a_script_the_user_has_not_decided_on_is_shown_in_a_question_and_nothing_goes_on_until_it_is_answered()
+ {
+    let (run, id) = made();
+
+    let run = set_up(run, id, asked("pnpm install"));
+
+    let Some(Ask::SetupWorktree { script, name, .. }) = run.state().overlays.confirm.clone() else {
+        panic!("{:?}", run.state().overlays.confirm);
+    };
+    assert_eq!(script, "pnpm install");
+    assert_eq!(name, "review");
+    assert!(run.last_effects().is_empty());
+    assert_eq!(run.state().tree.making.len(), 1);
+    let (_, _, body, action) = run.state().overlays.confirm.as_ref().unwrap().dialog();
+    assert!(body.contains("pnpm install"), "{body}");
+    assert_eq!(action, "Run setup");
+}
+
+#[test]
+fn answering_yes_runs_the_script_and_no_leaves_it_unrun_either_way_the_worktree_goes_on() {
+    for (yes, choice) in [(true, SetupChoice::Run), (false, SetupChoice::Skip)] {
+        let (run, id) = made();
+        let run = set_up(run, id, asked("make")).send(Msg::ConfirmAnswer(yes));
+
+        assert_eq!(
+            run.last_effects(),
+            [Effect::WorktreeSetup {
+                environment: here(),
+                repository: "/r".into(),
+                worktree: "/r-wt/review".into(),
+                id,
+                choice,
+            }]
+        );
+        assert_eq!(run.state().overlays.confirm, None);
+        // The answer, not the question, moves the worktree on.
+        let run = set_up(run, id, WorktreeSetup::default());
+        assert!(draft_is_open(&run));
+    }
+}
+
+#[test]
+fn a_setup_that_fails_keeps_the_worktree_and_its_row_with_why_and_starts_no_session() {
+    let (run, id) = made();
+
+    let run = run.send(Msg::WorktreeSetUp {
+        id,
+        result: Err("the setup script ended with status 3".into()),
     });
 
-    assert!(run.state().tree.making.is_empty());
-    assert_eq!(run.state().content.focus, Area::Prompt);
-    assert!(matches!(
-        run.state().content.active(),
-        Some(crate::content::Tab::Draft { worktree, .. }) if worktree == std::path::Path::new("/r-wt/review")
-    ));
+    let pending = &run.state().tree.making[0];
+    assert_eq!(pending.steps()[1], (Step::Setup, Progress::Failed));
+    assert_eq!(pending.steps()[2], (Step::Start, Progress::Waiting));
+    // Where the worktree is stays known, for the row to say.
+    assert_eq!(
+        pending.made.as_deref(),
+        Some(std::path::Path::new("/r-wt/review"))
+    );
+    let told = run.state().chrome.status.line.clone().unwrap();
+    assert!(told.contains("status 3"), "{told}");
+    assert!(
+        run.last_effects()
+            .iter()
+            .all(|e| matches!(e, Effect::LapseNotice { .. }))
+    );
 }
 
 #[test]
@@ -350,7 +502,8 @@ fn a_worktree_that_could_not_be_made_keeps_its_row_with_why_until_it_is_put_away
     let pending = &run.state().tree.making;
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].steps()[0], (Step::Create, Progress::Failed));
-    assert_eq!(pending[0].steps()[1], (Step::Start, Progress::Waiting));
+    assert_eq!(pending[0].steps()[1], (Step::Setup, Progress::Waiting));
+    assert_eq!(pending[0].steps()[2], (Step::Start, Progress::Waiting));
     let told = run.state().chrome.status.line.clone().unwrap();
     assert!(told.contains("cannot make review"), "{told}");
     assert!(told.contains("already exists"), "{told}");
@@ -377,9 +530,8 @@ fn a_row_still_running_is_not_put_away() {
 }
 
 #[test]
-fn the_pipeline_runs_the_creating_step_first_and_starting_a_session_last() {
-    assert_eq!(PIPELINE.first(), Some(&Step::Create));
-    assert_eq!(PIPELINE.last(), Some(&Step::Start));
+fn the_pipeline_runs_the_creating_step_first_the_setup_before_starting_a_session_last() {
+    assert_eq!(PIPELINE, [Step::Create, Step::Setup, Step::Start]);
 }
 
 fn standing() -> WorktreeStanding {

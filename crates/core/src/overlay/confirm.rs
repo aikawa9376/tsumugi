@@ -46,6 +46,17 @@ pub enum Ask {
         terminals: Vec<u128>,
         delete_branch: bool,
     },
+    /// Run the setup script of the pending worktree `id`, made at `worktree`
+    /// of `repository` and called `name`, which the repository lists and the
+    /// user's policy leaves to be asked about.
+    SetupWorktree {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        worktree: PathBuf,
+        id: u64,
+        name: String,
+        script: String,
+    },
     /// Replace the last commit of a worktree.
     AmendCommit {
         environment: EnvironmentId,
@@ -162,6 +173,14 @@ impl Ask {
                     if standing.dirty() { "Delete and discard changes" } else { "Delete" },
                 )
             }
+            Self::SetupWorktree { name, script, .. } => (
+                Icon::Terminal2,
+                format!("Run the setup of {name}?"),
+                format!(
+                    "The repository lists this for new worktrees. It runs in a terminal of the worktree, with your permissions:\n\n{script}"
+                ),
+                "Run setup",
+            ),
             Self::AmendCommit { .. } => (
                 Icon::Pencil,
                 "Amend the last commit?".into(),
@@ -230,7 +249,7 @@ impl Ask {
                     || !terminals.is_empty()
                     || (*delete_branch && standing.unmerged > 0)
             }
-            Self::Stop(..) | Self::RemoveEnvironment(..) => false,
+            Self::Stop(..) | Self::RemoveEnvironment(..) | Self::SetupWorktree { .. } => false,
         }
     }
 }

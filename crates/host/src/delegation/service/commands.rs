@@ -447,7 +447,7 @@ pub(super) async fn start(
         .map_err(|failure| {
             let code = match failure.stage {
                 Stage::Refused => Code::Invalid,
-                Stage::NotStarted | Stage::MayHaveRun => Code::Storage,
+                Stage::NotStarted | Stage::MayHaveRun | Stage::SetupFailed => Code::Storage,
             };
             Error::new(code, failure.message)
         })?;

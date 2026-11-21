@@ -113,6 +113,16 @@ pub enum Effect {
         id: u64,
         new: tsumugi_model::NewWorktree,
     },
+    /// Ask the work host of `environment` to set up the worktree at
+    /// `worktree` of `repository`, as the setup step of the pending worktree
+    /// `id`, running its script as `choice` says.
+    WorktreeSetup {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        worktree: PathBuf,
+        id: u64,
+        choice: tsumugi_model::SetupChoice,
+    },
     /// Ask the work host of `environment` how the worktree at `path` stands,
     /// before the person is asked to delete it.
     WorktreeInspect {

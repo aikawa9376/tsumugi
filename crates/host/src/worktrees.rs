@@ -13,8 +13,8 @@ use tsumugi_vcs::worktree::Worktree;
 type Step =
     for<'a> fn(&'a Worktree) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 
-/// What follows making a worktree, in order. A repository's own setup goes
-/// here.
+/// What follows making a worktree, in order. A repository's own setup is not
+/// here: it runs as a step of its own, which asks the person when it must.
 const AFTER_CREATE: &[Step] = &[];
 
 /// Makes the worktree `new` asks for in the repository at `repository`, and
