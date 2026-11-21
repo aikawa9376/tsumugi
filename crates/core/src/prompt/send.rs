@@ -77,6 +77,9 @@ pub(crate) fn taken(state: &mut ViewState, taken: Taken) -> Vec<Effect> {
     if let Some(pulling) = state.prompt.pulling.clone() {
         return super::pull_request::taken(state, pulling, taken);
     }
+    if let Some(basing) = state.prompt.basing.clone() {
+        return super::base::taken(state, basing, taken);
+    }
     if let Some(commit) = state.prompt.committing.clone() {
         state.prompt.sending = Some(Sending::Handed(taken.clone()));
         return vec![Effect::Git {
@@ -280,6 +283,7 @@ pub(crate) fn sent(state: &mut ViewState, ok: bool) -> Vec<Effect> {
     if ok {
         state.prompt.committing = None;
         state.prompt.pulling = None;
+        state.prompt.basing = None;
         state.prompt.writing = None;
         vec![Effect::PromptSent]
     } else {

@@ -85,7 +85,13 @@ pub fn link_sections(
         let row = match entry {
             // The timeline's rows are drawn as cards and bars, and the
             // repository's as its files and its graph, not as links.
-            Entry::Tree(_) | Entry::Task(_) | Entry::Changed(_) | Entry::Commit(_) => None,
+            Entry::Tree(_)
+            | Entry::Task(_)
+            | Entry::Changed(_)
+            | Entry::Compared(_)
+            | Entry::Branch(_)
+            | Entry::Operation(_)
+            | Entry::Commit(_) => None,
             Entry::More { hidden, .. } => {
                 if let Some(section) = out.last_mut() {
                     section.more = Some((at, *hidden));

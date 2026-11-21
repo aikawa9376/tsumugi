@@ -32,7 +32,7 @@ pub(crate) fn DiffWindow(
         .map(|r| r.listing.clone());
     let rev = match &spot {
         Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) => rev.clone(),
-        Spot::Log => Rev::WorkingCopy,
+        Spot::Log | Spot::Branch => Rev::WorkingCopy,
     };
     let navigate = {
         let (environment, worktree) = (environment.clone(), worktree.clone());

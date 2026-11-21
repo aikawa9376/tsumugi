@@ -7,17 +7,17 @@ use std::path::PathBuf;
 
 use tsumugi_model::config::UsageSettings;
 use tsumugi_model::links::{Kind as LinkKind, Link, Links};
-use tsumugi_model::repository::{Rev, Spot};
+use tsumugi_model::repository::{Change, Rev, Spot};
 use tsumugi_model::{ConversationStats, EnvironmentId, Note, Process, Session};
 use tsumugi_protocol::{
     Account, AgentFacts, DetailsWork, RepositorySight, Seq, SessionRead, Sight, WorkSnapshot,
 };
 
 use super::{
-    Component, DetailsLayout, DetailsTab, Drill, Entry, Fact, Gauge, Group, Listing, Placed,
-    Related, Shot, Source, Subject, Surface, TaskDetail, TreeCard, View, about, context_gauge,
-    file_link, gauges, grouped, newest_first, related, running, task_detail, timeline_entries,
-    tree_at,
+    BranchCard, Compared, Component, DetailsLayout, DetailsTab, Drill, Entry, Fact, Gauge, Group,
+    Listing, OperationCard, Placed, Related, Shot, Source, Subject, Surface, TaskDetail, TreeCard,
+    View, about, context_gauge, file_link, gauges, grouped, newest_first, related, running,
+    task_detail, timeline_entries, tree_at,
 };
 use crate::content::{Opening, Showing, Tab};
 use crate::effect::Effect;
@@ -125,6 +125,18 @@ pub enum Key {
     CreatePull,
     /// Ask the session's agent to draft the pull request.
     DraftPull,
+    /// Give up the merge, rebase, cherry-pick or revert in progress, once
+    /// asked.
+    Abort,
+    /// Go on with the operation in progress once its conflicts are resolved.
+    Resume,
+    /// Write the base the branch is compared with in the prompt.
+    Base,
+    /// Open a draft in the worktree whose prompt asks the agent to resolve
+    /// the conflicts.
+    Resolve,
+    /// Open the diff of the selected change in the user's Neovim.
+    Neovim,
 }
 
 /// How the panel scrolls what is not a list.
@@ -415,6 +427,11 @@ pub(crate) fn press(details: &mut Details, work: Option<&WorkSnapshot>, key: Key
             | Key::ForcePush
             | Key::CreatePull
             | Key::DraftPull
+            | Key::Abort
+            | Key::Resume
+            | Key::Base
+            | Key::Resolve
+            | Key::Neovim
     ) {
         return staged(details, work, key);
     }
@@ -464,7 +481,12 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::Push
         | Key::ForcePush
         | Key::CreatePull
-        | Key::DraftPull => {}
+        | Key::DraftPull
+        | Key::Abort
+        | Key::Resume
+        | Key::Base
+        | Key::Resolve
+        | Key::Neovim => {}
     }
     Vec::new()
 }
@@ -487,6 +509,45 @@ pub fn selected_change(
     }
 }
 
+/// The diff of the change the cursor is on, as the user's Neovim opens it: a
+/// change of the working copy, or a file the branch committed.
+pub fn selected_spot(details: &Details, work: Option<&WorkSnapshot>) -> Option<Spot> {
+    let shown = list(details, work)?;
+    let at = details.drill.selected(&shown)?;
+    match (&shown, details.drill.spot()) {
+        (Listing::Entries(entries), None) => match entries.get(at)? {
+            Entry::Changed(change) => Some(Spot::Diff(Rev::WorkingCopy, change.clone())),
+            Entry::Compared(c) => Some(Spot::Diff(Rev::Branch(c.since.clone()), c.change.clone())),
+            _ => None,
+        },
+        (Listing::Files(files), Some(Spot::Files(rev))) => {
+            Some(Spot::Diff(rev, files.get(at)?.clone()))
+        }
+        _ => None,
+    }
+}
+
+/// Where the branch of the worktree shown stands, as last read.
+pub fn branch(
+    details: &Details,
+    work: Option<&WorkSnapshot>,
+) -> Option<tsumugi_model::repository::Branch> {
+    let worktree = details.shown.worktree.as_ref()?;
+    let read = work?.details.repository(worktree, &Spot::Branch)?;
+    match View::of(worktree.clone(), read.clone()).listing {
+        Listing::Branch(branch) => Some(*branch),
+        _ => None,
+    }
+}
+
+/// The files of the working copy in conflict, as last read.
+pub fn conflicts(details: &Details, work: Option<&WorkSnapshot>) -> Vec<Change> {
+    match working_copy(details, work).map(|v| v.listing) {
+        Some(Listing::Files(files)) => files.into_iter().filter(Change::is_conflicted).collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// What a key of the index or of the remote asks: the change selected
 /// staged or unstaged, everything staged, a pull or a push. What loses work,
 /// a discard, an amend and a force push, and what writes a message in the
@@ -499,6 +560,7 @@ fn staged(details: &Details, work: Option<&WorkSnapshot>, key: Key) -> Vec<Effec
     let op = match key {
         Key::StageAll => GitOp::StageAll,
         Key::Pull => GitOp::Pull,
+        Key::Resume => GitOp::Resume,
         Key::Push => GitOp::Push { lease: false },
         Key::Stage => match selected_change(details, work) {
             Some(change) if change.is_unstaged() => GitOp::Stage {
@@ -605,6 +667,7 @@ fn opened(details: &mut Details, l: &Listing, entry: &Entry, how: Opening) -> Ve
         | Entry::Process(_)
         | Entry::Task(_)
         | Entry::Changed(_)
+        | Entry::Compared(_)
         | Entry::Commit(_)
         | Entry::Prompt(_) => {
             details.drill.open(l);
@@ -726,6 +789,9 @@ fn used(details: &Details, entry: &Entry, how: Use) -> Vec<Effect> {
         Entry::Tree(card) => copied(how, &card.title, format!("Copied {}", card.title)),
         Entry::Task(line) => copied(how, &line.title, format!("Copied {}", line.title)),
         Entry::Changed(c) => copied(how, &c.path, format!("Copied {}", c.path)),
+        Entry::Compared(c) => copied(how, &c.change.path, format!("Copied {}", c.change.path)),
+        Entry::Branch(card) => copied(how, &card.head, format!("Copied {}", card.head)),
+        Entry::Operation(_) => Vec::new(),
         Entry::Commit(c) => copied(how, &c.short, format!("Copied {}", c.short)),
         Entry::Prompt(p) => copied(how, &p.prompt.text, "Copied the prompt".into()),
         Entry::Heading { .. } | Entry::More { .. } => Vec::new(),
@@ -934,11 +1000,54 @@ fn rows_of(
     };
     match c {
         Component::Changes => {
-            let rows = match repository(Spot::Files(Rev::WorkingCopy)).map(|v| v.listing) {
-                Some(Listing::Files(files)) => files.into_iter().map(Entry::Changed).collect(),
+            let files = match repository(Spot::Files(Rev::WorkingCopy)).map(|v| v.listing) {
+                Some(Listing::Files(files)) => files,
                 _ => Vec::new(),
             };
-            return grouped(Group::Changed, rows, &folded, opened, first(usize::MAX));
+            let conflicts = files.iter().filter(|f| f.is_conflicted()).count();
+            let rows = files.into_iter().map(Entry::Changed).collect();
+            let branch = repository(Spot::Branch).and_then(|v| match v.listing {
+                Listing::Branch(branch) => Some(*branch),
+                _ => None,
+            });
+            let mut out = Vec::new();
+            if let Some(branch) = &branch {
+                out.push(Entry::Branch(BranchCard::of(branch)));
+                if let Some(operation) = branch.operation {
+                    out.push(Entry::Operation(OperationCard {
+                        operation,
+                        conflicts,
+                    }));
+                }
+            }
+            out.extend(grouped(
+                Group::Changed,
+                rows,
+                &folded,
+                opened,
+                first(usize::MAX),
+            ));
+            if let Some(comparison) = branch.as_ref().map(|b| &b.comparison)
+                && let Some(since) = &comparison.merge_base
+            {
+                let committed: Vec<Entry> = comparison
+                    .files
+                    .iter()
+                    .map(|f| Entry::Compared(Compared::new(since.clone(), f.clone())))
+                    .collect();
+                let shut: HashSet<Group> = (!alone && is_folded(details, Group::Branch))
+                    .then_some(Group::Branch)
+                    .into_iter()
+                    .collect();
+                out.extend(grouped(
+                    Group::Branch,
+                    committed,
+                    &shut,
+                    opened,
+                    first(usize::MAX),
+                ));
+            }
+            return out;
         }
         Component::Log => {
             let rows = match repository(Spot::Log).map(|v| v.listing) {
@@ -1096,8 +1205,11 @@ pub fn parts(details: &Details, work: Option<&WorkSnapshot>) -> Vec<Part> {
             let alone = !foot && in_tab == 1;
             let mut rows = rows_of(details, work, &placed, alone);
             if alone {
-                // The tab's own title names what it lists.
-                rows.retain(|e| !matches!(e, Entry::Heading { .. }));
+                // The tab's own title names what it lists, but not what the
+                // branch committed, which is a list of its own.
+                rows.retain(
+                    |e| !matches!(e, Entry::Heading { group, .. } if *group != Group::Branch),
+                );
             }
             let said = group_of(placed.component)
                 .map(|group| crate::details::said(group, &all_rows(details, work, &placed, group)));
@@ -1390,6 +1502,9 @@ pub(crate) fn sight(details: &Details) -> Sight {
     let mut spots = Vec::new();
     if has(Component::Change) || has(Component::Changes) {
         spots.push(Spot::Files(Rev::WorkingCopy));
+    }
+    if has(Component::Changes) {
+        spots.push(Spot::Branch);
     }
     if has(Component::Log) {
         spots.push(Spot::Log);
@@ -3046,7 +3161,10 @@ pub(crate) mod tests {
             .into_iter()
             .map(|r| r.spot)
             .collect();
-        assert_eq!(spots, [Spot::Files(Rev::WorkingCopy), Spot::Log]);
+        assert_eq!(
+            spots,
+            [Spot::Files(Rev::WorkingCopy), Spot::Branch, Spot::Log]
+        );
         assert_eq!(repository.system, Some(UsageSettings::NONE));
         let links = sight(
             "[panel.session]\nfoot = []\n[[panel.session.tabs]]\ntitle = \"L\"\ncomponents = [\"links\"]\n",
@@ -3719,5 +3837,267 @@ pub(crate) mod tests {
             Effect::TypeInto { tab: Tab::Session(..), typing } if typing.len() == 2
         )));
         assert_eq!(git_effects(&asked), []);
+    }
+
+    /// The Changes tab of `/w` once the host read where the branch stands.
+    fn branching(
+        files: &[(&str, &str)],
+        operation: Option<tsumugi_model::repository::Operation>,
+        compared: Vec<tsumugi_model::repository::Change>,
+    ) -> Scenario {
+        use tsumugi_model::repository::{Branch, Compared as Status, Comparison, Head};
+        let branch = Branch {
+            head: Head::Branch("feature".into()),
+            operation,
+            chosen: None,
+            comparison: Comparison {
+                status: Status::Ready,
+                base: Some("origin/main".into()),
+                merge_base: Some("abc123".into()),
+                ahead: 2,
+                behind: 1,
+                added: 7,
+                removed: 3,
+                files: compared,
+            },
+        };
+        changing(files).event(patch(3).change(DetailsChange::Repository {
+            worktree: "/w".into(),
+            read: RepositoryRead {
+                spot: Spot::Branch,
+                listing: Ok(Read::Branch(Box::new(branch))),
+                revision: None,
+            },
+        }))
+    }
+
+    fn rows(run: &Scenario) -> Vec<Entry> {
+        match entries_of(run) {
+            Some(Listing::Entries(rows)) => rows,
+            other => panic!("no rows: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_changes_say_how_the_branch_stands_and_list_what_it_committed_apart() {
+        let run = branching(
+            &[(" M", "a.rs")],
+            None,
+            vec![change_of("A", "new.rs"), change_of("M", "a.rs")],
+        );
+        let rows = rows(&run);
+        let Some(Entry::Branch(card)) = rows.first() else {
+            panic!("no branch row first: {rows:?}");
+        };
+        assert_eq!(
+            (card.head.as_str(), card.base.as_deref()),
+            ("feature", Some("origin/main"))
+        );
+        assert_eq!((card.ahead, card.behind), (2, 1));
+        assert_eq!((card.added, card.removed), (7, 3));
+        assert!(card.note.is_none());
+        assert!(!rows.iter().any(|e| matches!(e, Entry::Operation(_))));
+        let committed: Vec<_> = rows
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Compared(c) => Some((c.since.as_str(), c.change.path.as_str())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(committed, [("abc123", "new.rs"), ("abc123", "a.rs")]);
+        // The file the working copy and the branch both change has two rows.
+        let keys: Vec<&str> = rows.iter().map(Entry::key).collect();
+        assert_eq!(
+            keys.iter().filter(|k| k.ends_with("a.rs")).count(),
+            2,
+            "{keys:?}"
+        );
+        assert!(
+            rows.iter().any(|e| matches!(
+                e,
+                Entry::Heading {
+                    group: Group::Branch,
+                    count: 2,
+                    ..
+                }
+            )),
+            "{rows:?}"
+        );
+    }
+
+    #[test]
+    fn a_branch_that_could_not_be_compared_says_why_and_lists_nothing_committed() {
+        use tsumugi_model::repository::{Branch, Compared as Status, Comparison, Head};
+        let branch = Branch {
+            head: Head::Detached("abc1234".into()),
+            operation: None,
+            chosen: None,
+            comparison: Comparison {
+                status: Status::Unrelated(
+                    "this branch and origin/main share no commit in this shallow clone".into(),
+                ),
+                base: Some("origin/main".into()),
+                merge_base: None,
+                ahead: 0,
+                behind: 0,
+                added: 0,
+                removed: 0,
+                files: Vec::new(),
+            },
+        };
+        let card = BranchCard::of(&branch);
+        assert!(card.detached);
+        assert_eq!(card.head, "detached at abc1234");
+        assert!(card.note.as_deref().unwrap().contains("shallow"));
+    }
+
+    #[test]
+    fn an_unfinished_operation_shows_how_many_files_wait_on_it() {
+        use tsumugi_model::repository::Operation;
+        let run = branching(
+            &[("UU", "a.rs"), ("UU", "b.rs"), ("M ", "c.rs")],
+            Some(Operation::Merge),
+            Vec::new(),
+        );
+        let rows = rows(&run);
+        assert!(rows.iter().any(|e| matches!(
+            e,
+            Entry::Operation(OperationCard {
+                operation: Operation::Merge,
+                conflicts: 2
+            })
+        )));
+        // With nothing committed on the branch, no group is made of it.
+        assert!(!rows.iter().any(|e| matches!(e, Entry::Compared(_))));
+    }
+
+    #[test]
+    fn a_file_the_branch_committed_opens_its_diff_since_the_merge_base() {
+        let run = branching(&[], None, vec![change_of("A", "new.rs")]);
+        let at = rows(&run)
+            .iter()
+            .position(|e| matches!(e, Entry::Compared(_)))
+            .unwrap();
+        let opened = run.send(Msg::DetailsClick(at));
+        assert_eq!(
+            opened.state().details.drill.spot(),
+            Some(Spot::Diff(
+                Rev::Branch("abc123".into()),
+                change_of("A", "new.rs")
+            ))
+        );
+    }
+
+    #[test]
+    fn continuing_asks_the_work_host_at_once_and_aborting_asks_the_user_first() {
+        use tsumugi_model::repository::Operation;
+        use tsumugi_protocol::GitOp;
+        let run = branching(&[("UU", "a.rs")], Some(Operation::Rebase), Vec::new());
+        let resumed = run.send(Msg::DetailsKey(Key::Resume));
+        assert_eq!(git_effects(&resumed), [git(GitOp::Resume)]);
+        let asked = resumed.send(Msg::DetailsKey(Key::Abort));
+        assert_eq!(git_effects(&asked), []);
+        assert!(matches!(
+            asked.state().overlays.confirm,
+            Some(crate::overlay::confirm::Ask::AbortOperation {
+                operation: Operation::Rebase,
+                ..
+            })
+        ));
+        let yes = asked.send(Msg::ConfirmAnswer(true));
+        assert_eq!(git_effects(&yes), [git(GitOp::Abort)]);
+        let no = branching(&[], Some(Operation::Merge), Vec::new())
+            .send(Msg::DetailsKey(Key::Abort))
+            .send(Msg::ConfirmAnswer(false));
+        assert_eq!(git_effects(&no), []);
+    }
+
+    #[test]
+    fn aborting_with_nothing_in_progress_asks_nothing_and_says_so() {
+        let run = branching(&[], None, Vec::new()).send(Msg::DetailsKey(Key::Abort));
+        assert_eq!(run.state().overlays.confirm, None);
+        assert!(
+            run.last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::Notice(text) if text.contains("in progress")))
+        );
+    }
+
+    #[test]
+    fn resolving_opens_a_draft_that_asks_an_agent_for_the_files_in_conflict() {
+        use tsumugi_model::repository::Operation;
+        let run = branching(
+            &[("UU", "a.rs"), (" M", "fine.rs")],
+            Some(Operation::Merge),
+            Vec::new(),
+        )
+        .send(Msg::DetailsKey(Key::Resolve));
+        let text = run
+            .last_effects()
+            .iter()
+            .find_map(|e| match e {
+                Effect::PromptRestore { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("no prompt was written");
+        assert!(
+            text.contains("- a.rs") && !text.contains("fine.rs"),
+            "{text}"
+        );
+        assert!(text.contains("git merge --continue"), "{text}");
+        let none = changing(&[(" M", "fine.rs")]).send(Msg::DetailsKey(Key::Resolve));
+        assert!(
+            none.last_effects().iter().any(
+                |e| matches!(e, Effect::Notice(text) if text.contains("No file is in conflict"))
+            )
+        );
+        assert!(
+            !none
+                .last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::PromptRestore { .. }))
+        );
+    }
+
+    #[test]
+    fn a_file_in_conflict_opens_in_neovim_as_the_working_copys_diff() {
+        let run = changing(&[("UU", "a.rs")]).send(Msg::DetailsKey(Key::Neovim));
+        assert!(run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::StartDiffEditor {
+                spot: Spot::Diff(Rev::WorkingCopy, c), ..
+            } if c.path == "a.rs" && c.is_conflicted()
+        )));
+    }
+
+    #[test]
+    fn the_base_is_written_in_the_prompt_and_sending_it_chooses_it() {
+        use tsumugi_protocol::GitOp;
+        let writing = branching(&[], None, Vec::new())
+            .send(Msg::DetailsKey(Key::Base))
+            .send(Msg::PromptSend)
+            .send(taken("  origin/develop\nignored"));
+        assert_eq!(
+            git_effects(&writing),
+            [Effect::Git {
+                environment: here(),
+                worktree: "/w".into(),
+                op: GitOp::ChooseBase {
+                    base: Some("origin/develop".into())
+                },
+                prompt: true,
+            }]
+        );
+        let emptied = branching(&[], None, Vec::new())
+            .send(Msg::DetailsKey(Key::Base))
+            .send(Msg::PromptSend)
+            .send(taken(""));
+        assert!(git_effects(&emptied).iter().any(|e| matches!(
+            e,
+            Effect::Git {
+                op: GitOp::ChooseBase { base: None },
+                ..
+            }
+        )));
     }
 }

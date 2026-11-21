@@ -318,6 +318,12 @@ mod tests {
             },
             crate::GitOp::Push { lease: true },
             crate::GitOp::Pull,
+            crate::GitOp::Abort,
+            crate::GitOp::Resume,
+            crate::GitOp::ChooseBase {
+                base: Some("origin/日本語".into()),
+            },
+            crate::GitOp::ChooseBase { base: None },
             crate::GitOp::CreatePull {
                 base: Some("main".into()),
                 title: "core: 日本語".into(),

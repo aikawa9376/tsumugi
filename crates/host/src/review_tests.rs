@@ -149,3 +149,94 @@ end })
         );
     }
 }
+
+/// What the plugin was asked to open for `scope`, run in `dir`.
+fn plugin_args(dir: &std::path::Path, scope: &Spot) -> Vec<String> {
+    let record = dir.join("args.json");
+    let script = dir.join("record.lua");
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+package.preload.diffview = function() return {{ open = function(args)
+  local file = io.open({record:?}, 'w')
+  file:write(vim.json.encode(args))
+  file:close()
+end }} end
+vim.api.nvim_create_autocmd('VimEnter', {{ once = true, callback = function()
+  vim.defer_fn(function() vim.cmd('qa!') end, 50)
+end }})
+"#
+        ),
+    )
+    .unwrap();
+    let output = std::process::Command::new(tsumugi_nvim::program())
+        .args(["--headless", "-i", "NONE", "--noplugin", "-u"])
+        .arg(&script)
+        .arg("-c")
+        .arg(format!("lua {}", include_str!("../nvim/review.lua")))
+        .current_dir(dir)
+        .env("TSUMUGI_REVIEW", serde_json::to_string(scope).unwrap())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_str(&std::fs::read_to_string(record).unwrap()).unwrap()
+}
+
+#[test]
+fn a_file_in_conflict_and_a_branch_are_handed_to_the_plugin_as_what_they_are() {
+    let dir = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .args(["-c", "user.name=a", "-c", "user.email=a@b"])
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .unwrap()
+                .status
+                .success(),
+            "git {args:?}"
+        );
+    };
+    git(&["init", "-q", "-b", "main"]);
+    std::fs::write(dir.path().join(".git/info/exclude"), "*.lua\n*.json\n").unwrap();
+    std::fs::write(dir.path().join("f.txt"), "one\n").unwrap();
+    git(&["add", "f.txt"]);
+    git(&["commit", "-qm", "one"]);
+    let since = String::from_utf8(
+        std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    let change = |status: &str| tsumugi_model::repository::Change {
+        status: status.into(),
+        path: "f.txt".into(),
+        from: None,
+    };
+    assert_eq!(
+        plugin_args(dir.path(), &Spot::Diff(Rev::WorkingCopy, change("UU"))),
+        ["--", "f.txt"]
+    );
+    assert_eq!(
+        plugin_args(
+            dir.path(),
+            &Spot::Diff(Rev::Branch(since.clone()), change("M"))
+        ),
+        [format!("{since}..HEAD"), "--".into(), "f.txt".into()]
+    );
+    assert_eq!(
+        plugin_args(dir.path(), &Spot::Files(Rev::Branch(since.clone()))),
+        [format!("{since}..HEAD")]
+    );
+}

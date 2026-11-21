@@ -382,6 +382,21 @@ pub(crate) fn perform(
         Action::DetailsDraftPull if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::DraftPull))
         }
+        Action::DetailsAbort if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Abort))
+        }
+        Action::DetailsResume if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Resume))
+        }
+        Action::DetailsBase if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Base))
+        }
+        Action::DetailsResolve if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Resolve))
+        }
+        Action::DetailsNeovim if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Neovim))
+        }
         Action::DetailsStage
         | Action::DetailsStageAll
         | Action::DetailsDiscard
@@ -391,7 +406,12 @@ pub(crate) fn perform(
         | Action::DetailsPush
         | Action::DetailsForcePush
         | Action::DetailsCreatePull
-        | Action::DetailsDraftPull => Vec::new(),
+        | Action::DetailsDraftPull
+        | Action::DetailsAbort
+        | Action::DetailsResume
+        | Action::DetailsBase
+        | Action::DetailsResolve
+        | Action::DetailsNeovim => Vec::new(),
         Action::CursorDown
         | Action::CursorUp
         | Action::CursorFirst

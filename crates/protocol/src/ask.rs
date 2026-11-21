@@ -294,6 +294,13 @@ pub enum GitOp {
     Push { lease: bool },
     /// Pull the branch's upstream.
     Pull,
+    /// Give up the merge, rebase, cherry-pick or revert in progress.
+    Abort,
+    /// Go on with the operation in progress once its conflicts are resolved.
+    Resume,
+    /// Compare the branch with `base` from now on, or with the one found
+    /// when none is given.
+    ChooseBase { base: Option<String> },
     /// Push the branch and open a pull request for it on GitHub, into `base`
     /// or the repository's default branch.
     CreatePull {

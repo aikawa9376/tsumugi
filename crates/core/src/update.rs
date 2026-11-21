@@ -119,6 +119,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             if area != crate::content::Area::Prompt {
                 state.prompt.committing = None;
                 state.prompt.pulling = None;
+                state.prompt.basing = None;
                 state.prompt.writing = None;
             }
             content::focus(&mut state.content, area)
@@ -264,6 +265,16 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             None => Vec::new(),
         },
         Msg::DetailsKey(details::Key::DraftPull) => prompt::pull_request::ask_agent(state),
+        Msg::DetailsKey(details::Key::Abort) => overlay::ask_abort(state),
+        Msg::DetailsKey(details::Key::Base) => match state.details.shown.worktree.clone() {
+            Some(worktree) => {
+                let environment = state.details.shown.environment.clone();
+                prompt::base::begin(state, environment, worktree)
+            }
+            None => Vec::new(),
+        },
+        Msg::DetailsKey(details::Key::Resolve) => details::resolve(state),
+        Msg::DetailsKey(details::Key::Neovim) => details::open_in_neovim(state),
         Msg::DetailsKey(details::Key::Commit) => match state.details.shown.worktree.clone() {
             Some(worktree) => {
                 let environment = state.details.shown.environment.clone();
