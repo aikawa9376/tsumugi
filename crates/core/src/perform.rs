@@ -115,6 +115,13 @@ pub(crate) fn perform(
         | Action::ReviewResolve
         | Action::ReviewSend
         | Action::ReviewDraft
+        | Action::GithubNext
+        | Action::GithubPrev
+        | Action::GithubComment
+        | Action::GithubReply
+        | Action::GithubResolve
+        | Action::GithubReact
+        | Action::GithubReview
         | Action::OverlayClose
         | Action::OverlayDown
         | Action::OverlayUp

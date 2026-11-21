@@ -10,8 +10,10 @@ use crate::{Error, run};
 
 mod create;
 mod thread;
+mod write;
 pub use create::*;
 pub use thread::*;
+pub use write::write;
 
 /// The most items of a listing read.
 pub const LIMIT: usize = 30;

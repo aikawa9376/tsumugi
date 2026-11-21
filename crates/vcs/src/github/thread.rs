@@ -5,7 +5,8 @@ use std::path::Path;
 use base64::Engine;
 use serde::Deserialize;
 use tsumugi_model::github::{
-    Check, Did, FileChange, Image, Item, Label, Listing, Outcome, Post, Pull, Thread,
+    Check, Did, FileChange, Image, Item, Label, Listing, Outcome, Post, Pull, REACTIONS, Reaction,
+    ReviewThread, Thread,
 };
 
 use super::{reason, remote};
@@ -45,7 +46,7 @@ pub async fn thread(root: &Path, listing: Listing, number: u64) -> Result<Thread
         ),
         Listing::Issues => (None, String::new()),
     };
-    let (mut thread, texts) = read(&issue, pull.as_deref(), &comments, &reviews)?;
+    let (mut thread, mut texts) = read(&issue, pull.as_deref(), &comments, &reviews)?;
     if let Some(sha) = pull.as_deref().and_then(head_of) {
         // What cannot be read of them leaves them unlisted, not the thread
         // unread.
@@ -59,6 +60,15 @@ pub async fn thread(root: &Path, listing: Listing, number: u64) -> Result<Thread
         );
         thread.files = files(&files_read.unwrap_or_default());
         thread.checks = checks(&runs.unwrap_or_default(), &statuses.unwrap_or_default());
+        // What only GraphQL tells is left out when it cannot be read: the
+        // comments on lines and the viewed marks are not drawn, and writing
+        // to them is refused for want of their ids.
+        if let Some((owner, name)) = slug.split_once('/')
+            && let Ok(out) = graphql(root, owner, name, number).await
+            && let Ok(graph) = graph(&out)
+        {
+            merge(&mut thread, &mut texts, graph);
+        }
     }
     let mut wanted: Vec<(String, String)> = Vec::new();
     for (written, fetched) in texts.iter().flat_map(images) {
@@ -94,6 +104,39 @@ async fn api(root: &Path, path: &str, items: Option<&str>) -> Result<String, Str
         Err(Error::Failed { stderr, .. }) => Err(reason(&stderr)),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// What the GraphQL query for a [`Graph`] answers for the pull request
+/// `number` of `owner/name`.
+async fn graphql(root: &Path, owner: &str, name: &str, number: u64) -> Result<String, String> {
+    let query = format!("query={GRAPH_QUERY}");
+    let (owner, name, number) = (
+        format!("owner={owner}"),
+        format!("name={name}"),
+        format!("number={number}"),
+    );
+    let args = [
+        "api", "graphql", "-f", &query, "-F", &owner, "-F", &name, "-F", &number,
+    ];
+    match run("gh", &args, Some(root)).await {
+        Ok(out) => Ok(out),
+        Err(Error::Failed { stderr, .. }) => Err(reason(&stderr)),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// `graph` added to `thread`: the pull request's id, the files marked
+/// viewed, and the comments on lines among the rest said, oldest first.
+fn merge(thread: &mut Thread, texts: &mut Vec<Text>, graph: Graph) {
+    thread.pull_id = graph.id;
+    for file in &mut thread.files {
+        file.viewed = graph.viewed.contains(&file.path);
+    }
+    for (posts, text) in graph.threads {
+        thread.said.extend(posts);
+        texts.extend(text);
+    }
+    thread.said.sort_by(|a, b| a.at.cmp(&b.at));
 }
 
 /// A text written on GitHub: its Markdown and, where GitHub gave it, the
@@ -147,6 +190,8 @@ fn read(
         #[serde(default)]
         assignees: Vec<User>,
         milestone: Option<Titled>,
+        node_id: Option<String>,
+        reactions: Option<serde_json::Map<String, serde_json::Value>>,
     }
     #[derive(Deserialize)]
     struct Ref {
@@ -179,6 +224,8 @@ fn read(
         state: String,
         created_at: Option<String>,
         submitted_at: Option<String>,
+        node_id: Option<String>,
+        reactions: Option<serde_json::Map<String, serde_json::Value>>,
     }
     let unread = |e: serde_json::Error| format!("GitHub answered what cannot be read: {e}");
     let text = |markdown: Option<String>, html: Option<String>| Text {
@@ -205,6 +252,8 @@ fn read(
             Did::Commented,
             at,
             text(c.body, c.body_html),
+            c.node_id.unwrap_or_default(),
+            counted(c.reactions.as_ref()),
         )
     });
     let reviews = each(reviews)?.into_iter().filter_map(|r| {
@@ -217,11 +266,20 @@ fn read(
             _ => Did::Reviewed,
         };
         let at = r.submitted_at.clone().unwrap_or_default();
-        Some((login(&r.user), did, at, text(r.body, r.body_html)))
+        Some((
+            login(&r.user),
+            did,
+            at,
+            text(r.body, r.body_html),
+            r.node_id.unwrap_or_default(),
+            counted(r.reactions.as_ref()),
+        ))
     });
     let mut said: Vec<_> = comments.chain(reviews).collect();
     said.sort_by(|a, b| a.2.cmp(&b.2));
     let body = text(issue.body, issue.body_html);
+    let body_id = issue.node_id.unwrap_or_default();
+    let body_reactions = counted(issue.reactions.as_ref());
     let author = login(&issue.user);
     let texts = std::iter::once(body.clone())
         .chain(said.iter().map(|s| s.3.clone()))
@@ -254,21 +312,200 @@ fn read(
             did: Did::Opened,
             at: issue.created_at,
             body: body.markdown,
+            id: body_id,
+            reactions: body_reactions,
+            thread: None,
         },
         said: said
             .into_iter()
-            .map(|(author, did, at, text)| Post {
+            .map(|(author, did, at, text, id, reactions)| Post {
                 author,
                 did,
                 at,
                 body: text.markdown,
+                id,
+                reactions,
+                thread: None,
             })
             .collect(),
         images: Vec::new(),
         files: Vec::new(),
         checks: Vec::new(),
+        pull_id: String::new(),
     };
     Ok((thread, texts))
+}
+
+/// The reactions a post has, from the counts GitHub's API rolls them up
+/// into, those most given first.
+fn counted(rolled: Option<&serde_json::Map<String, serde_json::Value>>) -> Vec<Reaction> {
+    let mut out: Vec<Reaction> = REACTIONS
+        .iter()
+        .filter_map(|content| {
+            let count = rolled?.get(*content)?.as_u64()?;
+            (count > 0).then(|| Reaction {
+                content: (*content).into(),
+                count,
+            })
+        })
+        .collect();
+    out.sort_by_key(|r| std::cmp::Reverse(r.count));
+    out
+}
+
+/// What GitHub's GraphQL API tells of a pull request that its REST API does
+/// not: its id, the files the login marked viewed, and the threads of
+/// comments on lines.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Graph {
+    id: String,
+    viewed: Vec<String>,
+    /// Each thread as the posts of its comments, with the text each is
+    /// drawn from.
+    threads: Vec<(Vec<Post>, Vec<Text>)>,
+}
+
+/// The query for a [`Graph`].
+const GRAPH_QUERY: &str = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id files(first:100){nodes{path viewerViewedState}} reviewThreads(first:100){nodes{id isResolved path line comments(first:50){nodes{id body bodyHTML createdAt author{login} reactionGroups{content reactors{totalCount}}}}}}}}}";
+
+/// A [`Graph`] from what the query answered.
+fn graph(out: &str) -> Result<Graph, String> {
+    #[derive(Deserialize)]
+    struct Answer {
+        data: Option<Data>,
+    }
+    #[derive(Deserialize)]
+    struct Data {
+        repository: Option<Repository>,
+    }
+    #[derive(Deserialize)]
+    struct Repository {
+        #[serde(rename = "pullRequest")]
+        pull: Option<PullGraph>,
+    }
+    #[derive(Deserialize)]
+    struct Nodes<T> {
+        #[serde(default = "Vec::new")]
+        nodes: Vec<T>,
+    }
+    #[derive(Deserialize)]
+    struct PullGraph {
+        id: String,
+        files: Nodes<File>,
+        #[serde(rename = "reviewThreads")]
+        threads: Nodes<Threaded>,
+    }
+    #[derive(Deserialize)]
+    struct File {
+        path: String,
+        #[serde(rename = "viewerViewedState")]
+        state: String,
+    }
+    #[derive(Deserialize)]
+    struct Threaded {
+        id: String,
+        #[serde(rename = "isResolved")]
+        resolved: bool,
+        path: String,
+        line: Option<u64>,
+        comments: Nodes<Comment>,
+    }
+    #[derive(Deserialize)]
+    struct Comment {
+        id: String,
+        #[serde(default)]
+        body: String,
+        #[serde(rename = "bodyHTML", default)]
+        html: String,
+        #[serde(rename = "createdAt", default)]
+        at: String,
+        author: Option<User>,
+        #[serde(rename = "reactionGroups", default)]
+        reactions: Vec<Group>,
+    }
+    #[derive(Deserialize)]
+    struct Group {
+        content: String,
+        reactors: Total,
+    }
+    #[derive(Deserialize)]
+    struct Total {
+        #[serde(rename = "totalCount")]
+        count: u64,
+    }
+    let answer: Answer = serde_json::from_str(out)
+        .map_err(|e| format!("GitHub answered what cannot be read: {e}"))?;
+    let pull = answer
+        .data
+        .and_then(|d| d.repository)
+        .and_then(|r| r.pull)
+        .ok_or("GitHub does not know the pull request")?;
+    let graphql_name = |content: &str| match content {
+        "THUMBS_UP" => Some("+1"),
+        "THUMBS_DOWN" => Some("-1"),
+        "LAUGH" => Some("laugh"),
+        "CONFUSED" => Some("confused"),
+        "HEART" => Some("heart"),
+        "HOORAY" => Some("hooray"),
+        "ROCKET" => Some("rocket"),
+        "EYES" => Some("eyes"),
+        _ => None,
+    };
+    let threads = pull
+        .threads
+        .nodes
+        .into_iter()
+        .map(|t| {
+            let on = ReviewThread {
+                id: t.id,
+                resolved: t.resolved,
+                path: t.path,
+                line: t.line,
+            };
+            let mut posts = Vec::new();
+            let mut texts = Vec::new();
+            for c in t.comments.nodes {
+                let mut reactions: Vec<Reaction> = c
+                    .reactions
+                    .iter()
+                    .filter(|g| g.reactors.count > 0)
+                    .filter_map(|g| {
+                        Some(Reaction {
+                            content: graphql_name(&g.content)?.into(),
+                            count: g.reactors.count,
+                        })
+                    })
+                    .collect();
+                reactions.sort_by_key(|r| std::cmp::Reverse(r.count));
+                let markdown = c.body.trim().replace("\r\n", "\n");
+                posts.push(Post {
+                    author: login(&c.author),
+                    did: Did::Commented,
+                    at: c.at,
+                    body: markdown.clone(),
+                    id: c.id,
+                    reactions,
+                    thread: Some(on.clone()),
+                });
+                texts.push(Text {
+                    markdown,
+                    html: c.html,
+                });
+            }
+            (posts, texts)
+        })
+        .collect();
+    Ok(Graph {
+        id: pull.id,
+        viewed: pull
+            .files
+            .nodes
+            .into_iter()
+            .filter(|f| f.state == "VIEWED")
+            .map(|f| f.path)
+            .collect(),
+        threads,
+    })
 }
 
 /// The commit a pull request GitHub's API answered ends at.
@@ -309,6 +546,7 @@ fn files(out: &str) -> Vec<FileChange> {
             additions: f.additions,
             deletions: f.deletions,
             patch: f.patch,
+            viewed: false,
         })
         .collect()
 }
@@ -622,6 +860,7 @@ mod tests {
                 did: Did::Opened,
                 at: "2026-11-01T09:00:00Z".into(),
                 body: "It broke on tabs.".into(),
+                ..Default::default()
             }
         );
         let said: Vec<_> = thread
@@ -653,6 +892,108 @@ mod tests {
             (10, 2, 3)
         );
         assert_eq!(pull.requested, ["rev"]);
+    }
+
+    #[test]
+    fn what_is_said_carries_the_id_a_reaction_to_it_is_asked_by_and_its_counts() {
+        let issue = PULL_ISSUE.replace(
+            r#""state": "open""#,
+            r#""node_id": "I_1", "reactions": {"url": "u", "total_count": 3, "+1": 2, "-1": 0, "eyes": 1}, "state": "open""#,
+        );
+        let comments = r#"{"node_id": "IC_9", "user": {"login": "bob"}, "body": "Later.", "created_at": "2026-11-03T00:00:00Z", "reactions": {"heart": 4, "+1": 1, "rocket": 0}}"#;
+        let (thread, _) = read(&issue, None, comments, "").unwrap();
+        assert_eq!(thread.body.id, "I_1");
+        let reacted = |post: &Post| -> Vec<(String, u64)> {
+            post.reactions
+                .iter()
+                .map(|r| (r.content.clone(), r.count))
+                .collect()
+        };
+        assert_eq!(
+            reacted(&thread.body),
+            [("+1".to_string(), 2), ("eyes".to_string(), 1)]
+        );
+        assert_eq!(thread.said[0].id, "IC_9");
+        assert_eq!(
+            reacted(&thread.said[0]),
+            [("heart".to_string(), 4), ("+1".to_string(), 1)]
+        );
+    }
+
+    const GRAPH: &str = r#"{"data": {"repository": {"pullRequest": {
+        "id": "PR_1",
+        "files": {"nodes": [
+            {"path": "src/a.rs", "viewerViewedState": "VIEWED"},
+            {"path": "src/b.rs", "viewerViewedState": "UNVIEWED"}
+        ]},
+        "reviewThreads": {"nodes": [{
+            "id": "PRRT_1", "isResolved": true, "path": "src/a.rs", "line": 12,
+            "comments": {"nodes": [
+                {"id": "PRRC_1", "body": "Why?\r\n", "bodyHTML": "<p>Why?</p>",
+                 "createdAt": "2026-11-02T12:00:00Z", "author": {"login": "erin"},
+                 "reactionGroups": [{"content": "EYES", "reactors": {"totalCount": 2}},
+                                    {"content": "HEART", "reactors": {"totalCount": 0}}]},
+                {"id": "PRRC_2", "body": "Because.", "bodyHTML": "",
+                 "createdAt": "2026-11-04T12:00:00Z", "author": null, "reactionGroups": []}
+            ]}
+        }]}
+    }}}}"#;
+
+    #[test]
+    fn comments_on_lines_join_the_conversation_with_their_thread_and_files_their_viewed_marks() {
+        let comments =
+            r#"{"user": {"login": "bob"}, "body": "Later.", "created_at": "2026-11-03T00:00:00Z"}"#;
+        let (mut thread, mut texts) = read(PULL_ISSUE, Some(PULL), comments, "").unwrap();
+        thread.files = vec![
+            FileChange {
+                path: "src/a.rs".into(),
+                ..Default::default()
+            },
+            FileChange {
+                path: "src/b.rs".into(),
+                ..Default::default()
+            },
+        ];
+        merge(&mut thread, &mut texts, graph(GRAPH).unwrap());
+        assert_eq!(thread.pull_id, "PR_1");
+        assert_eq!(
+            thread.files.iter().map(|f| f.viewed).collect::<Vec<_>>(),
+            [true, false]
+        );
+        let said: Vec<_> = thread
+            .said
+            .iter()
+            .map(|p| (p.author.as_str(), p.body.as_str()))
+            .collect();
+        assert_eq!(
+            said,
+            [("erin", "Why?"), ("bob", "Later."), ("ghost", "Because.")]
+        );
+        let first = &thread.said[0];
+        assert_eq!(first.id, "PRRC_1");
+        assert_eq!(
+            first.thread,
+            Some(ReviewThread {
+                id: "PRRT_1".into(),
+                resolved: true,
+                path: "src/a.rs".into(),
+                line: Some(12),
+            })
+        );
+        assert_eq!(first.reactions.len(), 1);
+        assert_eq!(first.reactions[0].content, "eyes");
+        assert_eq!(thread.said[1].thread, None);
+        assert_eq!(
+            texts.len(),
+            4,
+            "the body, bob's comment and the two on lines"
+        );
+    }
+
+    #[test]
+    fn a_graphql_answer_without_the_pull_request_is_refused() {
+        assert!(graph(r#"{"data": {"repository": {"pullRequest": null}}}"#).is_err());
+        assert!(graph("nope").is_err());
     }
 
     #[test]

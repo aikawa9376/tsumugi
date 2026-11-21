@@ -83,13 +83,13 @@ pub fn thread_fragment(slug: &str, thread: &Thread, now_ms: u64) -> String {
         ));
     }
     out.push_str("</nav><div class=\"gh-pane\" data-pane=\"conversation\">");
-    for post in std::iter::once(&thread.body).chain(&thread.said) {
-        out.push_str(&card(post, thread, &when));
+    for (index, post) in thread.posts().enumerate() {
+        out.push_str(&card(index, post, thread, &when));
     }
     out.push_str("</div>");
     if pull {
         out.push_str("<div class=\"gh-pane\" data-pane=\"files\" hidden>");
-        out.push_str(&changed(&thread.files));
+        out.push_str(&changed(&thread.files, &thread.pull_id));
         out.push_str("</div><div class=\"gh-pane\" data-pane=\"checks\" hidden>");
         out.push_str(&checks(&thread.checks));
         out.push_str("</div>");
@@ -97,8 +97,9 @@ pub fn thread_fragment(slug: &str, thread: &Thread, now_ms: u64) -> String {
     out
 }
 
-/// The files a pull request changes, each as a card of its diff.
-fn changed(files: &[FileChange]) -> String {
+/// The files a pull request changes, each as a card of its diff, with a
+/// box to mark it viewed where the pull request's id is known.
+fn changed(files: &[FileChange], pull_id: &str) -> String {
     if files.is_empty() {
         return "<p class=\"gh-empty\">No file changes to show.</p>".into();
     }
@@ -117,8 +118,18 @@ fn changed(files: &[FileChange]) -> String {
         out.push_str(&format!(
             "<section class=\"gh-file\"><div class=\"gh-file-head\"><span class=\"{class}\">{letter}</span>\
              <span class=\"gh-file-path\">{path}</span><span class=\"gh-file-count\"><span class=\"gh-add\">+{}</span> \
-             <span class=\"gh-del\">−{}</span></span></div>",
-            file.additions, file.deletions,
+             <span class=\"gh-del\">−{}</span></span>{viewed}</div>",
+            file.additions,
+            file.deletions,
+            viewed = if pull_id.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<label class=\"gh-viewed\"><input type=\"checkbox\" data-viewed=\"{}\"{}> Viewed</label>",
+                    escape(&file.path),
+                    if file.viewed { " checked" } else { "" }
+                )
+            },
         ));
         match &file.patch {
             Some(patch) => out.push_str(&diff(patch)),
@@ -241,7 +252,7 @@ fn checks(checks: &[Check]) -> String {
 
 /// One post as a card: who wrote it, what it did and when, over what it
 /// wrote. A review that wrote nothing is its head alone.
-fn card(post: &Post, thread: &Thread, when: &dyn Fn(&str) -> String) -> String {
+fn card(index: usize, post: &Post, thread: &Thread, when: &dyn Fn(&str) -> String) -> String {
     let (class, mark) = match post.did {
         Did::Approved => (
             " gh-post-approved",
@@ -267,7 +278,7 @@ fn card(post: &Post, thread: &Thread, when: &dyn Fn(&str) -> String) -> String {
         ""
     };
     let mut out = format!(
-        "<section class=\"gh-post{class}{plain}\"><div class=\"gh-post-head\"><b>@{author}</b> {did} {mark} · {at}</div>",
+        "<section class=\"gh-post{class}{plain}\" data-card=\"{index}\"><div class=\"gh-post-head\"><b>@{author}</b> {did} {mark} · {at}{on}</div>",
         author = escape(&post.author),
         // A verdict is told by its mark.
         did = match post.did {
@@ -275,14 +286,54 @@ fn card(post: &Post, thread: &Thread, when: &dyn Fn(&str) -> String) -> String {
             did => did.words(),
         },
         at = when(&post.at),
+        on = match &post.thread {
+            Some(t) => format!(
+                " · <span class=\"gh-post-on\">{}{}</span>{}",
+                escape(&t.path),
+                t.line.map(|l| format!(":{l}")).unwrap_or_default(),
+                if t.resolved {
+                    " <span class=\"gh-post-mark gh-resolved\">Resolved</span>"
+                } else {
+                    ""
+                }
+            ),
+            None => String::new(),
+        },
     );
     if !shown.is_empty() {
         out.push_str(&format!(
             "<div class=\"gh-post-body markdown-body\">{shown}</div>"
         ));
     }
+    if !post.reactions.is_empty() {
+        out.push_str("<div class=\"gh-reactions\">");
+        for reaction in &post.reactions {
+            out.push_str(&format!(
+                "<span class=\"gh-reaction\" title=\"{name}\">{emoji} {count}</span>",
+                name = escape(&reaction.content),
+                emoji = emoji(&reaction.content),
+                count = reaction.count,
+            ));
+        }
+        out.push_str("</div>");
+    }
     out.push_str("</section>");
     out
+}
+
+/// A reaction as GitHub draws it.
+fn emoji(content: &str) -> &'static str {
+    match content {
+        "+1" => "👍",
+        "-1" => "👎",
+        "laugh" => "😄",
+        "confused" => "😕",
+        "heart" => "❤️",
+        "hooray" => "🎉",
+        "rocket" => "🚀",
+        "eyes" => "👀",
+        _ => "",
+    }
 }
 
 /// `body` with each image `thread` carries drawn from its bytes rather than
@@ -363,6 +414,7 @@ mod tests {
                 did: Did::Opened,
                 at: "2026-11-13T16:00:21Z".into(),
                 body: "It broke.\n\n![shot](https://github.com/a.png)".into(),
+                ..Default::default()
             },
             said: vec![
                 Post {
@@ -370,12 +422,14 @@ mod tests {
                     did: Did::Approved,
                     at: "2026-11-14T16:00:21Z".into(),
                     body: String::new(),
+                    ..Default::default()
                 },
                 Post {
                     author: "carol".into(),
                     did: Did::Commented,
                     at: "2026-11-15T16:00:21Z".into(),
                     body: "Thanks".into(),
+                    ..Default::default()
                 },
             ],
             images: vec![Image {
@@ -461,6 +515,69 @@ mod tests {
         assert!(page.contains("1 failing, 1 successful"));
         assert!(page.contains("<a href=\"https://x/1\">lint</a>"));
         assert!(!page.contains("javascript:"));
+    }
+
+    #[test]
+    fn each_card_is_numbered_so_the_key_that_selects_one_can_name_it() {
+        let page = thread_fragment("o/r", &thread(), NOW);
+        for index in 0..3 {
+            assert!(page.contains(&format!("data-card=\"{index}\"")), "{index}");
+        }
+        assert!(!page.contains("data-card=\"3\""));
+    }
+
+    #[test]
+    fn a_comment_on_lines_says_where_and_whether_its_thread_is_resolved() {
+        use tsumugi_model::github::{Reaction, ReviewThread};
+        let mut on_lines = thread();
+        on_lines.said[1].thread = Some(ReviewThread {
+            id: "PRRT_1".into(),
+            resolved: true,
+            path: "src/<a>.rs".into(),
+            line: Some(12),
+        });
+        on_lines.said[1].reactions = vec![
+            Reaction {
+                content: "heart".into(),
+                count: 2,
+            },
+            Reaction {
+                content: "<b>".into(),
+                count: 1,
+            },
+        ];
+        let page = thread_fragment("o/r", &on_lines, NOW);
+        assert!(page.contains("src/&lt;a&gt;.rs:12</span>"), "{page}");
+        assert!(page.contains("gh-resolved\">Resolved"), "{page}");
+        assert!(page.contains("❤️ 2"), "{page}");
+        assert!(!page.contains("<b>\""), "{page}");
+        on_lines.said[1].thread.as_mut().unwrap().resolved = false;
+        assert!(!thread_fragment("o/r", &on_lines, NOW).contains("Resolved"));
+    }
+
+    #[test]
+    fn a_file_has_a_box_to_mark_it_viewed_once_the_pull_request_is_known_whole() {
+        let mut pull = thread();
+        pull.files = vec![
+            FileChange {
+                path: "a\".rs".into(),
+                viewed: true,
+                ..Default::default()
+            },
+            FileChange {
+                path: "b.rs".into(),
+                ..Default::default()
+            },
+        ];
+        let without = thread_fragment("o/r", &pull, NOW);
+        assert!(!without.contains("data-viewed"), "{without}");
+        pull.pull_id = "PR_1".into();
+        let page = thread_fragment("o/r", &pull, NOW);
+        assert!(
+            page.contains("data-viewed=\"a&quot;.rs\" checked>"),
+            "{page}"
+        );
+        assert!(page.contains("data-viewed=\"b.rs\">"), "{page}");
     }
 
     #[test]

@@ -119,6 +119,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             if area != crate::content::Area::Prompt {
                 state.prompt.committing = None;
                 state.prompt.pulling = None;
+                state.prompt.writing = None;
             }
             content::focus(&mut state.content, area)
         }
@@ -351,6 +352,9 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         | Msg::PromptTaken(_)
         | Msg::PromptWent(_)
         | Msg::PullCreated { .. }
+        | Msg::GitHubCompose(_)
+        | Msg::GitHubWrite(_)
+        | Msg::GitHubWritten { .. }
         | Msg::PromptRetained
         | Msg::ComposeLapsed(_)) => prompt::update(state, msg),
 

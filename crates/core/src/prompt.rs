@@ -3,6 +3,7 @@
 //! sent before, which the work host reads.
 
 pub mod drafts;
+pub mod github_write;
 pub mod images;
 pub mod pull_request;
 pub mod send;
@@ -63,6 +64,9 @@ pub struct PromptView {
     /// The pull request the prompt is written for: its first line is the
     /// title, and what is sent from it opens the pull request.
     pub pulling: Option<pull_request::Pulling>,
+    /// What the prompt under a GitHub tab is written for; a new comment
+    /// where none.
+    pub writing: Option<github_write::Aim>,
 }
 
 /// A commit the prompt writes the message of.
@@ -91,6 +95,7 @@ impl Default for PromptView {
             commands: None,
             committing: None,
             pulling: None,
+            writing: None,
         }
     }
 }
@@ -229,6 +234,14 @@ pub(crate) fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             worktree,
             number,
         } => pull_request::created(state, environment, worktree, number),
+        Msg::GitHubCompose(aim) => github_write::begin(state, aim),
+        Msg::GitHubWrite(write) => github_write::at_once(state, write),
+        Msg::GitHubWritten {
+            environment,
+            repository,
+            listing,
+            number,
+        } => github_write::written(state, environment, repository, listing, number),
         Msg::PromptRetained => send::retained(state),
         Msg::ComposeLapsed(asked) => send::lapsed(state, asked),
         Msg::ImageSelect(path) => {

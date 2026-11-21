@@ -173,6 +173,29 @@ A worktree where something runs is closed the same ways: it asks first, then
 ends every session and terminal running there, and its row goes while its
 workspace stays listed.
 
+## Writing on a pull request or an issue
+
+The tab of a pull request or an issue shows the prompt, and what is written
+there is written on GitHub, as the login `gh` uses on the work machine,
+from a work machine too. Sending the prompt posts it as a new comment. Keys of
+the tab ([keys](reference/keys.md#actions)) prepare the prompt for more: one
+selects a card of the conversation, and the others reply to it, react to it,
+resolve the thread of lines it belongs to, write a comment, or write a review
+of a pull request, which approves it, asks for changes or only comments. A
+reply goes into the card's thread of lines, where it has one, and otherwise is
+a comment quoting the card. Comments on lines of the files are drawn among
+the conversation, with where they are and whether their thread is resolved;
+starting a new one on a line is not offered here. A file of a pull request
+has a box to mark it viewed.
+
+Nothing is written on GitHub but by sending the prompt, by the key that
+resolves a thread and by that box. A write that fails, because the work
+machine is offline, `gh` is logged out or GitHub refuses the login, says why
+in GitHub's words and leaves the text in the prompt to be sent again.
+Leaving the prompt gives a prepared write up, and the text stays. A comment
+or review that is posted is never edited or deleted from here, and neither
+is anyone else's.
+
 ## Making and deleting worktrees
 
 A worktree is made from the tree, by the `+` of a workspace or a worktree, its

@@ -453,6 +453,18 @@ pub enum Msg {
         worktree: std::path::PathBuf,
         number: u64,
     },
+    /// Write in the prompt under the GitHub tab shown for `aim`.
+    GitHubCompose(crate::prompt::github_write::Aim),
+    /// Write `write` on what the GitHub tab shown shows, at once.
+    GitHubWrite(tsumugi_model::github::Write),
+    /// A write on the pull request or issue `number` of the repository was
+    /// done by the work host.
+    GitHubWritten {
+        environment: tsumugi_model::EnvironmentId,
+        repository: std::path::PathBuf,
+        listing: tsumugi_model::github::Listing,
+        number: u64,
+    },
     /// A send ended while its original text stayed in the prompt.
     PromptRetained,
     /// The host has been asked long enough to compose the prompt numbered so.

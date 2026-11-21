@@ -1,6 +1,7 @@
 /* One line however many tabs there are, so the console keeps its height; the rest scrolls sideways. */
 .tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; align-items: center; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex: none; }
 .tabs::-webkit-scrollbar { display: none; }
+.github-screen { position: absolute; inset: 0 0 var(--composer, 0px); display: flex; }
 .conversation-screen { position: absolute; inset: 0 0 var(--composer, 0px); display: flex; flex-direction: column; background: var(--ground); }
 .conversation-heading { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: var(--ui-font-small); color: var(--text); }
 .conversation-hint { flex: 1; color: var(--text-3); }

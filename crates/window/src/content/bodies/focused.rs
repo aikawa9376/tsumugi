@@ -255,3 +255,67 @@ pub(crate) fn FocusedBody(
         }
     }
 }
+
+/// A pull request's or an issue's window with the prompt under it while the
+/// window has the keys: what is written there is written on GitHub.
+#[component]
+pub(crate) fn GithubFrame(focused: bool, target: String, children: Element) -> Element {
+    let app = use_context::<AppCtx>();
+    let consoles = use_context::<Consoles>();
+    let Consoles {
+        nvim,
+        prompt_frame,
+        prompt_view,
+        prompt_rows,
+        cell_width,
+        composer_height,
+        prompt_width,
+        prompts,
+        ..
+    } = consoles;
+    let area = app.content.read().focus;
+    let room = if focused {
+        composer_height() + 22.0
+    } else {
+        0.0
+    };
+    let (prompt_shell, shown_images, selected_image) = {
+        let prompt = app.prompt.read();
+        (prompt.shell, prompt.images.clone(), prompt.selected.clone())
+    };
+    let km = app.chrome.read().keymap.clone();
+    let k_send = km.keys_for(Context::Prompt, &Action::PromptSend);
+    let cw = cell_width();
+    rsx! {
+        div { class: "console", style: "--composer:{room}px",
+            div { class: "github-screen", {children} }
+            if focused {
+                Composer {
+                    nvim,
+                    prompt_frame,
+                    cell_width: cw,
+                    focused: area == Area::Prompt,
+                    target,
+                    composer_height,
+                    prompt_width,
+                    onpick: move |_| {
+                        app.dispatch(Msg::ImageSelect(None));
+                        if !consoles.writing() {
+                            consoles.start_writing();
+                        }
+                    },
+                    send_keys: k_send,
+                    view: prompt_view(),
+                    rows: prompt_rows(),
+                    shell: prompt_shell,
+                    answering: false,
+                    images: shown_images,
+                    image_keys: km.keys_for(Context::Prompt, &Action::PromptImages),
+                    selected_image,
+                    onselectimage: move |path| app.dispatch(Msg::ImageSelect(Some(path))),
+                    onremoveimage: move |path| { let _ = prompts.send(Op::RemoveImage(path)); },
+                }
+            }
+        }
+    }
+}

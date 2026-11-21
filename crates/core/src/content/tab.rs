@@ -80,7 +80,8 @@ pub enum Tab {
 
 /// Whether the prompt is shown under the console of a window showing `tab`, or
 /// with nothing open: a shell takes every key in the console itself, and a
-/// viewer has no console.
+/// viewer has no console. The prompt under a GitHub tab writes on the pull
+/// request or issue it shows.
 pub fn shows_prompt(tab: Option<&Tab>) -> bool {
     !matches!(
         tab,
@@ -89,7 +90,6 @@ pub fn shows_prompt(tab: Option<&Tab>) -> bool {
                 | Tab::Browser { .. }
                 | Tab::Viewer(..)
                 | Tab::Drawn { .. }
-                | Tab::GitHub { .. }
                 | Tab::Diff { .. }
         )
     )

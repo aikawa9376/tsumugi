@@ -173,6 +173,19 @@ pub enum Effect {
         op: tsumugi_protocol::GitOp,
         prompt: bool,
     },
+    /// Write `write` on the pull request or issue `number` of the repository
+    /// at `repository`, as the work host's `gh` login. With `prompt`, it is
+    /// the prompt's text being sent, put back if it failed: the window
+    /// tells the update with [`crate::msg::Msg::PromptWent`]; and either
+    /// way it tells [`crate::msg::Msg::GitHubWritten`] once it is done.
+    GitHubWrite {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        listing: tsumugi_model::github::Listing,
+        number: u64,
+        write: tsumugi_model::github::Write,
+        prompt: bool,
+    },
     /// Open a terminal running the CLI's own login where this profile runs
     /// it, and show it.
     OpenLogin {

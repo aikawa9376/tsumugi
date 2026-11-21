@@ -124,7 +124,11 @@ pub fn help_contexts(area: Area, shown: Option<&Tab>) -> Vec<Context> {
                 Some(Tab::Viewer(_, _) | Tab::GitHub { .. } | Tab::Diff { .. })
             ) =>
         {
-            &[Context::Viewer, Context::Global]
+            if matches!(shown, Some(Tab::GitHub { .. })) {
+                &[Context::GitHub, Context::Viewer, Context::Global]
+            } else {
+                &[Context::Viewer, Context::Global]
+            }
         }
         _ => footer_contexts(area),
     };

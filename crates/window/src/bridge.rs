@@ -1003,6 +1003,64 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::GitHubWrite {
+                environment,
+                repository,
+                listing,
+                number,
+                write,
+                prompt,
+            } => {
+                let made = self.ask_in(
+                    &environment,
+                    Ask::GitHubWrite {
+                        repository: repository.clone(),
+                        listing,
+                        number,
+                        write,
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    match made.await {
+                        Answer::Told { text } => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(true));
+                            }
+                            app.dispatch(Msg::GitHubWritten {
+                                environment,
+                                repository,
+                                listing,
+                                number,
+                            });
+                            app.notice(text);
+                        }
+                        // Nothing was written: what was typed goes back to
+                        // the prompt, and GitHub's own words stay on screen.
+                        Answer::Failed { text } => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(false));
+                            } else {
+                                // A box pressed in the page shows what was not
+                                // written: read the page again to undo it.
+                                app.dispatch(Msg::GitHubWritten {
+                                    environment,
+                                    repository,
+                                    listing,
+                                    number,
+                                });
+                            }
+                            app.status(Some(text));
+                        }
+                        answer => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(false));
+                            }
+                            app.notice(format!("the work host answered {answer:?}"));
+                        }
+                    }
+                });
+            }
             Effect::Copy { text, done } => {
                 let told = match crate::clipboard::copy_to_clipboard(&text) {
                     Ok(()) => done,

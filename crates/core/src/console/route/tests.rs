@@ -178,6 +178,35 @@ fn a_key_is_looked_up_where_the_keys_are_and_only_globally_while_they_pass_on() 
 }
 
 #[test]
+fn a_pull_request_or_an_issue_has_keys_of_its_own_before_the_viewer_s() {
+    use crate::actions::Action;
+    use crate::keymap::{Keymap, Step};
+    use tsumugi_model::Key;
+    let tab = Tab::GitHub {
+        environment: here(),
+        repository: "/r".into(),
+        listing: tsumugi_model::github::Listing::Pulls,
+        number: 7,
+    };
+    let contexts = help_contexts(Area::Console, Some(&tab));
+    assert_eq!(
+        contexts,
+        vec![Context::GitHub, Context::Viewer, Context::Global]
+    );
+    let map = Keymap::defaults();
+    let press = |contexts: &[Context], key: &str| map.resolve(contexts, &[], &Key::new(key));
+    // `r` replies in a pull request's tab and resolves a comment in a diff.
+    assert_eq!(press(&contexts, "r"), Step::Run(Action::GithubReply));
+    assert_eq!(
+        press(&[Context::Viewer, Context::Global], "r"),
+        Step::Run(Action::ReviewResolve)
+    );
+    // `+` reacts there, and `=` still zooms.
+    assert_eq!(press(&contexts, "+"), Step::Run(Action::GithubReact));
+    assert_eq!(press(&contexts, "="), Step::Run(Action::ViewerZoomIn));
+}
+
+#[test]
 fn the_footer_names_what_the_keys_do_where_they_are() {
     let session = Tab::Session(here(), "s".into());
     let shell = Tab::Terminal(here(), 1);

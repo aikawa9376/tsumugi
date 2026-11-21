@@ -17,6 +17,12 @@
 .gh-tab.on{color:var(--fgColor-default);font-weight:600;border-bottom-color:#fd8c73}
 .gh-count{display:inline-block;min-width:18px;margin-left:4px;padding:0 6px;border-radius:999px;font-size:12px;line-height:18px;text-align:center;background:var(--bgColor-neutral-muted,rgba(175,184,193,.2))}
 .gh-post{margin:0 0 16px;border:1px solid var(--borderColor-default);border-radius:6px;overflow:hidden}
+.gh-post.gh-selected{border-color:var(--fgColor-accent,#0969da);box-shadow:0 0 0 1px var(--fgColor-accent,#0969da)}
+.gh-post-on{font-family:var(--fontStack-monospace,monospace);font-size:12px}
+.gh-resolved{color:#fff;background:#8250df}
+.gh-reactions{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}
+.gh-reaction{padding:0 8px;border:1px solid var(--borderColor-default);border-radius:999px;font-size:12px;line-height:22px;color:var(--fgColor-muted)}
+.gh-viewed{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--fgColor-muted);cursor:pointer}
 .gh-post-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;font-size:14px;color:var(--fgColor-muted);background:var(--bgColor-muted);border-bottom:1px solid var(--borderColor-default)}
 .gh-post-head b{color:var(--fgColor-default)}
 .gh-post-head time{cursor:default}

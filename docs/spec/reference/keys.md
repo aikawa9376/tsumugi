@@ -168,6 +168,13 @@ changes them ([keys](../keys.md)).
 | `review.resolve` |  | in a diff of lines, resolve the comment on the line the cursor is on, or open it again; only this resolves a comment | `viewer`: `r` |
 | `review.send` |  | in a diff of lines, show the prompt that carries every comment not resolved; shown, send it to the session chosen with the movement keys | `viewer`: `s` |
 | `review.draft` |  | in a diff of lines, or in the prompt shown, write the prompt in a new session's draft in the worktree instead of sending it | `viewer`: `S` |
+| `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
+| `github.prev` |  | in a pull request's or an issue's tab, select the previous card of its conversation | `github`: `N` |
+| `github.comment` |  | in a pull request's or an issue's tab, write a new comment in the prompt under it; sending the prompt posts it, and leaving the prompt gives it up | `github`: `c` |
+| `github.reply` |  | in a pull request's or an issue's tab, reply to the card selected: in its thread of lines when it belongs to one, otherwise as a comment that quotes it | `github`: `r` |
+| `github.resolve` |  | in a pull request's tab, resolve the thread of lines the card selected belongs to, or open it again | `github`: `R` |
+| `github.react` |  | in a pull request's or an issue's tab, react to the card selected: write `React:` and one of GitHub's eight reactions in the prompt, or `Unreact:` to take one back | `github`: `Plus` |
+| `github.review` |  | in a pull request's tab, write a review in the prompt: `Review:` and approve, request-changes or comment on its first line, then your words; sending the prompt submits it | `github`: `v` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -502,6 +509,15 @@ changes them ([keys](../keys.md)).
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"
+
+[github]
+"n" = "github.next"
+"N" = "github.prev"
+"c" = "github.comment"
+"r" = "github.reply"
+"R" = "github.resolve"
+"Plus" = "github.react"
+"v" = "github.review"
 
 [lightbox]
 "l" = "lightbox.next"

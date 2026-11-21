@@ -375,6 +375,43 @@ mod tests {
                 number: 3,
             }),
         });
+        for write in [
+            tsumugi_model::github::Write::Comment {
+                body: "日本語 -x".into(),
+            },
+            tsumugi_model::github::Write::Reply {
+                thread: "PRRT_1".into(),
+                body: "Done.".into(),
+            },
+            tsumugi_model::github::Write::Resolve {
+                thread: "PRRT_1".into(),
+                resolved: true,
+            },
+            tsumugi_model::github::Write::React {
+                subject: "IC_1".into(),
+                content: "+1".into(),
+                add: false,
+            },
+            tsumugi_model::github::Write::Review {
+                verdict: tsumugi_model::github::Verdict::RequestChanges,
+                body: "Fix.".into(),
+            },
+            tsumugi_model::github::Write::Viewed {
+                pull: "PR_1".into(),
+                path: "a.rs".into(),
+                viewed: true,
+            },
+        ] {
+            round_trips(Request::Ask {
+                asked: 14,
+                ask: Box::new(crate::Ask::GitHubWrite {
+                    repository: "/w".into(),
+                    listing: tsumugi_model::github::Listing::Pulls,
+                    number: 3,
+                    write,
+                }),
+            });
+        }
         round_trips(Request::History {
             asked: 3,
             agent: tsumugi_model::Agent::Claude,
