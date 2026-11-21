@@ -86,6 +86,7 @@ fn App() -> Element {
             crate::adding::AddingSheet {}
             crate::local_issues::LocalIssues {}
             crate::resource_sheet::ResourceSheet {}
+            super::composer::ComposerDialog {}
             ConfirmDialog {}
             super::lightbox::Lightbox {}
         }

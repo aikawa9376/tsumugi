@@ -138,6 +138,8 @@
 "A" = "workspace.add"
 "!" = "worktrees.toggle"
 "c" = "saved_commands.open"
+"W" = "worktree.new"
+"D" = "worktree.delete"
 "N" = "file.new"
 "K" = "directory.new"
 "}" = "workspace.next"

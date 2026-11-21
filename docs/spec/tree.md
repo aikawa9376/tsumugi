@@ -166,6 +166,34 @@ A worktree where something runs is closed the same ways: it asks first, then
 ends every session and terminal running there, and its row goes while its
 workspace stays listed.
 
+## Making and deleting worktrees
+
+A worktree is made from the tree, by the `+` of a workspace or a worktree, its
+menu or its key ([keys](reference/keys.md#actions)). A dialog asks for its
+name, where it starts from and, if wanted, the branch it works on. It starts
+from the repository's checkout, a local branch, a branch of a remote, which is
+fetched first so it is as the remote has it, or any revision typed, a commit
+for one. The new branch is named after the worktree's directory unless given
+one; a worktree made from a remote's branch does not push to it.
+
+Once the dialog is answered it closes and the worktree is made in the
+background: a row under its workspace says which step it is at, and a session's
+draft opens in the worktree when it is made. A worktree that cannot be made, for
+a branch or a directory that is taken, a name git refuses, a start that is no
+revision or a remote that cannot be fetched, leaves nothing behind and its row
+stays with the reason until it is put away. Work already in the repository is
+never touched. This works for a repository on a work machine as for one on this
+computer, and for a directory outside git it says it has no worktrees.
+
+A worktree is deleted from its row, which asks first. The question says what
+deleting loses: the files changed and not committed, the commits pushed nowhere,
+and what runs in the worktree, which ends first. A worktree with changes is
+deleted only when the question is answered to discard them. The main checkout and
+a locked worktree are never deleted. Its branch goes with it when its commits are
+all merged or pushed; otherwise it is kept, and the question offers to delete it
+too, saying how many commits that loses. A branch git refuses to delete is left,
+and the status line says so. When deleting fails, nothing is lost.
+
 The filter at the top of the tree narrows it as it is typed into, by the
 fuzzy match the pickers use, fzf's syntax included, on the names of
 sessions, terminals, worktrees and workspaces; a worktree or a workspace that

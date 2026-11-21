@@ -113,6 +113,7 @@ pub(crate) fn Body() -> Element {
                     onclose: EventHandler::new(move |item: Item| {
                         let action = match item {
                             Item::Worktree(..) => Action::WorktreeClose,
+                            Item::Pending(..) => Action::CursorClose,
                             _ => Action::WorkspaceRemove,
                         };
                         app.dispatch(Msg::MenuRun { target: Target::Row(item), action });

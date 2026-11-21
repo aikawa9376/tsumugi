@@ -104,6 +104,8 @@ pub enum Action {
     SavedCommands,
     WorkspaceRemove,
     WorktreeClose,
+    WorktreeNew,
+    WorktreeDelete,
     WindowClose,
     WindowOpen,
     Refresh,
@@ -440,6 +442,12 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeClose, "worktree.close", "end, after asking, every session and terminal running in the worktree selected in the tree, which takes its row out of it; the workspace stays listed ([details](tree.md#workspaces-and-worktrees))")
         .icon(Icon::X)
         .row("Close worktree…", End),
+    S::new(A::WorktreeNew, "worktree.new", "open the dialog asking for a new worktree of the repository of the workspace or worktree selected in the tree: its name, where it starts, listed from the repository's branches or given as a commit, and optionally the branch it works on; it is made in the background, a row in the tree showing how far it has come, and a new session's draft opens in it once it is made ([details](tree.md#making-and-deleting-worktrees))")
+        .icon(Icon::GitBranch)
+        .row("New worktree…", Start),
+    S::new(A::WorktreeDelete, "worktree.delete", "delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](tree.md#making-and-deleting-worktrees))")
+        .icon(Icon::Trash)
+        .row("Delete worktree…", End),
     S::new(A::WindowClose, "window.close", "close the window; the instance's other windows stay open, and its sessions run on").bar("Close Window", Icon::AppWindow),
     S::new(A::WindowOpen, "window.open", "open another window of the instance ([windows](sessions.md#windows))").bar("New Window", Icon::CopyPlus),
     S::new(A::Refresh, "refresh", "read the sessions, and what git says of where they run, again now").bar("Refresh", Icon::Refresh),
@@ -737,6 +745,8 @@ mod tests {
             SavedCommands,
             WorkspaceRemove,
             WorktreeClose,
+            WorktreeNew,
+            WorktreeDelete,
             WindowClose,
             WindowOpen,
             Refresh,

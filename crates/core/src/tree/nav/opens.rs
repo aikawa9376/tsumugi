@@ -63,6 +63,7 @@ pub fn opens(item: &Item, tree: &Tree, terminals: &[TerminalSession], local: boo
         | Item::Heading(..)
         | Item::GitHub(..)
         | Item::GitHubFailed(..)
+        | Item::Pending(..)
         | Item::File { dir: true, .. } => Opens::Fold,
         Item::GitHubItem(environment, root, listing, number) => Opens::Shows(
             Tab::GitHub {
@@ -189,6 +190,7 @@ pub fn copied(item: &Item, tree: &Tree, terminals: &[TerminalSession]) -> Option
         | Item::GitHubItem(..)
         | Item::LocalIssue(..)
         | Item::Browser(..)
+        | Item::Pending(..)
         | Item::GitHubFailed(..) => None,
     }
 }

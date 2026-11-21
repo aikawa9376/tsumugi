@@ -92,6 +92,33 @@ pub fn items_with_issues(
     out
 }
 
+/// `rows`, with a row for each worktree being made under the row of the
+/// workspace it is made in, first, while that workspace is unfolded.
+pub fn with_making(
+    rows: Vec<Item>,
+    making: &[crate::worktree::Pending],
+    folds: &Folds,
+) -> Vec<Item> {
+    if making.is_empty() {
+        return rows;
+    }
+    let mut out = Vec::with_capacity(rows.len() + making.len());
+    for row in rows {
+        let open = matches!(&row, Item::Workspace(..)) && folds.is_open(&row);
+        let under = match &row {
+            Item::Workspace(environment, root) if open => making
+                .iter()
+                .filter(|p| p.environment == *environment && p.root == *root)
+                .map(crate::worktree::Pending::row)
+                .collect(),
+            _ => Vec::new(),
+        };
+        out.push(row);
+        out.extend(under);
+    }
+    out
+}
+
 /// Local issues belong to the workspace with the nearest containing checkout.
 pub fn issues_in<'a>(
     tree: &Tree,
@@ -255,7 +282,7 @@ pub fn depth(tree: &Tree, item: &Item) -> usize {
     };
     match item {
         Item::Environment(_) | Item::Workspace(_, _) | Item::Waiting(_, _) => 0,
-        Item::Worktree(_, _) | Item::Across(..) | Item::GitHub(..) => 1,
+        Item::Worktree(_, _) | Item::Across(..) | Item::GitHub(..) | Item::Pending(..) => 1,
         Item::GitHubItem(..) | Item::LocalIssue(..) | Item::GitHubFailed(..) => 2,
         Item::Gathered(_) => 2,
         Item::Heading(_, path, _) => heading_at(path),

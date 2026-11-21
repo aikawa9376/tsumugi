@@ -42,6 +42,10 @@ pub struct TreeView {
     pub completions: Completions,
     /// When the window saw each session's state last change.
     pub changes: Changes,
+    /// The worktrees being made, each with a row under its workspace.
+    pub making: Vec<crate::worktree::Pending>,
+    /// The number the next worktree being made takes.
+    pub(crate) making_next: u64,
     built: Built,
     /// The rows the selection was last kept among.
     kept_among: u64,
@@ -91,6 +95,7 @@ type BuiltFrom = (
     Folds,
     bool,
     Vec<(EnvironmentId, nav::Page)>,
+    Vec<Item>,
 );
 
 /// A key on the tree.
@@ -361,6 +366,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
         view.folds.clone(),
         view.show_hidden,
         pages.to_vec(),
+        view.making.iter().map(|p| p.row()).collect::<Vec<_>>(),
     );
     if view.built.from.as_ref() == Some(&from) {
         return;
@@ -396,7 +402,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
                 .filter(|(e, _)| e == environment)
                 .map(|(_, page)| page.clone())
                 .collect();
-            rows.extend(nav::items_with_issues(
+            let listed = nav::items_with_issues(
                 environment,
                 &narrowed,
                 &view.folds,
@@ -404,7 +410,8 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
                 &facts.github,
                 &facts.local_issues,
                 &own,
-            ));
+            );
+            rows.extend(nav::with_making(listed, &view.making, &view.folds));
         }
         view.built.narrowed.insert(environment.clone(), narrowed);
     }

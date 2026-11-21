@@ -112,6 +112,27 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 .await
                 .map(|path| Answer::Worktree { path })
         }
+        Ask::WorktreeStarts { repository } => tsumugi_vcs::worktree::starts(&repository)
+            .await
+            .map(|starts| Answer::WorktreeStarts { starts }),
+        Ask::CreateWorktree { repository, new } => {
+            let made = crate::worktrees::make(&repository, &new).await;
+            watched.read_again();
+            made.map(|path| Answer::Worktree { path })
+        }
+        Ask::WorktreeStanding { path } => tsumugi_vcs::worktree::standing(&path)
+            .await
+            .map(|standing| Answer::WorktreeStanding { standing }),
+        Ask::DeleteWorktree {
+            path,
+            force,
+            branch,
+        } => {
+            let removed = tsumugi_vcs::worktree::delete(&path, force, branch).await;
+            watched.relist();
+            watched.read_again();
+            removed.map(|removed| Answer::WorktreeRemoved { removed })
+        }
         Ask::GitHubThread {
             repository,
             listing,

@@ -75,6 +75,35 @@ pub enum Effect {
         dir: bool,
     },
 
+    /// Ask the work host of `environment` where a worktree of `repository`
+    /// may start, for the dialog asking for one.
+    WorktreeStarts {
+        environment: EnvironmentId,
+        repository: PathBuf,
+    },
+    /// Ask the work host of `environment` to make `new` in `repository`, as
+    /// the step of the pending worktree `id`.
+    WorktreeCreate {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        id: u64,
+        new: tsumugi_model::NewWorktree,
+    },
+    /// Ask the work host of `environment` how the worktree at `path` stands,
+    /// before the person is asked to delete it.
+    WorktreeInspect {
+        environment: EnvironmentId,
+        path: PathBuf,
+    },
+    /// Ask the work host of `environment` to delete the worktree at `path`,
+    /// with its changes only when `force`, and its branch as `branch` says.
+    WorktreeDelete {
+        environment: EnvironmentId,
+        path: PathBuf,
+        force: bool,
+        branch: tsumugi_model::BranchFate,
+    },
+
     /// Draw the consoles in these colours.
     Palette(tsumugi_protocol::Colours),
 

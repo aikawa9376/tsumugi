@@ -37,6 +37,7 @@ pub mod time;
 pub mod timeline;
 mod tree;
 pub mod usage;
+mod worktree;
 
 pub use clone::*;
 pub use code::*;
@@ -57,3 +58,4 @@ pub use saved_command::*;
 pub use session::*;
 pub use terminal::*;
 pub use tree::*;
+pub use worktree::*;

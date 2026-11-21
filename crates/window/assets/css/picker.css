@@ -18,3 +18,8 @@
 .command-text { margin: 0; padding: 8px 10px; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--raised); color: var(--text); font-family: var(--mono-font, monospace); }
 .command-form { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .command-input { font-family: var(--mono-font, monospace); }
+.dialog.composer-dialog { height: min(560px, calc(100% - 48px)); }
+.composer-label { padding: 2px 8px 0; color: var(--text-3); font-size: var(--ui-font-small); }
+.composer-field { border-color: var(--line); }
+.confirm-lines { display: flex; flex-direction: column; gap: 4px; }
+.confirm-option { display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer; }

@@ -470,6 +470,47 @@ pub enum Msg {
     },
     /// The question answered yes or no.
     ConfirmAnswer(bool),
+    /// The choice the question holds besides yes and no flipped.
+    ConfirmToggle,
+    /// Open the dialog asking for a new worktree from the tree's row `row`.
+    ComposerOpen(crate::tree::nav::Item),
+    /// The dialog's field now holds `text`.
+    ComposerText {
+        field: crate::worktree::Field,
+        text: String,
+    },
+    /// The dialog's field has the keys.
+    ComposerFocus(crate::worktree::Field),
+    /// A key the dialog's fields do not type with.
+    ComposerKey(Key),
+    /// The place to start from in row `n` of the dialog's list chosen.
+    ComposerCursor(usize),
+    /// The work host listed where a worktree of `repository` may start, or
+    /// why it could not.
+    WorktreeStarts {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        result: Result<Vec<tsumugi_model::StartChoice>, String>,
+    },
+    /// The work host answered the step of the pending worktree `id`: where
+    /// the worktree is, or why it could not be made.
+    WorktreeMade {
+        id: u64,
+        result: Result<PathBuf, String>,
+    },
+    /// Put away the row of the pending worktree `id` that failed.
+    WorktreeDismiss(u64),
+    /// The work host said how the worktree at `path` stands.
+    WorktreeInspected {
+        environment: EnvironmentId,
+        path: PathBuf,
+        result: Result<tsumugi_model::WorktreeStanding, String>,
+    },
+    /// The work host answered deleting the worktree at `path`.
+    WorktreeDeleted {
+        path: PathBuf,
+        result: Result<tsumugi_model::WorktreeRemoved, String>,
+    },
     /// Start typing a new name for the session `id` of `environment` where
     /// `place` shows it.
     RenameStart {

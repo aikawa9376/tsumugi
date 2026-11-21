@@ -59,10 +59,6 @@ changes them ([keys](../keys.md)).
 | `cursor.copy` |  | copy the path of the selected file, worktree or workspace, or the name of the selected session, shell or Neovim; in the details panel, the selected link of the overview: its address, or its file's path | `tree`: `y`<br>`agents`: `y`<br>`details`: `y` |
 | `cursor.reveal` |  | in the details panel, show the selected file of the overview in the Finder |  |
 | `cursor.browse` |  | open the selected pull request or issue on GitHub in the browser | `tree`: `g x`<br>`viewer`: `g x` |
-| `resource.pin` |  | in the details panel, keep the selected link, file or artifact as a resource of the project the panel shows ([resources](../resources.md#pinning-and-unpinning)) | `details`: `p` |
-| `resource.unpin` |  | in the details panel, stop keeping the selected pinned resource ([resources](../resources.md#pinning-and-unpinning)) | `details`: `x` |
-| `resource.add` |  | in the details panel, type a path or an address to keep as a resource of the project the panel shows, and a label for it ([resources](../resources.md#pinning-and-unpinning)) | `details`: `a` |
-| `resource.edit` |  | in the details panel, change the label and the note of the selected pinned resource ([resources](../resources.md#pinning-and-unpinning)) | `details`: `e` |
 | `filer.down` |  | move to the next file or directory, in the tree's files or the picker's directories | `filer`: `j`, `ArrowDown` |
 | `filer.up` |  | move to the previous file or directory | `filer`: `k`, `ArrowUp` |
 | `filer.into` |  | open the directory selected and go to its first entry once it is read; on a file of the tree, open it as `cursor.go` does | `filer`: `l`, `ArrowRight` |
@@ -98,9 +94,10 @@ changes them ([keys](../keys.md)).
 | `environment.pair` |  | pair again with the work machine of the environment selected in the tree, or else of the tab shown, as when it no longer accepts this computer or answers at another address ([details](../environments.md#create-and-configure)) |  |
 | `workspace.add` | Add to Tree… | open the picker on the directories alone, to add the one chosen to the tree with nothing running there ([details](../tree.md#going-to-a-session-or-starting-one)) | `tree`: `A` |
 | `local_issues.open` | Local Issues… | open local issues for this environment and working directory, to queue work for its default agent ([details](../local-issues.md)) |  |
-| `saved_commands.open` | Saved Commands… | open the commands the project keeps, to search them, run one in the selected worktree after confirming it, and add, edit or delete one ([details](../saved-commands.md)) | `tree`: `c` |
 | `workspace.remove` |  | take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `worktree.close` |  | end, after asking, every session and terminal running in the worktree selected in the tree, which takes its row out of it; the workspace stays listed ([details](../tree.md#workspaces-and-worktrees)) |  |
+| `worktree.new` |  | open the dialog asking for a new worktree of the repository of the workspace or worktree selected in the tree: its name, where it starts, listed from the repository's branches or given as a commit, and optionally the branch it works on; it is made in the background, a row in the tree showing how far it has come, and a new session's draft opens in it once it is made ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `W` |
+| `worktree.delete` |  | delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `D` |
 | `window.close` | Close Window | close the window; the instance's other windows stay open, and its sessions run on | `global`: `Cmd+W` |
 | `window.open` | New Window | open another window of the instance ([windows](../sessions.md#windows)) | `global`: `Mod+n` |
 | `refresh` | Refresh | read the sessions, and what git says of where they run, again now | `global`: `Mod+r`<br>`tree`: `r`<br>`agents`: `r` |
@@ -145,13 +142,6 @@ changes them ([keys](../keys.md)).
 | `viewer.back` |  | in a viewer, seek a movie back | `viewer`: `h` |
 | `viewer.forward` |  | in a viewer, seek a movie forward | `viewer`: `l` |
 | `viewer.copy_path` |  | in a viewer, copy the path of the file it shows | `viewer`: `y` |
-| `review.comment` |  | in a diff of lines, write a comment on the line the cursor is on, or on the lines marked with `review.select`; `Enter` keeps it and `Escape` gives it up ([review](../review.md)) | `viewer`: `c` |
-| `review.select` |  | in a diff of lines, start marking lines from the cursor to comment on them together, or stop | `viewer`: `v` |
-| `review.edit` |  | in a diff of lines, change the comment on the line the cursor is on | `viewer`: `Enter` |
-| `review.delete` |  | in a diff of lines, delete the comment on the line the cursor is on | `viewer`: `d d` |
-| `review.resolve` |  | in a diff of lines, resolve the comment on the line the cursor is on, or open it again; only this resolves a comment | `viewer`: `r` |
-| `review.send` |  | in a diff of lines, show the prompt that carries every comment not resolved; shown, send it to the session chosen with the movement keys | `viewer`: `s` |
-| `review.draft` |  | in a diff of lines, or in the prompt shown, write the prompt in a new session's draft in the worktree instead of sending it | `viewer`: `S` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -312,7 +302,8 @@ changes them ([keys](../keys.md)).
 "w" = "session.pick"
 "A" = "workspace.add"
 "!" = "worktrees.toggle"
-"c" = "saved_commands.open"
+"W" = "worktree.new"
+"D" = "worktree.delete"
 "N" = "file.new"
 "K" = "directory.new"
 "}" = "workspace.next"
@@ -374,10 +365,6 @@ changes them ([keys](../keys.md)).
 "G" = "cursor.last"
 "Escape" = "cursor.fold"
 "y" = "cursor.copy"
-"p" = "resource.pin"
-"x" = "resource.unpin"
-"a" = "resource.add"
-"e" = "resource.edit"
 "Backspace" = "cursor.fold"
 "1" = "details.tab 1"
 "2" = "details.tab 2"
@@ -450,13 +437,6 @@ changes them ([keys](../keys.md)).
 "h" = "viewer.back"
 "l" = "viewer.forward"
 "y" = "viewer.copy_path"
-"c" = "review.comment"
-"v" = "review.select"
-"Enter" = "review.edit"
-"d d" = "review.delete"
-"r" = "review.resolve"
-"s" = "review.send"
-"S" = "review.draft"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"
