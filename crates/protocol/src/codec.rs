@@ -348,6 +348,14 @@ mod tests {
             }),
         });
         round_trips(Request::Ask {
+            asked: 18,
+            ask: Box::new(crate::Ask::SetupWorktree {
+                repository: "/w".into(),
+                worktree: "/w-wt/fix-login".into(),
+                choice: tsumugi_model::SetupChoice::Run,
+            }),
+        });
+        round_trips(Request::Ask {
             asked: 15,
             ask: Box::new(crate::Ask::DeleteWorktree {
                 path: "/w-wt/fix-login".into(),

@@ -64,6 +64,26 @@ async fn a_start_that_may_have_run_keeps_its_new_worktree() {
 }
 
 #[tokio::test]
+async fn a_start_whose_worktree_setup_failed_keeps_the_worktree_for_the_user_to_look_at() {
+    let dir = tempfile::tempdir().unwrap();
+    let worktree = new_worktree(dir.path()).await;
+    let path = worktree.path.clone();
+
+    let failed = settled::<()>(
+        Some(worktree),
+        Err(Failure::new(
+            Stage::SetupFailed,
+            "the setup script ended with status 3",
+        )),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(failed.stage, Stage::SetupFailed);
+    assert!(path.is_dir());
+}
+
+#[tokio::test]
 async fn a_started_session_keeps_its_new_worktree() {
     let dir = tempfile::tempdir().unwrap();
     let worktree = new_worktree(dir.path()).await;

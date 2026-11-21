@@ -341,3 +341,20 @@ Machine resources sampled for a window that does not say which it shows; the Set
 | `usage.gpu` | boolean | `true` | Show the GPU's use, when the system reports it. |
 | `usage.memory` | boolean | `true` | Show the physical memory used, as a share of all of it. |
 | `usage.storage` | boolean | `true` | Show the capacity used on the startup volume. |
+
+## `[worktree_setup]`
+
+Whether the setup script a repository lists runs in its new worktrees.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worktree_setup.run_policy` |  | `"ask"` | What a repository with no `[[worktree_setup.repositories]]` table of its own gets: `run`, `ask` to show the script and run it when you say so, or `skip`. |
+
+### `[[worktree_setup.repositories]]`
+
+The repositories that differ, each `[[worktree_setup.repositories]]` table one of them.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worktree_setup.repositories.path` | string | `""` | The repository's primary checkout, the directory holding its `.git`. |
+| `worktree_setup.repositories.run_policy` |  | `"ask"` | What its new worktrees' setup script does. |

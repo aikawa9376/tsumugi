@@ -211,6 +211,16 @@ pub enum Ask {
         repository: PathBuf,
         new: tsumugi_model::NewWorktree,
     },
+    /// Set up the worktree made at `worktree` of the repository at
+    /// `repository`: give it the ignored files and directories the primary
+    /// checkout lists, and run its setup script as `choice` and the
+    /// repository's run policy say. Asked again with a choice once a person was
+    /// asked what an answer of `Asked` held.
+    SetupWorktree {
+        repository: PathBuf,
+        worktree: PathBuf,
+        choice: tsumugi_model::SetupChoice,
+    },
     /// How the worktree at `path` stands, as far as deleting it loses work.
     WorktreeStanding {
         path: PathBuf,
@@ -414,6 +424,10 @@ pub enum Answer {
     /// The worktree was made here.
     Worktree {
         path: PathBuf,
+    },
+    /// What came of setting up a worktree.
+    WorktreeSetup {
+        setup: tsumugi_model::WorktreeSetup,
     },
     /// Where a worktree may start.
     WorktreeStarts {

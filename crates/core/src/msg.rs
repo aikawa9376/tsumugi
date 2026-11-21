@@ -539,6 +539,12 @@ pub enum Msg {
         id: u64,
         result: Result<PathBuf, String>,
     },
+    /// The work host answered the setup step of the pending worktree `id`:
+    /// what came of it, or why it failed.
+    WorktreeSetUp {
+        id: u64,
+        result: Result<tsumugi_model::WorktreeSetup, String>,
+    },
     /// Put away the row of the pending worktree `id` that failed.
     WorktreeDismiss(u64),
     /// The work host said how the worktree at `path` stands.

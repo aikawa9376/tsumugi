@@ -46,7 +46,8 @@ cannot act as another.
   refused. A worktree that cannot be made refuses the start; the session never
   falls back to the caller's directory. A start refused or failed after its
   worktree is made removes that worktree again, unless the agent may already
-  run on the work machine. A model must be one its profile lists
+  run on the work machine, or the worktree's setup failed, which keeps it
+  ([worktree setup](worktree-setup.md)). A model must be one its profile lists
   (see `models`); any other is refused, naming the listed ones.
 - **`send`** sends a message to another session by its code or its id. Any session Tsumugi
   started, running or not yet ready, can be sent to; one that has ended

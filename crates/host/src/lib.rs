@@ -61,6 +61,7 @@ pub mod watch;
 pub mod work;
 pub mod work_host;
 pub mod workspaces;
+pub mod worktree_setup;
 mod worktrees;
 
 use tsumugi_core::content;

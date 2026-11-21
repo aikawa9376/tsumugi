@@ -448,6 +448,10 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
     let Some(ask) = state.overlays.confirm.take() else {
         return Vec::new();
     };
+    // Not running a script is an answer too: the worktree goes on without it.
+    if matches!(ask, Ask::SetupWorktree { .. }) {
+        return crate::worktree::answered(ask, yes);
+    }
     if !yes {
         return Vec::new();
     }
@@ -514,6 +518,7 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
                 .collect()
         }
         ask @ Ask::DeleteWorktree { .. } => crate::worktree::confirmed(ask),
+        Ask::SetupWorktree { .. } => Vec::new(),
         Ask::CloseWorktree {
             environment,
             sessions,

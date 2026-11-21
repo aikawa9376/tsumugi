@@ -906,6 +906,31 @@ impl AppCtx {
                     app.dispatch(Msg::WorktreeMade { id, result });
                 });
             }
+            Effect::WorktreeSetup {
+                environment,
+                repository,
+                worktree,
+                id,
+                choice,
+            } => {
+                let asked = self.ask_in(
+                    &environment,
+                    Ask::SetupWorktree {
+                        repository,
+                        worktree,
+                        choice,
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::WorktreeSetup { setup } => Ok(setup),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeSetUp { id, result });
+                });
+            }
             Effect::WorktreeInspect { environment, path } => {
                 let asked = self.ask_in(&environment, Ask::WorktreeStanding { path: path.clone() });
                 let app = *self;

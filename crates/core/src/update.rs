@@ -401,6 +401,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             result,
         } => crate::worktree::read_starts(state, &environment, &repository, result),
         Msg::WorktreeMade { id, result } => crate::worktree::made(state, id, result),
+        Msg::WorktreeSetUp { id, result } => crate::worktree::set_up(state, id, result),
         Msg::WorktreeDismiss(id) => crate::worktree::dismiss(state, id),
         Msg::WorktreeInspected {
             environment,

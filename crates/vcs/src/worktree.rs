@@ -10,9 +10,11 @@ use tsumugi_model::{NewWorktree, StartPoint};
 
 use crate::Backend;
 
+mod placing;
 mod removal;
 mod starts;
 
+pub use placing::{included, place, relative};
 pub use removal::{delete, standing};
 pub use starts::starts;
 
@@ -285,6 +287,17 @@ fn slug(name: &str) -> String {
     } else {
         words.join("-")
     }
+}
+
+/// The primary checkout of the repository holding `source`: the directory
+/// holding its `.git`, which every worktree of it was made from. A bare
+/// repository has none, and `source`'s own top directory stands for it.
+pub async fn primary(source: &Path) -> Result<PathBuf> {
+    let (top, common) = identify(&canonical(source)?).await?;
+    Ok(match common.file_name() {
+        Some(name) if name == ".git" => common.parent().map_or(top, Path::to_path_buf),
+        _ => top,
+    })
 }
 
 async fn identify(source: &Path) -> Result<(PathBuf, PathBuf)> {

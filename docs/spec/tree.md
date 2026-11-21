@@ -213,7 +213,10 @@ a branch or a directory that is taken, a name git refuses, a start that is no
 revision or a remote that cannot be fetched, leaves nothing behind and its row
 stays with the reason until it is put away. Work already in the repository is
 never touched. This works for a repository on a work machine as for one on this
-computer, and for a directory outside git it says it has no worktrees.
+computer, and for a directory outside git it says it has no worktrees. A new
+worktree is also given the ignored files its repository lists and has the
+repository's setup script run in it as you allow, before the session's draft
+opens ([worktree setup](worktree-setup.md)).
 
 A worktree is deleted from its row, which asks first. The question says what
 deleting loses: the files changed and not committed, the commits pushed nowhere,

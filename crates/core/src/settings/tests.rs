@@ -443,6 +443,13 @@ fn settings_written_read_back_the_same() {
             }),
             ..Default::default()
         },
+        worktree_setup: WorktreeSetupSettings {
+            run_policy: tsumugi_model::SetupRunPolicy::Skip,
+            repositories: vec![RepositorySetup {
+                path: "/r/api".into(),
+                run_policy: tsumugi_model::SetupRunPolicy::Run,
+            }],
+        },
     };
     assert_eq!(written_and_read(&s), s);
 }
@@ -1116,7 +1123,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`, `worktree_setup`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),
@@ -1134,4 +1141,26 @@ fn automatic_display_scaling_is_on_for_old_settings_and_can_be_disabled() {
     let reloaded = Settings::parse(&saved).unwrap();
     assert!(!reloaded.auto_scale);
     assert_eq!(reloaded.zoom, 1.25);
+}
+
+#[test]
+fn a_new_worktrees_setup_script_is_asked_about_unless_the_user_said_otherwise() {
+    use tsumugi_model::SetupRunPolicy::{Ask, Run, Skip};
+    let settings = Settings::parse("").unwrap();
+    assert_eq!(settings.worktree_setup.policy_for("/r/api".as_ref()), Ask);
+
+    let settings = Settings::parse(
+        "[worktree_setup]\nrun_policy = 'skip'\n\
+         [[worktree_setup.repositories]]\npath = '/r/api'\nrun_policy = 'run'\n",
+    )
+    .unwrap();
+    assert_eq!(settings.worktree_setup.policy_for("/r/api".as_ref()), Run);
+    assert_eq!(settings.worktree_setup.policy_for("/r/web".as_ref()), Skip);
+    assert_eq!(written_and_read(&settings), settings);
+}
+
+#[test]
+fn a_repositorys_run_policy_is_kept_in_the_settings_and_never_read_from_its_files() {
+    assert!(Settings::parse("[worktree_setup]\nrun_policy = 'sometimes'\n").is_err());
+    assert!(Settings::parse("[worktree_setup]\nsetup = 'make'\n").is_err());
 }
