@@ -64,6 +64,8 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::CloseLocalIssue { id } => crate::local_issues::close(watched, id).await,
         Ask::ReopenLocalIssue { id } => crate::local_issues::reopen(watched, id).await,
         Ask::DeleteLocalIssue { id } => crate::local_issues::delete(watched, id).await,
+        Ask::SaveCommand(new) => crate::saved_commands::save(watched, new).await,
+        Ask::DeleteSavedCommand { id } => crate::saved_commands::delete(watched, id).await,
         Ask::PathEntries { root, typed } => crate::completion::read(root, typed)
             .await
             .map(|entries| Answer::PathEntries { entries }),
@@ -347,7 +349,15 @@ async fn start_terminal(watched: &Watched, start: TerminalStart) -> Result<Answe
             env: daemon::terminal_env(),
             file: start.file,
             diff: start.diff,
-            command: Vec::new(),
+            command: start
+                .script
+                .map(|script| {
+                    tsumugi_model::shell_line(
+                        &settings.shell.program(&programs::login_shell()),
+                        &script,
+                    )
+                })
+                .unwrap_or_default(),
             opener: None,
             show: false,
             restored_from: None,

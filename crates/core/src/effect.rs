@@ -122,6 +122,8 @@ pub enum Effect {
         sessions: BTreeSet<String>,
         terminals: BTreeSet<u128>,
     },
+    /// Run, keep or delete a command a project keeps.
+    SavedCommand(crate::picker::commands::Do),
     /// Bring back what the terminal host of `environment` took with it, by
     /// the daemon ids it ran as.
     BringBack {

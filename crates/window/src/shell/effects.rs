@@ -30,6 +30,7 @@ impl Ui {
             Effect::BringBack { environment, ids } => self.bring_back(environment, ids),
             Effect::LetGo { environment, ids } => self.let_go(environment, ids),
             Effect::StartTerminal(ask) => self.start_terminal(ask),
+            Effect::SavedCommand(done) => self.saved_command(done),
             Effect::StartDiffEditor { place, spot } => self.start_terminal_review(
                 tsumugi_core::content::TerminalAsk {
                     place,

@@ -94,6 +94,7 @@ changes them ([keys](../keys.md)).
 | `environment.pair` |  | pair again with the work machine of the environment selected in the tree, or else of the tab shown, as when it no longer accepts this computer or answers at another address ([details](../environments.md#create-and-configure)) |  |
 | `workspace.add` | Add to Tree… | open the picker on the directories alone, to add the one chosen to the tree with nothing running there ([details](../tree.md#going-to-a-session-or-starting-one)) | `tree`: `A` |
 | `local_issues.open` | Local Issues… | open local issues for this environment and working directory, to queue work for its default agent ([details](../local-issues.md)) |  |
+| `saved_commands.open` | Saved Commands… | open the commands the project keeps, to search them, run one in the selected worktree after confirming it, and add, edit or delete one ([details](../saved-commands.md)) | `tree`: `c` |
 | `workspace.remove` |  | take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `worktree.close` |  | end, after asking, every session and terminal running in the worktree selected in the tree, which takes its row out of it; the workspace stays listed ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `window.close` | Close Window | close the window; the instance's other windows stay open, and its sessions run on | `global`: `Cmd+W` |
@@ -300,6 +301,7 @@ changes them ([keys](../keys.md)).
 "w" = "session.pick"
 "A" = "workspace.add"
 "!" = "worktrees.toggle"
+"c" = "saved_commands.open"
 "N" = "file.new"
 "K" = "directory.new"
 "}" = "workspace.next"

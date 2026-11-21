@@ -3,7 +3,7 @@
 
 use crate::actions::Action;
 use crate::keymap::{Context, Keymap};
-use crate::picker::{Mode, Picking, Purpose};
+use crate::picker::{Mode, Picking, Purpose, commands};
 
 /// Keys and what they do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +123,29 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
             Some(Hint::new("Ctrl+a", "this directory or every one")),
             close(),
         ],
+        Picking::Commands(c) => match &c.stage {
+            commands::Stage::List => vec![
+                moving(keymap, "move"),
+                bound(keymap, &over, &Action::OverlayChoose, "run"),
+                Some(Hint::new("Ctrl+a", "add")),
+                Some(Hint::new("Ctrl+e", "edit")),
+                Some(Hint::new("Ctrl+d", "delete")),
+                close(),
+            ],
+            commands::Stage::Run(_) => vec![
+                bound(keymap, &over, &Action::OverlayChoose, "run"),
+                bound(keymap, &over, &Action::OverlayClose, "back"),
+            ],
+            commands::Stage::Delete(_) => vec![
+                bound(keymap, &over, &Action::OverlayChoose, "delete"),
+                bound(keymap, &over, &Action::OverlayClose, "back"),
+            ],
+            commands::Stage::Edit(_) => vec![
+                Some(Hint::new("Ctrl+s", "save")),
+                Some(Hint::new("Tab", "next field")),
+                Some(Hint::new("Escape", "back")),
+            ],
+        },
         Picking::Interrupted(_) => vec![
             moving(keymap, "move"),
             bound(keymap, &over, &Action::OverlayChoose, "bring back"),

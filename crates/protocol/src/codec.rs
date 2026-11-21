@@ -75,6 +75,26 @@ mod tests {
         round_trips(Ask::CloseLocalIssue { id: new.id.clone() });
         round_trips(Ask::ReopenLocalIssue { id: new.id.clone() });
         round_trips(Ask::DeleteLocalIssue { id: new.id.clone() });
+        let command = tsumugi_model::NewSavedCommand {
+            id: new.id.clone(),
+            dir: "/project with spaces/日本語".into(),
+            label: "Checks".into(),
+            command: "cd 'a b'\njust ci".into(),
+        };
+        let ask = Ask::SaveCommand(command.clone());
+        assert!(ask.mutates());
+        round_trips(ask);
+        let ask = Ask::DeleteSavedCommand { id: new.id.clone() };
+        assert!(ask.mutates());
+        round_trips(ask);
+        round_trips(TreeChange::SavedCommands {
+            commands: vec![tsumugi_model::SavedCommand {
+                id: command.id,
+                project: command.dir,
+                label: command.label,
+                command: command.command,
+            }],
+        });
         round_trips(TreeChange::Resources {
             resources: vec![tsumugi_model::Resource {
                 id: "r".into(),

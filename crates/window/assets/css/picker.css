@@ -10,3 +10,11 @@
 .picker-heading:first-child { padding-top: 0; }
 .picker-place { margin-left: 10px; color: var(--text-3); font-size: var(--ui-font-small); }
 .picker-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 8px 0; border-top: 1px solid var(--line); font-size: var(--ui-font-small); color: var(--text-3); }
+.command-preview { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.command-preview h3 { margin: 0; font-size: var(--ui-font); }
+.command-preview dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: var(--ui-font-small); }
+.command-preview dt { color: var(--text-3); }
+.command-preview dd { margin: 0; overflow-wrap: anywhere; }
+.command-text { margin: 0; padding: 8px 10px; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--raised); color: var(--text); font-family: var(--mono-font, monospace); }
+.command-form { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.command-input { font-family: var(--mono-font, monospace); }

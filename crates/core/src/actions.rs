@@ -97,6 +97,7 @@ pub enum Action {
     EnvironmentPair,
     WorkspaceAdd,
     LocalIssues,
+    SavedCommands,
     WorkspaceRemove,
     WorktreeClose,
     WindowClose,
@@ -411,6 +412,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::LocalIssues, "local_issues.open", "open local issues for this environment and working directory, to queue work for its default agent ([details](local-issues.md))")
         .bar("Local Issues…", Icon::Bug)
         .row("Local issues…", Start),
+    S::new(A::SavedCommands, "saved_commands.open", "open the commands the project keeps, to search them, run one in the selected worktree after confirming it, and add, edit or delete one ([details](saved-commands.md))")
+        .bar("Saved Commands…", Icon::Terminal)
+        .row("Saved commands…", Start),
     S::new(A::WorkspaceRemove, "workspace.remove", "take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](tree.md#workspaces-and-worktrees))")
         .icon(Icon::SquareMinus)
         .row("Remove from tree…", End),
@@ -700,6 +704,7 @@ mod tests {
             EnvironmentPair,
             WorkspaceAdd,
             LocalIssues,
+            SavedCommands,
             WorkspaceRemove,
             WorktreeClose,
             WindowClose,

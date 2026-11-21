@@ -111,6 +111,38 @@ impl Ui {
         ask: TerminalAsk,
         diff: Option<tsumugi_model::repository::Spot>,
     ) {
+        self.start_terminal_as(ask, diff, None);
+    }
+
+    /// Run the saved command `script`, named `label`, in a command terminal
+    /// in the place asked, without taking the keys; its tab opens behind the
+    /// one shown when `behind`, or else is shown.
+    pub(crate) fn run_saved_command(
+        &self,
+        place: tsumugi_core::tree::Place,
+        label: String,
+        script: String,
+        behind: bool,
+    ) {
+        self.start_terminal_as(
+            TerminalAsk {
+                place,
+                runs: tsumugi_model::TerminalProgram::Command,
+                file: None,
+                opening: tsumugi_core::content::Opening::Tab,
+                focus: false,
+            },
+            None,
+            Some((label, script, behind)),
+        );
+    }
+
+    fn start_terminal_as(
+        &self,
+        ask: TerminalAsk,
+        diff: Option<tsumugi_model::repository::Spot>,
+        command: Option<(String, String, bool)>,
+    ) {
         let app = self.app;
         let TerminalAsk {
             place: p,
@@ -129,9 +161,11 @@ impl Ui {
                 .collect()
         };
         let taken: Vec<&str> = names.iter().map(String::as_str).collect();
-        let base = match (&file, runs) {
-            (Some(f), _) => file_name(f),
-            (None, runs) => tsumugi_model::base_name(runs, &[]),
+        let behind = command.as_ref().is_some_and(|(_, _, behind)| *behind);
+        let (base, script) = match (&file, runs, command) {
+            (_, _, Some((label, script, _))) => (label, Some(script)),
+            (Some(f), ..) => (file_name(f), None),
+            (None, runs, None) => (tsumugi_model::base_name(runs, &[]), None),
         };
         let name = fresh_name(&base, &taken);
         let size = *self.local.console_size.peek();
@@ -139,6 +173,7 @@ impl Ui {
             name,
             cwd: HostPath::local(&p.worktree),
             program: runs,
+            script,
             file,
             diff,
             cols: size.cols,
@@ -171,6 +206,10 @@ impl Ui {
                 environment,
                 terminal,
             });
+            if behind {
+                app.dispatch(Msg::OpenBehind(tab));
+                return;
+            }
             app.dispatch(Msg::Show {
                 thing: tab,
                 place: Some(p),

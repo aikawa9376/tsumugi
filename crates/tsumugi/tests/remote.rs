@@ -99,7 +99,7 @@ fn remote_mutations_survive_lost_replies_and_retire_old_ids() {
         };
         let start = Request::Ask { asked: 1, ask: Box::new(Ask::StartTerminal(Box::new(tsumugi_protocol::TerminalStart {
             name: "once".into(), cwd: tsumugi_protocol::HostPath::local(hosts.0.path()),
-            program: tsumugi_model::TerminalProgram::Shell, file: None, diff: None, cols: 80, rows: 24,
+            program: tsumugi_model::TerminalProgram::Shell, script: None, file: None, diff: None, cols: 80, rows: 24,
         }))) };
         // Lose the connection immediately after writing, before reading an answer.
         link.requests.send(&Request::Ask { asked: 1, ask: Box::new(applied(&stamp, &start)) }).await.unwrap();

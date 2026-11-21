@@ -272,6 +272,12 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::PickerChoose(at) => picker::choose(state, at),
         Msg::PickerDir(dir) => picker::start_in(state, dir),
         Msg::PickerEvery => picker::every(&mut state.picker),
+        Msg::CommandsOpen => picker::commands::open(state),
+        Msg::OpenBehind(tab) => {
+            state.content.windows.open_behind(tab);
+            Vec::new()
+        }
+        Msg::CommandsTyped(typed) => picker::commands::type_into(state, typed),
 
         msg @ (Msg::Key { .. }
         | Msg::Text { .. }

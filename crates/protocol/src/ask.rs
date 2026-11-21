@@ -32,6 +32,13 @@ pub enum Ask {
     DeleteLocalIssue {
         id: String,
     },
+    /// Keep a command in the project holding `dir`, or keep the command of
+    /// `id` anew.
+    SaveCommand(tsumugi_model::NewSavedCommand),
+    /// Keep the saved command of `id` no more.
+    DeleteSavedCommand {
+        id: String,
+    },
     PathEntries {
         root: Option<HostPath>,
         typed: String,
@@ -211,6 +218,10 @@ pub struct TerminalStart {
     pub name: String,
     pub cwd: HostPath,
     pub program: TerminalProgram,
+    /// The text of the shell command a command terminal runs, given to the
+    /// shell as one argument; none for any other terminal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
     /// A repository review opened after the user's Neovim configuration loads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diff: Option<tsumugi_model::repository::Spot>,
