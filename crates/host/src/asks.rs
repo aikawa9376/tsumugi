@@ -72,6 +72,22 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::DeleteLocalIssue { id } => crate::local_issues::delete(watched, id).await,
         Ask::SaveCommand(new) => crate::saved_commands::save(watched, new).await,
         Ask::DeleteSavedCommand { id } => crate::saved_commands::delete(watched, id).await,
+        Ask::KeepResource {
+            dir,
+            target,
+            label,
+            note,
+        } => crate::resources::keep(watched, &dir, &target, label, note).await,
+        Ask::KeepScreenshot {
+            dir,
+            data,
+            label,
+            note,
+        } => crate::resources::keep_screenshot(watched, &dir, &data, label, note).await,
+        Ask::DescribeResource { id, label, note } => {
+            crate::resources::describe(watched, id, label, note).await
+        }
+        Ask::DropResource { id } => crate::resources::drop(watched, id).await,
         Ask::PathEntries { root, typed } => crate::completion::read(root, typed)
             .await
             .map(|entries| Answer::PathEntries { entries }),

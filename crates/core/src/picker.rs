@@ -57,6 +57,8 @@ pub enum Picking {
     Interrupted(Waiting),
     /// Run, write, edit or delete a command the project keeps.
     Commands(Commands),
+    /// Go through what needed the user.
+    Notices(crate::notices::Listing),
 }
 
 impl Picking {
@@ -67,6 +69,7 @@ impl Picking {
             Picking::Resume(r) => &r.list,
             Picking::Interrupted(w) => &w.list,
             Picking::Commands(c) => &c.list,
+            Picking::Notices(n) => &n.list,
         }
     }
 
@@ -76,6 +79,7 @@ impl Picking {
             Picking::Resume(r) => &mut r.list,
             Picking::Interrupted(w) => &mut w.list,
             Picking::Commands(c) => &mut c.list,
+            Picking::Notices(n) => &mut n.list,
         }
     }
 
@@ -337,6 +341,8 @@ pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
             r.toggle_every();
             return Vec::new();
         }
+        Picking::Notices(_) if ctrl && key.key == "u" => return crate::notices::toggle(state),
+        Picking::Notices(_) if ctrl && key.key == "a" => return crate::notices::read_all(state),
         _ => {}
     }
     let delta = match action {
@@ -348,14 +354,19 @@ pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
         Some(Action::OverlayUp) => -1,
         _ => return Vec::new(),
     };
-    let len = rows_len(&state.picker, &state.hosts, &state.tree);
+    let len = rows_len(&state.picker, &state.hosts, &state.tree, &state.notices);
     if let Some(open) = &mut state.picker.open {
         open.list_mut().step(delta, len);
     }
     Vec::new()
 }
 
-fn rows_len(view: &PickerView, hosts: &Hosts, tree: &TreeView) -> usize {
+fn rows_len(
+    view: &PickerView,
+    hosts: &Hosts,
+    tree: &TreeView,
+    notices: &crate::notices::NoticeView,
+) -> usize {
     match &view.open {
         Some(Picking::Go(p)) => go_rows(p, &view.home, hosts, tree).len(),
         Some(Picking::Resume(r)) => {
@@ -363,6 +374,7 @@ fn rows_len(view: &PickerView, hosts: &Hosts, tree: &TreeView) -> usize {
         }
         Some(Picking::Interrupted(w)) => interrupted::rows(w, &view.home, hosts).len(),
         Some(Picking::Commands(c)) => commands::rows(c, hosts).len(),
+        Some(Picking::Notices(n)) => crate::notices::rows(notices, hosts, &n.list.query).len(),
         None => 0,
     }
 }
@@ -408,6 +420,7 @@ pub(crate) fn choose(state: &mut ViewState, at: usize) -> Vec<Effect> {
         Some(Picking::Resume(_)) => return resume::choose(state, at),
         Some(Picking::Interrupted(_)) => return interrupted::choose(state, at),
         Some(Picking::Commands(_)) => return commands::choose(state, at),
+        Some(Picking::Notices(_)) => return crate::notices::choose(state, at),
         None => None,
     };
     match chosen {

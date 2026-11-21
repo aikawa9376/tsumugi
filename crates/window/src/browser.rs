@@ -28,7 +28,31 @@ use crate::components::{IconButton, InlineField};
 use crate::icons::{Icon, IconView};
 
 thread_local! {
+    /// The address a page opened for one starts at, kept until its view is made.
+    static START: RefCell<HashMap<BrowserId, String>> = RefCell::new(HashMap::new());
+    /// The windows whose page was asked for a screenshot, until their loop
+    /// takes the asking.
+    static SHOTS: RefCell<Vec<WindowId>> = const { RefCell::new(Vec::new()) };
     static FOCUSED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The page of the window `window` is asked for a screenshot to keep.
+pub(crate) fn ask_screenshot(window: WindowId) {
+    SHOTS.with(|shots| shots.borrow_mut().push(window));
+}
+
+fn take_screenshot(window: WindowId) -> bool {
+    SHOTS.with(|shots| {
+        let mut shots = shots.borrow_mut();
+        let asked = shots.contains(&window);
+        shots.retain(|w| *w != window);
+        asked
+    })
+}
+
+/// The page `id` goes to `url` once its view is made.
+pub(crate) fn start_at(id: BrowserId, url: String) {
+    START.with(|start| start.borrow_mut().insert(id, url));
 }
 
 pub(crate) fn has_focus() -> bool {
@@ -406,6 +430,41 @@ pub(crate) fn use_browsers(app: AppCtx) {
     });
 }
 
+/// Capture the visible part of `page` and keep it among the resources of
+/// the project holding `worktree`, with the page's address as its note.
+async fn keep_screenshot(app: AppCtx, page: &Page, environment: &EnvironmentId, worktree: PathBuf) {
+    use base64::Engine;
+    let url = page.view.url().unwrap_or_default();
+    if url.is_empty() || url == "about:blank" {
+        app.notice("Open a page to take a screenshot of".into());
+        return;
+    }
+    let png = match capture::page(&page.view, &url).await {
+        Ok((_, png)) => png,
+        Err(message) => {
+            app.notice(message);
+            return;
+        }
+    };
+    let answer = app
+        .ask_in(
+            environment,
+            tsumugi_protocol::Ask::KeepScreenshot {
+                dir: worktree,
+                data: base64::engine::general_purpose::STANDARD.encode(png),
+                label: Some(format!("Screenshot of {}", name_of(&url))),
+                note: Some(url),
+            },
+        )
+        .await;
+    match answer {
+        tsumugi_protocol::Answer::Done => app.notice("Kept the screenshot in resources".into()),
+        tsumugi_protocol::Answer::Failed { text }
+        | tsumugi_protocol::Answer::Unconfirmed { text } => app.notice(text),
+        answer => app.notice(format!("the work host answered {answer:?}")),
+    }
+}
+
 #[component]
 pub(crate) fn BrowserWindow(
     window: WindowId,
@@ -445,6 +504,14 @@ pub(crate) fn BrowserWindow(
             return rsx! { div { class: "browser-error", "Browser could not start: {message}" } };
         }
     };
+    use_hook({
+        let page = page.clone();
+        move || {
+            if let Some(url) = START.with(|start| start.borrow_mut().remove(&id)) {
+                *page.pending.lock().expect("browser navigation lock") = Some(url);
+            }
+        }
+    });
     use_drop({
         let page = page.clone();
         move || {
@@ -456,6 +523,7 @@ pub(crate) fn BrowserWindow(
             FOCUSED.set(false);
         }
     });
+    let (shot_environment, shot_worktree) = (environment.clone(), worktree.clone());
     use_hook({
         let page = page.clone();
         move || {
@@ -542,6 +610,16 @@ pub(crate) fn BrowserWindow(
                         }
                         FOCUSED.set(false);
                         let _ = dioxus::desktop::window().webview.focus();
+                    }
+                    if take_screenshot(window) {
+                        let (page, environment, worktree) = (
+                            page.clone(),
+                            shot_environment.clone(),
+                            shot_worktree.clone(),
+                        );
+                        spawn(async move {
+                            keep_screenshot(app, &page, &environment, worktree).await;
+                        });
                     }
                     let pending = page.pending.lock().expect("browser navigation lock").take();
                     if let Some(url) = pending {

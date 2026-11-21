@@ -56,7 +56,7 @@ pub(crate) fn mode_tip(mode: &str, dialog: bool) -> &'static str {
         "PASS" => "Every key goes to the console's program, but Ctrl+q sequences",
         "DIRECT" => "Every key goes to the session until Esc",
         "PICK" => "Choosing where a session works: type to narrow, Enter chooses, Esc closes",
-        "INSERT" => "Writing a prompt: Ctrl+Enter sends it, Esc stops writing",
+        "INSERT" => "Writing a prompt: Ctrl+Enter or Ctrl+s sends it, Esc stops writing",
         "NORMAL" => "The prompt takes Vim commands: i writes again, Ctrl+q k goes up",
         _ => "The prompt is Neovim; this is its mode",
     }

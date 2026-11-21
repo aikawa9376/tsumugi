@@ -686,6 +686,7 @@ fn common(change: &Change) -> bool {
                 | TreeChange::LocalIssues { .. }
                 | TreeChange::Resources { .. }
                 | TreeChange::SavedCommands { .. }
+                | TreeChange::Notices { .. }
         ) | Change::Details(DetailsChange::Usage { .. } | DetailsChange::System { .. })
             | Change::Config(_)
     )
@@ -702,7 +703,8 @@ fn in_sight(change: &Change, sight: &Sight) -> bool {
             | TreeChange::GitHub { .. }
             | TreeChange::LocalIssues { .. }
             | TreeChange::Resources { .. }
-            | TreeChange::SavedCommands { .. },
+            | TreeChange::SavedCommands { .. }
+            | TreeChange::Notices { .. },
         ) => true,
         Change::Tree(TreeChange::Marks { worktree, .. } | TreeChange::MarksLeft { worktree }) => {
             sight.tree.marked.contains(worktree)

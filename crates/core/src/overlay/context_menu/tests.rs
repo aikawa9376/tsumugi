@@ -21,6 +21,8 @@ fn every_entry_of_every_menu_shows_an_icon_and_has_a_row_in_the_table() {
         Target::Tab(Tab::Session(here(), "a".into())),
         Target::Tab(Tab::Terminal(here(), 1)),
         Target::Link { at: 0, file: true },
+        Target::Pinned { at: 0, file: true },
+        Target::Panel,
     ];
     for target in targets {
         for s in [None, Some(&own)] {
@@ -36,11 +38,36 @@ fn every_entry_of_every_menu_shows_an_icon_and_has_a_row_in_the_table() {
 fn a_link_of_the_overview_is_opened_or_copied_and_a_file_revealed_too() {
     assert_eq!(
         actions(Target::Link { at: 2, file: false }, None),
-        [Action::CursorGo, Action::CursorCopy]
+        [Action::CursorGo, Action::CursorCopy, Action::ResourceKeep]
     );
     assert_eq!(
         actions(Target::Link { at: 2, file: true }, None),
-        [Action::CursorGo, Action::CursorCopy, Action::CursorReveal]
+        [
+            Action::CursorGo,
+            Action::CursorCopy,
+            Action::CursorReveal,
+            Action::ResourceKeep
+        ]
+    );
+}
+
+#[test]
+fn a_pinned_resource_opens_where_a_file_does_and_is_copied_edited_and_removed() {
+    assert_eq!(
+        grouped(Target::Pinned { at: 1, file: false }, None),
+        [
+            [&OPENS[..], &[Action::CursorCopy, Action::ResourceEdit]].concat(),
+            vec![Action::ResourceRemove]
+        ]
+    );
+    assert!(actions(Target::Pinned { at: 1, file: true }, None).contains(&Action::CursorReveal));
+}
+
+#[test]
+fn the_panel_itself_offers_to_keep_a_resource() {
+    assert_eq!(
+        actions(Target::Panel, None),
+        [Action::ResourceAdd, Action::ResourceScreenshot]
     );
 }
 

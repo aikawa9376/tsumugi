@@ -1,6 +1,7 @@
 use super::*;
 
 mod commands;
+mod discover;
 mod identity;
 mod metrics;
 mod models;
@@ -39,6 +40,23 @@ impl AgentAdapter for Codex {
         title: String,
     ) -> ConversationLookup {
         Box::pin(identity::resolve(context, cwd, title))
+    }
+
+    fn discover_conversation(
+        &self,
+        context: AgentContext,
+        home: PathBuf,
+        cwd: PathBuf,
+        since_ms: u64,
+        taken: Vec<String>,
+    ) -> ConversationLookup {
+        let root = root(&context, &home);
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || discover::find(&root, &cwd, since_ms, &taken))
+                .await
+                .ok()
+                .flatten()
+        })
     }
 
     fn developer_instructions(&self, context: AgentContext, cwd: PathBuf) -> DeveloperInstructions {

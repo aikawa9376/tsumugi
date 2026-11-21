@@ -247,6 +247,7 @@ pub(crate) fn perform(
             effects
         }
         Action::SessionResume => step(state, Msg::ResumeOpen),
+        Action::NoticesOpen => step(state, Msg::NoticesOpen),
         Action::SessionBringBack => {
             let environment = content::focused_environment(state);
             step(state, Msg::InterruptedOpen(environment))
@@ -501,6 +502,11 @@ pub(crate) fn perform(
         Action::WorkspaceAdd => step(state, Msg::PickerAddOpen),
         Action::LocalIssues => crate::local_issues::open(state),
         Action::SavedCommands => step(state, Msg::CommandsOpen),
+        Action::ResourceAdd => crate::resources::add(state),
+        Action::ResourceEdit => crate::resources::edit(state),
+        Action::ResourceRemove => crate::resources::remove(state),
+        Action::ResourceKeep => crate::resources::keep(state),
+        Action::ResourceScreenshot => crate::resources::screenshot(state),
         // An environment holds no directory to start in: where the session
         // works is picked in that environment.
         Action::SessionNew if on_list && matches!(cur, Some(Item::Environment(_))) => {

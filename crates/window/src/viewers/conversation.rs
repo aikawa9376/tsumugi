@@ -1,6 +1,6 @@
 //! A conversation read in order, with only thinking folded away.
 
-use tsumugi_model::conversation::{Message, Role};
+use tsumugi_model::conversation::{Message, Role, Tool};
 
 use super::{escape, render_post};
 
@@ -16,6 +16,11 @@ pub fn conversation_fragment(messages: &[Message]) -> String {
     let mut out = String::new();
     let mut at = 0;
     while at < messages.len() {
+        if let Some(tool) = &messages[at].tool {
+            out.push_str(&call(tool, at));
+            at += 1;
+            continue;
+        }
         if !messages[at].thinking {
             out.push_str(&message(&messages[at], at));
             at += 1;
@@ -33,6 +38,35 @@ pub fn conversation_fragment(messages: &[Message]) -> String {
         at = end;
     }
     out
+}
+
+/// A tool call as a folded line that opens to its input and output.
+fn call(tool: &Tool, index: usize) -> String {
+    let state = match (&tool.output, tool.failed) {
+        (_, true) => "failed",
+        (Some(_), false) => "done",
+        (None, false) => "running",
+    };
+    let part = |label: &str, text: &str| {
+        if text.trim().is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<div class=\"conversation-tool-part\"><b>{label}</b><pre>{}</pre></div>",
+                escape(text)
+            )
+        }
+    };
+    format!(
+        "<details class=\"conversation-tool {state}\" data-progress=\"{index}\">\
+        <summary><span class=\"conversation-tool-name\">{}</span>\
+        <span class=\"conversation-tool-summary\">{}</span>\
+        <span class=\"conversation-tool-state\">{state}</span></summary>{}{}</details>",
+        escape(&tool.name),
+        escape(&tool.summary),
+        part("Input", &tool.input),
+        part("Output", tool.output.as_deref().unwrap_or_default()),
+    )
 }
 
 fn message(m: &Message, index: usize) -> String {
@@ -59,6 +93,7 @@ mod tests {
             text: text.into(),
             at_ms: None,
             thinking,
+            tool: None,
         }
     }
 
@@ -75,6 +110,42 @@ mod tests {
         assert!(html.find("Checking").unwrap() < html.find("Done <strong>now</strong>").unwrap());
         assert!(html.contains("Still working"));
         assert!(html.find("Fix it").unwrap() < html.find("Next").unwrap());
+    }
+
+    #[test]
+    fn a_tool_call_is_one_folded_line_that_escapes_what_it_ran_and_returned() {
+        let html = conversation_fragment(&[
+            said(Role::Assistant, "Running", false),
+            Message {
+                tool: Some(Tool {
+                    id: "a".into(),
+                    name: "Bash".into(),
+                    summary: "echo <b>".into(),
+                    input: "{\"command\":\"echo <b>\"}".into(),
+                    output: Some("<script>x</script>".into()),
+                    failed: true,
+                }),
+                ..said(Role::Assistant, "", false)
+            },
+            Message {
+                tool: Some(Tool {
+                    id: "b".into(),
+                    name: "Read".into(),
+                    summary: "file".into(),
+                    input: String::new(),
+                    output: None,
+                    failed: false,
+                }),
+                ..said(Role::Assistant, "", false)
+            },
+        ]);
+        assert!(html.contains("<details class=\"conversation-tool failed\" data-progress=\"1\">"));
+        assert!(html.contains("<details class=\"conversation-tool running\" data-progress=\"2\">"));
+        assert!(html.contains("echo &lt;b&gt;"));
+        assert!(html.contains("&lt;script&gt;x&lt;/script&gt;"));
+        assert!(!html.contains("<script>"));
+        assert!(!html.contains(" open"));
+        assert_eq!(html.matches("conversation-message").count(), 1);
     }
 
     #[test]

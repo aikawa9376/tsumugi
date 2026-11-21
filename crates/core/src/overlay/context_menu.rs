@@ -21,6 +21,14 @@ pub enum Target {
         at: usize,
         file: bool,
     },
+    /// Row `at` of the details panel's pinned resources, and whether it is a
+    /// path.
+    Pinned {
+        at: usize,
+        file: bool,
+    },
+    /// The details panel's Resources where no row is.
+    Panel,
 }
 
 /// Where the environment of a menu's heading works, as far as its menu
@@ -191,7 +199,18 @@ pub fn entries(
             .map(offer)
             .into_iter()
             .chain(file.then(|| offer(Action::CursorReveal)))
+            .chain([offer(Action::ResourceKeep)])
             .collect(),
+        Target::Pinned { file, .. } => opens
+            .into_iter()
+            .chain([offer(Action::CursorCopy)])
+            .chain(file.then(|| offer(Action::CursorReveal)))
+            .chain([offer(Action::ResourceEdit), offer(Action::ResourceRemove)])
+            .collect(),
+        Target::Panel => vec![
+            offer(Action::ResourceAdd),
+            offer(Action::ResourceScreenshot),
+        ],
     }
 }
 

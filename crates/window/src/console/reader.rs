@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use dioxus::prelude::*;
 use tokio::sync::{Notify, mpsc};
+use tsumugi_core::actions::Action;
 use tsumugi_core::msg::Msg;
 use tsumugi_nvim::{Embedded, Event as NvimEvent, Mark, View};
 use tsumugi_term::{Pane, Size};
@@ -37,15 +38,19 @@ pub(crate) struct Reader {
     hub: Hub,
     frame: Signal<u64>,
     console_size: Signal<Size>,
+    /// Told each action a key of the reader asks for.
+    asked: Callback<Action>,
 }
 
 /// The reader started for the console drawn at `console_size`, its pane
-/// redrawn as `frame` moves.
+/// redrawn as `frame` moves; `asked` is told each action a key of it asks
+/// for.
 pub(crate) fn use_reader(
     app: AppCtx,
     hub: &Hub,
     frame: Signal<u64>,
     console_size: Signal<Size>,
+    asked: Callback<Action>,
 ) -> Reader {
     let reader = Reader {
         reader: use_signal(|| None),
@@ -56,6 +61,7 @@ pub(crate) fn use_reader(
         hub: hub.clone(),
         frame,
         console_size,
+        asked,
     };
     // Told when the console changes while it is read.
     let console_changed = use_hook(|| Rc::new(Notify::new()));
@@ -185,6 +191,10 @@ impl Reader {
                     Ok(()) if lines == 1 => app.notice("Copied a line".into()),
                     Ok(()) => app.notice(format!("Copied {lines} lines")),
                     Err(e) => app.notice(format!("cannot copy: {e}")),
+                },
+                NvimEvent::Action(name) => match name.parse::<Action>() {
+                    Ok(action) => (self.asked)(action),
+                    Err(e) => app.notice(format!("cannot run {name}: {e}")),
                 },
                 NvimEvent::ConfigurationSaved => {
                     let Ok(view) = reader.view().await else {

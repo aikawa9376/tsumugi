@@ -448,12 +448,7 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         Key::Up => details.drill.step(l, -1),
         Key::First => details.drill.first(l),
         Key::Last => details.drill.last(l),
-        Key::Open
-        | Key::OpenIn(_)
-        | Key::Fold
-        | Key::Copy
-        | Key::Reveal
-        => {}
+        Key::Open | Key::OpenIn(_) | Key::Fold | Key::Copy | Key::Reveal => {}
         Key::Stage
         | Key::StageAll
         | Key::Discard
@@ -575,13 +570,23 @@ fn pressed_on_entries(
     }
 }
 
+/// The entry the cursor is on, when a list of entries is shown.
+pub fn chosen(details: &Details, work: Option<&WorkSnapshot>) -> Option<Entry> {
+    let listing = entry_listing(details, work)?;
+    let at = details.drill.selected(&listing)?;
+    match listing {
+        Listing::Entries(entries) => entries.into_iter().nth(at),
+        _ => None,
+    }
+}
+
 /// `entry` of `l` opened: the row for a group's rest shows the group whole,
 /// a subagent, message, process, task, file changed or change of the log
 /// opens to a level of its own, and any other row is used.
 fn opened(details: &mut Details, l: &Listing, entry: &Entry, how: Opening) -> Vec<Effect> {
     let in_place = how == Opening::Existing;
     match entry {
-        Entry::Image(_) => used(details, entry, Use::Open(how)),
+        Entry::Image(_) | Entry::Pinned(_) => used(details, entry, Use::Open(how)),
         _ if !in_place => Vec::new(),
         Entry::More { group, .. } => {
             details.opened.insert(*group);
@@ -680,9 +685,12 @@ fn fold(details: &mut Details, group: Group, shut: bool) {
 fn used(details: &Details, entry: &Entry, how: Use) -> Vec<Effect> {
     match entry {
         Entry::Link(link) => use_link(link, how, &details.shown.environment),
-        Entry::Pinned(resource) => {
-            use_link(&resource_link(resource), how, &details.shown.environment)
-        }
+        Entry::Pinned(resource) => match how {
+            Use::Open(opening) => opened_resource(details, resource, opening),
+            Use::Copy | Use::Reveal => {
+                use_link(&resource_link(resource), how, &details.shown.environment)
+            }
+        },
         Entry::Image(shot) => use_shot(
             shot,
             how,
@@ -723,6 +731,35 @@ fn copied(how: Use, text: &str, done: String) -> Vec<Effect> {
             done,
         }],
         Use::Open(_) | Use::Reveal => Vec::new(),
+    }
+}
+
+/// `resource` opened in the content as `how` says: an address as a page of
+/// the browser under the worktree shown, a path as the file tree opens it;
+/// an address the browser does not take is left to the system.
+fn opened_resource(
+    details: &Details,
+    resource: &tsumugi_model::Resource,
+    how: Opening,
+) -> Vec<Effect> {
+    let environment = details.shown.environment.clone();
+    let web = resource.target.starts_with("http://") || resource.target.starts_with("https://");
+    match (resource.reach(), &details.shown.worktree) {
+        (tsumugi_model::Reach::Address, Some(worktree)) if web => vec![Effect::OpenAddress {
+            environment,
+            worktree: worktree.clone(),
+            url: resource.target.clone(),
+            how,
+        }],
+        (tsumugi_model::Reach::Address, _) => vec![Effect::Open {
+            environment,
+            target: resource.target.clone(),
+        }],
+        (tsumugi_model::Reach::Path, _) => vec![Effect::OpenFile {
+            environment,
+            path: PathBuf::from(&resource.target),
+            how,
+        }],
     }
 }
 
@@ -2794,7 +2831,7 @@ pub(crate) mod tests {
         );
     }
 
-    fn resource(project: &str, target: &str) -> tsumugi_model::Resource {
+    pub(crate) fn resource(project: &str, target: &str) -> tsumugi_model::Resource {
         tsumugi_model::Resource {
             id: format!("{project}{target}"),
             project: project.into(),
@@ -2806,14 +2843,14 @@ pub(crate) mod tests {
 
     /// The session `a` shown in `/w` with the panel made of the settings
     /// `panel`, where the projects keep `resources`.
-    fn pinned_in(panel: &str, resources: Vec<tsumugi_model::Resource>) -> Scenario {
+    pub(crate) fn pinned_in(panel: &str, resources: Vec<tsumugi_model::Resource>) -> Scenario {
         Scenario::new()
             .event(crate::config::testing::configured(panel))
             .event(work(read("a", file_and_url())).with(|w| w.tree.resources = resources))
             .send(shown(Some("a"), Some("/w")))
     }
 
-    const PINNED_TAB: &str =
+    pub(crate) const PINNED_TAB: &str =
         "[[panel.session.tabs]]\ntitle = \"Mine\"\ncomponents = [\"pinned\", \"files\"]\n";
 
     #[test]
@@ -2845,7 +2882,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_pinned_address_opens_and_a_pinned_path_opens_and_reveals_and_either_copies() {
+    fn a_pinned_address_opens_in_a_page_and_a_pinned_path_in_its_file_tab_and_either_copies() {
         let pressed = |keys: &[Key]| {
             let run = pinned_in(
                 PINNED_TAB,
@@ -2858,9 +2895,19 @@ pub(crate) mod tests {
         };
         assert_eq!(
             pressed(&[Key::Down, Key::Open]),
-            [Effect::Open {
+            [Effect::OpenAddress {
                 environment: here(),
-                target: "https://a.dev/doc".into()
+                worktree: "/w".into(),
+                url: "https://a.dev/doc".into(),
+                how: Opening::Existing,
+            }]
+        );
+        assert_eq!(
+            pressed(&[Key::Down, Key::Down, Key::Open]),
+            [Effect::OpenFile {
+                environment: here(),
+                path: "/etc/a.conf".into(),
+                how: Opening::Existing,
             }]
         );
         assert_eq!(pressed(&[Key::Down, Key::Reveal]), []);
@@ -2876,6 +2923,36 @@ pub(crate) mod tests {
             [Effect::Copy {
                 text: "https://a.dev/doc".into(),
                 done: "Copied https://a.dev/doc".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn a_pinned_address_the_browser_does_not_take_is_left_to_the_system() {
+        let run = pinned_in(PINNED_TAB, vec![resource("/w", "ssh://host/repo")]);
+        let opened = run.send_all([Msg::DetailsKey(Key::Down), Msg::DetailsKey(Key::Open)]);
+        assert_eq!(
+            local(&opened),
+            [Effect::Open {
+                environment: here(),
+                target: "ssh://host/repo".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn a_pinned_resource_opens_in_a_tab_or_a_split_as_the_keys_say() {
+        let run = pinned_in(PINNED_TAB, vec![resource("/w", "/etc/a.conf")]);
+        let tab = run.send_all([
+            Msg::DetailsKey(Key::Down),
+            Msg::DetailsKey(Key::OpenIn(Opening::Tab)),
+        ]);
+        assert_eq!(
+            local(&tab),
+            [Effect::OpenFile {
+                environment: here(),
+                path: "/etc/a.conf".into(),
+                how: Opening::Tab,
             }]
         );
     }

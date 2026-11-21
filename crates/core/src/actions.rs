@@ -81,6 +81,7 @@ pub enum Action {
     SessionScratch,
     SessionResume,
     SessionBringBack,
+    NoticesOpen,
     SessionStop,
     SessionRename,
     SessionProfileNext,
@@ -98,6 +99,11 @@ pub enum Action {
     WorkspaceAdd,
     LocalIssues,
     SavedCommands,
+    ResourceAdd,
+    ResourceEdit,
+    ResourceRemove,
+    ResourceKeep,
+    ResourceScreenshot,
     WorkspaceRemove,
     WorktreeClose,
     WorktreeNew,
@@ -234,7 +240,6 @@ pub struct ActionSpec {
 /// so a key that steps through another begins what it begins instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Steps {
-    Windows,
     WindowSize,
     Tabs,
     TabOrder,
@@ -295,8 +300,8 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WindowDown, "window.down", "move to the window below: a session's prompt lies below its console").bar("Window Below", Icon::SquareArrowDown),
     S::new(A::WindowUp, "window.up", "move to the window above: a session's console lies above its prompt").bar("Window Above", Icon::SquareArrowUp),
     S::new(A::WindowRight, "window.right", "move to the window to the right: the details panel lies right of the content's windows").bar("Right Window", Icon::SquareArrowRight),
-    S::new(A::WindowNext, "window.next", "move to the window after the one the keys are in, from the tree through the content's windows, each console before its prompt, to the details panel, going round at the end").bar("Next Window", Icon::ArrowBarRight).repeats(Steps::Windows),
-    S::new(A::WindowPrev, "window.prev", "move to the window before the one the keys are in, in the order `window.next` goes, going round at the start").bar("Previous Window", Icon::ArrowBarLeft).repeats(Steps::Windows),
+    S::new(A::WindowNext, "window.next", "move to the window after the one the keys are in, from the tree through the content's windows, each console before its prompt, to the details panel, going round at the end").bar("Next Window", Icon::ArrowBarRight),
+    S::new(A::WindowPrev, "window.prev", "move to the window before the one the keys are in, in the order `window.next` goes, going round at the start").bar("Previous Window", Icon::ArrowBarLeft),
     S::new(A::WindowTop, "window.top", "move to the first window, the tree when shown").bar("First Window", Icon::ArrowUpLeft),
     S::new(A::WindowBottom, "window.bottom", "move to the last window, the details panel when shown").bar("Last Window", Icon::ArrowDownRight),
     S::new(A::WindowBack, "window.back", "move back to the window the keys were in before").bar("Back to Window Before", Icon::ArrowBackUp),
@@ -384,6 +389,7 @@ pub static ACTIONS: &[ActionSpec] = &[
         .row("New session here", Start),
     S::new(A::SessionScratch, "session.scratch", "start a scratch session, with the prompt ready: one that runs in the scratch folder, for talking about something no project holds ([details](tree.md#scratch-sessions))").bar("New Scratch Session", Icon::Notes),
     S::new(A::SessionResume, "session.resume", "list the conversations Claude Code and Codex kept, to resume one in a new session ([details](sessions.md#resuming-a-past-conversation))").bar("Resume Conversation…", Icon::TransferIn),
+    S::new(A::NoticesOpen, "notices.open", "open the list of what needed you, the sessions that began waiting on you, failed or finished a turn, to go through them, mark them read or unread and go to their sessions ([details](notices.md))").bar("Notices…", Icon::Bell),
     S::new(A::SessionBringBack, "session.bring_back", "list what the terminal host took with it when it went, to bring a session or a shell back ([details](sessions.md#when-the-terminal-host-goes))").bar("Bring Back Sessions…", Icon::Restore),
     S::new(A::SessionStop, "session.stop", "end a session Tsumugi runs after asking; Claude Code keeps its conversation, for `/resume` in a session started later; on a terminal's row, end that terminal")
         .bar("End…", Icon::PlayerStop)
@@ -432,6 +438,21 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::SavedCommands, "saved_commands.open", "open the commands the project keeps, to search them, run one in the selected worktree after confirming it, and add, edit or delete one ([details](saved-commands.md))")
         .bar("Saved Commands…", Icon::Terminal)
         .row("Saved commands…", Start),
+    S::new(A::ResourceAdd, "resource.add", "open the sheet that keeps a path or an address, with a label and a note, in the project of what the details panel shows, to open from its Resources tab ([details](resources.md#keeping-and-opening-them))")
+        .bar("Add Resource…", Icon::FilePlus)
+        .row("Add resource…", Start),
+    S::new(A::ResourceEdit, "resource.edit", "open the sheet on the pinned resource the details panel's cursor is on, to change its label and note ([details](resources.md#keeping-and-opening-them))")
+        .icon(Icon::Pencil)
+        .row("Edit label and note…", Go),
+    S::new(A::ResourceRemove, "resource.remove", "stop keeping the pinned resource the details panel's cursor is on, which leaves what it points at as it is ([details](resources.md#keeping-and-opening-them))")
+        .icon(Icon::Trash)
+        .row("Remove from resources", End),
+    S::new(A::ResourceKeep, "resource.keep", "keep the address, file or image the details panel's cursor is on in the project's resources, unless it keeps it already ([details](resources.md#keeping-and-opening-them))")
+        .icon(Icon::SquarePlus)
+        .row("Keep as resource", Go),
+    S::new(A::ResourceScreenshot, "resource.screenshot", "take a screenshot of the visible part of the browser page shown and keep the picture, with the page's address as its note, among the project's resources ([details](resources.md#keeping-and-opening-them))")
+        .icon(Icon::Photo)
+        .row("Screenshot of the page", Start),
     S::new(A::WorkspaceRemove, "workspace.remove", "take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](tree.md#workspaces-and-worktrees))")
         .icon(Icon::SquareMinus)
         .row("Remove from tree…", End),
@@ -726,6 +747,7 @@ mod tests {
             SessionScratch,
             SessionResume,
             SessionBringBack,
+            NoticesOpen,
             SessionStop,
             SessionRename,
             SessionProfileNext,
@@ -743,6 +765,11 @@ mod tests {
             WorkspaceAdd,
             LocalIssues,
             SavedCommands,
+            ResourceAdd,
+            ResourceEdit,
+            ResourceRemove,
+            ResourceKeep,
+            ResourceScreenshot,
             WorkspaceRemove,
             WorktreeClose,
             WorktreeNew,

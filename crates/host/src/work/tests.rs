@@ -38,6 +38,34 @@ fn resources_reach_every_window_and_are_in_a_new_windows_snapshot() {
 }
 
 #[test]
+fn notices_reach_every_window_and_are_in_a_new_windows_snapshot() {
+    let mut host = two_windows("a", "b");
+    let notice = tsumugi_model::Notice {
+        id: 3,
+        kind: tsumugi_model::NoticeKind::Waiting,
+        session: "s".into(),
+        name: "s".into(),
+        workspace: "api".into(),
+        at_ms: 9,
+        reason: "permission prompt".into(),
+    };
+    let change = TreeChange::Notices {
+        notices: vec![notice.clone()],
+    };
+    let sent = host.record([change.clone()]);
+    for window in [A, B] {
+        let event = to(window, sent.clone()).pop().unwrap();
+        assert!(
+            matches!(event, Event::Patch(patch) if patch.changes == [Change::Tree(change.clone())])
+        );
+    }
+    let opened = host.handle(WindowId(3), hello(&[SPOKEN[0].0]));
+    assert!(opened.iter().any(
+        |(_, event)| matches!(event, Event::Snapshot(work) if work.tree.notices == [notice.clone()])
+    ));
+}
+
+#[test]
 fn local_issues_reach_every_window_and_are_in_a_new_windows_snapshot() {
     let mut host = two_windows("a", "b");
     let issue = tsumugi_model::LocalIssue {

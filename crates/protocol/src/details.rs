@@ -335,6 +335,7 @@ mod tests {
                 text: "Hello".into(),
                 at_ms: Some(1),
                 thinking: false,
+                tool: None,
             }],
         };
         let change = DetailsChange::Transcript {

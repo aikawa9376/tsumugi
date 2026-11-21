@@ -30,6 +30,8 @@ pub enum Msg {
     SidebarFilter(String),
     SidebarFiltering(bool),
     LocalIssuesClose,
+    /// Put the sheet of resources away.
+    ResourcesClose,
     /// The window opened, with the home directory the paths it draws
     /// shorten to `~`.
     Opened {
@@ -178,6 +180,8 @@ pub enum Msg {
     /// opens, in the worktree it lies in or else its own folder: a document
     /// shown links to it.
     OpenFile(EnvironmentId, PathBuf),
+    /// [`Msg::OpenFile`] where `how` says: in a tab or a split of its own.
+    OpenFileIn(EnvironmentId, PathBuf, crate::content::Opening),
     /// Review this repository spot in a dedicated tab or the user's Neovim.
     OpenDiff {
         environment: EnvironmentId,
@@ -315,6 +319,10 @@ pub enum Msg {
     /// Open the list of what the terminal host of the environment took
     /// with it, to choose what comes back.
     InterruptedOpen(EnvironmentId),
+    /// Open the list of what needed the user.
+    NoticesOpen,
+    /// What the window read of the notices when it last closed.
+    ReadsRestored(crate::notices::Reads),
     PickerClose,
     /// Its query field now holds this.
     PickerQuery(String),

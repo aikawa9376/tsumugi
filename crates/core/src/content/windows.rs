@@ -422,6 +422,7 @@ pub(crate) fn open_file(
     state: &mut ViewState,
     environment: EnvironmentId,
     path: PathBuf,
+    how: Opening,
 ) -> Vec<Effect> {
     let work = state.hosts.work(&environment);
     let listed = tree::listed(work);
@@ -441,7 +442,7 @@ pub(crate) fn open_file(
     match opens {
         nav::Opens::Shows(thing, place) => {
             content.place = place.or(Some(Place::at(&environment, worktree)));
-            content.windows.open_in(thing, Opening::Existing);
+            content.windows.open_in(thing, how);
             content.focus = Area::Console;
             Vec::new()
         }
@@ -449,7 +450,7 @@ pub(crate) fn open_file(
             place: Place::at(&environment, worktree),
             runs: TerminalProgram::Neovim,
             file: Some(file),
-            opening: Opening::Existing,
+            opening: how,
             focus: true,
         })],
         nav::Opens::Unavailable => vec![Effect::Notice(super::REMOTE_PREVIEW.into())],

@@ -321,11 +321,16 @@ mod tests {
         assert!(!bound.is_empty());
         for (_, keys, name) in bound {
             let action: Action = name.parse().unwrap();
-            // Moving focus and switching a document to Neovim belong to
-            // the window, and opening a pull request to the browser.
+            // Moving focus and switching a document to Neovim belong to the window, and opening a pull request to
+            // the browser.
             if matches!(
                 action,
-                Action::KeysHelp | Action::WindowEdit | Action::CursorBrowse | Action::TreeFocus
+                Action::KeysHelp
+                    | Action::WindowEdit
+                    | Action::CursorBrowse
+                    | Action::TreeFocus
+                    | Action::WindowNext
+                    | Action::WindowPrev
             ) {
                 continue;
             }

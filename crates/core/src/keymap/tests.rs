@@ -210,6 +210,35 @@ fn the_tabs_are_switched_by_the_keys_each_platform_and_vim_switch_tabs_with() {
 }
 
 #[test]
+fn double_brackets_go_round_the_sidebar_the_windows_and_the_details() {
+    let map = Keymap::defaults();
+    for ctx in [
+        Context::Tree,
+        Context::Agents,
+        Context::Details,
+        Context::Console,
+        Context::Viewer,
+    ] {
+        let (next, prev) = (Action::WindowNext, Action::WindowPrev);
+        let areas = [ctx, Context::Global];
+        for (first, key, action) in [("]", "]", next.clone()), ("[", "[", prev.clone())] {
+            assert_eq!(
+                step(&map, &areas, &[], first),
+                Step::Wait,
+                "{} {first}",
+                ctx.name()
+            );
+            assert_eq!(
+                step(&map, &areas, &[first], key),
+                Step::Run(action),
+                "{} {first}{key}",
+                ctx.name()
+            );
+        }
+    }
+}
+
+#[test]
 fn a_ctrl_key_bound_alone_everywhere_reaches_the_window_from_the_prompt_s_insert_mode() {
     let map = Keymap::defaults();
     let inserting = [Context::Prompt];

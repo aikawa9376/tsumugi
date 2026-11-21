@@ -39,6 +39,10 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             state.sidebar.filtering = on;
             Vec::new()
         }
+        Msg::ResourcesClose => {
+            state.overlays.resources = None;
+            Vec::new()
+        }
         Msg::LocalIssuesClose => {
             state.overlays.local_issues = None;
             Vec::new()
@@ -139,7 +143,12 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             prompt,
         } => content::draft_written(state, environment, worktree, prompt),
         Msg::EditFile(environment, path) => content::edit_file(state, environment, path),
-        Msg::OpenFile(environment, path) => content::open_file(state, environment, path),
+        Msg::OpenFile(environment, path) => {
+            content::open_file(state, environment, path, content::Opening::Existing)
+        }
+        Msg::OpenFileIn(environment, path, how) => {
+            content::open_file(state, environment, path, how)
+        }
         Msg::OpenDiff {
             environment,
             worktree,
@@ -282,6 +291,8 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::PickerAddOpen => picker::open(state, picker::Purpose::Add),
         Msg::ResumeOpen => picker::open_resume(state),
         Msg::InterruptedOpen(environment) => picker::open_interrupted(state, environment),
+        Msg::NoticesOpen => crate::notices::open(state),
+        Msg::ReadsRestored(reads) => crate::notices::restore(state, reads),
         Msg::PickerClose => picker::close(&mut state.picker),
         Msg::PickerQuery(text) => picker::query(&mut state.picker, text),
         Msg::PickerKey(key) => picker::press(state, &key),

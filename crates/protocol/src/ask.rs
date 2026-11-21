@@ -39,6 +39,33 @@ pub enum Ask {
     DeleteSavedCommand {
         id: String,
     },
+    /// Keep `target`, an address or a path, in the project holding `dir`; a
+    /// relative path is one of `dir`. One the project keeps already keeps its
+    /// identity and takes the label and note given anew.
+    KeepResource {
+        dir: PathBuf,
+        target: String,
+        label: Option<String>,
+        note: Option<String>,
+    },
+    /// Keep the PNG `data`, in base64, as a file on the work machine and
+    /// keep that file as a resource of the project holding `dir`.
+    KeepScreenshot {
+        dir: PathBuf,
+        data: String,
+        label: Option<String>,
+        note: Option<String>,
+    },
+    /// Replace the label and the note of the resource of `id`.
+    DescribeResource {
+        id: String,
+        label: Option<String>,
+        note: Option<String>,
+    },
+    /// Keep the resource of `id` no more.
+    DropResource {
+        id: String,
+    },
     PathEntries {
         root: Option<HostPath>,
         typed: String,

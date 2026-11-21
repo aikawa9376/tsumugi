@@ -22,6 +22,10 @@ pub(crate) struct Preferences {
     prompt_min_rows: usize,
     prompt_max_rows: usize,
     notify_waiting: bool,
+    #[serde(default)]
+    notify_failed: bool,
+    #[serde(default)]
+    notify_done: bool,
     console: ConsoleSettings,
     appearance: Appearance,
     light_theme: String,
@@ -66,6 +70,8 @@ impl Preferences {
             prompt_min_rows: settings.prompt_min_rows,
             prompt_max_rows: settings.prompt_max_rows,
             notify_waiting: settings.notify_waiting,
+            notify_failed: settings.notify_failed,
+            notify_done: settings.notify_done,
             console: settings.console.clone(),
             appearance: settings.appearance,
             light_theme: settings.light_theme.clone(),
@@ -82,6 +88,8 @@ impl Preferences {
         settings.prompt_min_rows = self.prompt_min_rows;
         settings.prompt_max_rows = self.prompt_max_rows;
         settings.notify_waiting = self.notify_waiting;
+        settings.notify_failed = self.notify_failed;
+        settings.notify_done = self.notify_done;
         settings.console = self.console.clone();
         settings.panel = self.panel.clone();
         self.looks().apply(settings);

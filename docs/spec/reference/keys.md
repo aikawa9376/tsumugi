@@ -15,8 +15,8 @@ changes them ([keys](../keys.md)).
 | `window.down` | Window Below | move to the window below: a session's prompt lies below its console | `global`: `Ctrl+q j`, `Ctrl+q ArrowDown` |
 | `window.up` | Window Above | move to the window above: a session's console lies above its prompt | `global`: `Ctrl+q k`, `Ctrl+q ArrowUp` |
 | `window.right` | Right Window | move to the window to the right: the details panel lies right of the content's windows | `global`: `Ctrl+q l`, `Ctrl+q ArrowRight` |
-| `window.next` | Next Window | move to the window after the one the keys are in, from the tree through the content's windows, each console before its prompt, to the details panel, going round at the end; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+q q` |
-| `window.prev` | Previous Window | move to the window before the one the keys are in, in the order `window.next` goes, going round at the start; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+q Q` |
+| `window.next` | Next Window | move to the window after the one the keys are in, from the tree through the content's windows, each console before its prompt, to the details panel, going round at the end | `global`: `Ctrl+q q`<br>`tree`: `] ]`<br>`agents`: `] ]`<br>`details`: `] ]`<br>`console`: `] ]`<br>`viewer`: `] ]` |
+| `window.prev` | Previous Window | move to the window before the one the keys are in, in the order `window.next` goes, going round at the start | `global`: `Ctrl+q Q`<br>`tree`: `[ [`<br>`agents`: `[ [`<br>`details`: `[ [`<br>`console`: `[ [`<br>`viewer`: `[ [` |
 | `window.top` | First Window | move to the first window, the tree when shown | `global`: `Ctrl+q t` |
 | `window.bottom` | Last Window | move to the last window, the details panel when shown | `global`: `Ctrl+q b` |
 | `window.back` | Back to Window Before | move back to the window the keys were in before | `global`: `Ctrl+q p` |
@@ -77,6 +77,7 @@ changes them ([keys](../keys.md)).
 | `session.new` | New Session | start a session, with the prompt ready to write its first message: in the selected row's worktree or directory from the tree, in the one the focused window shows from elsewhere | `global`: `Mod+t`<br>`tree`: `n`<br>`agents`: `n` |
 | `session.scratch` | New Scratch Session | start a scratch session, with the prompt ready: one that runs in the scratch folder, for talking about something no project holds ([details](../tree.md#scratch-sessions)) |  |
 | `session.resume` | Resume Conversation… | list the conversations Claude Code and Codex kept, to resume one in a new session ([details](../sessions.md#resuming-a-past-conversation)) | `global`: `Mod+o`<br>`tree`: `O` |
+| `notices.open` | Notices… | open the list of what needed you, the sessions that began waiting on you, failed or finished a turn, to go through them, mark them read or unread and go to their sessions ([details](../notices.md)) | `global`: `Ctrl+q i` |
 | `session.bring_back` | Bring Back Sessions… | list what the terminal host took with it when it went, to bring a session or a shell back ([details](../sessions.md#when-the-terminal-host-goes)) |  |
 | `session.stop` | End… | end a session Tsumugi runs after asking; Claude Code keeps its conversation, for `/resume` in a session started later; on a terminal's row, end that terminal | `global`: `Mod+Backspace`<br>`tree`: `X`<br>`agents`: `X`<br>`console`: `X` |
 | `session.rename` | Rename… | edit the name of a session Tsumugi runs in place; the tree shows it, and the session is sent Claude Code's `/rename` so its own interface says it too | `tree`: `R`<br>`agents`: `R` |
@@ -95,6 +96,11 @@ changes them ([keys](../keys.md)).
 | `workspace.add` | Add to Tree… | open the picker on the directories alone, to add the one chosen to the tree with nothing running there ([details](../tree.md#going-to-a-session-or-starting-one)) | `tree`: `A` |
 | `local_issues.open` | Local Issues… | open local issues for this environment and working directory, to queue work for its default agent ([details](../local-issues.md)) |  |
 | `saved_commands.open` | Saved Commands… | open the commands the project keeps, to search them, run one in the selected worktree after confirming it, and add, edit or delete one ([details](../saved-commands.md)) | `tree`: `c` |
+| `resource.add` | Add Resource… | open the sheet that keeps a path or an address, with a label and a note, in the project of what the details panel shows, to open from its Resources tab ([details](../resources.md#keeping-and-opening-them)) | `details`: `a` |
+| `resource.edit` |  | open the sheet on the pinned resource the details panel's cursor is on, to change its label and note ([details](../resources.md#keeping-and-opening-them)) | `details`: `e` |
+| `resource.remove` |  | stop keeping the pinned resource the details panel's cursor is on, which leaves what it points at as it is ([details](../resources.md#keeping-and-opening-them)) | `details`: `D` |
+| `resource.keep` |  | keep the address, file or image the details panel's cursor is on in the project's resources, unless it keeps it already ([details](../resources.md#keeping-and-opening-them)) | `details`: `p` |
+| `resource.screenshot` |  | take a screenshot of the visible part of the browser page shown and keep the picture, with the page's address as its note, among the project's resources ([details](../resources.md#keeping-and-opening-them)) |  |
 | `workspace.remove` |  | take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `worktree.close` |  | end, after asking, every session and terminal running in the worktree selected in the tree, which takes its row out of it; the workspace stays listed ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `worktree.new` |  | open the dialog asking for a new worktree of the repository of the workspace or worktree selected in the tree: its name, where it starts, listed from the repository's branches or given as a commit, and optionally the branch it works on; it is made in the background, a row in the tree showing how far it has come, and a new session's draft opens in it once it is made ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `W` |
@@ -139,7 +145,7 @@ changes them ([keys](../keys.md)).
 | `details.discard` |  | in the details panel, discard the selected change of the worktree, staged or not, after asking; a file in conflict cannot be discarded ([details](../details.md#changes)) | `details`: `X` |
 | `details.commit` |  | in the details panel, write the message of a commit in the prompt: sending it commits what is staged, and leaving the prompt gives it up; a hook that refuses the commit says why and the message stays in the prompt ([details](../details.md#changes)) | `details`: `c` |
 | `details.amend` |  | in the details panel, after asking, write the message of a commit that replaces the last one, starting from its message, as `details.commit` does ([details](../details.md#changes)) | `details`: `C` |
-| `details.pull` |  | in the details panel, pull the branch's upstream; diverged branches are merged unless git is configured to rebase ([details](../details.md#changes)) | `details`: `p` |
+| `details.pull` |  | in the details panel, pull the branch's upstream; diverged branches are merged unless git is configured to rebase ([details](../details.md#changes)) | `details`: `u` |
 | `details.push` |  | in the details panel, push the branch, setting its upstream when it has none ([details](../details.md#changes)) | `details`: `P` |
 | `details.force_push` |  | in the details panel, after asking, push the branch over the remote's, but only if nobody else pushed to it since it was fetched ([details](../details.md#changes)) | `details`: `F` |
 | `viewer.zoom_in` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](../content.md#viewers)) | `viewer`: `Plus`, `=` |
@@ -196,6 +202,7 @@ changes them ([keys](../keys.md)).
 "Ctrl+q v" = "window.vsplit"
 "Ctrl+q s" = "window.split"
 "Ctrl+q n" = "window.new"
+"Ctrl+q i" = "notices.open"
 "Ctrl+q c" = "window.quit"
 "Ctrl+q o" = "window.only"
 "Ctrl+q H" = "window.move_left"
@@ -328,11 +335,15 @@ changes them ([keys](../keys.md)).
 
 "Tab" = "sidebar.next"
 "Shift+Tab" = "sidebar.next"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 
 [agents]
 "g t" = "agents.reveal"
 "Tab" = "sidebar.next"
 "Shift+Tab" = "sidebar.next"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "j" = "cursor.down"
 "ArrowDown" = "cursor.down"
 "k" = "cursor.up"
@@ -374,6 +385,8 @@ changes them ([keys](../keys.md)).
 "Escape Escape" = "tree.focus"
 "Tab" = "tab.next"
 "Shift+Tab" = "tab.prev"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "j" = "cursor.down"
 "ArrowDown" = "cursor.down"
 "k" = "cursor.up"
@@ -382,13 +395,17 @@ changes them ([keys](../keys.md)).
 "G" = "cursor.last"
 "Escape" = "cursor.fold"
 "y" = "cursor.copy"
+"a" = "resource.add"
+"e" = "resource.edit"
+"D" = "resource.remove"
+"p" = "resource.keep"
 "Backspace" = "cursor.fold"
 "s" = "details.stage"
 "S" = "details.stage_all"
 "X" = "details.discard"
 "c" = "details.commit"
 "C" = "details.amend"
-"p" = "details.pull"
+"u" = "details.pull"
 "P" = "details.push"
 "F" = "details.force_push"
 "1" = "details.tab 1"
@@ -405,6 +422,8 @@ changes them ([keys](../keys.md)).
 
 [console]
 "Escape Escape" = "tree.focus"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "Enter" = "console.send"
 "Ctrl+Enter" = "console.send Enter"
 "ArrowUp" = "prompt.history_prev"
@@ -444,6 +463,8 @@ changes them ([keys](../keys.md)).
 
 [viewer]
 "Escape Escape" = "tree.focus"
+"] ]" = "window.next"
+"[ [" = "window.prev"
 "j" = "scroll.down"
 "ArrowDown" = "scroll.down"
 "k" = "scroll.up"

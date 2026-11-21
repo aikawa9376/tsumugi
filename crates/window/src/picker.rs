@@ -12,6 +12,7 @@ use crate::components::{InlineField, KeyHint};
 mod commands;
 mod go;
 mod interrupted;
+mod notices;
 mod resume;
 
 #[component]
@@ -35,6 +36,7 @@ pub(crate) fn Picker() -> Element {
                 Picking::Resume(list) => rsx! { resume::Resume { list } },
                 Picking::Interrupted(list) => rsx! { interrupted::Interrupted { list } },
                 Picking::Commands(list) => rsx! { commands::Commands { list } },
+                Picking::Notices(list) => rsx! { notices::Notices { list } },
             }
         }
     }

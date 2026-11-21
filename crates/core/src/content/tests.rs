@@ -1532,6 +1532,30 @@ fn a_file_a_document_links_to_opens_by_its_kind_in_the_worktree_it_is_in() {
 }
 
 #[test]
+fn a_file_opened_in_a_tab_or_a_split_opens_there_by_its_kind() {
+    let run = || listed_with([session("a").cwd("/r/a")]).send(show(session_tab("a")));
+    let picture = run().send(Msg::OpenFileIn(
+        here(),
+        "/r/a/docs/shot.png".into(),
+        Opening::Tab,
+    ));
+    assert_eq!(
+        active(&picture),
+        Some(Tab::Viewer(here(), "/r/a/docs/shot.png".into()))
+    );
+    assert_eq!(picture.state().content.windows.tabs().len(), 2);
+    let source = run().send(Msg::OpenFileIn(
+        here(),
+        "/r/a/src/main.rs".into(),
+        Opening::Tab,
+    ));
+    assert!(source.last_effects().iter().any(|e| matches!(
+        e,
+        Effect::StartTerminal(TerminalAsk { opening: Opening::Tab, file: Some(f), .. }) if f == std::path::Path::new("/r/a/src/main.rs")
+    )));
+}
+
+#[test]
 fn a_file_asked_to_be_edited_in_another_environment_starts_its_neovim_there() {
     let run = shows_there(listed_with([session("a").cwd("/r")]), [session("b")])
         .send(Msg::EditFile(there(), "/c/prompt/nvim/init.lua".into()));

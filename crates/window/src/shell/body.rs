@@ -209,7 +209,12 @@ fn DetailsSide(focused: bool, shown: bool) -> Element {
                         }
                     },
                     on_menu: move |m: details::LinkMenu| {
-                        app.dispatch(Msg::MenuOpen { x: m.x, y: m.y, target: Target::Link { at: m.at, file: m.file }, reach: Reach::Here });
+                        let target = if m.pinned {
+                            Target::Pinned { at: m.at, file: m.file }
+                        } else {
+                            Target::Link { at: m.at, file: m.file }
+                        };
+                        app.dispatch(Msg::MenuOpen { x: m.x, y: m.y, target, reach: Reach::Here });
                     },
                 }
         }

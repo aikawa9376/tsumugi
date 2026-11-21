@@ -54,6 +54,13 @@ local function apply(chan)
     deny("<C-w>", function()
       vim.fn.getcharstr()
     end)
+    -- The window's own way round its areas, in place of the section
+    -- motions, which a console has no use for.
+    for lhs, action in pairs({ ["]]"] = "window.next", ["[["] = "window.prev" }) do
+      vim.keymap.set({ "n", "x" }, lhs, function()
+        vim.rpcnotify(chan, "tsumugi_action", action)
+      end, { buffer = b, desc = "Go to the " .. (action == "window.next" and "next" or "previous") .. " window" })
+    end
     -- Neovim's own `gx` reads `<cfile>`, which takes the text written up
     -- against a URL into it, and the console's lines often hold Japanese
     -- that does. What is not a URL is left to it.
