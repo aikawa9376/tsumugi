@@ -324,6 +324,16 @@ mod tests {
                 base: Some("origin/日本語".into()),
             },
             crate::GitOp::ChooseBase { base: None },
+            crate::GitOp::CherryPick {
+                commit: "a".repeat(40),
+            },
+            crate::GitOp::Revert {
+                commit: "b".repeat(40),
+            },
+            crate::GitOp::CreateBranch {
+                name: "feat/日本語".into(),
+                commit: "c".repeat(40),
+            },
             crate::GitOp::CreatePull {
                 base: Some("main".into()),
                 title: "core: 日本語".into(),

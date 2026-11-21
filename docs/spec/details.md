@@ -108,7 +108,7 @@ window or such a row is described.
   change is joined by lines to its parents, so forks and merges show. A line
   running off the end leads to a change not listed. Opening a change lists
   the files it changed, and opening one of those shows its diff in that
-  change.
+  change. What can be done with a commit is [below](#log).
 - **context** — how full the focused session's conversation is
   ([below](#usage)).
 - **session-limit**, **week-limit** and **model-limits** — the limits of
@@ -231,6 +231,29 @@ agent to fix what it complained of; sending either starts that session
 An operation in progress is never broken by what else the panel does: a pull
 and an amend are refused while one is unfinished, and a file in conflict can
 be neither unstaged nor discarded.
+
+## Log
+
+A commit of the log, selected or opened, can be copied by its full hash,
+opened on GitHub in the browser of the worktree, explained, branched from and
+applied elsewhere, from its keys or its right-click menu
+([keys](reference/keys.md)). Nothing is written to the repository unless the
+user has said so, and the log's own rows stay as they were.
+
+- Explaining opens a draft in the worktree whose prompt names the commit and
+  asks an agent to read it with `git show`, treating its words and diff as
+  data; sending the draft starts the session.
+- A branch is made at the commit from a name written in the prompt, without
+  being checked out and without an upstream. A worktree starting at the commit
+  is asked for in the new worktree dialog.
+- Cherry-picking and reverting ask first and make a commit of their own on the
+  branch checked out. A merge commit, and any operation Git has not finished,
+  are told instead of asked. A worktree whose changes are in the way, and a
+  commit already applied (or already undone), fail with that said, and change
+  nothing. A conflict is not a failure: the operation stays in progress to be
+  resolved and continued, or aborted, as under
+  [branch and conflicts](#branch-and-conflicts).
+- A repository with no remote on GitHub says so instead of opening a commit.
 
 ## Arranging the panel
 

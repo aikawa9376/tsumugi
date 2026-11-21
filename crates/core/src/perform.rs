@@ -410,6 +410,34 @@ pub(crate) fn perform(
         Action::DetailsNeovim if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::Neovim))
         }
+        Action::LogCopyHash if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogCopyHash))
+        }
+        Action::LogOpenRemote if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogOpenRemote))
+        }
+        Action::LogExplain if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogExplain))
+        }
+        Action::LogBranch if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogBranch))
+        }
+        Action::LogWorktree if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogWorktree))
+        }
+        Action::LogCherryPick if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogCherryPick))
+        }
+        Action::LogRevert if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::LogRevert))
+        }
+        Action::LogCopyHash
+        | Action::LogOpenRemote
+        | Action::LogExplain
+        | Action::LogBranch
+        | Action::LogWorktree
+        | Action::LogCherryPick
+        | Action::LogRevert => Vec::new(),
         Action::DetailsStage
         | Action::DetailsStageAll
         | Action::DetailsDiscard

@@ -144,6 +144,20 @@ pub enum Key {
     Resolve,
     /// Open the diff of the selected change in the user's Neovim.
     Neovim,
+    /// Copy the full hash of the commit selected in the log.
+    LogCopyHash,
+    /// Open the commit selected in the log on GitHub.
+    LogOpenRemote,
+    /// Open a draft whose prompt asks an agent to explain the commit.
+    LogExplain,
+    /// Write the name of a branch to make at the commit in the prompt.
+    LogBranch,
+    /// Ask for a worktree that starts at the commit.
+    LogWorktree,
+    /// Cherry-pick the commit onto the branch checked out, once asked.
+    LogCherryPick,
+    /// Revert the commit on the branch checked out, once asked.
+    LogRevert,
 }
 
 /// How the panel scrolls what is not a list.
@@ -497,7 +511,14 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::Resume
         | Key::Base
         | Key::Resolve
-        | Key::Neovim => {}
+        | Key::Neovim
+        | Key::LogCopyHash
+        | Key::LogOpenRemote
+        | Key::LogExplain
+        | Key::LogBranch
+        | Key::LogWorktree
+        | Key::LogCherryPick
+        | Key::LogRevert => {}
     }
     Vec::new()
 }
@@ -4334,6 +4355,292 @@ pub(crate) mod tests {
                 op: GitOp::ChooseBase { base: None },
                 ..
             }
+        )));
+    }
+
+    fn commit_of(id: &str, subject: &str, parents: &[&str]) -> tsumugi_model::repository::Commit {
+        tsumugi_model::repository::Commit {
+            id: format!("{id}{}", "0".repeat(40 - id.len())),
+            short: id.into(),
+            subject: subject.into(),
+            node: format!("{id}{}", "0".repeat(40 - id.len())),
+            parents: parents.iter().map(|p| (*p).to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    /// The Log tab of the worktree `/r/a` of the repository `/r`, which is
+    /// `o/r` on GitHub when `on_github`, listing `commits` with what git
+    /// has unfinished in the worktree.
+    fn logged(
+        commits: Vec<tsumugi_model::repository::Commit>,
+        operation: Option<tsumugi_model::repository::Operation>,
+        on_github: bool,
+    ) -> Scenario {
+        use crate::testing::worktree;
+        use tsumugi_model::repository::{Branch, Compared as Status, Comparison, Head};
+        let branch = Branch {
+            head: Head::Branch("a".into()),
+            operation,
+            chosen: None,
+            comparison: Comparison {
+                status: Status::Ready,
+                base: None,
+                merge_base: None,
+                ahead: 0,
+                behind: 0,
+                added: 0,
+                removed: 0,
+                files: Vec::new(),
+            },
+        };
+        let run = scenario().event(
+            snapshot()
+                .listed(
+                    listed()
+                        .session(session("a").cwd("/r/a"))
+                        .worktree(worktree("/r", "/r", "main"))
+                        .worktree(worktree("/r/a", "/r", "a")),
+                )
+                .details(DetailsWork::default()),
+        );
+        let github = on_github.then(|| Box::new(tsumugi_model::github::Repository::new("o/r")));
+        run.event(patch(2).change(tsumugi_protocol::TreeChange::GitHub {
+            repository: "/r".into(),
+            github,
+        }))
+        .send_all([shown(Some("a"), Some("/r/a")), Msg::DetailsTab(LOG)])
+        .event(patch(3).change(DetailsChange::Repository {
+            worktree: "/r/a".into(),
+            read: RepositoryRead {
+                spot: Spot::Log,
+                listing: Ok(Read::Log(commits)),
+                revision: None,
+            },
+        }))
+        .event(patch(4).change(DetailsChange::Repository {
+            worktree: "/r/a".into(),
+            read: RepositoryRead {
+                spot: Spot::Branch,
+                listing: Ok(Read::Branch(Box::new(branch))),
+                revision: None,
+            },
+        }))
+    }
+
+    fn three_commits() -> Vec<tsumugi_model::repository::Commit> {
+        vec![
+            commit_of("c3", "third", &["c2"]),
+            commit_of("c2", "second \"quoted\"", &["c1"]),
+            commit_of("c1", "first", &[]),
+        ]
+    }
+
+    /// The cursor moved to the log's commit `n`.
+    fn on_commit(run: Scenario, n: usize) -> Scenario {
+        let at = rows(&run)
+            .iter()
+            .position(|e| matches!(e, Entry::Commit(_)))
+            .expect("the log lists commits");
+        let mut run = run;
+        for _ in 0..at + n {
+            run = run.send(Msg::DetailsKey(Key::Down));
+        }
+        run
+    }
+
+    fn notice_of(run: &Scenario) -> Option<String> {
+        run.last_effects().iter().find_map(|e| match e {
+            Effect::Notice(text) => Some(text.clone()),
+            _ => None,
+        })
+    }
+
+    fn full(id: &str) -> String {
+        commit_of(id, "", &[]).id
+    }
+
+    #[test]
+    fn the_hash_of_the_commit_selected_is_copied_in_full_and_the_commit_opened_keeps_it() {
+        let second = || on_commit(logged(three_commits(), None, true), 1);
+        let copied = second().send(Msg::DetailsKey(Key::LogCopyHash));
+        assert!(copied.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::Copy { text, .. } if *text == full("c2")
+        )));
+        let opened = second()
+            .send(Msg::DetailsKey(Key::Open))
+            .send(Msg::DetailsKey(Key::LogCopyHash));
+        assert!(opened.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::Copy { text, .. } if *text == full("c2")
+        )));
+    }
+
+    #[test]
+    fn a_key_for_a_commit_with_none_selected_says_so_and_does_nothing() {
+        for key in [
+            Key::LogCopyHash,
+            Key::LogOpenRemote,
+            Key::LogExplain,
+            Key::LogBranch,
+            Key::LogWorktree,
+            Key::LogCherryPick,
+            Key::LogRevert,
+        ] {
+            let run = changing(&[(" M", "a.rs")]).send(Msg::DetailsKey(key));
+            assert!(
+                notice_of(&run).is_some_and(|text| text.contains("commit")),
+                "{key:?}"
+            );
+            assert_eq!(run.state().overlays.confirm, None, "{key:?}");
+            assert_eq!(git_effects(&run), [], "{key:?}");
+        }
+    }
+
+    #[test]
+    fn the_commit_opens_on_github_in_the_browser_and_a_repository_off_github_says_so() {
+        let run = on_commit(logged(three_commits(), None, true), 2)
+            .send(Msg::DetailsKey(Key::LogOpenRemote));
+        assert!(run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::OpenAddress { url, worktree, .. }
+                if *url == format!("https://github.com/o/r/commit/{}", full("c1"))
+                    && worktree == std::path::Path::new("/r/a")
+        )));
+        let off = on_commit(logged(three_commits(), None, false), 0)
+            .send(Msg::DetailsKey(Key::LogOpenRemote));
+        assert!(
+            !off.last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::OpenAddress { .. }))
+        );
+        assert!(notice_of(&off).is_some_and(|text| text.contains("GitHub")));
+    }
+
+    #[test]
+    fn explaining_a_commit_drafts_a_prompt_that_reads_it_by_id_and_treats_it_as_data() {
+        let run = on_commit(logged(three_commits(), None, true), 1)
+            .send(Msg::DetailsKey(Key::LogExplain));
+        let text = run
+            .last_effects()
+            .iter()
+            .find_map(|e| match e {
+                Effect::PromptRestore { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("no prompt was written");
+        assert!(text.contains("c2"), "{text}");
+        assert!(
+            text.contains(&format!("git show --no-ext-diff {}", full("c2"))),
+            "{text}"
+        );
+        assert!(text.contains(r#"Subject: "second \"quoted\"""#), "{text}");
+        assert!(text.contains("untrusted"), "{text}");
+        assert_eq!(git_effects(&run), []);
+    }
+
+    #[test]
+    fn cherry_picking_and_reverting_ask_first_and_hand_the_full_id_to_the_work_host() {
+        use crate::overlay::confirm::Ask;
+        use tsumugi_protocol::GitOp;
+        for (key, revert) in [(Key::LogCherryPick, false), (Key::LogRevert, true)] {
+            let asked =
+                on_commit(logged(three_commits(), None, true), 1).send(Msg::DetailsKey(key));
+            assert_eq!(git_effects(&asked), []);
+            match (&asked.state().overlays.confirm, revert) {
+                (Some(Ask::CherryPick { commit, .. }), false)
+                | (Some(Ask::RevertCommit { commit, .. }), true) => {
+                    assert_eq!(commit.id, full("c2"));
+                }
+                other => panic!("asked {other:?}"),
+            }
+            let yes = asked.send(Msg::ConfirmAnswer(true));
+            let commit = full("c2");
+            assert_eq!(
+                git_effects(&yes),
+                [git_at(if revert {
+                    GitOp::Revert { commit }
+                } else {
+                    GitOp::CherryPick { commit }
+                })]
+            );
+            let no = on_commit(logged(three_commits(), None, true), 1)
+                .send(Msg::DetailsKey(key))
+                .send(Msg::ConfirmAnswer(false));
+            assert_eq!(git_effects(&no), []);
+        }
+    }
+
+    fn git_at(op: tsumugi_protocol::GitOp) -> Effect {
+        Effect::Git {
+            environment: here(),
+            worktree: "/r/a".into(),
+            op,
+            prompt: false,
+        }
+    }
+
+    #[test]
+    fn a_cherry_pick_the_host_would_refuse_is_told_instead_of_asked() {
+        use tsumugi_model::repository::Operation;
+        let busy = on_commit(logged(three_commits(), Some(Operation::Rebase), true), 0)
+            .send(Msg::DetailsKey(Key::LogCherryPick));
+        assert_eq!(busy.state().overlays.confirm, None);
+        assert!(notice_of(&busy).is_some_and(|text| text.contains("rebase")));
+        let merged = vec![commit_of("m", "joined", &["a1", "b1"])];
+        for key in [Key::LogCherryPick, Key::LogRevert] {
+            let told = on_commit(logged(merged.clone(), None, true), 0).send(Msg::DetailsKey(key));
+            assert_eq!(told.state().overlays.confirm, None, "{key:?}");
+            assert!(
+                notice_of(&told).is_some_and(|text| text.contains("merge commit")),
+                "{key:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_branch_is_named_in_the_prompt_and_made_at_the_commit_selected() {
+        use tsumugi_protocol::GitOp;
+        let writing = on_commit(logged(three_commits(), None, true), 1)
+            .send(Msg::DetailsKey(Key::LogBranch))
+            .send(Msg::PromptSend)
+            .send(taken("  topic/x  \nignored"));
+        assert_eq!(
+            git_effects(&writing),
+            [Effect::Git {
+                environment: here(),
+                worktree: "/r/a".into(),
+                op: GitOp::CreateBranch {
+                    name: "topic/x".into(),
+                    commit: full("c2"),
+                },
+                prompt: true,
+            }]
+        );
+        let empty = on_commit(logged(three_commits(), None, true), 1)
+            .send(Msg::DetailsKey(Key::LogBranch))
+            .send(Msg::PromptSend)
+            .send(taken("  \n"));
+        assert_eq!(git_effects(&empty), []);
+        assert!(notice_of(&empty).is_some_and(|text| text.contains("name")));
+    }
+
+    #[test]
+    fn a_worktree_is_asked_for_starting_at_the_commit_selected() {
+        let run = on_commit(logged(three_commits(), None, true), 1)
+            .send(Msg::DetailsKey(Key::LogWorktree));
+        let composer = run
+            .state()
+            .overlays
+            .composer
+            .clone()
+            .expect("the dialog opens");
+        assert_eq!(composer.repository, std::path::PathBuf::from("/r"));
+        assert_eq!(composer.chosen().name(), full("c2"));
+        assert!(run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::WorktreeStarts { repository, .. } if repository == std::path::Path::new("/r")
         )));
     }
 }

@@ -55,7 +55,7 @@ pub(crate) fn ContextMenu() -> Element {
         Target::Agent(..) => &[Context::Global, Context::Agents],
         Target::Row(_) | Target::Start(_) => &[Context::Global, Context::Tree],
         Target::Tab(_) => &[Context::Global, Context::Console, Context::Tree],
-        Target::Link { .. } | Target::Pinned { .. } | Target::Panel => {
+        Target::Link { .. } | Target::Pinned { .. } | Target::Commit { .. } | Target::Panel => {
             &[Context::Details, Context::Tree, Context::Global]
         }
     };

@@ -160,8 +160,20 @@ pub(crate) fn open(state: &mut ViewState, row: &Item) -> Vec<Effect> {
         } => (environment.clone(), path.clone()),
         _ => return Vec::new(),
     };
+    open_at(state, environment, &root, None)
+}
+
+/// Open the dialog for a new worktree of the repository holding `root`, as
+/// [`open`] does, starting at the commit `start` when one is given, as when
+/// it is typed in the dialog.
+pub(crate) fn open_at(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    root: &std::path::Path,
+    start: Option<String>,
+) -> Vec<Effect> {
     let tree = crate::tree::listed(state.hosts.work(&environment));
-    let Some(ws) = tree.workspace_of(&root) else {
+    let Some(ws) = tree.workspace_of(root) else {
         return Vec::new();
     };
     if !ws.git {
@@ -180,11 +192,9 @@ pub(crate) fn open(state: &mut ViewState, row: &Item) -> Vec<Effect> {
         .or(ws.worktrees.first())
         .map_or_else(|| ws.root.clone(), |w| w.worktree.path.clone());
     let project = ws.name.clone();
-    state.overlays.composer = Some(Composer::new(
-        environment.clone(),
-        repository.clone(),
-        project,
-    ));
+    let mut composer = Composer::new(environment.clone(), repository.clone(), project);
+    composer.query = start.unwrap_or_default();
+    state.overlays.composer = Some(composer);
     vec![Effect::WorktreeStarts {
         environment,
         repository,

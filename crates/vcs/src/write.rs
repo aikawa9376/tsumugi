@@ -311,6 +311,118 @@ pub async fn resume(path: &Path) -> Result<String, Error> {
     }
 }
 
+fn fail(stderr: impl Into<String>) -> Error {
+    Error::Failed {
+        program: "git".into(),
+        stderr: stderr.into(),
+    }
+}
+
+/// Only a full object id names a commit to act on: a name or an option
+/// would let what the list showed and what git runs differ.
+fn require_full_id(commit: &str) -> Result<(), Error> {
+    let hex = commit.bytes().all(|b| b.is_ascii_hexdigit());
+    if hex && matches!(commit.len(), 40 | 64) {
+        Ok(())
+    } else {
+        Err(fail(format!("{commit} is not a full commit id")))
+    }
+}
+
+/// Whether what git said of a refused cherry-pick or revert is that the
+/// worktree's own changes are in its way.
+fn is_dirty_refusal(stderr: &str) -> bool {
+    let said = stderr.to_lowercase();
+    [
+        "would be overwritten",
+        "local changes",
+        "commit your changes or stash",
+        "uncommitted changes",
+    ]
+    .iter()
+    .any(|needle| said.contains(needle))
+}
+
+/// Cherry-pick or revert (`verb`) `commit` onto the branch checked out.
+///
+/// It is refused, with nothing touched, while another operation is
+/// unfinished, for a merge commit, and where the worktree's changes are in
+/// the way. A commit already applied (or already undone) is told as a
+/// refusal and leaves no operation behind. A conflict is no failure: the
+/// operation stays in progress for the user to resolve and continue, or
+/// abort, and what to do is told.
+async fn apply(path: &Path, verb: &'static str, commit: &str) -> Result<String, Error> {
+    require_full_id(commit)?;
+    refuse_during_operation(path, verb).await?;
+    let parents = make(path, &["show", "--no-patch", "--format=%P", commit, "--"]).await?;
+    if parents.split_whitespace().count() > 1 {
+        return Err(fail(format!("cannot {verb} a merge commit from here")));
+    }
+    let Err(Error::Failed { stderr, .. }) = tell(path, &[verb, "--no-edit", commit]).await else {
+        return tell(path, &["rev-parse", "--short", "HEAD"])
+            .await
+            .map(|head| format!("{verb} done, now at {head}"));
+    };
+    let began = branch::operation(path)
+        .await
+        .is_some_and(|o| o.name() == verb);
+    let unmerged = began && !make(path, &["ls-files", "--unmerged"]).await?.is_empty();
+    if unmerged {
+        return Ok(format!(
+            "{stderr}\nresolve the conflicts, then continue or abort the {verb}"
+        ));
+    }
+    if began && tell(path, &[verb, "--skip"]).await.is_err() {
+        // It stopped on a commit that would change nothing; give it up.
+        tell(path, &[verb, "--abort"]).await?;
+    }
+    if began || stderr.contains("nothing to commit") {
+        return Err(fail(if verb == "revert" {
+            "nothing to revert, the changes are already undone"
+        } else {
+            "already applied, nothing to cherry-pick"
+        }));
+    }
+    Err(fail(if is_dirty_refusal(&stderr) {
+        "commit or stash your changes, then try again".to_string()
+    } else {
+        stderr
+    }))
+}
+
+/// Apply the changes of `commit` as a commit of its own on the branch
+/// checked out. See [`apply`] for what is refused.
+pub async fn cherry_pick(path: &Path, commit: &str) -> Result<String, Error> {
+    apply(path, "cherry-pick", commit).await
+}
+
+/// Undo the changes of `commit` in a commit of its own on the branch
+/// checked out. See [`apply`] for what is refused.
+pub async fn revert(path: &Path, commit: &str) -> Result<String, Error> {
+    apply(path, "revert", commit).await
+}
+
+/// Make the branch `name` at `commit` without checking it out and without an
+/// upstream. A name that is taken or is not a branch name is refused, and
+/// nothing is made.
+pub async fn create_branch(path: &Path, name: &str, commit: &str) -> Result<(), Error> {
+    require_full_id(commit)?;
+    make(path, &["check-ref-format", "--branch", name])
+        .await
+        .map_err(|_| fail(format!("{name:?} is not a branch name")))?;
+    let taken = format!("refs/heads/{name}");
+    if make(path, &["rev-parse", "--verify", "--quiet", &taken])
+        .await
+        .is_ok()
+    {
+        return Err(fail(format!("the branch {name} exists already")));
+    }
+    let at = format!("{commit}^{{commit}}");
+    make(path, &["branch", "--no-track", "--", name, &at])
+        .await
+        .map(drop)
+}
+
 /// Compare the branch checked out with `base` from now on, or with the one
 /// Tsumugi finds when `base` is `None`. A base that is not a commit of the
 /// repository is refused, so a comparison is never left without one.
@@ -963,5 +1075,204 @@ mod tests {
         );
         git_in(dir.path(), &["checkout", "-q", "--detach"]);
         assert!(choose_base(dir.path(), Some("feature")).await.is_err());
+    }
+
+    /// The full id of `rev`.
+    fn id_of(dir: &Path, rev: &str) -> String {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", rev])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    }
+
+    /// `main` holds `base`; `feature` adds `side.txt`, which `main` lacks.
+    fn parted() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        git_in(dir.path(), &["init", "-q", "-b", "main"]);
+        committed(dir.path(), &[("f.txt", "base\n")]);
+        git_in(dir.path(), &["switch", "-q", "-c", "feature"]);
+        write(dir.path(), "side.txt", "side\n");
+        git_in(dir.path(), &["add", "side.txt"]);
+        git_in(dir.path(), &["commit", "-q", "-m", "side"]);
+        git_in(dir.path(), &["switch", "-q", "main"]);
+        dir
+    }
+
+    fn stderr_of(result: Result<String, Error>) -> String {
+        match result {
+            Err(Error::Failed { stderr, .. }) => stderr,
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_commit_is_cherry_picked_onto_the_branch_checked_out() {
+        let dir = parted();
+        let side = id_of(dir.path(), "feature");
+        cherry_pick(dir.path(), &side).await.unwrap();
+        assert_eq!(log(dir.path()), ["side", "first"]);
+        assert!(dir.path().join("side.txt").exists());
+        assert_eq!(branch::operation(dir.path()).await, None);
+    }
+
+    #[tokio::test]
+    async fn a_cherry_pick_that_conflicts_stays_in_progress_and_says_how_to_go_on() {
+        let dir = conflicting();
+        let feature = id_of(dir.path(), "feature");
+        let told = cherry_pick(dir.path(), &feature).await.unwrap();
+        assert!(told.contains("conflict"), "{told}");
+        assert_eq!(
+            branch::operation(dir.path()).await,
+            Some(Operation::CherryPick)
+        );
+        assert_eq!(statuses(dir.path()).await, [status("UU", "f.txt")]);
+        // What the user then does with it is the operation's own.
+        abort(dir.path()).await.unwrap();
+        assert_eq!(log(dir.path()), ["main", "first"]);
+    }
+
+    #[tokio::test]
+    async fn a_cherry_pick_over_changes_it_would_overwrite_fails_and_touches_nothing() {
+        let dir = conflicting();
+        let feature = id_of(dir.path(), "feature");
+        write(dir.path(), "f.txt", "mine\n");
+        let stderr = stderr_of(cherry_pick(dir.path(), &feature).await);
+        assert_eq!(stderr, "commit or stash your changes, then try again");
+        assert_eq!(branch::operation(dir.path()).await, None);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "mine\n"
+        );
+        assert_eq!(log(dir.path()), ["main", "first"]);
+    }
+
+    #[tokio::test]
+    async fn a_commit_already_applied_is_told_and_leaves_no_operation_behind() {
+        let dir = parted();
+        let side = id_of(dir.path(), "feature");
+        cherry_pick(dir.path(), &side).await.unwrap();
+        let stderr = stderr_of(cherry_pick(dir.path(), &side).await);
+        assert_eq!(stderr, "already applied, nothing to cherry-pick");
+        assert_eq!(branch::operation(dir.path()).await, None);
+        assert_eq!(log(dir.path()), ["side", "first"]);
+        assert!(statuses(dir.path()).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_merge_commit_is_not_cherry_picked_or_reverted_from_here() {
+        let dir = parted();
+        git_in(dir.path(), &["switch", "-q", "-c", "other"]);
+        write(dir.path(), "o.txt", "o\n");
+        git_in(dir.path(), &["add", "o.txt"]);
+        git_in(dir.path(), &["commit", "-q", "-m", "other"]);
+        git_in(dir.path(), &["switch", "-q", "main"]);
+        git_in(
+            dir.path(),
+            &["merge", "-q", "--no-ff", "-m", "joined", "other"],
+        );
+        let merge = id_of(dir.path(), "HEAD");
+        let stderr = stderr_of(cherry_pick(dir.path(), &merge).await);
+        assert_eq!(stderr, "cannot cherry-pick a merge commit from here");
+        let stderr = stderr_of(revert(dir.path(), &merge).await);
+        assert_eq!(stderr, "cannot revert a merge commit from here");
+        assert_eq!(branch::operation(dir.path()).await, None);
+    }
+
+    #[tokio::test]
+    async fn a_cherry_pick_or_revert_waits_for_the_operation_in_progress() {
+        let dir = conflicting();
+        let feature = id_of(dir.path(), "feature");
+        failing(dir.path(), &["merge", "feature"]);
+        for stderr in [
+            stderr_of(cherry_pick(dir.path(), &feature).await),
+            stderr_of(revert(dir.path(), &feature).await),
+        ] {
+            assert!(stderr.contains("merge is in progress"), "{stderr}");
+        }
+        assert_eq!(branch::operation(dir.path()).await, Some(Operation::Merge));
+    }
+
+    #[tokio::test]
+    async fn a_commit_is_reverted_by_a_commit_of_its_own() {
+        let dir = parted();
+        let side = id_of(dir.path(), "feature");
+        cherry_pick(dir.path(), &side).await.unwrap();
+        revert(dir.path(), &id_of(dir.path(), "HEAD"))
+            .await
+            .unwrap();
+        assert_eq!(log(dir.path()), ["Revert \"side\"", "side", "first"]);
+        assert!(!dir.path().join("side.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn a_revert_of_what_is_already_undone_is_told_and_leaves_no_operation_behind() {
+        let dir = parted();
+        let side = id_of(dir.path(), "feature");
+        cherry_pick(dir.path(), &side).await.unwrap();
+        let applied = id_of(dir.path(), "HEAD");
+        revert(dir.path(), &applied).await.unwrap();
+        let stderr = stderr_of(revert(dir.path(), &applied).await);
+        assert_eq!(stderr, "nothing to revert, the changes are already undone");
+        assert_eq!(branch::operation(dir.path()).await, None);
+        assert_eq!(log(dir.path()).len(), 3);
+    }
+
+    #[tokio::test]
+    async fn only_a_full_commit_id_is_taken_to_cherry_pick_or_revert() {
+        let dir = parted();
+        for bad in ["feature", "--abort", "HEAD", "abc123"] {
+            let stderr = stderr_of(cherry_pick(dir.path(), bad).await);
+            assert!(stderr.contains(bad), "{stderr}");
+            assert!(revert(dir.path(), bad).await.is_err());
+        }
+        assert_eq!(log(dir.path()), ["first"]);
+    }
+
+    #[tokio::test]
+    async fn a_branch_is_made_at_a_commit_without_checking_it_out() {
+        let dir = parted();
+        let side = id_of(dir.path(), "feature");
+        create_branch(dir.path(), "from-side", &side).await.unwrap();
+        assert_eq!(id_of(dir.path(), "from-side"), side);
+        assert_eq!(
+            branch::head(dir.path()).await.unwrap(),
+            Head::Branch("main".into())
+        );
+        // It does not follow the branch it was cut from.
+        assert!(
+            git(dir.path(), &["config", "--get", "branch.from-side.merge"])
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_branch_name_that_is_taken_or_not_a_name_is_refused_and_nothing_is_made() {
+        let dir = parted();
+        let side = id_of(dir.path(), "feature");
+        let taken = stderr_of(
+            create_branch(dir.path(), "feature", &side)
+                .await
+                .map(|()| "".into()),
+        );
+        assert!(taken.contains("feature"), "{taken}");
+        for bad in ["", "  ", "-x", "a b", "a..b"] {
+            assert!(
+                create_branch(dir.path(), bad, &side).await.is_err(),
+                "{bad:?}"
+            );
+        }
+        let stderr = stderr_of(
+            create_branch(dir.path(), "x", "feature")
+                .await
+                .map(|()| "".into()),
+        );
+        assert!(stderr.contains("feature"), "{stderr}");
+        let branches = git(dir.path(), &["branch", "--format=%(refname:short)"])
+            .await
+            .unwrap();
+        assert_eq!(branches.lines().collect::<Vec<_>>(), ["feature", "main"]);
     }
 }

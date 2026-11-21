@@ -9,7 +9,7 @@ mod pending;
 pub use composer::{Composer, Field, Starts};
 pub use pending::{PIPELINE, Pending, Progress, Step};
 
-pub(crate) use composer::{composer_key, cursor_at, focus, open, read_starts, type_into};
+pub(crate) use composer::{composer_key, cursor_at, focus, open, open_at, read_starts, type_into};
 pub(crate) use delete::{confirmed, delete, inspected, removed, toggle};
 pub(crate) use pending::{answered, dismiss, made, set_up};
 

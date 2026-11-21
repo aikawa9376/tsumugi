@@ -647,6 +647,11 @@ async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<Answer, tsumugi
         GitOp::ChooseBase { base } => write::choose_base(worktree, base.as_deref())
             .await
             .map(|()| Answer::Done),
+        GitOp::CherryPick { commit } => write::cherry_pick(worktree, &commit).await.map(told),
+        GitOp::Revert { commit } => write::revert(worktree, &commit).await.map(told),
+        GitOp::CreateBranch { name, commit } => write::create_branch(worktree, &name, &commit)
+            .await
+            .map(|()| Answer::Done),
         GitOp::CreatePull {
             base,
             title,

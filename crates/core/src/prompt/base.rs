@@ -47,6 +47,7 @@ pub(crate) fn begin(
     state.prompt.committing = None;
     state.prompt.pulling = None;
     state.prompt.writing = None;
+    state.prompt.branching = None;
     state.prompt.basing = Some(Basing {
         environment,
         worktree,

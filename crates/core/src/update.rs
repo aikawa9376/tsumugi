@@ -120,6 +120,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
                 state.prompt.committing = None;
                 state.prompt.pulling = None;
                 state.prompt.basing = None;
+                state.prompt.branching = None;
                 state.prompt.writing = None;
             }
             content::focus(&mut state.content, area)
@@ -297,6 +298,15 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         },
         Msg::DetailsKey(details::Key::Resolve) => crate::ai::resolve_conflicts(state),
         Msg::DetailsKey(details::Key::Neovim) => details::open_in_neovim(state),
+        Msg::DetailsKey(
+            key @ (details::Key::LogCopyHash
+            | details::Key::LogOpenRemote
+            | details::Key::LogExplain
+            | details::Key::LogBranch
+            | details::Key::LogWorktree
+            | details::Key::LogCherryPick
+            | details::Key::LogRevert),
+        ) => details::press_on_commit(state, key),
         Msg::DetailsKey(details::Key::Commit) => match state.details.shown.worktree.clone() {
             Some(worktree) => {
                 let environment = state.details.shown.environment.clone();

@@ -313,6 +313,14 @@ pub enum GitOp {
     /// Compare the branch with `base` from now on, or with the one found
     /// when none is given.
     ChooseBase { base: Option<String> },
+    /// Apply the commit `commit`, by its full id, to the branch as a commit
+    /// of its own.
+    CherryPick { commit: String },
+    /// Undo the commit `commit`, by its full id, in a commit of its own.
+    Revert { commit: String },
+    /// Make the branch `name` at the commit `commit`, by its full id,
+    /// without checking it out.
+    CreateBranch { name: String, commit: String },
     /// Push the branch and open a pull request for it on GitHub, into `base`
     /// or the repository's default branch.
     CreatePull {

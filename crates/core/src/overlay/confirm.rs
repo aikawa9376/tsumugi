@@ -81,6 +81,18 @@ pub enum Ask {
         number: u64,
         write: tsumugi_model::github::Write,
     },
+    /// Cherry-pick `commit` onto the branch a worktree has checked out.
+    CherryPick {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        commit: tsumugi_model::repository::Commit,
+    },
+    /// Revert `commit` on the branch a worktree has checked out.
+    RevertCommit {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        commit: tsumugi_model::repository::Commit,
+    },
     /// Lose these changes of a worktree, staged or not.
     DiscardChanges {
         environment: EnvironmentId,
@@ -225,6 +237,24 @@ impl Ask {
                 };
                 (icon, title, body, yes)
             }
+            Self::CherryPick { commit, .. } => (
+                Icon::GitBranch,
+                format!("Cherry-pick {}?", commit.short),
+                format!(
+                    "{}\n\nIts changes are applied to the branch checked out in a commit of its own. A conflict stops it for you to resolve and continue, or abort.",
+                    commit.subject
+                ),
+                "Cherry-pick",
+            ),
+            Self::RevertCommit { commit, .. } => (
+                Icon::ArrowBackUp,
+                format!("Revert {}?", commit.short),
+                format!(
+                    "{}\n\nIts changes are undone on the branch checked out in a commit of its own. A conflict stops it for you to resolve and continue, or abort.",
+                    commit.subject
+                ),
+                "Revert",
+            ),
             Self::DiscardChanges { changes, .. } => (
                 Icon::Trash,
                 match changes.as_slice() {
@@ -283,7 +313,11 @@ impl Ask {
                     || (*delete_branch && standing.unmerged > 0)
             }
             Self::PullWrite { number, write, .. } => crate::pull_change::question(*number, write).3,
-            Self::Stop(..) | Self::RemoveEnvironment(..) | Self::SetupWorktree { .. } => false,
+            Self::Stop(..)
+            | Self::RemoveEnvironment(..)
+            | Self::SetupWorktree { .. }
+            | Self::CherryPick { .. }
+            | Self::RevertCommit { .. } => false,
         }
     }
 }

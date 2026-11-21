@@ -159,6 +159,13 @@ changes them ([keys](../keys.md)).
 | `details.base` |  | in the details panel, write the base the branch is compared with in the prompt, an empty one giving up the choice for the one Tsumugi finds; sending chooses it ([details](../details.md#branch-and-conflicts)) | `details`: `b` |
 | `details.resolve` |  | in the details panel, open a draft in the worktree whose prompt asks the agent the conflict recipe names to resolve the files in conflict, without pushing; sending it starts the session ([ai actions](../ai-actions.md)) | `details`: `I` |
 | `details.neovim` |  | in the details panel, open the diff of the selected change in your Neovim, a file in conflict in its Diffview where it has one ([details](../details.md#branch-and-conflicts)) | `details`: `E` |
+| `log.copy_hash` |  | in the details panel, copy the full hash of the commit selected in the log, or opened from it ([details](../details.md#log)) | `details`: `Y` |
+| `log.open_remote` |  | in the details panel, open the commit selected in the log on GitHub, in the browser of the worktree; a repository that is not on GitHub says so ([details](../details.md#log)) | `details`: `O` |
+| `log.explain` |  | in the details panel, open a draft in the worktree whose prompt asks an agent to explain the commit selected in the log; sending it starts the session ([details](../details.md#log)) | `details`: `x` |
+| `log.branch` |  | in the details panel, write the name of a branch to make at the commit selected in the log in the prompt: sending makes it without checking it out, and leaving the prompt gives it up ([details](../details.md#log)) | `details`: `B` |
+| `log.worktree` |  | in the details panel, open the new worktree dialog starting at the commit selected in the log ([details](../details.md#log)) | `details`: `W` |
+| `log.cherry_pick` |  | in the details panel, after asking, cherry-pick the commit selected in the log onto the branch checked out; a dirty worktree, an unfinished operation, a merge commit and a commit already applied are told and change nothing, and a conflict is left to resolve, continue or abort ([details](../details.md#log)) | `details`: `t` |
+| `log.revert` |  | in the details panel, after asking, revert the commit selected in the log in a commit of its own on the branch checked out, with the same refusals as `log.cherry_pick` ([details](../details.md#log)) | `details`: `v` |
 | `viewer.zoom_in` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](../content.md#viewers)) | `viewer`: `Plus`, `=` |
 | `viewer.zoom_out` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller | `viewer`: `-` |
 | `viewer.zoom_fit` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document fitting the window | `viewer`: `0` |
@@ -447,6 +454,13 @@ changes them ([keys](../keys.md)).
 "b" = "details.base"
 "I" = "details.resolve"
 "E" = "details.neovim"
+"Y" = "log.copy_hash"
+"O" = "log.open_remote"
+"x" = "log.explain"
+"B" = "log.branch"
+"W" = "log.worktree"
+"t" = "log.cherry_pick"
+"v" = "log.revert"
 "1" = "details.tab 1"
 "2" = "details.tab 2"
 "3" = "details.tab 3"
