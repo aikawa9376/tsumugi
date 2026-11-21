@@ -220,6 +220,7 @@ fn main() {
             return;
         }
         Some(Command::Session(rest)) => std::process::exit(tsumugi_host::session_cli(&rest)),
+        Some(Command::Skills(rest)) => std::process::exit(tsumugi_host::skills::cli(&rest)),
         Some(Command::Mcp(rest)) => {
             std::process::exit(tsumugi_host::delegation::bridge::cli(&rest))
         }
