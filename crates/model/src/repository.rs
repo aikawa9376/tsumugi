@@ -29,6 +29,26 @@ impl Change {
             .collect()
     }
 
+    /// Whether the index holds a change of it: the first status letter is
+    /// neither blank nor `?`, and it is not in conflict.
+    pub fn is_staged(&self) -> bool {
+        !self.is_conflicted() && !matches!(self.status.chars().next(), None | Some(' ' | '?' | '!'))
+    }
+
+    /// Whether the worktree holds a change the index does not: a second
+    /// status letter, or a file git does not track.
+    pub fn is_unstaged(&self) -> bool {
+        self.status == "??" || !matches!(self.status.chars().nth(1), None | Some(' '))
+    }
+
+    /// Whether the merge left it unresolved.
+    pub fn is_conflicted(&self) -> bool {
+        matches!(
+            self.status.as_str(),
+            "DD" | "AU" | "UD" | "UA" | "DU" | "AA" | "UU"
+        )
+    }
+
     /// Its path, and where it came from.
     pub fn shown(&self) -> String {
         match &self.from {
@@ -131,5 +151,32 @@ mod tests {
         assert_eq!(c.shown(), "old.rs -> new.rs");
         assert_eq!(c.paths(), ["old.rs", "new.rs"]);
         assert_eq!(change("M", "a.rs", None).paths(), ["a.rs"]);
+    }
+
+    #[test]
+    fn a_status_tells_what_is_staged_what_is_not_and_what_is_in_conflict() {
+        // (status, staged, unstaged, conflicted)
+        for (status, staged, unstaged, conflicted) in [
+            ("M ", true, false, false),
+            (" M", false, true, false),
+            ("MM", true, true, false),
+            ("A ", true, false, false),
+            ("AM", true, true, false),
+            ("R ", true, false, false),
+            ("RM", true, true, false),
+            ("D ", true, false, false),
+            (" D", false, true, false),
+            ("??", false, true, false),
+            ("UU", false, true, true),
+            ("AA", false, true, true),
+            ("DU", false, true, true),
+        ] {
+            let c = change(status, "a.rs", None);
+            assert_eq!(
+                (c.is_staged(), c.is_unstaged(), c.is_conflicted()),
+                (staged, unstaged, conflicted),
+                "{status:?}"
+            );
+        }
     }
 }

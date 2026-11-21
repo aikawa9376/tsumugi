@@ -212,6 +212,11 @@ pub enum Ask {
         force: bool,
         branch: tsumugi_model::BranchFate,
     },
+    /// Make `op` in the Git worktree at `worktree`.
+    Git {
+        worktree: PathBuf,
+        op: GitOp,
+    },
     /// Read the pull request or the issue `number` of the repository at
     /// `repository` whole, with what was said on it and the images shown.
     GitHubThread {
@@ -226,6 +231,33 @@ pub enum Ask {
         cwd: PathBuf,
         input: Option<String>,
     },
+}
+
+/// What is made in a Git worktree, each over the files `git status` listed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GitOp {
+    /// Put these changes in the index.
+    Stage {
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
+    /// Take these changes out of the index.
+    Unstage {
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
+    /// Lose these changes, staged or not.
+    Discard {
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
+    /// Put every change of the worktree in the index.
+    StageAll,
+    /// Commit what is staged, or with `amend` replace the last commit.
+    Commit { message: String, amend: bool },
+    /// Push the branch, overwriting the remote's only if it has not moved
+    /// since it was fetched when `lease` is set.
+    Push { lease: bool },
+    /// Pull the branch's upstream.
+    Pull,
 }
 
 /// A session to start.
@@ -343,6 +375,10 @@ pub enum Answer {
     /// The image was kept here.
     Kept {
         path: PathBuf,
+    },
+    /// What Git told of a commit, push or pull that went through.
+    Told {
+        text: String,
     },
     /// The worktree was made here.
     Worktree {

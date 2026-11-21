@@ -137,6 +137,18 @@ pub enum Effect {
         number: u64,
         prompt: String,
     },
+    /// Make `op` in the Git worktree at `worktree` of `environment`, and
+    /// say why when it cannot be made.
+    ///
+    /// With `prompt`, it is the prompt's text being sent, which is put back
+    /// if it failed: the window tells the update with
+    /// [`crate::msg::Msg::PromptWent`].
+    Git {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        op: tsumugi_protocol::GitOp,
+        prompt: bool,
+    },
     /// Open a terminal running the CLI's own login where this profile runs
     /// it, and show it.
     OpenLogin {

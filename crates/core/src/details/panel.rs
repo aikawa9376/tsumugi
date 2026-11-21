@@ -115,6 +115,20 @@ pub enum Key {
     Add,
     /// Open the sheet describing the resource selected.
     Edit,
+    /// Stage the change selected, or unstage it when only staged.
+    Stage,
+    /// Stage every change of the worktree.
+    StageAll,
+    /// Discard the change selected, once asked.
+    Discard,
+    /// Write a commit message in the prompt, and commit with it.
+    Commit,
+    /// As [`Key::Commit`], replacing the last commit, once asked.
+    Amend,
+    Pull,
+    Push,
+    /// Push over the remote's branch where nobody else changed it, once asked.
+    ForcePush,
 }
 
 /// How the panel scrolls what is not a list.
@@ -392,6 +406,19 @@ pub(crate) fn click(details: &mut Details, work: Option<&WorkSnapshot>, at: usiz
 /// `key` pressed on the panel: the cursor moves through a list shown and
 /// scrolls anything else.
 pub(crate) fn press(details: &mut Details, work: Option<&WorkSnapshot>, key: Key) -> Vec<Effect> {
+    if matches!(
+        key,
+        Key::Stage
+            | Key::StageAll
+            | Key::Discard
+            | Key::Commit
+            | Key::Amend
+            | Key::Pull
+            | Key::Push
+            | Key::ForcePush
+    ) {
+        return staged(details, work, key);
+    }
     let shown = list(details, work);
     match (key, &shown) {
         // A row opened from the entries shows no list: the keys scroll,
@@ -437,8 +464,66 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::Unpin
         | Key::Add
         | Key::Edit => {}
+        | Key::Stage
+        | Key::StageAll
+        | Key::Discard
+        | Key::Commit
+        | Key::Amend
+        | Key::Pull
+        | Key::Push
+        | Key::ForcePush => {}
     }
     Vec::new()
+}
+
+/// The change of the worktree the cursor is on: a row of the changes, or a
+/// file of the working copy's change opened.
+pub fn selected_change(
+    details: &Details,
+    work: Option<&WorkSnapshot>,
+) -> Option<tsumugi_model::repository::Change> {
+    let shown = list(details, work)?;
+    let at = details.drill.selected(&shown)?;
+    match (&shown, details.drill.spot()) {
+        (Listing::Entries(entries), None) => match entries.get(at)? {
+            Entry::Changed(change) => Some(change.clone()),
+            _ => None,
+        },
+        (Listing::Files(files), Some(Spot::Files(Rev::WorkingCopy))) => files.get(at).cloned(),
+        _ => None,
+    }
+}
+
+/// What a key of the index or of the remote asks: the change selected
+/// staged or unstaged, everything staged, a pull or a push. What loses work,
+/// a discard, an amend and a force push, and what writes a message in the
+/// prompt are the update's, which asks first.
+fn staged(details: &Details, work: Option<&WorkSnapshot>, key: Key) -> Vec<Effect> {
+    use tsumugi_protocol::GitOp;
+    let Some(worktree) = details.shown.worktree.clone() else {
+        return Vec::new();
+    };
+    let op = match key {
+        Key::StageAll => GitOp::StageAll,
+        Key::Pull => GitOp::Pull,
+        Key::Push => GitOp::Push { lease: false },
+        Key::Stage => match selected_change(details, work) {
+            Some(change) if change.is_unstaged() => GitOp::Stage {
+                changes: vec![change],
+            },
+            Some(change) => GitOp::Unstage {
+                changes: vec![change],
+            },
+            None => return Vec::new(),
+        },
+        _ => return Vec::new(),
+    };
+    vec![Effect::Git {
+        environment: details.shown.environment.clone(),
+        worktree,
+        op,
+        prompt: false,
+    }]
 }
 
 fn scrolled(key: Key) -> Vec<Effect> {
@@ -3181,5 +3266,268 @@ pub(crate) mod tests {
             e,
             Effect::Copy { text, .. } if text == "fix the login"
         )));
+    }
+
+    /// The Changes tab of `/w`, listing files git says have these statuses.
+    fn changing(files: &[(&str, &str)]) -> Scenario {
+        let listed = files
+            .iter()
+            .map(|(status, path)| tsumugi_model::repository::Change {
+                status: (*status).into(),
+                path: (*path).into(),
+                from: None,
+            })
+            .collect();
+        scenario()
+            .event(work(DetailsWork::default()))
+            .send_all([shown(Some("a"), Some("/w")), Msg::DetailsTab(CHANGES)])
+            .event(patch(2).change(DetailsChange::Repository {
+                worktree: "/w".into(),
+                read: RepositoryRead {
+                    spot: Spot::Files(Rev::WorkingCopy),
+                    listing: Ok(Read::Files(listed)),
+                    revision: None,
+                },
+            }))
+    }
+
+    fn change_of(status: &str, path: &str) -> tsumugi_model::repository::Change {
+        tsumugi_model::repository::Change {
+            status: status.into(),
+            path: path.into(),
+            from: None,
+        }
+    }
+
+    fn git_effects(run: &Scenario) -> Vec<Effect> {
+        run.last_effects()
+            .iter()
+            .filter(|e| matches!(e, Effect::Git { .. }))
+            .cloned()
+            .collect()
+    }
+
+    fn git(op: tsumugi_protocol::GitOp) -> Effect {
+        Effect::Git {
+            environment: here(),
+            worktree: "/w".into(),
+            op,
+            prompt: false,
+        }
+    }
+
+    #[test]
+    fn s_stages_what_is_not_staged_and_unstages_what_is_only_staged() {
+        use tsumugi_protocol::GitOp;
+        for (status, stages) in [
+            (" M", true),
+            ("??", true),
+            (" D", true),
+            ("MM", true),
+            ("UU", true),
+            ("M ", false),
+            ("A ", false),
+            ("D ", false),
+        ] {
+            let run = changing(&[(status, "a b.rs")]).send(Msg::DetailsKey(Key::Stage));
+            let changes = vec![change_of(status, "a b.rs")];
+            let op = if stages {
+                GitOp::Stage { changes }
+            } else {
+                GitOp::Unstage { changes }
+            };
+            assert_eq!(git_effects(&run), [git(op)], "{status:?}");
+        }
+    }
+
+    #[test]
+    fn s_works_on_the_row_the_cursor_is_on() {
+        use tsumugi_protocol::GitOp;
+        let run = changing(&[(" M", "a.rs"), ("M ", "b.rs")])
+            .send(Msg::DetailsKey(Key::Down))
+            .send(Msg::DetailsKey(Key::Stage));
+        assert_eq!(
+            git_effects(&run),
+            [git(GitOp::Unstage {
+                changes: vec![change_of("M ", "b.rs")]
+            })]
+        );
+    }
+
+    #[test]
+    fn capital_s_stages_everything_and_nothing_is_staged_where_no_change_is_selected() {
+        use tsumugi_protocol::GitOp;
+        let run = changing(&[(" M", "a.rs")]).send(Msg::DetailsKey(Key::StageAll));
+        assert_eq!(git_effects(&run), [git(GitOp::StageAll)]);
+        let nothing = changing(&[])
+            .send(Msg::DetailsKey(Key::Stage))
+            .send(Msg::DetailsKey(Key::Discard));
+        assert_eq!(git_effects(&nothing), []);
+        assert_eq!(nothing.state().overlays.confirm, None);
+        let overview = scenario()
+            .event(work(DetailsWork::default()))
+            .send(shown(Some("a"), Some("/w")))
+            .send(Msg::DetailsKey(Key::Stage));
+        assert_eq!(git_effects(&overview), []);
+    }
+
+    #[test]
+    fn discarding_is_asked_first_and_only_a_yes_discards() {
+        use tsumugi_protocol::GitOp;
+        let asked = changing(&[("MM", "a.rs")]).send(Msg::DetailsKey(Key::Discard));
+        assert_eq!(git_effects(&asked), []);
+        assert!(matches!(
+            asked.state().overlays.confirm,
+            Some(crate::overlay::confirm::Ask::DiscardChanges { .. })
+        ));
+        let yes = asked.send(Msg::ConfirmAnswer(true));
+        assert_eq!(
+            git_effects(&yes),
+            [git(GitOp::Discard {
+                changes: vec![change_of("MM", "a.rs")]
+            })]
+        );
+        let no = changing(&[("MM", "a.rs")])
+            .send(Msg::DetailsKey(Key::Discard))
+            .send(Msg::ConfirmAnswer(false));
+        assert_eq!(git_effects(&no), []);
+    }
+
+    #[test]
+    fn a_file_in_conflict_cannot_be_discarded_and_says_so_without_asking() {
+        let run = changing(&[("UU", "a.rs")]).send(Msg::DetailsKey(Key::Discard));
+        assert_eq!(run.state().overlays.confirm, None);
+        assert!(
+            run.last_effects()
+                .iter()
+                .any(|e| matches!(e, Effect::Notice(text) if text.contains("in conflict")))
+        );
+    }
+
+    #[test]
+    fn p_pulls_and_capital_p_pushes_without_asking() {
+        use tsumugi_protocol::GitOp;
+        let pulled = changing(&[]).send(Msg::DetailsKey(Key::Pull));
+        assert_eq!(git_effects(&pulled), [git(GitOp::Pull)]);
+        let pushed = changing(&[]).send(Msg::DetailsKey(Key::Push));
+        assert_eq!(git_effects(&pushed), [git(GitOp::Push { lease: false })]);
+    }
+
+    #[test]
+    fn a_force_push_is_asked_first_and_pushes_with_the_lease() {
+        use tsumugi_protocol::GitOp;
+        let asked = changing(&[]).send(Msg::DetailsKey(Key::ForcePush));
+        assert_eq!(git_effects(&asked), []);
+        assert!(matches!(
+            asked.state().overlays.confirm,
+            Some(crate::overlay::confirm::Ask::ForcePush { .. })
+        ));
+        let yes = asked.send(Msg::ConfirmAnswer(true));
+        assert_eq!(git_effects(&yes), [git(GitOp::Push { lease: true })]);
+        let no = changing(&[])
+            .send(Msg::DetailsKey(Key::ForcePush))
+            .send(Msg::ConfirmAnswer(false));
+        assert_eq!(git_effects(&no), []);
+    }
+
+    /// The prompt's text taken, written for the session shown.
+    fn taken(text: &str) -> Msg {
+        Msg::PromptTaken(Box::new(crate::prompt::send::Taken {
+            tab: Some(Tab::Session(here(), "a".into())),
+            text: text.into(),
+            ..Default::default()
+        }))
+    }
+
+    #[test]
+    fn c_gives_the_prompt_the_keys_and_what_is_sent_from_it_is_committed() {
+        use crate::content::Area;
+        use tsumugi_protocol::GitOp;
+        let writing = changing(&[("M ", "a.rs")]).send(Msg::DetailsKey(Key::Commit));
+        assert_eq!(writing.state().content.focus, Area::Prompt);
+        assert!(writing.state().prompt.committing.is_some());
+        let sent = writing.send(Msg::PromptSend).send(taken("fix: a\n\nwhy"));
+        assert_eq!(
+            git_effects(&sent),
+            [Effect::Git {
+                environment: here(),
+                worktree: "/w".into(),
+                op: GitOp::Commit {
+                    message: "fix: a\n\nwhy".into(),
+                    amend: false,
+                },
+                prompt: true,
+            }]
+        );
+        let done = sent.send(Msg::PromptWent(true));
+        assert!(done.last_effects().contains(&Effect::PromptSent));
+        assert!(done.state().prompt.committing.is_none());
+    }
+
+    #[test]
+    fn a_commit_that_failed_puts_the_message_back_and_stays_a_commit() {
+        let failed = changing(&[("M ", "a.rs")])
+            .send(Msg::DetailsKey(Key::Commit))
+            .send(Msg::PromptSend)
+            .send(taken("fix: a"))
+            .send(Msg::PromptWent(false));
+        assert!(failed.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::PromptRestore { text, .. } if text == "fix: a"
+        )));
+        assert!(failed.state().prompt.committing.is_some());
+    }
+
+    #[test]
+    fn leaving_the_prompt_gives_up_the_commit() {
+        let left = changing(&[("M ", "a.rs")])
+            .send(Msg::DetailsKey(Key::Commit))
+            .send(Msg::Focus(crate::content::Area::Console));
+        assert!(left.state().prompt.committing.is_none());
+    }
+
+    #[test]
+    fn an_amend_is_asked_first_and_then_starts_from_the_last_message() {
+        use tsumugi_protocol::GitOp;
+        let files = RepositoryRead {
+            spot: Spot::Files(Rev::WorkingCopy),
+            listing: Ok(Read::Files(Vec::new())),
+            revision: Some(tsumugi_model::repository::Revision {
+                id: "x-full".into(),
+                short: "x".into(),
+                description: "core: keep it\n\nWhy.".into(),
+            }),
+        };
+        let asked = changing(&[])
+            .event(patch(3).change(DetailsChange::Repository {
+                worktree: "/w".into(),
+                read: files,
+            }))
+            .send(Msg::DetailsKey(Key::Amend));
+        assert!(asked.state().prompt.committing.is_none());
+        assert!(matches!(
+            asked.state().overlays.confirm,
+            Some(crate::overlay::confirm::Ask::AmendCommit { .. })
+        ));
+        let yes = asked.send(Msg::ConfirmAnswer(true));
+        assert!(yes.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::PromptRestore { text, .. } if text == "core: keep it\n\nWhy."
+        )));
+        let sent = yes
+            .send(Msg::PromptSend)
+            .send(taken("core: keep it, better"));
+        assert_eq!(
+            git_effects(&sent),
+            [Effect::Git {
+                environment: here(),
+                worktree: "/w".into(),
+                op: GitOp::Commit {
+                    message: "core: keep it, better".into(),
+                    amend: true,
+                },
+                prompt: true,
+            }]
+        );
     }
 }

@@ -335,6 +335,38 @@ pub(crate) fn perform(
             Some(key) if area == Area::Details => step(state, Msg::DetailsKey(key)),
             _ => Vec::new(),
         },
+        Action::DetailsStage if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Stage))
+        }
+        Action::DetailsStageAll if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::StageAll))
+        }
+        Action::DetailsDiscard if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Discard))
+        }
+        Action::DetailsCommit if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Commit))
+        }
+        Action::DetailsAmend if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Amend))
+        }
+        Action::DetailsPull if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Pull))
+        }
+        Action::DetailsPush if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::Push))
+        }
+        Action::DetailsForcePush if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::ForcePush))
+        }
+        Action::DetailsStage
+        | Action::DetailsStageAll
+        | Action::DetailsDiscard
+        | Action::DetailsCommit
+        | Action::DetailsAmend
+        | Action::DetailsPull
+        | Action::DetailsPush
+        | Action::DetailsForcePush => Vec::new(),
         Action::CursorDown
         | Action::CursorUp
         | Action::CursorFirst

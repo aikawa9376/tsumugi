@@ -896,6 +896,46 @@ impl AppCtx {
                     app.dispatch(Msg::WorktreeDeleted { path, result });
                 });
             }
+            Effect::Git {
+                environment,
+                worktree,
+                op,
+                prompt,
+            } => {
+                let made = self.ask_in(&environment, Ask::Git { worktree, op });
+                let app = *self;
+                spawn(async move {
+                    match made.await {
+                        Answer::Done => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(true));
+                            }
+                        }
+                        Answer::Told { text } => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(true));
+                            }
+                            if !text.is_empty() {
+                                app.notice(text);
+                            }
+                        }
+                        // What a hook or the remote said stays on screen, and
+                        // what was written for a commit goes back to the prompt.
+                        Answer::Failed { text } => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(false));
+                            }
+                            app.status(Some(text));
+                        }
+                        answer => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(false));
+                            }
+                            app.notice(format!("the work host answered {answer:?}"));
+                        }
+                    }
+                });
+            }
             Effect::Copy { text, done } => {
                 let told = match crate::clipboard::copy_to_clipboard(&text) {
                     Ok(()) => done,

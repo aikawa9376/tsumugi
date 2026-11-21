@@ -56,6 +56,18 @@ pub struct PromptView {
     /// What the running Neovim was last offered after `/`; nothing while
     /// none runs.
     commands: Option<Vec<Command>>,
+    /// The commit the prompt is written for: what is sent from it is the
+    /// message, and the session it was shown for hears nothing of it.
+    pub committing: Option<Committing>,
+}
+
+/// A commit the prompt writes the message of.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Committing {
+    pub environment: tsumugi_model::EnvironmentId,
+    pub worktree: PathBuf,
+    /// Whether it replaces the last commit.
+    pub amend: bool,
 }
 
 impl Default for PromptView {
@@ -73,6 +85,7 @@ impl Default for PromptView {
             asked: 0,
             offered: None,
             commands: None,
+            committing: None,
         }
     }
 }
@@ -102,6 +115,42 @@ fn project(state: &ViewState, tab: Option<&Tab>) -> Option<PathBuf> {
         Some(Tab::Draft { worktree, .. }) => Some(worktree.clone()),
         _ => None,
     }
+}
+
+/// Give the prompt the keys to write the message of a commit in `worktree`,
+/// which is sent from it as any prompt is. An amend starts from the message
+/// of the last commit. Where no prompt is shown there is nowhere to write it.
+pub(crate) fn begin_commit(
+    state: &mut ViewState,
+    environment: tsumugi_model::EnvironmentId,
+    worktree: PathBuf,
+    amend: bool,
+) -> Vec<Effect> {
+    if !crate::content::shows_prompt(state.content.active()) {
+        return vec![Effect::Notice(
+            "Open a session or a draft to write the commit message in its prompt".into(),
+        )];
+    }
+    let last = crate::details::working_copy(&state.details, state.hosts.work(&environment))
+        .and_then(|view| view.revision)
+        .map(|revision| revision.description);
+    state.prompt.committing = Some(Committing {
+        environment,
+        worktree,
+        amend,
+    });
+    let mut effects = step(state, Msg::Focus(Area::Prompt));
+    if amend && let Some(text) = last {
+        effects.push(Effect::PromptRestore {
+            tab: state.content.active().cloned(),
+            text,
+            images: Vec::new(),
+        });
+    }
+    effects.push(Effect::Notice(
+        "Write the commit message; sending it commits, leaving the prompt gives up".into(),
+    ));
+    effects
 }
 
 /// Step back through the prompts `agent` kept as sent where the shown tab's

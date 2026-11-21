@@ -133,6 +133,14 @@ changes them ([keys](../keys.md)).
 | `agents.collapse` |  | fold the selected agent family or move to its parent | `agents`: `h`, `ArrowLeft` |
 | `agents.reveal` |  | from Agents, show the selected session in Tree, clearing Tree's filter and unfolding its directory path ([agents](../agents-panel.md)) | `agents`: `g t` |
 | `details.toggle` | Toggle Details | show or hide the details panel | `global`: `Mod+d` |
+| `details.stage` |  | in the details panel, stage the selected change of the worktree, or unstage it when it is only staged; a file in conflict is staged to mark it resolved ([details](../details.md#changes)) | `details`: `s` |
+| `details.stage_all` |  | in the details panel, stage every change of the worktree, untracked files included ([details](../details.md#changes)) | `details`: `S` |
+| `details.discard` |  | in the details panel, discard the selected change of the worktree, staged or not, after asking; a file in conflict cannot be discarded ([details](../details.md#changes)) | `details`: `X` |
+| `details.commit` |  | in the details panel, write the message of a commit in the prompt: sending it commits what is staged, and leaving the prompt gives it up; a hook that refuses the commit says why and the message stays in the prompt ([details](../details.md#changes)) | `details`: `c` |
+| `details.amend` |  | in the details panel, after asking, write the message of a commit that replaces the last one, starting from its message, as `details.commit` does ([details](../details.md#changes)) | `details`: `C` |
+| `details.pull` |  | in the details panel, pull the branch's upstream; diverged branches are merged unless git is configured to rebase ([details](../details.md#changes)) | `details`: `p` |
+| `details.push` |  | in the details panel, push the branch, setting its upstream when it has none ([details](../details.md#changes)) | `details`: `P` |
+| `details.force_push` |  | in the details panel, after asking, push the branch over the remote's, but only if nobody else pushed to it since it was fetched ([details](../details.md#changes)) | `details`: `F` |
 | `viewer.zoom_in` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](../content.md#viewers)) | `viewer`: `Plus`, `=` |
 | `viewer.zoom_out` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller | `viewer`: `-` |
 | `viewer.zoom_fit` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document fitting the window | `viewer`: `0` |
@@ -366,6 +374,14 @@ changes them ([keys](../keys.md)).
 "Escape" = "cursor.fold"
 "y" = "cursor.copy"
 "Backspace" = "cursor.fold"
+"s" = "details.stage"
+"S" = "details.stage_all"
+"X" = "details.discard"
+"c" = "details.commit"
+"C" = "details.amend"
+"p" = "details.pull"
+"P" = "details.push"
+"F" = "details.force_push"
 "1" = "details.tab 1"
 "2" = "details.tab 2"
 "3" = "details.tab 3"

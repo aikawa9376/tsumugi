@@ -46,6 +46,22 @@ pub enum Ask {
         terminals: Vec<u128>,
         delete_branch: bool,
     },
+    /// Replace the last commit of a worktree.
+    AmendCommit {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+    },
+    /// Push a worktree's branch over what the remote has of it.
+    ForcePush {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+    },
+    /// Lose these changes of a worktree, staged or not.
+    DiscardChanges {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        changes: Vec<tsumugi_model::repository::Change>,
+    },
 }
 
 impl Ask {
@@ -141,6 +157,27 @@ impl Ask {
                     if standing.dirty() { "Delete and discard changes" } else { "Delete" },
                 )
             }
+            Self::AmendCommit { .. } => (
+                Icon::Pencil,
+                "Amend the last commit?".into(),
+                "The last commit is replaced by a new one holding what is staged now, with the message you write. If it was pushed, pushing it again needs a force push.".into(),
+                "Amend",
+            ),
+            Self::ForcePush { .. } => (
+                Icon::ArrowBarToUp,
+                "Force push?".into(),
+                "The remote's branch is overwritten with this one, unless somebody else pushed to it since you last fetched. Commits only the remote has are lost.".into(),
+                "Force push",
+            ),
+            Self::DiscardChanges { changes, .. } => (
+                Icon::Trash,
+                match changes.as_slice() {
+                    [one] => format!("Discard changes to {}?", one.path),
+                    many => format!("Discard {} changes?", many.len()),
+                },
+                "Staged and unstaged changes go back to the last commit, and a new file is deleted. This cannot be undone.".into(),
+                "Discard",
+            ),
         }
     }
 
@@ -170,7 +207,11 @@ impl Ask {
     /// Whether answering yes loses what cannot be had back.
     pub fn destroys(&self) -> bool {
         match self {
-            Self::KillProcess(..) | Self::RestartDaemon(_) => true,
+            Self::KillProcess(..)
+            | Self::RestartDaemon(_)
+            | Self::DiscardChanges { .. }
+            | Self::AmendCommit { .. }
+            | Self::ForcePush { .. } => true,
             Self::RemoveWorkspace { terminals, .. } | Self::CloseWorktree { terminals, .. } => {
                 !terminals.is_empty()
             }

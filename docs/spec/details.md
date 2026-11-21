@@ -90,7 +90,8 @@ window or such a row is described.
   one shows it whole, and copying it copies its text. What Tsumugi or the
   agent put into a turn, as a command's output, is not a prompt.
 - **changes** — the HEAD commit's full message in Git, alongside the files
-  the worktree changes.
+  the worktree changes, each with what is staged of it and what is not
+  ([below](#changes)).
   Opening a file shows its diff, which you can comment on ([review](review.md)).
 - **log** — the changes that lead to the worktree, drawn as a graph: each
   change is joined by lines to its parents, so forks and merges show. A line
@@ -139,6 +140,33 @@ A shell or a draft has no conversation, and what is read of one shows
 nothing for it. A component that lists rows lists them under a line that
 says what they come to, how many and the first of them, which folds and
 unfolds them; one alone in its tab lists them without it.
+
+## Changes
+
+A row of **changes** says what is staged of its file and what is not, in two
+letters as Git does: the index's, then the worktree's. With the keys in the
+panel, the selected row's file is staged, unstaged or discarded, and every
+change is staged at once ([keys](keys.md)). Staging a file with unstaged
+changes, or an untracked or deleted one, puts it in the index; staging one
+that is only staged takes it out. A renamed file is one change, staged,
+unstaged or discarded with the file it came from. A file in conflict can be
+staged, which marks it resolved, and can neither be unstaged nor discarded.
+
+Discarding asks first, because what it loses cannot be had back: a tracked
+file goes back to the last commit, staged or not, and an untracked or newly
+staged file is deleted. Nothing in the panel discards without that answer.
+
+`c` writes the message of a commit in the prompt: sending it commits what is
+staged, and leaving the prompt gives the commit up. A hook or Git refusing
+the commit says why with what it printed, and the message stays in the
+prompt to be sent again. `C` writes a commit that replaces the last one,
+starting from its message. Pull and push work the branch's upstream, and a
+first push sets it; a force push overwrites the remote's branch only if
+nobody else pushed to it since it was fetched. An amend and a force push ask
+first, like a discard.
+
+These work wherever the work host runs, and name each file by its path as it
+is, whatever characters it holds. When Git refuses, the panel says why.
 
 ## Arranging the panel
 

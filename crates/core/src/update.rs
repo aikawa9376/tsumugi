@@ -114,7 +114,13 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         }],
 
         Msg::ContentOpened { kept, scratch } => content::opened(&mut state.content, kept, scratch),
-        Msg::Focus(area) => content::focus(&mut state.content, area),
+        Msg::Focus(area) => {
+            // The message being written for a commit is given up with the prompt.
+            if area != crate::content::Area::Prompt {
+                state.prompt.committing = None;
+            }
+            content::focus(&mut state.content, area)
+        }
         Msg::Show { thing, place, how } => {
             let local = state.hosts.is_local(thing.environment());
             content::show(&mut state.content, thing, place, how, local)
@@ -253,6 +259,16 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             }
             Vec::new()
         }
+        Msg::DetailsKey(details::Key::Discard) => overlay::ask_discard(state),
+        Msg::DetailsKey(details::Key::Amend) => overlay::ask_rewrite(state, true),
+        Msg::DetailsKey(details::Key::ForcePush) => overlay::ask_rewrite(state, false),
+        Msg::DetailsKey(details::Key::Commit) => match state.details.shown.worktree.clone() {
+            Some(worktree) => {
+                let environment = state.details.shown.environment.clone();
+                prompt::begin_commit(state, environment, worktree, false)
+            }
+            None => Vec::new(),
+        },
         Msg::DetailsKey(key) => {
             let environment = content::shown_environment(state);
             details::press(&mut state.details, state.hosts.work(&environment), key)

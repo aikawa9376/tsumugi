@@ -171,7 +171,7 @@ pub fn added(path: &str, content: &[u8], max: usize) -> Vec<DiffLine> {
 /// outside ASCII, so a Japanese name reads as itself.
 const UNQUOTED: &str = "core.quotePath=false";
 
-fn git_dir(path: &Path) -> Result<&str, Error> {
+pub(crate) fn git_dir(path: &Path) -> Result<&str, Error> {
     path.to_str().ok_or_else(|| Error::Failed {
         program: "git".into(),
         stderr: format!("{} is not valid UTF-8", path.display()),
@@ -179,7 +179,7 @@ fn git_dir(path: &Path) -> Result<&str, Error> {
 }
 
 /// What git, asked `args` about the worktree at `path`, prints.
-async fn git(path: &Path, args: &[&str]) -> Result<String, Error> {
+pub(crate) async fn git(path: &Path, args: &[&str]) -> Result<String, Error> {
     let mut all = vec!["-C", git_dir(path)?];
     all.extend(args);
     run("git", &all, None).await

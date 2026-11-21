@@ -22,6 +22,25 @@ fn diff_class(kind: DiffKind) -> &'static str {
     }
 }
 
+/// A file's status as two spans: the index's letter, which says what is
+/// staged, and the worktree's, drawn apart so the two read apart.
+#[component]
+pub(crate) fn FileStatus(status: String, conflicted: bool) -> Element {
+    let mut letters = status.chars();
+    let index = letters.next().map(String::from).unwrap_or_default();
+    let worktree = letters.next().map(String::from).unwrap_or_default();
+    if worktree.is_empty() {
+        return rsx! { span { class: "details-file-status", "{index}" } };
+    }
+    let index_class = if conflicted { "conflicted" } else { "staged" };
+    rsx! {
+        span { class: "details-file-status",
+            span { class: "{index_class}", "{index}" }
+            span { class: if conflicted { "conflicted" } else { "" }, "{worktree}" }
+        }
+    }
+}
+
 /// What a worktree is: none shown, outside Git, or a repository.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Worktree {
@@ -78,7 +97,7 @@ pub(super) fn Repository(
                             kind: "mono",
                             selected: selected == Some(i),
                             onclick: move |_| app.dispatch(Msg::DetailsOpenRow(i)),
-                            span { class: "details-file-status", "{f.status}" }
+                            FileStatus { status: f.status.clone(), conflicted: f.is_conflicted() }
                             span { class: "list-row-name", "{f.shown()}" }
                         }
                     }
