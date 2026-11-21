@@ -22,6 +22,7 @@ pub mod execution;
 mod explain;
 pub mod gateway;
 mod held;
+mod issue_cli;
 mod jobs;
 pub mod kept;
 mod local_issues;
@@ -62,6 +63,7 @@ pub mod workspaces;
 use tsumugi_core::content;
 
 pub use daemon::cli as daemon_cli;
+pub use issue_cli::cli as issue_cli;
 pub use kept::{KEEP, keep};
 pub use start::cli as session_cli;
 pub use terminals::cli as terminal_cli;

@@ -47,7 +47,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
     ) {
         let prepared = terminal_host::judged(judged.subscribe()).await;
         let starts = match &ask {
-            Ask::Run { args, .. } => args.get(1).is_some_and(|op| op == "start"),
+            // A queued issue is started by the host once it can be.
+            Ask::Run { args, .. } => {
+                args.first().is_some_and(|command| command != "issue")
+                    && args.get(1).is_some_and(|op| op == "start")
+            }
             _ => true,
         };
         // Existing terminals can be used even when preparing terminfo failed.
@@ -157,7 +161,14 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 .map(|cleared| Answer::DraftConsumed { cleared })
         }
         Ask::Picture { path, whole } => Ok(picture(path, whole).await),
-        Ask::Run { args, cwd, input } => Ok(run(&args, &cwd, input).await),
+        Ask::Run { args, cwd, input } => Ok(match args.split_first() {
+            Some((command, rest)) if command == "issue" => {
+                crate::issue_cli::run(watched, rest, &cwd, input)
+                    .await
+                    .answer(crate::remote::active())
+            }
+            _ => run(&args, &cwd, input).await,
+        }),
         Ask::LoginStanding { profile, after } => {
             if let Some(terminal) = after {
                 ended(terminal).await;

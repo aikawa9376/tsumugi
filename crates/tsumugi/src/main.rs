@@ -20,7 +20,8 @@ fn main() {
         std::process::exit(tsumugi_host::hold(&args[1..]));
     }
     use tsumugi_host::cli::{
-        Command, ROUTING, RemoteCommand, USAGE, command, set_aside, settle_instance,
+        Command, ROUTING, RemoteCommand, USAGE, command, named_instance, routing_and_credential,
+        set_aside, settle_instance,
     };
     // Run from inside an agent's account, such as by its MCP server or a
     // command its session runs, tsumugi finds its instance where it is
@@ -40,6 +41,16 @@ fn main() {
     if let Some(Command::InOwnLogin(rest)) = &asked {
         std::process::exit(tsumugi_agents::own_login::run(rest));
     }
+    // An instance named on the command line wins over the one the session it
+    // is typed in belongs to.
+    if let Some(Command::Issue(rest)) = &asked
+        && named_instance(rest).is_some()
+    {
+        for name in routing_and_credential() {
+            // SAFETY: no other thread exists yet.
+            unsafe { std::env::remove_var(name) };
+        }
+    }
     for name in set_aside(|name| std::env::var(name).ok()) {
         // SAFETY: no other thread exists yet.
         unsafe { std::env::remove_var(name) };
@@ -48,6 +59,7 @@ fn main() {
         Some(Command::Window { instance, .. } | Command::Remote { instance, .. }) => {
             instance.clone()
         }
+        Some(Command::Issue(rest)) => named_instance(rest),
         Some(Command::Host(_) | Command::Daemon(_)) => std::env::var("TSUMUGI_WORK_INSTANCE").ok(),
         _ => None,
     };
@@ -120,6 +132,7 @@ fn main() {
             &asked,
             Some(
                 Command::Session(_)
+                    | Command::Issue(_)
                     | Command::Terminal(_)
                     | Command::Mcp(_)
                     | Command::Editor(_)
@@ -221,6 +234,7 @@ fn main() {
         }
         Some(Command::Session(rest)) => std::process::exit(tsumugi_host::session_cli(&rest)),
         Some(Command::Skills(rest)) => std::process::exit(tsumugi_host::skills::cli(&rest)),
+        Some(Command::Issue(rest)) => std::process::exit(tsumugi_host::issue_cli(&rest)),
         Some(Command::Mcp(rest)) => {
             std::process::exit(tsumugi_host::delegation::bridge::cli(&rest))
         }

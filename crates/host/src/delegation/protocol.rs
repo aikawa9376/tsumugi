@@ -56,6 +56,12 @@ pub enum Command {
     Context,
     StartSession(Start),
     CreateLocalIssue(CreateLocalIssue),
+    /// The local issues of the environment.
+    LocalIssues(LocalIssues),
+    ReadLocalIssue(LocalIssueName),
+    CloseLocalIssue(LocalIssueName),
+    ReopenLocalIssue(LocalIssueName),
+    CancelLocalIssue(LocalIssueName),
     /// The resources the user keeps in the caller's project.
     Resources(Resources),
     AddResource(AddResource),
@@ -92,6 +98,9 @@ impl Command {
             self,
             Self::StartSession(_)
                 | Self::CreateLocalIssue(_)
+                | Self::CloseLocalIssue(_)
+                | Self::ReopenLocalIssue(_)
+                | Self::CancelLocalIssue(_)
                 | Self::AddResource(_)
                 | Self::RemoveResource(_)
                 | Self::Send(_)
@@ -111,6 +120,26 @@ pub struct CreateLocalIssue {
     /// The working directory on this work machine; the caller's when omitted.
     #[serde(default)]
     pub dir: Option<PathBuf>,
+}
+
+/// List the local issues of this environment.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LocalIssues {
+    /// Only issues in this state: open, queued, starting, running, waiting, done, closed, failed or cancelled; every state when omitted.
+    #[serde(default)]
+    pub state: Option<String>,
+    /// Only issues of this directory or below it; every directory when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+}
+
+/// Name one local issue.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LocalIssueName {
+    /// Its number as `local_issues` lists it, or the start of its id.
+    pub issue: String,
 }
 
 /// Look up the paths and addresses the user keeps in the project.

@@ -1,7 +1,9 @@
 //! The environment's durable queue, beside the sessions it starts.
 
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
-use tsumugi_model::{LocalIssue, LocalIssueState, NewLocalIssue, Session, SessionId, State};
+use tsumugi_model::{
+    LocalIssue, LocalIssueAction, LocalIssueState, NewLocalIssue, Session, SessionId, State,
+};
 
 use super::{Code, Error, Result, Store};
 
@@ -53,8 +55,18 @@ impl Store {
     }
 
     pub fn local_issues(&self) -> Result<Vec<LocalIssue>> {
+        Ok(self
+            .numbered_local_issues()?
+            .into_iter()
+            .map(|(_, issue)| issue)
+            .collect())
+    }
+
+    /// Every issue with its number: the short, stable one a person types,
+    /// which a deletion never hands on to another issue.
+    pub fn numbered_local_issues(&self) -> Result<Vec<(u64, LocalIssue)>> {
         let mut query = self.connection.prepare(
-            "SELECT i.id, i.dir, i.title, i.body, i.state, i.session, s.terminal, i.error
+            "SELECT i.id, i.dir, i.title, i.body, i.state, i.session, s.terminal, i.error, i.seq
              FROM local_issues i LEFT JOIN sessions s ON s.id = i.session ORDER BY i.seq",
         )?;
         let rows = query.query_map([], |row| {
@@ -63,7 +75,7 @@ impl Store {
             let parse_error = |error: Box<dyn std::error::Error + Send + Sync>| {
                 rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, error)
             };
-            Ok(LocalIssue {
+            let issue = LocalIssue {
                 id: row.get(0)?,
                 dir: std::path::PathBuf::from(row.get::<_, String>(1)?),
                 title: row.get(2)?,
@@ -76,10 +88,71 @@ impl Store {
                     .map_err(|e| parse_error(Box::new(e)))?,
                 session: row.get(6)?,
                 error: row.get(7)?,
-            })
+            };
+            Ok((row.get::<_, i64>(8)?.unsigned_abs(), issue))
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    /// The issue `selector` names: its number, or the start of its id when
+    /// no issue has that number. One that names none, or several, is
+    /// refused.
+    pub fn local_issue_named(&self, selector: &str) -> Result<(u64, LocalIssue)> {
+        let selector = selector.trim().trim_start_matches('#');
+        if selector.is_empty() {
+            return Err(Error::new(Code::Invalid, "Name an issue by its number"));
+        }
+        let all = self.numbered_local_issues()?;
+        if let Ok(number) = selector.parse::<u64>()
+            && let Some(found) = all.iter().find(|(n, _)| *n == number)
+        {
+            return Ok(found.clone());
+        }
+        let prefix = selector.to_ascii_lowercase();
+        let mut matching: Vec<_> = all
+            .into_iter()
+            .filter(|(_, issue)| issue.id.starts_with(&prefix))
+            .collect();
+        match matching.len() {
+            0 => Err(Error::new(
+                Code::NotFound,
+                format!("No local issue is named {selector}"),
+            )),
+            1 => Ok(matching.remove(0)),
+            _ => {
+                let numbers: Vec<String> = matching.iter().map(|(n, _)| format!("#{n}")).collect();
+                Err(Error::new(
+                    Code::Invalid,
+                    format!(
+                        "{selector} names several issues ({}); use more of the id or a number",
+                        numbers.join(", ")
+                    ),
+                ))
+            }
+        }
+    }
+
+    /// Do `action` to the issue `selector` names and hand it back as it is
+    /// then, or as it was when it is deleted.
+    pub fn act_on_local_issue(
+        &mut self,
+        selector: &str,
+        action: LocalIssueAction,
+    ) -> Result<(u64, LocalIssue)> {
+        let (number, issue) = self.local_issue_named(selector)?;
+        match action {
+            LocalIssueAction::Start => self.start_local_issue(&issue.id)?,
+            LocalIssueAction::Cancel => self.cancel_local_issue(&issue.id)?,
+            LocalIssueAction::Retry => self.retry_local_issue(&issue.id)?,
+            LocalIssueAction::Close => self.close_local_issue(&issue.id)?,
+            LocalIssueAction::Reopen => self.reopen_local_issue(&issue.id)?,
+            LocalIssueAction::Delete => {
+                self.delete_local_issue(&issue.id)?;
+                return Ok((number, issue));
+            }
+        }
+        self.local_issue_named(&issue.id)
     }
 
     /// Reserve one request per directory before any program is started.
@@ -244,7 +317,7 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use tsumugi_model::{LocalIssueState as State, NewLocalIssue};
+    use tsumugi_model::{LocalIssueAction, LocalIssueState as State, NewLocalIssue};
 
     fn issue(dir: &str, title: &str) -> NewLocalIssue {
         NewLocalIssue {
@@ -598,5 +671,111 @@ mod tests {
         session.state = tsumugi_model::State::Idle;
         store.follow_local_issues(&[session]).unwrap();
         assert_eq!(store.local_issues().unwrap()[0].state, State::Done);
+    }
+
+    #[test]
+    fn issues_have_short_numbers_that_a_deletion_does_not_hand_on() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let [one, two] = ["one", "two"].map(|title| issue("/project", title));
+        store.add_local_issue(one.clone()).unwrap();
+        store.add_local_issue(two.clone()).unwrap();
+        store.delete_local_issue(&two.id).unwrap();
+        let three = issue("/project", "three");
+        store.add_local_issue(three.clone()).unwrap();
+        let numbers: Vec<_> = store
+            .numbered_local_issues()
+            .unwrap()
+            .into_iter()
+            .map(|(number, issue)| (number, issue.id))
+            .collect();
+        assert_eq!(numbers, [(1, one.id), (3, three.id)]);
+    }
+
+    fn named(store: &Store, selector: &str) -> std::result::Result<String, Error> {
+        store
+            .local_issue_named(selector)
+            .map(|(_, issue)| issue.title)
+    }
+
+    #[test]
+    fn an_issue_is_named_by_its_number_or_by_a_unique_prefix_of_its_id() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let mut one = issue("/project", "one");
+        let mut two = issue("/project", "two");
+        one.id = "ab12".to_owned() + &"0".repeat(28);
+        two.id = "ab34".to_owned() + &"0".repeat(28);
+        for new in [one.clone(), two.clone()] {
+            store.add_local_issue(new).unwrap();
+        }
+        assert_eq!(named(&store, "2").unwrap(), "two");
+        assert_eq!(named(&store, "#1").unwrap(), "one");
+        assert_eq!(named(&store, "ab3").unwrap(), "two");
+        assert_eq!(named(&store, "AB12").unwrap(), "one");
+        assert_eq!(named(&store, &two.id).unwrap(), "two");
+        let ambiguous = named(&store, "ab").unwrap_err();
+        assert_eq!(ambiguous.code, Code::Invalid);
+        assert!(ambiguous.message.contains("#1") && ambiguous.message.contains("#2"));
+        for selector in ["9", "ff", "", "  ", "ab12/"] {
+            let error = named(&store, selector).unwrap_err();
+            assert!(
+                matches!(error.code, Code::NotFound | Code::Invalid),
+                "{selector:?}"
+            );
+        }
+        assert_eq!(named(&store, "9").unwrap_err().code, Code::NotFound);
+    }
+
+    #[test]
+    fn a_number_wins_over_an_id_that_starts_with_the_same_digits() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let mut one = issue("/project", "one");
+        let mut two = issue("/project", "two");
+        one.id = "2".to_owned() + &"0".repeat(31);
+        two.id = "1".to_owned() + &"0".repeat(31);
+        store.add_local_issue(one).unwrap();
+        store.add_local_issue(two).unwrap();
+        assert_eq!(named(&store, "1").unwrap(), "one");
+        assert_eq!(named(&store, "10").unwrap(), "two");
+    }
+
+    #[test]
+    fn an_action_changes_the_issue_named_and_hands_it_back() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        store.add_local_issue(issue("/project", "kept")).unwrap();
+        let mut act = |action| {
+            store
+                .act_on_local_issue("1", action)
+                .map(|(_, issue)| issue.state)
+        };
+        assert_eq!(act(LocalIssueAction::Start).unwrap(), State::Queued);
+        assert_eq!(act(LocalIssueAction::Cancel).unwrap(), State::Cancelled);
+        assert_eq!(act(LocalIssueAction::Retry).unwrap(), State::Queued);
+        assert_eq!(act(LocalIssueAction::Close).unwrap(), State::Closed);
+        assert_eq!(act(LocalIssueAction::Reopen).unwrap(), State::Open);
+        assert_eq!(act(LocalIssueAction::Delete).unwrap(), State::Open);
+        assert_eq!(
+            store
+                .act_on_local_issue("1", LocalIssueAction::Close)
+                .unwrap_err()
+                .code,
+            Code::NotFound
+        );
+    }
+
+    #[test]
+    fn an_issue_at_work_is_neither_closed_nor_deleted_by_name() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        queue(&mut store, issue("/project", "busy"));
+        store.claim_local_issues().unwrap();
+        for action in [LocalIssueAction::Close, LocalIssueAction::Delete] {
+            let error = store.act_on_local_issue("1", action).unwrap_err();
+            assert_eq!(error.code, Code::Refused, "{}", action.word());
+        }
+        assert_eq!(store.local_issues().unwrap()[0].state, State::Starting);
     }
 }

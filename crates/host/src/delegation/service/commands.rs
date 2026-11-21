@@ -51,6 +51,73 @@ pub(super) async fn create_local_issue(
     answer(saved)
 }
 
+/// The local issues of the environment, narrowed by state and directory.
+pub(super) async fn local_issues(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::LocalIssues,
+) -> Result<Value> {
+    let state = asked
+        .state
+        .as_deref()
+        .map(|word| {
+            tsumugi_model::LocalIssueState::parse(word).ok_or_else(|| {
+                Error::new(
+                    Code::Invalid,
+                    format!("{word} is no state of a local issue"),
+                )
+            })
+        })
+        .transpose()?;
+    let dir = asked.dir.map(|dir| {
+        let dir = caller.cwd.join(dir);
+        tsumugi_sys::fs::canonicalize(&dir).unwrap_or(dir)
+    });
+    let all = context.call(|store| store.numbered_local_issues()).await?;
+    let issues: Vec<Value> = all
+        .iter()
+        .filter(|(_, issue)| state.is_none_or(|state| issue.state == state))
+        .filter(|(_, issue)| dir.as_ref().is_none_or(|dir| issue.dir.starts_with(dir)))
+        .map(|(number, issue)| crate::local_issues::view(*number, issue))
+        .collect();
+    Ok(serde_json::json!({"issues": issues}))
+}
+
+/// One local issue, with its request.
+pub(super) async fn local_issue(
+    context: &Context,
+    asked: protocol::LocalIssueName,
+) -> Result<Value> {
+    let (number, issue) = context
+        .call(move |store| store.local_issue_named(&asked.issue))
+        .await?;
+    Ok(serde_json::json!({"issue": crate::local_issues::view(number, &issue)}))
+}
+
+/// Close, reopen or cancel a local issue. Starting one authorizes an agent
+/// to work, and deleting one loses its request, so those stay with the
+/// user.
+pub(super) async fn change_local_issue(
+    context: &Context,
+    action: tsumugi_model::LocalIssueAction,
+    asked: protocol::LocalIssueName,
+) -> Result<Value> {
+    use tsumugi_model::LocalIssueAction as Action;
+    if !matches!(action, Action::Close | Action::Reopen | Action::Cancel) {
+        return Err(Error::new(
+            Code::Refused,
+            format!(
+                "An agent does not {} a local issue; the user does",
+                action.word()
+            ),
+        ));
+    }
+    let (number, issue) = context
+        .call(move |store| store.act_on_local_issue(&asked.issue, action))
+        .await?;
+    Ok(serde_json::json!({"issue": crate::local_issues::view(number, &issue)}))
+}
+
 /// The project a command names by `dir`, or else the caller's: the root of
 /// the workspace holding the directory.
 async fn project_of(

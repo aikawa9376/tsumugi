@@ -250,3 +250,67 @@ fn saved_issues_wait_for_start_then_run_in_order_and_survive_a_work_host_restart
         std::thread::sleep(Duration::from_millis(25));
     }
 }
+
+#[test]
+fn the_issue_command_changes_the_queue_the_running_work_host_owns() {
+    let hosts = Hosts::new();
+    let root = hosts.0.path();
+    hosts.run(&["terminal", "list", "--json"]);
+    let mut window = link(root);
+    let dir = root.to_str().unwrap();
+    let created = hosts.run(&[
+        "issue",
+        "create",
+        "--title",
+        "Check the docs",
+        "--body",
+        "Read them.",
+        "--dir",
+        dir,
+        "--json",
+    ]);
+    assert_eq!(created["ok"], true);
+    assert_eq!(created["result"]["issue"]["number"], 1);
+    assert_eq!(created["result"]["issue"]["state"], "open");
+    // The window learns of it without being asked.
+    waiting_for(&mut window, |issues| {
+        issues.len() == 1 && issues[0].title == "Check the docs"
+    });
+
+    let closed = hosts.run(&["issue", "close", "1", "--json"]);
+    assert_eq!(closed["result"]["issue"]["state"], "closed");
+    waiting_for(&mut window, |issues| {
+        issues[0].state == LocalIssueState::Closed
+    });
+    let listed = hosts.run(&["issue", "list", "--state", "closed", "--dir", dir, "--json"]);
+    assert_eq!(listed["result"]["issues"].as_array().unwrap().len(), 1);
+    let none = hosts.run(&["issue", "list", "--state", "open", "--json"]);
+    assert!(none["result"]["issues"].as_array().unwrap().is_empty());
+
+    let id = created["result"]["issue"]["id"].as_str().unwrap();
+    let reopened = hosts.run(&["issue", "reopen", &id[..8], "--json"]);
+    assert_eq!(reopened["result"]["issue"]["state"], "open");
+    let shown = hosts.run(&["issue", "show", "#1", "--json"]);
+    assert_eq!(shown["result"]["issue"]["body"], "Read them.");
+
+    let missing = isolated(root)
+        .args(["issue", "show", "9", "--json"])
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(1));
+    let said: serde_json::Value = serde_json::from_slice(&missing.stdout).unwrap();
+    assert_eq!(said["ok"], false);
+    assert_eq!(said["error"]["code"], "not_found");
+    let plain = isolated(root)
+        .args(["issue", "delete", "9"])
+        .output()
+        .unwrap();
+    assert_eq!(plain.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&plain.stderr).contains("No local issue"));
+
+    let deleted = hosts.run(&["issue", "delete", "1", "--json"]);
+    assert_eq!(deleted["result"]["deleted"], true);
+    waiting_for(&mut window, |issues| issues.is_empty());
+    let usage = isolated(root).args(["issue", "close"]).output().unwrap();
+    assert_eq!(usage.status.code(), Some(2));
+}

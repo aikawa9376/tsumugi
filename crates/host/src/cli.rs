@@ -31,6 +31,8 @@ pub enum Command {
     /// List, read, install and update the skills tsumugi ships; it acts on
     /// files alone, so it needs no host.
     Skills(Vec<String>),
+    /// Save, read and change local issues.
+    Issue(Vec<String>),
     /// Start an agent's program in a login of its own, as the last step
     /// of its launch; never typed by hand, so left out of the usage.
     InOwnLogin(Vec<String>),
@@ -163,6 +165,24 @@ pub const ROUTING: [&str; 4] = [
     "TSUMUGI_WORK_INSTANCE",
 ];
 
+/// The instance an `issue` command's `--instance` names, as a command that
+/// acts in another instance than the one it is typed in says it.
+pub fn named_instance(args: &[String]) -> Option<String> {
+    let at = args.iter().position(|word| word == "--instance")?;
+    args.get(at + 1)
+        .filter(|name| !name.starts_with("--"))
+        .cloned()
+}
+
+/// The variables a command run inside a session carries to reach its hosts
+/// and to act as it: the routing and the credential.
+pub fn routing_and_credential() -> impl Iterator<Item = &'static str> {
+    ROUTING.into_iter().chain([
+        crate::delegation::launch::ROOT_ENV,
+        crate::delegation::launch::TOKEN_ENV,
+    ])
+}
+
 /// The inherited variables to set aside before anything reads them: the
 /// routing of a session, and the credential it acts with, when `var`'s
 /// `$TSUMUGI_INSTANCE` names another instance than the routing does. The
@@ -171,13 +191,7 @@ pub const ROUTING: [&str; 4] = [
 pub fn set_aside(var: impl Fn(&str) -> Option<String>) -> Vec<&'static str> {
     let named = |name| var(name).filter(|value| !value.is_empty());
     match (named(INSTANCE_ENV), named(WORK_INSTANCE_ENV)) {
-        (Some(instance), Some(work)) if instance != work => ROUTING
-            .into_iter()
-            .chain([
-                crate::delegation::launch::ROOT_ENV,
-                crate::delegation::launch::TOKEN_ENV,
-            ])
-            .collect(),
+        (Some(instance), Some(work)) if instance != work => routing_and_credential().collect(),
         _ => Vec::new(),
     }
 }
@@ -256,6 +270,7 @@ impl Command {
         matches!(
             self,
             Command::Session(_)
+                | Command::Issue(_)
                 | Command::Terminal(_)
                 | Command::Mcp(_)
                 | Command::Editor(_)
@@ -264,7 +279,7 @@ impl Command {
     }
 }
 
-pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | mcp … | editor … | session … | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
+pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
 
 /// The command `args` ask for; `None` for one tsumugi does not know, which
 /// must not open a window: a program that ran an older tsumugi's subcommand
@@ -305,6 +320,7 @@ pub fn command(args: &[String]) -> Option<Command> {
         Some("editor") => Some(Command::Editor(rest())),
         Some("session") => Some(Command::Session(rest())),
         Some("skills") => Some(Command::Skills(rest())),
+        Some("issue") => Some(Command::Issue(rest())),
         Some("remote") => remote(&args[1..]),
         Some(tsumugi_agents::own_login::SUBCOMMAND) => Some(Command::InOwnLogin(rest())),
         Some("daemon") => match &args[1..] {
@@ -412,6 +428,7 @@ mod tests {
             &["terminal", "screen", "dev"],
             &["mcp"],
             &["editor", "/tmp/p.md"],
+            &["issue", "list"],
             &["connect"],
         ] {
             assert!(asked(words).unwrap().routed(), "{words:?}");
@@ -438,6 +455,22 @@ mod tests {
     }
 
     #[test]
+    fn an_issue_command_names_the_instance_it_acts_in_by_its_option() {
+        let words = |words: &[&str]| words.iter().map(|w| w.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            named_instance(&words(&["list", "--instance", "work", "--json"])),
+            Some("work".to_string())
+        );
+        assert_eq!(named_instance(&words(&["list", "--json"])), None);
+        assert_eq!(named_instance(&words(&["list", "--instance"])), None);
+        assert_eq!(
+            named_instance(&words(&["create", "--title", "--instance", "--body", "x"])),
+            None,
+            "a value is not an option"
+        );
+    }
+
+    #[test]
     fn a_subcommand_takes_the_arguments_after_it() {
         assert_eq!(
             asked(&["terminal", "screen", "dev"]),
@@ -450,6 +483,10 @@ mod tests {
         assert_eq!(
             asked(&["session", "start"]),
             Some(Command::Session(vec!["start".into()]))
+        );
+        assert_eq!(
+            asked(&["issue", "close", "3"]),
+            Some(Command::Issue(vec!["close".into(), "3".into()]))
         );
         assert_eq!(
             asked(&["daemon"]),

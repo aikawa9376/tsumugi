@@ -1,5 +1,5 @@
 //! The work host owns issue processing independently of its connected windows.
-use tsumugi_model::{NewLocalIssue, Session};
+use tsumugi_model::{LocalIssue, LocalIssueAction, NewLocalIssue, Session};
 use tsumugi_protocol::{Answer, TreeChange};
 
 use crate::delegation::app::{root, with_store};
@@ -49,6 +49,38 @@ pub(crate) async fn reopen(watched: &Watched, id: String) -> Result<Answer, Stri
 
 pub(crate) async fn delete(watched: &Watched, id: String) -> Result<Answer, String> {
     edit(watched, move |store| store.delete_local_issue(&id)).await
+}
+
+/// Do `action` to the issue `selector` names, which the windows then show.
+pub(crate) async fn act(
+    watched: &Watched,
+    selector: &str,
+    action: LocalIssueAction,
+) -> crate::delegation::Result<(u64, LocalIssue)> {
+    let selector = selector.to_owned();
+    let done = with_store(&root(), move |store| {
+        store.act_on_local_issue(&selector, action)
+    })
+    .await?;
+    publish(watched)
+        .await
+        .map_err(crate::delegation::Error::storage)?;
+    watched.relist();
+    Ok(done)
+}
+
+/// What an issue says of itself to a command or an agent.
+pub(crate) fn view(number: u64, issue: &LocalIssue) -> serde_json::Value {
+    serde_json::json!({
+        "number": number,
+        "id": issue.id,
+        "dir": issue.dir,
+        "title": issue.title,
+        "body": issue.body,
+        "state": issue.state,
+        "session": issue.session,
+        "error": issue.error,
+    })
 }
 
 async fn edit(
