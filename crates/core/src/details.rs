@@ -153,6 +153,16 @@ fn conversation_totals(stats: &tsumugi_model::ConversationStats) -> Vec<(&'stati
             used.push(format!("{} cached", tokens(t.cached)));
         }
         out.push(("Tokens used", used.join(" · ")));
+        if let Some(dollars) = stats
+            .model
+            .as_deref()
+            .and_then(|model| tsumugi_model::cost::estimate(model, t))
+        {
+            out.push((
+                "Estimated cost",
+                format!("{} · inferred pricing", tsumugi_model::cost::show(dollars)),
+            ));
+        }
     }
     let mut activity = Vec::new();
     if stats.user_turns > 0 {
@@ -217,10 +227,27 @@ pub enum GaugeKind {
     Other,
 }
 
+/// The share of a limit used from which it is warned of.
+pub const WARN_AT: u32 = 80;
+
 impl Gauge {
     /// Whether this is the conversation's context, not an account limit.
     pub fn context(&self) -> bool {
         self.kind == GaugeKind::Context
+    }
+
+    /// Whether an account limit has reached [`WARN_AT`].
+    pub fn warning(&self) -> bool {
+        !self.context() && self.used >= WARN_AT
+    }
+
+    /// What is used, or, as `left` chooses, what is left.
+    pub fn shown(&self, left: bool) -> String {
+        if left {
+            self.left.clone()
+        } else {
+            format!("{}% used", self.used)
+        }
     }
 }
 
@@ -1603,6 +1630,29 @@ mod tests {
             ]
         );
         assert!(conversation_totals(&tsumugi_model::ConversationStats::default()).is_empty());
+    }
+
+    #[test]
+    fn a_priced_model_s_conversation_shows_its_estimated_cost_as_inferred() {
+        let priced = tsumugi_model::ConversationStats {
+            model: Some("claude-opus-4-7-20260101".into()),
+            tokens: Some(tsumugi_model::Tokens {
+                input: 1_000_000,
+                output: 100_000,
+                cached: 0,
+            }),
+            ..Default::default()
+        };
+        assert!(
+            conversation_totals(&priced)
+                .contains(&("Estimated cost", "$7.50 · inferred pricing".to_string()))
+        );
+        assert!(
+            !conversation_totals(&stats())
+                .iter()
+                .any(|(k, _)| *k == "Estimated cost"),
+            "a model the table does not hold is not priced"
+        );
     }
 
     #[test]

@@ -43,6 +43,12 @@ A notification outside the window is told when a failure or a completion
 happens while the window is not in front, as for a session that waits
 ([settings](settings.md)); each of the three is on until Settings turns it off.
 
+A limit of an agent's account that passes 80% used is told the same way,
+once each time it does, as **Notify when a usage limit runs low** in Settings
+says; what already stood over it when the window first heard from a host is
+not news, and a login whose profile does not poll is not told of. Muting does
+not silence it.
+
 **Mute or unmute notifications** (`notifications.mute`), on the row of a
 workspace, a worktree or a session, silences the three kinds for what runs in
 that workspace or worktree, a session's meaning the worktree it runs in, and

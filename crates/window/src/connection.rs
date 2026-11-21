@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use tsumugi_connect::Target;
 use tsumugi_connect::environments::Catalog;
 use tsumugi_core::config::Config;
-use tsumugi_core::details::{ProfileRow, profile_rows};
+use tsumugi_core::details::{ProfileRow, UsageStatus, profile_rows, usage_roster};
 use tsumugi_core::host::Link;
 use tsumugi_core::overlay::context_menu::Reach;
 use tsumugi_model::EnvironmentId;
@@ -419,7 +419,22 @@ pub(crate) fn EnvironmentAgents(environment: EnvironmentId) -> Element {
         let work = hosts.work(&environment);
         let agents = work.map(|w| w.agents.clone()).unwrap_or_default();
         let usage = work.map(|w| w.details.usage.clone()).unwrap_or_default();
-        profile_rows(&settings.read(), &agents, &usage, clock())
+        let unavailable = work
+            .map(|w| w.details.unavailable.clone())
+            .unwrap_or_default();
+        let logins = app.logins.read();
+        let login = |id: &tsumugi_model::profile::ProfileId| match logins.get(&environment, id) {
+            Some(crate::logins::Login::Is(standing, _)) => Some(*standing),
+            _ => None,
+        };
+        usage_roster(profile_rows(
+            &settings.read(),
+            &agents,
+            &usage,
+            &unavailable,
+            login,
+            clock(),
+        ))
     };
     rsx! {
         if !rows.is_empty() {
@@ -485,7 +500,11 @@ fn ProfileItem(environment: EnvironmentId, row: ProfileRow) -> Element {
                 }
             }
             if row.reports_usage {
-                Gauges { gauges: row.gauges }
+                if row.status == UsageStatus::Limits {
+                    Gauges { gauges: row.gauges }
+                } else {
+                    div { class: "usage-status", role: "status", "{row.status.word()}" }
+                }
             }
         }
     }

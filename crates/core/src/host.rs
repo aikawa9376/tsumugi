@@ -274,6 +274,7 @@ pub(crate) fn told(state: &mut ViewState, environment: EnvironmentId, event: Eve
                 effects.extend(show_asked(state, &environment, &before));
             }
             effects.extend(crate::notices::heard(state, &environment));
+            effects.extend(crate::notices::usage::heard(state, &environment));
             effects
         }
     }

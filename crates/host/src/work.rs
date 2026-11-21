@@ -687,8 +687,11 @@ fn common(change: &Change) -> bool {
                 | TreeChange::Resources { .. }
                 | TreeChange::SavedCommands { .. }
                 | TreeChange::Notices { .. }
-        ) | Change::Details(DetailsChange::Usage { .. } | DetailsChange::System { .. })
-            | Change::Config(_)
+        ) | Change::Details(
+            DetailsChange::Usage { .. }
+                | DetailsChange::UsageUnavailable { .. }
+                | DetailsChange::System { .. },
+        ) | Change::Config(_)
     )
 }
 
@@ -755,7 +758,9 @@ fn details_in_sight(change: &DetailsChange, sight: &Sight) -> bool {
             .repositories
             .iter()
             .any(|r| r.worktree == *worktree && r.spot == *spot),
-        DetailsChange::Usage { .. } | DetailsChange::System { .. } => true,
+        DetailsChange::Usage { .. }
+        | DetailsChange::UsageUnavailable { .. }
+        | DetailsChange::System { .. } => true,
     }
 }
 

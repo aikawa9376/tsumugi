@@ -253,6 +253,9 @@ pub struct AgentProfile {
     pub home: Option<PathBuf>,
     pub launch: Launch,
     pub options: AgentOptions,
+    /// Whether the account's usage limits are asked of the agent; off, the
+    /// account is never queried, and the usage view says so.
+    pub poll_usage: bool,
 }
 
 impl AgentProfile {
@@ -265,6 +268,7 @@ impl AgentProfile {
             home: None,
             launch: Launch::default(),
             options: AgentOptions::of(agent),
+            poll_usage: true,
         }
     }
 
@@ -345,6 +349,10 @@ struct ProfileEntry {
     /// How its agent is started; an empty command runs the agent's own program.
     #[serde(default)]
     launch: Launch,
+    /// Whether the account's usage limits are asked of the agent; `false`
+    /// stops every query for this login. Left out, they are asked.
+    #[serde(default = "polled", skip_serializing_if = "is_polled")]
+    poll_usage: bool,
     /// Claude Code's model, permission mode and tools denied, for a `claude`
     /// profile; what is left empty is Claude Code's own choice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -372,6 +380,14 @@ struct ProfileEntry {
     #[serde(default, skip_serializing)]
     #[schemars(skip)]
     archived: bool,
+}
+
+fn polled() -> bool {
+    true
+}
+
+fn is_polled(polled: &bool) -> bool {
+    *polled
 }
 
 impl TryFrom<ProfileEntry> for AgentProfile {
@@ -420,6 +436,7 @@ impl ProfileEntry {
             name: self.name,
             launch: self.launch,
             options,
+            poll_usage: self.poll_usage,
         })
     }
 }
@@ -443,6 +460,7 @@ impl From<AgentProfile> for ProfileEntry {
             home: profile.home,
             connection: None,
             launch: profile.launch,
+            poll_usage: profile.poll_usage,
             claude,
             codex,
             pi,

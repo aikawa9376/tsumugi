@@ -900,6 +900,18 @@ fn WindowPane(now: Settings, change: Callback<Change>) -> Element {
                     onchange: move |on| change(Box::new(move |s: &mut Settings| s.notify_done = on)),
                 }
             }
+            SettingRow { label: "Notify when a usage limit runs low", hint: "A notification when a limit of an agent account passes 80% used while the window is not in front.",
+                Toggle {
+                    checked: now.notify_usage,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.notify_usage = on)),
+                }
+            }
+            SettingRow { label: "Show usage left", hint: "Usage limits show what is left; off, what is used.",
+                Toggle {
+                    checked: now.usage_left,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.usage_left = on)),
+                }
+            }
     }
     }
 }

@@ -404,6 +404,8 @@ fn settings_written_read_back_the_same() {
         notify_waiting: true,
         notify_failed: true,
         notify_done: true,
+        notify_usage: false,
+        usage_left: false,
         rename_sessions: true,
         restore_sessions: RestoreSessions::Always,
         close_successful_commands: false,
@@ -685,6 +687,23 @@ fn profiles_are_read_as_settings_toml_names_them() {
     assert_eq!(s.profiles[0].home, None);
     assert_eq!(s.profiles[2].codex().unwrap().sandbox_mode, "read-only");
     assert_eq!(written_and_read(&s), s);
+}
+
+#[test]
+fn a_profile_is_polled_for_its_usage_unless_it_says_not_to() {
+    let s = Settings::parse(PROFILES).unwrap();
+    assert!(s.profiles.iter().all(|p| p.poll_usage));
+    let off =
+        Settings::parse("[[profiles]]\nid = \"claude\"\nagent = \"claude\"\npoll_usage = false\n")
+            .unwrap();
+    assert!(!off.profiles[0].poll_usage);
+    assert_eq!(written_and_read(&off), off);
+    assert!(
+        !toml::to_string_pretty(&Settings::parse(PROFILES).unwrap())
+            .unwrap()
+            .contains("poll_usage"),
+        "polling is written only when it is off"
+    );
 }
 
 /// A file as versions that kept logins in connections wrote it: two
@@ -1047,7 +1066,7 @@ fn a_file_that_cannot_be_read_says_which_setting_and_why() {
         ),
         (
             "[[profiles]]\nid = \"a\"\nagent = \"claude\"\nnonsense = 1\n",
-            "unknown field `nonsense`, expected one of `id`, `name`, `agent`, `home`, `connection`, `launch`, `claude`, `codex`, `pi`, `opencode`, `cursor`, `archived`\nin `profiles`\n",
+            "unknown field `nonsense`, expected one of `id`, `name`, `agent`, `home`, `connection`, `launch`, `poll_usage`, `claude`, `codex`, `pi`, `opencode`, `cursor`, `archived`\nin `profiles`\n",
         ),
         (
             "profile = \"gone\"\n[[profiles]]\nid = \"a\"\nagent = \"claude\"\n",
@@ -1097,7 +1116,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `console`, `details`, `usage`, `panel`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),

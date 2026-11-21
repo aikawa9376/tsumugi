@@ -50,12 +50,19 @@ pub(super) fn AgentUsage(
 /// A bar for each of `gauges`, with what is left and when it resets.
 #[component]
 pub(crate) fn Gauges(gauges: Vec<Gauge>) -> Element {
+    // What the user chose to see, which a window without the choice, as the
+    // settings specimen, shows as what is left.
+    let left = try_use_context::<crate::bridge::AppCtx>()
+        .is_none_or(|app| app.config.read().settings.usage_left);
     rsx! {
         for g in gauges.into_iter() {
             div { key: "{g.label}", class: "usage-gauge",
                 div { class: "usage-gauge-head",
                     span { class: "usage-gauge-label", "{g.label}" }
-                    span { class: "usage-gauge-left", "{g.left}" }
+                    if g.warning() {
+                        span { class: "usage-gauge-chip", title: "Passed 80% used", "Low" }
+                    }
+                    span { class: "usage-gauge-left", "{g.shown(left)}" }
                 }
                 div { class: "usage-gauge-track",
                     div {

@@ -39,11 +39,13 @@ pub(super) async fn watch(mut watched: Watched) {
                     };
                 held.settle(Instant::now(), got);
             }
-            if let Some(limits) = held.get() {
+            if let Some(limits) = held.get().filter(|_| !held.failed()) {
                 watched.record([DetailsChange::Usage {
                     account,
                     limits: limits.to_vec(),
                 }]);
+            } else if held.failed() {
+                watched.record([DetailsChange::UsageUnavailable { account }]);
             }
         }
         watched
@@ -59,17 +61,18 @@ pub(super) async fn watch(mut watched: Watched) {
 /// The accounts whose usage `sights` want read, each once: the one an open
 /// details panel shows, and, while a window lists the environment's agents,
 /// the login of each of `profiles` whose agent is `limited`, having usage
-/// limits to tell.
+/// limits to tell. A login none of whose profiles polls is never read.
 fn wanted(
     sights: &[Sight],
     profiles: &[AgentProfile],
     limited: impl Fn(Agent) -> bool,
 ) -> Vec<Account> {
     let mut found = distinct(sights, |s| s.usage.clone().filter(|_| s.details));
+    found.retain(|account| polled(profiles, account));
     if sights.iter().any(|s| s.agents) {
         let logins = profiles
             .iter()
-            .filter(|p| limited(p.agent()))
+            .filter(|p| p.poll_usage && limited(p.agent()))
             .map(|p| Account {
                 agent: p.agent(),
                 home: p.home.clone(),
@@ -81,6 +84,16 @@ fn wanted(
         }
     }
     found
+}
+
+/// Whether `account` may be asked: some profile of its login polls, or none
+/// is of it.
+fn polled(profiles: &[AgentProfile], account: &Account) -> bool {
+    let mut of = profiles
+        .iter()
+        .filter(|p| p.agent() == account.agent && p.home == account.home)
+        .peekable();
+    of.peek().is_none() || of.any(|p| p.poll_usage)
 }
 
 #[cfg(test)]
@@ -149,6 +162,32 @@ mod tests {
                 account(Agent::Claude, None),
                 account(Agent::Claude, Some("/p/claude-work")),
             ]
+        );
+    }
+
+    #[test]
+    fn a_login_whose_profiles_all_stopped_polling_is_never_asked() {
+        let mut profiles = profiles();
+        // `claude-work` and `claude-same` share one login: one that still
+        // polls keeps it asked, both off stop it.
+        profiles[1].poll_usage = false;
+        let listing = Sight {
+            details: true,
+            agents: true,
+            usage: Some(account(Agent::Claude, Some("/p/claude-work"))),
+            ..Sight::default()
+        };
+        assert_eq!(
+            wanted(&[listing.clone()], &profiles, limited),
+            [
+                account(Agent::Claude, Some("/p/claude-work")),
+                account(Agent::Claude, None),
+            ]
+        );
+        profiles[2].poll_usage = false;
+        assert_eq!(
+            wanted(&[listing], &profiles, limited),
+            [account(Agent::Claude, None)]
         );
     }
 

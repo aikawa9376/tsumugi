@@ -19,7 +19,8 @@ use tsumugi_protocol::{AgentsWork, Answer, Ask, Request};
 use super::agents::{CodexGroup, CursorGroup, OpenCodeGroup, PiGroup, SessionGroup};
 use super::{Change, LaunchGroup};
 use crate::components::{
-    Button, ConfirmInline, Select, SettingGroup, SettingRow, SettingsError, TextField, choices_of,
+    Button, ConfirmInline, Select, SettingGroup, SettingRow, SettingsError, TextField, Toggle,
+    choices_of,
 };
 use crate::icons::{Icon, IconView};
 use crate::link::{Link, failure, refusal};
@@ -349,6 +350,15 @@ fn ProfilePage(
                 home: profile.home.clone(),
                 choose_login: set_login,
                 probed,
+            }
+            SettingRow { label: "Poll usage", hint: "Ask the agent for this login's usage limits now and then; off, nothing is asked and the usage list says so.",
+                Toggle {
+                    checked: profile.poll_usage,
+                    onchange: {
+                        let id = id.clone();
+                        move |on: bool| edit_profile(change, &id, move |p| p.poll_usage = on)
+                    },
+                }
             }
         }
         match profile.options.clone() {

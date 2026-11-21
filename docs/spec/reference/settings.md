@@ -21,6 +21,7 @@ when the file does not name it, and what it does
 | `light_theme` | string | `"Solarized Light"` | The theme drawn while the appearance is light, by name: one tsumugi comes with, or one in `themes/` beside `settings.toml`. |
 | `notify_done` | boolean | `true` | Show a notification when a session finishes its turn while the window is not in front, as `notify_waiting` does. |
 | `notify_failed` | boolean | `true` | Show a notification when a session fails while the window is not in front, as `notify_waiting` does. |
+| `notify_usage` | boolean | `true` | Show a notification when a limit of an agent account passes 80% used while the window is not in front, as `notify_waiting` does. |
 | `notify_waiting` | boolean | `true` | Show a notification when a session starts waiting on you while the window is not in front; with several windows open, the one holding the lowest number tells. |
 | `profile` | string | `"claude"` | The profile a new session starts from, by id, when it names neither a profile nor an agent; left out, the first profile. A session not started yet can be switched to another agent for the current run of the window. |
 | `prompt_max_rows` | integer | `12` | The most lines the prompt grows to before it scrolls inside. |
@@ -28,6 +29,7 @@ when the file does not name it, and what it does
 | `rename_sessions` | boolean | `true` | Let a session's agent name its session once it has answered the first prompt, and again when the work turns to something else; a name given by hand, above the prompt or by renaming, is kept all the same. |
 | `restore_sessions` |  | `"ask"` | Whether the sessions and terminals a terminal host took with it, as it restarted, crashed or went with the machine, come back: offered by the window to bring back, at once, or never. |
 | `scratch_dir` | string | `""` | Where scratch sessions run, `~` standing for your home folder; empty for Tsumugi's own folder. |
+| `usage_left` | boolean | `true` | Show how much of each usage limit is left; off, how much is used. |
 | `zoom` | number | `1.0` | The user's zoom adjustment, multiplied by the display scale when automatic scaling is enabled. |
 
 ## `[console]`
@@ -159,6 +161,7 @@ The profiles sessions start from, each `[[profiles]]` table one of them ([settin
 | `profiles.home` | string |  | The folder of its own its agent keeps its login, history and settings in, as an absolute path without `~`, `.` or `..` and with no `/` doubled or at its end, which no other profile names; it is fixed when the login is made, since the CLIs tell logins apart by it as it is written. Left out, the agent runs in its own environment, shared with the terminal. |
 | `profiles.id` | string |  | The profile's id, kept when it is renamed: lowercase letters, digits and `-`. |
 | `profiles.name` | string | `""` | What the profile is called; empty for its id. |
+| `profiles.poll_usage` | boolean |  | Whether the account's usage limits are asked of the agent; `false` stops every query for this login. Left out, they are asked. |
 
 ### `[profiles.claude]`
 
