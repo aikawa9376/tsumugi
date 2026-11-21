@@ -57,9 +57,12 @@ window or such a row is described.
   worktree's servers are never listed. A port opens in the default browser
   when the session runs on this computer, copies its address as the work
   machine itself reaches it, and is stopped by killing the process that
-  listens, as a process of **processes** is. A port of a work machine is not
-  opened from here as if it were on this computer: `localhost` there is not
-  `localhost` here. It lists nothing where nothing listens.
+  listens, as a process of **processes** is. A port of a work machine is
+  opened through a forward: this computer listens on a port of its own
+  loopback and carries each connection over the paired connection to the work
+  machine's loopback, so `localhost` there is never taken for `localhost`
+  here. Forwards end with the connection to the work machine, and none opens
+  a port on the work machine's network. It lists nothing where nothing listens.
 - **about** — the facts that change little: the tokens the whole
   conversation has used, its prompt and tool call counts, the profile and the
   login it started from, the workspace and the worktree, and the

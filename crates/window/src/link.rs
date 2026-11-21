@@ -115,6 +115,14 @@ impl Link {
             sender.move_to(address);
         }
     }
+    /// The port of this computer's loopback that reaches `port` of the work
+    /// machine, for a link to one; none of this computer's reaches its own.
+    pub(crate) fn forward_port(&self, port: u16) -> Result<u16, String> {
+        match &self.requests {
+            Sending::Remote(sender) => sender.forward_port(port),
+            Sending::Local(_) => Ok(port),
+        }
+    }
     pub(crate) fn query_remote(&self, stamp: tsumugi_protocol::MutationStamp) {
         if let Sending::Remote(sender) = &self.requests {
             sender.query(stamp);
