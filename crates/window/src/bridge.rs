@@ -940,7 +940,13 @@ impl AppCtx {
                 op,
                 prompt,
             } => {
-                let made = self.ask_in(&environment, Ask::Git { worktree, op });
+                let made = self.ask_in(
+                    &environment,
+                    Ask::Git {
+                        worktree: worktree.clone(),
+                        op,
+                    },
+                );
                 let app = *self;
                 spawn(async move {
                     match made.await {
@@ -948,6 +954,17 @@ impl AppCtx {
                             if prompt {
                                 app.dispatch(Msg::PromptWent(true));
                             }
+                        }
+                        Answer::PullCreated { number, url } => {
+                            if prompt {
+                                app.dispatch(Msg::PromptWent(true));
+                            }
+                            app.dispatch(Msg::PullCreated {
+                                environment: environment.clone(),
+                                worktree: worktree.clone(),
+                                number,
+                            });
+                            app.notice(format!("Opened pull request #{number}: {url}"));
                         }
                         Answer::Told { text } => {
                             if prompt {

@@ -118,6 +118,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             // The message being written for a commit is given up with the prompt.
             if area != crate::content::Area::Prompt {
                 state.prompt.committing = None;
+                state.prompt.pulling = None;
             }
             content::focus(&mut state.content, area)
         }
@@ -254,6 +255,14 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::DetailsKey(details::Key::Discard) => overlay::ask_discard(state),
         Msg::DetailsKey(details::Key::Amend) => overlay::ask_rewrite(state, true),
         Msg::DetailsKey(details::Key::ForcePush) => overlay::ask_rewrite(state, false),
+        Msg::DetailsKey(details::Key::CreatePull) => match state.details.shown.worktree.clone() {
+            Some(worktree) => {
+                let environment = state.details.shown.environment.clone();
+                prompt::pull_request::begin(state, environment, worktree)
+            }
+            None => Vec::new(),
+        },
+        Msg::DetailsKey(details::Key::DraftPull) => prompt::pull_request::ask_agent(state),
         Msg::DetailsKey(details::Key::Commit) => match state.details.shown.worktree.clone() {
             Some(worktree) => {
                 let environment = state.details.shown.environment.clone();
@@ -335,6 +344,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         | Msg::PromptEmpty
         | Msg::PromptTaken(_)
         | Msg::PromptWent(_)
+        | Msg::PullCreated { .. }
         | Msg::PromptRetained
         | Msg::ComposeLapsed(_)) => prompt::update(state, msg),
 

@@ -105,6 +105,9 @@ it is shown and whenever the work is read again, and is not kept for the
 next run. `g x` on its row or in its tab opens it on GitHub in the browser
 instead, from a work machine too.
 
+A pull request opened from the details panel ([details](details.md#changes))
+shows in this tab as soon as it exists.
+
 `n` on a row opens a new session on it, its first prompt already naming it
 and left to finish and send: an issue's in the repository's checkout, a pull
 request's in a new worktree fetched from GitHub: on the pull request's own

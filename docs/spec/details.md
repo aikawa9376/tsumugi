@@ -176,6 +176,19 @@ first push sets it; a force push overwrites the remote's branch only if
 nobody else pushed to it since it was fetched. An amend and a force push ask
 first, like a discard.
 
+`R` writes a pull request for the branch in the prompt: its first line is the
+title and the lines after it are the body, and above them a `Base:` line
+names the branch it merges into, left empty for the repository's default, and
+a `Draft:` line says yes or no. It starts from the last commit's message.
+Sending pushes the branch, setting its upstream, and opens the pull request
+with `gh`, then shows it in a tab of its own ([tree](tree.md)); leaving the
+prompt gives it up, sending nothing. A branch that has a pull request open
+already is not written one. A push Git refuses, a `gh` that is not installed
+or not logged in, and a pull request GitHub refuses fail with their own
+words, create nothing the failure came before, and leave the text in the
+prompt to be sent again. `A` asks the agent of the session shown to draft the
+title and body, which are then copied into the prompt.
+
 These work wherever the work host runs, and name each file by its path as it
 is, whatever characters it holds. When Git refuses, the panel says why.
 

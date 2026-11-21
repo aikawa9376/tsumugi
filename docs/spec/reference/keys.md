@@ -148,6 +148,8 @@ changes them ([keys](../keys.md)).
 | `details.pull` |  | in the details panel, pull the branch's upstream; diverged branches are merged unless git is configured to rebase ([details](../details.md#changes)) | `details`: `u` |
 | `details.push` |  | in the details panel, push the branch, setting its upstream when it has none ([details](../details.md#changes)) | `details`: `P` |
 | `details.force_push` |  | in the details panel, after asking, push the branch over the remote's, but only if nobody else pushed to it since it was fetched ([details](../details.md#changes)) | `details`: `F` |
+| `details.create_pull` |  | in the details panel, write a pull request for the branch in the prompt: the title on its first line, the body after it, and the base branch and whether it is a draft as headers above; sending pushes the branch and opens the pull request, and leaving the prompt gives it up ([details](../details.md#changes)) | `details`: `R` |
+| `details.draft_pull` |  | in the details panel, ask the agent of the session shown to draft the title and body of a pull request for the branch ([details](../details.md#changes)) | `details`: `A` |
 | `viewer.zoom_in` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document larger ([viewers](../content.md#viewers)) | `viewer`: `Plus`, `=` |
 | `viewer.zoom_out` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document smaller | `viewer`: `-` |
 | `viewer.zoom_fit` |  | in a viewer, draw an image, a PDF, an HTML page or a Markdown document fitting the window | `viewer`: `0` |
@@ -408,6 +410,8 @@ changes them ([keys](../keys.md)).
 "u" = "details.pull"
 "P" = "details.push"
 "F" = "details.force_push"
+"R" = "details.create_pull"
+"A" = "details.draft_pull"
 "1" = "details.tab 1"
 "2" = "details.tab 2"
 "3" = "details.tab 3"

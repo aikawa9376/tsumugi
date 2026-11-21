@@ -121,6 +121,10 @@ pub enum Key {
     Push,
     /// Push over the remote's branch where nobody else changed it, once asked.
     ForcePush,
+    /// Write a pull request in the prompt, and open it with what is sent.
+    CreatePull,
+    /// Ask the session's agent to draft the pull request.
+    DraftPull,
 }
 
 /// How the panel scrolls what is not a list.
@@ -409,6 +413,8 @@ pub(crate) fn press(details: &mut Details, work: Option<&WorkSnapshot>, key: Key
             | Key::Pull
             | Key::Push
             | Key::ForcePush
+            | Key::CreatePull
+            | Key::DraftPull
     ) {
         return staged(details, work, key);
     }
@@ -456,7 +462,9 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::Amend
         | Key::Pull
         | Key::Push
-        | Key::ForcePush => {}
+        | Key::ForcePush
+        | Key::CreatePull
+        | Key::DraftPull => {}
     }
     Vec::new()
 }
@@ -3554,5 +3562,160 @@ pub(crate) mod tests {
                 prompt: true,
             }]
         );
+    }
+
+    /// `changing` with the last commit's message read as `description`.
+    fn committed(description: &str) -> Scenario {
+        changing(&[]).event(patch(3).change(DetailsChange::Repository {
+            worktree: "/w".into(),
+            read: RepositoryRead {
+                spot: Spot::Files(Rev::WorkingCopy),
+                listing: Ok(Read::Files(Vec::new())),
+                revision: Some(tsumugi_model::repository::Revision {
+                    id: "x-full".into(),
+                    short: "x".into(),
+                    description: description.into(),
+                }),
+            },
+        }))
+    }
+
+    fn pull_op(base: Option<&str>, title: &str, body: &str, draft: bool) -> Effect {
+        Effect::Git {
+            environment: here(),
+            worktree: "/w".into(),
+            op: tsumugi_protocol::GitOp::CreatePull {
+                base: base.map(Into::into),
+                title: title.into(),
+                body: body.into(),
+                draft,
+            },
+            prompt: true,
+        }
+    }
+
+    #[test]
+    fn r_gives_the_prompt_the_keys_starting_from_the_last_commit_under_headers() {
+        use crate::content::Area;
+        let writing = committed("core: keep it\n\nWhy.").send(Msg::DetailsKey(Key::CreatePull));
+        assert_eq!(writing.state().content.focus, Area::Prompt);
+        assert!(writing.state().prompt.pulling.is_some());
+        assert!(writing.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::PromptRestore { text, .. }
+                if text == "Base: \nDraft: no\n\ncore: keep it\n\nWhy."
+        )));
+        assert_eq!(git_effects(&writing), []);
+    }
+
+    #[test]
+    fn what_is_sent_from_the_prompt_opens_a_pull_request_as_written() {
+        let sent = committed("a")
+            .send(Msg::DetailsKey(Key::CreatePull))
+            .send(Msg::PromptSend)
+            .send(taken("Base: develop\nDraft: yes\n\ncore: keep it\n\nWhy."));
+        assert_eq!(
+            git_effects(&sent),
+            [pull_op(Some("develop"), "core: keep it", "Why.", true)]
+        );
+    }
+
+    #[test]
+    fn a_pull_request_that_failed_puts_the_text_back_and_stays_a_pull_request() {
+        let failed = committed("a")
+            .send(Msg::DetailsKey(Key::CreatePull))
+            .send(Msg::PromptSend)
+            .send(taken("t\n\nb"))
+            .send(Msg::PromptWent(false));
+        assert!(failed.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::PromptRestore { text, .. } if text == "t\n\nb"
+        )));
+        assert!(failed.state().prompt.pulling.is_some());
+    }
+
+    #[test]
+    fn a_pull_request_that_was_opened_is_shown_in_its_tab_and_ends_the_writing() {
+        let done = committed("a")
+            .send(Msg::DetailsKey(Key::CreatePull))
+            .send(Msg::PromptSend)
+            .send(taken("t"))
+            .send(Msg::PromptWent(true))
+            .send(Msg::PullCreated {
+                environment: here(),
+                worktree: "/w".into(),
+                number: 12,
+            });
+        assert!(done.state().prompt.pulling.is_none());
+        assert!(matches!(
+            done.state().content.active(),
+            Some(Tab::GitHub { number: 12, .. })
+        ));
+    }
+
+    #[test]
+    fn a_title_that_is_missing_sends_nothing_and_keeps_what_was_written() {
+        let refused = committed("a")
+            .send(Msg::DetailsKey(Key::CreatePull))
+            .send(Msg::PromptSend)
+            .send(taken("Base: main\nDraft: no\n\n"));
+        assert_eq!(git_effects(&refused), []);
+        assert!(refused.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::PromptRestore { text, .. } if text.starts_with("Base: main")
+        )));
+        assert!(refused.state().prompt.pulling.is_some());
+        assert!(refused.state().prompt.sending.is_none());
+    }
+
+    #[test]
+    fn leaving_the_prompt_gives_up_the_pull_request_without_sending_anything() {
+        let left = committed("a")
+            .send(Msg::DetailsKey(Key::CreatePull))
+            .send(Msg::Focus(crate::content::Area::Console));
+        assert!(left.state().prompt.pulling.is_none());
+        assert_eq!(git_effects(&left), []);
+    }
+
+    #[test]
+    fn a_branch_with_a_pull_request_open_says_so_instead_of_writing_another() {
+        let mut repository = tsumugi_model::github::Repository::new("o/r");
+        repository.pulls = Some(Ok(vec![tsumugi_model::github::Item {
+            number: 7,
+            pull: Some(tsumugi_model::github::Pull {
+                head: "main".into(),
+                base: "trunk".into(),
+                additions: 0,
+                deletions: 0,
+                changed_files: 0,
+                review: None,
+                requested: Vec::new(),
+                checks: Default::default(),
+            }),
+            ..Default::default()
+        }]));
+        let run = scenario()
+            .event(snapshot().listed(listed().session(session("a").cwd("/r"))))
+            .event(patch(2).change(tsumugi_protocol::TreeChange::GitHub {
+                repository: "/r".into(),
+                github: Some(Box::new(repository)),
+            }))
+            .send(shown(Some("a"), Some("/r")))
+            .send(Msg::DetailsKey(Key::CreatePull));
+        assert!(run.state().prompt.pulling.is_none());
+        assert!(run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::Notice(text) if text.contains("#7")
+        )));
+    }
+
+    #[test]
+    fn a_asks_the_agent_of_the_session_shown_to_draft_without_creating_anything() {
+        let asked = changing(&[]).send(Msg::DetailsKey(Key::DraftPull));
+        assert!(asked.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::TypeInto { tab: Tab::Session(..), typing } if typing.len() == 2
+        )));
+        assert_eq!(git_effects(&asked), []);
     }
 }

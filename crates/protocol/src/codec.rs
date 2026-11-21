@@ -317,6 +317,12 @@ mod tests {
             },
             crate::GitOp::Push { lease: true },
             crate::GitOp::Pull,
+            crate::GitOp::CreatePull {
+                base: Some("main".into()),
+                title: "core: 日本語".into(),
+                body: "Why.\n\n- one".into(),
+                draft: true,
+            },
         ] {
             round_trips(Request::Ask {
                 asked: 14,
@@ -416,6 +422,13 @@ mod tests {
         round_trips(Event::Told(Told::Notice {
             text: "ended fix".into(),
         }));
+        round_trips(Event::Answer {
+            asked: 12,
+            answer: crate::Answer::PullCreated {
+                number: 7,
+                url: "https://github.com/o/r/pull/7".into(),
+            },
+        });
         round_trips(Event::Answer {
             asked: 13,
             answer: crate::Answer::Thread {

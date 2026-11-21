@@ -601,6 +601,25 @@ async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<Answer, tsumugi
         }
         GitOp::Push { lease } => write::push(worktree, lease).await.map(told),
         GitOp::Pull => write::pull(worktree).await.map(told),
+        GitOp::CreatePull {
+            base,
+            title,
+            body,
+            draft,
+        } => {
+            let new = tsumugi_vcs::github::NewPull {
+                base,
+                title,
+                body,
+                draft,
+            };
+            tsumugi_vcs::github::create(worktree, &new)
+                .await
+                .map(|made| Answer::PullCreated {
+                    number: made.number,
+                    url: made.url,
+                })
+        }
     }
 }
 

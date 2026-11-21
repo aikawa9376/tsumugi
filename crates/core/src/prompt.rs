@@ -4,6 +4,7 @@
 
 pub mod drafts;
 pub mod images;
+pub mod pull_request;
 pub mod send;
 pub mod tab;
 #[cfg(test)]
@@ -59,6 +60,9 @@ pub struct PromptView {
     /// The commit the prompt is written for: what is sent from it is the
     /// message, and the session it was shown for hears nothing of it.
     pub committing: Option<Committing>,
+    /// The pull request the prompt is written for: its first line is the
+    /// title, and what is sent from it opens the pull request.
+    pub pulling: Option<pull_request::Pulling>,
 }
 
 /// A commit the prompt writes the message of.
@@ -86,6 +90,7 @@ impl Default for PromptView {
             offered: None,
             commands: None,
             committing: None,
+            pulling: None,
         }
     }
 }
@@ -219,6 +224,11 @@ pub(crate) fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::PromptEmpty => send::nothing_taken(state),
         Msg::PromptTaken(taken) => send::taken(state, *taken),
         Msg::PromptWent(ok) => send::sent(state, ok),
+        Msg::PullCreated {
+            environment,
+            worktree,
+            number,
+        } => pull_request::created(state, environment, worktree, number),
         Msg::PromptRetained => send::retained(state),
         Msg::ComposeLapsed(asked) => send::lapsed(state, asked),
         Msg::ImageSelect(path) => {

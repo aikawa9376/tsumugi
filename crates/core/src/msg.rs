@@ -430,6 +430,13 @@ pub enum Msg {
     PromptTaken(Box<Taken>),
     /// The prompt handed over to send went, or did not.
     PromptWent(bool),
+    /// The work host opened pull request `number` for the branch of
+    /// `worktree`.
+    PullCreated {
+        environment: tsumugi_model::EnvironmentId,
+        worktree: std::path::PathBuf,
+        number: u64,
+    },
     /// A send ended while its original text stayed in the prompt.
     PromptRetained,
     /// The host has been asked long enough to compose the prompt numbered so.

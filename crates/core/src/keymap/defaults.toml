@@ -221,6 +221,8 @@
 "u" = "details.pull"
 "P" = "details.push"
 "F" = "details.force_push"
+"R" = "details.create_pull"
+"A" = "details.draft_pull"
 "1" = "details.tab 1"
 "2" = "details.tab 2"
 "3" = "details.tab 3"
