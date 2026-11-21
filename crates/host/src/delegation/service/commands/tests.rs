@@ -651,7 +651,8 @@ async fn an_agent_closes_reopens_and_cancels_issues_but_never_starts_one() {
         "cancelled"
     );
     assert_eq!(
-        act(Action::Close, "9".into()).await.unwrap_err().code,
+        // Not a hex digit, so no random issue id can start with it.
+        act(Action::Close, "zz".into()).await.unwrap_err().code,
         Code::NotFound
     );
     act(Action::Reopen, id.clone()).await.unwrap();
