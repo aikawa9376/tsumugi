@@ -10,6 +10,9 @@ use tsumugi_protocol::Offers;
 use super::Choice;
 use super::filer::{Filer, Row};
 use super::list::ListState;
+use super::scopes::{self, Aim};
+use crate::settings::PickerScope;
+use crate::tree::Place;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
@@ -52,14 +55,50 @@ pub struct GoPicker {
     pub environment: EnvironmentId,
     /// The home directory of that environment's host, where the tree starts.
     pub home: PathBuf,
+    /// The mixes of sources the settings name, as they were when the picker
+    /// opened.
+    pub scopes: Vec<PickerScope>,
+    /// The scope the picker is stepped to; a prefix typed first overrides it.
+    pub scope: usize,
+    /// The worktree shown when the picker opened, whose files, and whose
+    /// project's resources, come first.
+    pub place: Option<Place>,
 }
 
 impl GoPicker {
     pub fn new(filer: Filer) -> Self {
         Self {
             filer,
+            scopes: PickerScope::defaults(),
             ..Self::default()
         }
+    }
+
+    /// What the query asks of the picker: the scope it is in, the sources
+    /// searched and what is searched for. Adding to the tree offers only
+    /// directories, whatever the scopes say.
+    pub fn aim(&self) -> Aim<'_> {
+        match self.purpose {
+            Purpose::Add => scopes::directories_only(&self.list.query),
+            Purpose::Go => scopes::resolve(&self.scopes, self.scope, &self.list.query),
+        }
+    }
+
+    /// Step to the next scope, or the previous, going round.
+    pub fn step_scope(&mut self, delta: isize) {
+        let at = crate::cursor::wrap(self.aim().scope, delta, self.scopes.len());
+        self.set_scope(at);
+    }
+
+    /// Go to the scope `at`; the cursor goes back to the first row, and what
+    /// is typed stays, less the prefix that would put the picker back.
+    pub fn set_scope(&mut self, at: usize) {
+        if self.purpose == Purpose::Add || at >= self.scopes.len() {
+            return;
+        }
+        self.list.query = self.aim().query.to_string();
+        self.scope = at;
+        self.list.cursor = 0;
     }
 
     pub fn toggle_mode(&mut self) {

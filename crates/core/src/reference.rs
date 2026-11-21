@@ -228,7 +228,7 @@ fn rows(out: &mut String, prefix: &str, fields: Vec<(&String, &Value)>, defs: &M
             out,
             "| {} | {} | {} | {} |",
             cell(&format!("`{prefix}{name}`")),
-            cell(&type_of(target)),
+            cell(&type_of(target, defs)),
             cell(&default),
             cell(&does),
         )
@@ -264,7 +264,7 @@ fn entries<'a>(field: &'a Value, defs: &'a Map<String, Value>) -> Option<&'a Val
         .flatten()
 }
 
-fn type_of(schema: &Value) -> String {
+fn type_of(schema: &Value, defs: &Map<String, Value>) -> String {
     if let Some(values) = schema["enum"].as_array() {
         let names: Vec<String> = values
             .iter()
@@ -283,8 +283,16 @@ fn type_of(schema: &Value) -> String {
         kind => Some(kind),
     };
     match kind.and_then(Value::as_str) {
-        Some("array") => format!("array of {}s", type_of(&schema["items"])),
-        Some("object") => format!("table of {}s", type_of(&schema["additionalProperties"])),
+        Some("array") => match type_of(resolve(&schema["items"], defs), defs) {
+            // A list of the names a setting may take reads as them, not as
+            // a plural of "one of".
+            names if names.starts_with("one of ") => format!("array of {}", &names[7..]),
+            item => format!("array of {item}s"),
+        },
+        Some("object") => format!(
+            "table of {}s",
+            type_of(resolve(&schema["additionalProperties"], defs), defs)
+        ),
         Some(kind) => kind.to_string(),
         None => String::new(),
     }
@@ -392,6 +400,11 @@ mod tests {
         );
         assert!(
             s.contains("| `profiles.launch.command` | array of strings | `[]` |"),
+            "{s}"
+        );
+        // An array of names a setting may take reads as them.
+        assert!(
+            s.contains("| `picker.scopes.sources` | array of `sessions`, `directories`,"),
             "{s}"
         );
         // An array of tables within a table has a heading of its own too.

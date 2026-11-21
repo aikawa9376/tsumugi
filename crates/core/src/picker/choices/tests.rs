@@ -253,6 +253,11 @@ fn chosen(found: &[Choice]) -> Vec<String> {
             Choice::Clone(c) => format!("clone {}", c.target.path),
             Choice::Owner(o) => format!("owner {o}"),
             Choice::GitHubHelp => "help".into(),
+            Choice::Worktree(w) => format!("worktree {}", w.name),
+            Choice::NewWorktree(n) => format!("new worktree {}", n.name),
+            Choice::Resource(r) => format!("resource {}", r.resource.id),
+            Choice::File(f) => format!("file {}", f.path),
+            Choice::Action(a) => format!("action {}", a.name),
         })
         .collect()
 }

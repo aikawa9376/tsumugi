@@ -346,7 +346,7 @@ impl Default for Settings {
 }
 
 /// Where the picker looks for directories to start a session in, beside where
-/// sessions run and Claude Code has been used.
+/// sessions run and Claude Code has been used, and what else it searches.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PickerSettings {
@@ -355,6 +355,12 @@ pub struct PickerSettings {
     /// Folders whose folders are offered, and which the file tree lists, `~`
     /// standing for your home folder.
     pub roots: Vec<String>,
+    /// What the picker searches, each `[[picker.scopes]]` table one mix of
+    /// sources: the first is where it opens, `Ctrl+g` steps through the
+    /// others, and a scope with a `prefix` is entered by typing it first.
+    /// Writing any replaces those the picker starts with
+    /// ([picker](../tree.md#searching-more-than-sessions-and-directories)).
+    pub scopes: Vec<PickerScope>,
 }
 
 impl Default for PickerSettings {
@@ -362,7 +368,92 @@ impl Default for PickerSettings {
         Self {
             ghq: true,
             roots: Vec::new(),
+            scopes: PickerScope::defaults(),
         }
+    }
+}
+
+/// Where the picker's rows come from: `sessions`, `directories`,
+/// `worktrees`, `resources`, `files` or `actions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum PickerSource {
+    // The sessions, and the scratch session.
+    Sessions,
+    // The directories to start a session in, and repositories to clone.
+    Directories,
+    // Every worktree the tree lists.
+    Worktrees,
+    // What the projects keep as resources.
+    Resources,
+    // The files of the project shown, those git tracks or would track.
+    Files,
+    // Every action Tsumugi runs, as the keys and menus name them.
+    Actions,
+}
+
+impl PickerSource {
+    /// The group heading its rows are listed under.
+    pub fn heading(self) -> &'static str {
+        match self {
+            PickerSource::Sessions => "Sessions",
+            PickerSource::Directories => "Start in",
+            PickerSource::Worktrees => "Worktrees",
+            PickerSource::Resources => "Resources",
+            PickerSource::Files => "Files",
+            PickerSource::Actions => "Actions",
+        }
+    }
+}
+
+/// One mix of sources the picker searches at once.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct PickerScope {
+    /// What the scope is called where the picker shows it.
+    pub name: String,
+    /// What is typed first to enter the scope instead of stepping to it;
+    /// none when empty. What follows it is what is searched for.
+    pub prefix: String,
+    /// The sources it mixes, their rows listed in this order.
+    pub sources: Vec<PickerSource>,
+}
+
+impl PickerScope {
+    fn of(name: &str, prefix: &str, sources: &[PickerSource]) -> Self {
+        Self {
+            name: name.into(),
+            prefix: prefix.into(),
+            sources: sources.to_vec(),
+        }
+    }
+
+    /// The scopes the picker starts with: going to a session or a directory,
+    /// then each other source on its own, then the project's worktrees,
+    /// resources and files together.
+    pub fn defaults() -> Vec<Self> {
+        use PickerSource::*;
+        vec![
+            Self::of("Go", "", &[Sessions, Directories]),
+            Self::of("Actions", ">", &[Actions]),
+            Self::of("Files", ";", &[Files]),
+            Self::of("Resources", "*", &[Resources]),
+            Self::of("Worktrees", ":", &[Worktrees]),
+            Self::of("Project", "&", &[Worktrees, Resources, Files]),
+        ]
+    }
+
+    /// The scope made sensible: its words trimmed, a source listed once.
+    fn sane(mut self) -> Option<Self> {
+        self.name = self.name.trim().to_string();
+        self.prefix = self.prefix.trim().to_string();
+        let mut seen = Vec::new();
+        self.sources.retain(|s| {
+            let new = !seen.contains(s);
+            seen.push(*s);
+            new
+        });
+        (!self.name.is_empty() && !self.sources.is_empty()).then_some(self)
     }
 }
 
@@ -432,6 +523,13 @@ impl Settings {
         d.diff_lines = d.diff_lines.clamp(1, 100_000);
         d.links_kept = d.links_kept.clamp(1, tsumugi_model::links::KEPT);
         d.links_shown = d.links_shown.max(1);
+        self.picker.scopes = std::mem::take(&mut self.picker.scopes)
+            .into_iter()
+            .filter_map(PickerScope::sane)
+            .collect();
+        if self.picker.scopes.is_empty() {
+            self.picker.scopes = PickerScope::defaults();
+        }
         self
     }
 

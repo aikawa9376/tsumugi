@@ -12,9 +12,13 @@ use crate::content::{self, Opening, TerminalAsk};
 use crate::effect::Effect;
 use crate::host::Hosts;
 use crate::keymap::{Context, Step};
+use crate::msg::Msg;
+use crate::settings::PickerSource;
 use crate::state::ViewState;
 use crate::tree::Place;
+use crate::tree::nav;
 use crate::tree::{self, TreeView};
+use crate::update::step;
 
 mod choices;
 pub mod commands;
@@ -24,6 +28,8 @@ mod go;
 pub mod interrupted;
 mod list;
 pub mod resume;
+pub mod scopes;
+pub mod sources;
 #[cfg(test)]
 mod tests;
 
@@ -34,10 +40,15 @@ pub use go::*;
 use interrupted::Waiting;
 pub use list::*;
 use resume::Resume;
+pub use scopes::Aim;
+pub use sources::{ActionOffer, FileOffer, NewWorktreeOffer, ResourceOffer, WorktreeOffer};
 
 /// The most sessions, and the most directories, the picker going to a
 /// session lists at once.
 const PICKS: usize = 40;
+
+/// The most rows a scope of one source lists.
+const ALONE: usize = 100;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PickerView {
@@ -112,8 +123,15 @@ impl PickerView {
         if *environment != p.environment {
             sight = PickSight::default();
         }
-        let clones = p.offered.get(environment).is_some_and(|o| o.clones);
-        match GitHubTyped::parse(&p.list.query).filter(|_| clones) {
+        let aim = p.aim();
+        let clones = p.offered.get(environment).is_some_and(|o| o.clones)
+            && aim.sources.contains(&PickerSource::Directories);
+        if aim.sources.contains(&PickerSource::Files)
+            && let Some(place) = p.place.as_ref().filter(|pl| pl.environment == *environment)
+        {
+            sight.files.insert(place.worktree.clone());
+        }
+        match GitHubTyped::parse(aim.query).filter(|_| clones) {
             Some(GitHubTyped::Owner(_)) => sight.accounts = true,
             Some(GitHubTyped::Repository { owner, .. }) => {
                 sight.owners.insert(owner);
@@ -148,56 +166,84 @@ fn listed_dirs(work: Option<&WorkSnapshot>, dir: &Path) -> Option<Vec<PathBuf>> 
 
 /// What the picker going to a session lists from every environment
 /// `hosts` holds, best first for what is typed, each session standing as
-/// `tree` shows it; the directories alone while it adds to the tree.
+/// `tree` shows it; the directories alone while it adds to the tree. Each
+/// source of the scope searched lists its rows in turn.
 pub fn go_rows(picker: &GoPicker, home: &Path, hosts: &Hosts, tree: &TreeView) -> Vec<Choice> {
-    let github = hosts.each().filter_map(|(environment, host)| {
-        Some(GitHubOffers {
-            environment,
-            offers: picker.offered.get(environment)?,
-            listed: &host.work.as_ref()?.pick,
-        })
-    });
-    if let Some(rows) = github_choices(&picker.list.query, github, PICKS) {
-        return rows;
+    let aim = picker.aim();
+    let query = aim.query;
+    let directories = aim.sources.contains(&PickerSource::Directories);
+    if directories {
+        let github = hosts.each().filter_map(|(environment, host)| {
+            Some(GitHubOffers {
+                environment,
+                offers: picker.offered.get(environment)?,
+                listed: &host.work.as_ref()?.pick,
+            })
+        });
+        if let Some(rows) = github_choices(query, github, PICKS) {
+            return rows;
+        }
     }
-    let mut all_sessions = Vec::new();
-    let mut directories = Vec::new();
-    for (environment, host) in hosts.each() {
-        let offered = picker.offered.get(environment).cloned().unwrap_or_default();
-        let running = picker
-            .running
-            .get(environment)
-            .map_or(&[][..], Vec::as_slice);
-        directories.extend(candidates(
-            environment,
-            running,
-            &offered.recent,
-            &offered.ghq,
-            &offered.listed,
-        ));
-        all_sessions.extend(sessions(
-            environment,
-            tree::listed(host.work.as_ref()),
-            &tree.completions,
-            &tree.changes,
-        ));
+    // A scope of one source has the room to itself.
+    let cap = match aim.sources.len() {
+        1 => ALONE,
+        _ => PICKS,
+    };
+    let mut rows = Vec::new();
+    for source in aim.sources {
+        match source {
+            PickerSource::Sessions => {
+                let mut offers = Vec::new();
+                for (environment, host) in hosts.each() {
+                    offers.extend(sessions(
+                        environment,
+                        tree::listed(host.work.as_ref()),
+                        &tree.completions,
+                        &tree.changes,
+                    ));
+                }
+                rows.extend(session_rows(&offers, query, cap));
+            }
+            PickerSource::Directories => {
+                let mut found = Vec::new();
+                for (environment, _) in hosts.each() {
+                    let offered = picker.offered.get(environment).cloned().unwrap_or_default();
+                    let running = picker
+                        .running
+                        .get(environment)
+                        .map_or(&[][..], Vec::as_slice);
+                    found.extend(candidates(
+                        environment,
+                        running,
+                        &offered.recent,
+                        &offered.ghq,
+                        &offered.listed,
+                    ));
+                }
+                rows.extend(directory_rows(&found, query, home, cap));
+                let clones = hosts.each().filter_map(|(environment, _)| {
+                    clone_offer(environment, picker.offered.get(environment)?, query)
+                });
+                let help =
+                    github_help(query, picker.offered.values()).then_some(Choice::GitHubHelp);
+                rows.extend(clones.map(Choice::Clone).chain(help));
+            }
+            PickerSource::Worktrees => {
+                rows.extend(sources::worktrees(hosts, picker.place.as_ref(), query, cap))
+            }
+            PickerSource::Resources => {
+                rows.extend(sources::resources(hosts, picker.place.as_ref(), query, cap));
+            }
+            PickerSource::Files => {
+                rows.extend(sources::files(hosts, picker.place.as_ref(), query, cap));
+            }
+            PickerSource::Actions => rows.extend(sources::actions(query, cap)),
+        }
     }
-    let clones = hosts.each().filter_map(|(environment, _)| {
-        clone_offer(
-            environment,
-            picker.offered.get(environment)?,
-            &picker.list.query,
-        )
-    });
-    let help =
-        github_help(&picker.list.query, picker.offered.values()).then_some(Choice::GitHubHelp);
-    let rows = choices(&all_sessions, &directories, &picker.list.query, home, PICKS)
-        .into_iter()
-        .chain(clones.map(Choice::Clone))
-        .chain(help);
     match picker.purpose {
-        Purpose::Go => rows.collect(),
+        Purpose::Go => rows,
         Purpose::Add => rows
+            .into_iter()
             .filter(|c| !matches!(c, Choice::Scratch | Choice::Session(_)))
             .collect(),
     }
@@ -244,6 +290,8 @@ pub(crate) fn open(state: &mut ViewState, purpose: Purpose) -> Vec<Effect> {
         purpose,
         environment,
         home: home.clone(),
+        scopes: state.config.settings.picker.scopes.clone(),
+        place: state.content.place.clone(),
         ..GoPicker::new(Filer::new([home]))
     };
     enter(&mut picker, work);
@@ -276,6 +324,15 @@ pub(crate) fn close(view: &mut PickerView) -> Vec<Effect> {
 pub(crate) fn query(view: &mut PickerView, text: String) -> Vec<Effect> {
     if let Some(open) = &mut view.open {
         open.list_mut().set_query(text);
+    }
+    Vec::new()
+}
+
+/// Search the scope `at` of the picker going to a session, what is typed
+/// staying.
+pub(crate) fn scope(view: &mut PickerView, at: usize) -> Vec<Effect> {
+    if let Some(Picking::Go(p)) = &mut view.open {
+        p.set_scope(at);
     }
     Vec::new()
 }
@@ -326,6 +383,10 @@ pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
     match open {
         Picking::Go(p) if ctrl && key.key == "f" => {
             p.toggle_mode();
+            return Vec::new();
+        }
+        Picking::Go(p) if ctrl && key.key.eq_ignore_ascii_case("g") && p.mode == Mode::List => {
+            p.step_scope(if key.shift { -1 } else { 1 });
             return Vec::new();
         }
         Picking::Go(p) if p.mode == Mode::Tree => {
@@ -441,9 +502,90 @@ pub(crate) fn choose(state: &mut ViewState, at: usize) -> Vec<Effect> {
             close(&mut state.picker);
             content::show_session(state, s.environment, s.id)
         }
+        Some(Choice::Worktree(w)) => {
+            close(&mut state.picker);
+            go_to_worktree(state, w)
+        }
+        Some(Choice::NewWorktree(n)) => {
+            close(&mut state.picker);
+            let row = nav::Item::Worktree(n.environment, n.from);
+            let effects = crate::worktree::composer::open(state, &row);
+            if let Some(composer) = state.overlays.composer.as_mut() {
+                composer.name = n.name;
+            }
+            effects
+        }
+        Some(Choice::Resource(r)) => {
+            close(&mut state.picker);
+            vec![open_resource(&r)]
+        }
+        Some(Choice::File(f)) => {
+            close(&mut state.picker);
+            vec![Effect::OpenFile {
+                environment: f.environment.clone(),
+                path: f.absolute(),
+                how: Opening::Existing,
+            }]
+        }
+        Some(Choice::Action(a)) => {
+            close(&mut state.picker);
+            match a.action() {
+                Some(action) => step(
+                    state,
+                    Msg::Perform {
+                        action,
+                        key: None,
+                        probe: Box::default(),
+                    },
+                ),
+                None => Vec::new(),
+            }
+        }
         Some(Choice::Owner(owner)) => query(&mut state.picker, GitHubTyped::owner_query(&owner)),
         Some(Choice::GitHubHelp) => query(&mut state.picker, GitHubTyped::PREFIX.to_string()),
         None => Vec::new(),
+    }
+}
+
+/// Go to the worktree `w` in the tree: its workspace opened and its row
+/// selected, the keys left where they were.
+fn go_to_worktree(state: &mut ViewState, w: WorktreeOffer) -> Vec<Effect> {
+    let root = tree::listed(state.hosts.work(&w.environment))
+        .workspace_of(&w.path)
+        .map(|ws| ws.root.clone());
+    let folds = &mut state.tree.folds;
+    if let Some(root) = root {
+        folds.set(&nav::Item::Workspace(w.environment.clone(), root), true);
+    }
+    let row = nav::Item::Worktree(w.environment, w.path);
+    folds.set(&row, true);
+    state.tree.selected = Some(row);
+    Vec::new()
+}
+
+/// What opening `offer` asks of the window, as opening a pinned row of the
+/// details panel does: an address as a page of the browser, a path in its
+/// viewer or Neovim.
+fn open_resource(offer: &ResourceOffer) -> Effect {
+    let resource = &offer.resource;
+    let environment = offer.environment.clone();
+    let web = resource.target.starts_with("http://") || resource.target.starts_with("https://");
+    match resource.reach() {
+        tsumugi_model::Reach::Path => Effect::OpenFile {
+            environment,
+            path: PathBuf::from(&resource.target),
+            how: Opening::Existing,
+        },
+        tsumugi_model::Reach::Address if web => Effect::OpenAddress {
+            environment,
+            worktree: resource.project.clone(),
+            url: resource.target.clone(),
+            how: Opening::Existing,
+        },
+        tsumugi_model::Reach::Address => Effect::Open {
+            environment,
+            target: resource.target.clone(),
+        },
     }
 }
 
@@ -567,7 +709,14 @@ fn under_cursor(state: &ViewState) -> Option<(EnvironmentId, PathBuf)> {
             Some((s.environment.clone(), worktree.to_path_buf()))
         }
         Choice::Directory(c) => Some((c.environment, c.path)),
-        Choice::Clone(_) | Choice::Owner(_) | Choice::GitHubHelp => None,
+        Choice::Worktree(w) => Some((w.environment, w.path)),
+        Choice::Clone(_)
+        | Choice::Owner(_)
+        | Choice::GitHubHelp
+        | Choice::NewWorktree(_)
+        | Choice::Resource(_)
+        | Choice::File(_)
+        | Choice::Action(_) => None,
     }
 }
 

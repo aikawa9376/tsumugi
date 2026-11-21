@@ -139,6 +139,16 @@ Where the picker looks for directories to start a session in.
 | `picker.ghq` | boolean | `true` | Offer the repositories ghq keeps, and its roots in the file tree. |
 | `picker.roots` | array of strings | `[]` | Folders whose folders are offered, and which the file tree lists, `~` standing for your home folder. |
 
+### `[[picker.scopes]]`
+
+What the picker searches, each `[[picker.scopes]]` table one mix of sources: the first is where it opens, `Ctrl+g` steps through the others, and a scope with a `prefix` is entered by typing it first. Writing any replaces those the picker starts with ([picker](../tree.md#searching-more-than-sessions-and-directories)).
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `picker.scopes.name` | string | `""` | What the scope is called where the picker shows it. |
+| `picker.scopes.prefix` | string | `""` | What is typed first to enter the scope instead of stepping to it; none when empty. What follows it is what is searched for. |
+| `picker.scopes.sources` | array of `sessions`, `directories`, `worktrees`, `resources`, `files`, `actions` | `[]` | The sources it mixes, their rows listed in this order. |
+
 ## `[[profiles]]`
 
 The profiles sessions start from, each `[[profiles]]` table one of them ([settings](../settings.md#profiles)). An agent's default profile is the default profile when that starts the agent, else the agent's first profile.

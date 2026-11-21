@@ -9,8 +9,10 @@ use tsumugi_model::{CloneTarget, EnvironmentId, GitHubTyped, Session, Tree};
 use tsumugi_protocol::{Offers, PickWork};
 
 use super::fuzzy::{Query, best};
+use super::sources::{ActionOffer, FileOffer, NewWorktreeOffer, ResourceOffer, WorktreeOffer};
 use crate::attention::{self, Changes};
 use crate::completion::Completions;
+use crate::settings::PickerSource;
 
 /// One row of the list as drawn: the heading of the group it starts, what
 /// the query marks, where it is, and a badge beside it.
@@ -36,6 +38,16 @@ pub enum Mark {
     Owner,
     /// How to look through GitHub.
     Help,
+    /// A worktree to go to.
+    Worktree,
+    /// A worktree to make.
+    NewWorktree,
+    /// A resource a project keeps.
+    Resource,
+    /// A file of the project shown.
+    File,
+    /// An action to run.
+    Action,
 }
 
 /// What the scratch row says.
@@ -59,6 +71,16 @@ pub enum Choice {
     Owner(String),
     /// [`GITHUB_HELP`], which types the prefix that looks through GitHub.
     GitHubHelp,
+    /// A worktree to go to in the tree.
+    Worktree(WorktreeOffer),
+    /// A worktree to make, named as typed.
+    NewWorktree(NewWorktreeOffer),
+    /// A resource to open.
+    Resource(ResourceOffer),
+    /// A file of the project shown to open.
+    File(FileOffer),
+    /// An action to run.
+    Action(ActionOffer),
 }
 
 impl Choice {
@@ -75,6 +97,15 @@ impl Choice {
             (Choice::Clone(a), Choice::Clone(b)) => a == b,
             (Choice::Owner(a), Choice::Owner(b)) => a == b,
             (Choice::GitHubHelp, Choice::GitHubHelp) => true,
+            (Choice::Worktree(a), Choice::Worktree(b)) => {
+                a.environment == b.environment && a.path == b.path
+            }
+            (Choice::Resource(a), Choice::Resource(b)) => {
+                a.environment == b.environment && a.resource.id == b.resource.id
+            }
+            (Choice::NewWorktree(a), Choice::NewWorktree(b)) => a == b,
+            (Choice::File(a), Choice::File(b)) => a == b,
+            (Choice::Action(a), Choice::Action(b)) => a.name == b.name,
             _ => false,
         }
     }
@@ -368,10 +399,43 @@ pub fn matching(candidates: &[Candidate], query: &str, home: &Path, cap: usize) 
     )
 }
 
+/// The scratch row while `query` answers to it, then the sessions for
+/// `query`, ranked and cut at `cap`. A query that names a state offers only
+/// sessions, since nothing else stands in one.
+pub fn session_rows(sessions: &[SessionOffer], query: &str, cap: usize) -> Vec<Choice> {
+    let matched = matching_sessions(sessions, query, cap).into_iter();
+    if Narrowing::new(query).states.is_some() {
+        return matched.map(Choice::Session).collect();
+    }
+    let scratch = Query::new(query)
+        .rank_named(SCRATCH, SCRATCH)
+        .map(|_| Choice::Scratch);
+    scratch
+        .into_iter()
+        .chain(matched.map(Choice::Session))
+        .collect()
+}
+
+/// The directories for `query`, ranked and cut at `cap`; none for a query
+/// that names a state, which only sessions stand in.
+pub fn directory_rows(
+    directories: &[Candidate],
+    query: &str,
+    home: &Path,
+    cap: usize,
+) -> Vec<Choice> {
+    if Narrowing::new(query).states.is_some() {
+        return Vec::new();
+    }
+    matching(directories, query, home, cap)
+        .into_iter()
+        .map(Choice::Directory)
+        .collect()
+}
+
 /// The scratch row while `query` answers to it, the sessions for `query`,
 /// then the directories, each group ranked among its own and cut at `cap`: a
-/// directory never comes between sessions. A query that names a state offers
-/// only sessions, since nothing else stands in one.
+/// directory never comes between sessions.
 pub fn choices(
     sessions: &[SessionOffer],
     directories: &[Candidate],
@@ -379,20 +443,9 @@ pub fn choices(
     home: &Path,
     cap: usize,
 ) -> Vec<Choice> {
-    let sessions = matching_sessions(sessions, query, cap).into_iter();
-    let narrowing = Narrowing::new(query);
-    if narrowing.states.is_some() {
-        return sessions.map(Choice::Session).collect();
-    }
-    let scratch = Query::new(query)
-        .rank_named(SCRATCH, SCRATCH)
-        .map(|_| Choice::Scratch);
-    let directories = matching(directories, query, home, cap).into_iter();
-    scratch
-        .into_iter()
-        .chain(sessions.map(Choice::Session))
-        .chain(directories.map(Choice::Directory))
-        .collect()
+    let mut rows = session_rows(sessions, query, cap);
+    rows.extend(directory_rows(directories, query, home, cap));
+    rows
 }
 
 /// The rows `choices` are drawn as, the first of each group under its heading.
@@ -473,6 +526,69 @@ pub fn labelled_lines(
                         place: None,
                         badge: String::new(),
                         mark: Mark::Help,
+                    },
+                ),
+                Choice::Worktree(w) => (
+                    Some(PickerSource::Worktrees.heading()),
+                    Line {
+                        heading: None,
+                        name: w.name.clone(),
+                        place: Some(match label(&w.environment) {
+                            Some(environment) => format!("{environment} · {}", w.place),
+                            None => w.place.clone(),
+                        }),
+                        badge: String::new(),
+                        mark: Mark::Worktree,
+                    },
+                ),
+                Choice::NewWorktree(n) => (
+                    Some(PickerSource::Worktrees.heading()),
+                    Line {
+                        heading: None,
+                        name: format!("Create worktree {}", n.name),
+                        place: Some(n.project.clone()),
+                        badge: "new".into(),
+                        mark: Mark::NewWorktree,
+                    },
+                ),
+                Choice::Resource(r) => (
+                    Some(PickerSource::Resources.heading()),
+                    Line {
+                        heading: None,
+                        name: r.resource.title(),
+                        place: Some(match label(&r.environment) {
+                            Some(environment) => format!("{environment} · {}", r.resource.target),
+                            None => r.resource.target.clone(),
+                        }),
+                        badge: match r.resource.reach() {
+                            tsumugi_model::Reach::Path => "path",
+                            tsumugi_model::Reach::Address => "link",
+                        }
+                        .into(),
+                        mark: Mark::Resource,
+                    },
+                ),
+                Choice::File(f) => {
+                    let (name, dir) = f.parts();
+                    (
+                        Some(PickerSource::Files.heading()),
+                        Line {
+                            heading: None,
+                            name: name.into(),
+                            place: Some(dir.to_string()).filter(|d| !d.is_empty()),
+                            badge: String::new(),
+                            mark: Mark::File,
+                        },
+                    )
+                }
+                Choice::Action(a) => (
+                    Some(PickerSource::Actions.heading()),
+                    Line {
+                        heading: None,
+                        name: a.label.clone(),
+                        place: Some(a.name.into()),
+                        badge: String::new(),
+                        mark: Mark::Action,
                     },
                 ),
             };
