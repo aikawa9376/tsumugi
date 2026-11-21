@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tsumugi_model::links::Links;
 use tsumugi_model::repository::{Listing, Revision, Spot};
 use tsumugi_model::usage::Limit;
-use tsumugi_model::{Agent, ConversationStats, Note, Process};
+use tsumugi_model::{Agent, ConversationStats, Note, Port, Process};
 
 use crate::work::set;
 use crate::{CommandsSight, HostPath, PastSight, PickSight, TreeSight};
@@ -116,6 +116,9 @@ pub struct SessionRead {
     /// What it sent and received through Tsumugi.
     pub notes: Option<Vec<Note>>,
     pub processes: Option<Vec<Process>>,
+    /// The TCP ports its processes listen on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ports: Option<Vec<Port>>,
     /// The journal of what its agent recorded of its work, oldest first.
     pub timeline: Option<Vec<tsumugi_model::timeline::Entry>>,
 }
@@ -200,6 +203,10 @@ pub enum DetailsChange {
         session: String,
         processes: Vec<Process>,
     },
+    Ports {
+        session: String,
+        ports: Vec<Port>,
+    },
     Timeline {
         session: String,
         entries: Vec<tsumugi_model::timeline::Entry>,
@@ -252,6 +259,9 @@ impl DetailsWork {
             }
             DetailsChange::Processes { session, processes } => {
                 set(&mut self.session(session).processes, Some(processes))
+            }
+            DetailsChange::Ports { session, ports } => {
+                set(&mut self.session(session).ports, Some(ports))
             }
             DetailsChange::Timeline { session, entries } => {
                 set(&mut self.session(session).timeline, Some(entries))
@@ -371,11 +381,16 @@ mod tests {
             session: "b".into(),
             processes: Vec::new(),
         });
+        work.apply(DetailsChange::Ports {
+            session: "b".into(),
+            ports: Vec::new(),
+        });
         let a = &work.sessions["a"];
         assert_eq!(a.conversation, Some(conversation("c1", 2)));
         assert_eq!(a.notes, Some(Vec::new()));
         assert_eq!(a.links, None);
         assert_eq!(work.sessions["b"].processes, Some(Vec::new()));
+        assert_eq!(work.sessions["b"].ports, Some(Vec::new()));
     }
 
     #[test]

@@ -45,6 +45,11 @@ impl Ask {
         entry: Option<&Entry>,
     ) -> Option<Self> {
         match entry? {
+            Entry::Port(port) if !port.process.zombie => Some(Self::KillProcess(
+                environment.clone(),
+                session?.clone(),
+                port.process.clone(),
+            )),
             Entry::Process(process) if !process.zombie => Some(Self::KillProcess(
                 environment.clone(),
                 session?.clone(),
@@ -244,5 +249,29 @@ mod tests {
         assert!(
             Ask::kill_process(&there, Some(&session), Some(&Entry::Process(process))).is_none()
         );
+    }
+
+    #[test]
+    fn stopping_a_port_kills_the_process_that_listens_on_it() {
+        let session = tsumugi_model::testing::session("session-one").build();
+        let process = Process {
+            pid: 123,
+            started_secs: 456,
+            name: "node".into(),
+            ..Default::default()
+        };
+        let port = tsumugi_model::Port {
+            port: 3000,
+            process: process.clone(),
+            ..Default::default()
+        };
+        let there = EnvironmentId::new("there");
+        assert_eq!(
+            Ask::kill_process(&there, Some(&session), Some(&Entry::Port(port.clone()))),
+            Some(Ask::KillProcess(there.clone(), session.clone(), process))
+        );
+        let mut gone = port;
+        gone.process.zombie = true;
+        assert!(Ask::kill_process(&there, Some(&session), Some(&Entry::Port(gone))).is_none());
     }
 }

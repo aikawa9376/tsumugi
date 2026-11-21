@@ -791,6 +791,7 @@ impl AppCtx {
             // factor. Applying the raw adjustment here would briefly undo it.
             Effect::Zoom(_) => {}
             Effect::Open { target, .. } => open([target]),
+            Effect::OpenPort { url, .. } => open([url]),
             Effect::Reveal { path, .. } => open(["-R".into(), path]),
             Effect::PullWorktree {
                 environment,
@@ -1032,6 +1033,10 @@ fn refused(effect: &Effect, remote: impl Fn(&EnvironmentId) -> bool) -> Option<&
             && !target.starts_with("http://") =>
         {
             Some("Opening a remote path in a local application is unavailable")
+        }
+        // Its `localhost` is the work machine's, not this computer's.
+        Effect::OpenPort { environment, .. } if remote(environment) => {
+            Some("This port is on the work machine and cannot be opened from here")
         }
         Effect::Reveal { environment, .. } if remote(environment) => {
             Some("This path is on the work machine and cannot be revealed here")
@@ -1635,6 +1640,22 @@ mod tests {
                     environment: there.clone(),
                     window,
                     action,
+                },
+                true,
+            ),
+            (
+                Effect::OpenPort {
+                    environment: here.clone(),
+                    port: 3000,
+                    url: "http://localhost:3000".into(),
+                },
+                false,
+            ),
+            (
+                Effect::OpenPort {
+                    environment: there.clone(),
+                    port: 3000,
+                    url: "http://localhost:3000".into(),
                 },
                 true,
             ),

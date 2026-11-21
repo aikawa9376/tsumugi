@@ -110,6 +110,7 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
             let all = context.call(|store| store.sessions()).await?;
             listed(all, &filter).await
         }
+        Command::Ports(asked) => super::commands::ports(&caller, asked).await,
         Command::Models => answer(context.models.lock().expect("the models' lock").view()),
         Command::Next => {
             let id = caller.id;

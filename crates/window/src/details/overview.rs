@@ -188,6 +188,9 @@ pub(super) fn GroupedRows(
     let sections = link_sections(&rows, Path::new(&paths_from), &crate::paths::home(), now_ms);
     let killable = |at: usize| match rows.get(at) {
         Some(Entry::Process(p)) if !p.zombie => session.clone().map(|s| (s, p.clone())),
+        Some(Entry::Port(p)) if !p.process.zombie => {
+            session.clone().map(|s| (s, p.process.clone()))
+        }
         _ => None,
     };
     // A component alone in its tab lists its rows without a heading; they

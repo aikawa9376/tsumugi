@@ -126,6 +126,9 @@ environments. On macOS before 14, website data is temporary.
 The page takes its own keys. Ctrl+Shift+Escape gives the keys back to the
 workspace. Browsing runs on the computer displaying Tsumugi, including for
 a remote environment: localhost reaches this computer, not its work host.
+A development server the work machine runs is listed in the details panel's
+ports ([details](details.md#components)), which never open it as if it were
+on this computer.
 
 Annotate lets the user select page elements, one after another until they
 turn it off or press Escape. Selecting an element shows a card by it, over a

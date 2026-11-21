@@ -62,6 +62,8 @@ pub enum Command {
     RemoveResource(RemoveResource),
     Send(Send),
     Sessions(Sessions),
+    /// The TCP ports the processes of sessions listen on.
+    Ports(Ports),
     Models,
     /// Name the caller's own session anew.
     Rename(Rename),
@@ -219,6 +221,18 @@ pub struct Sessions {
     /// Only sessions working in this directory or below it.
     #[serde(default)]
     pub dir: Option<PathBuf>,
+}
+
+/// List the TCP ports the processes of sessions listen on.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Ports {
+    /// The worktree whose sessions' ports to list, by a directory in it; your own worktree when omitted.
+    #[serde(default)]
+    pub worktree: Option<PathBuf>,
+    /// Every session's ports on this work machine, whatever worktree it works in.
+    #[serde(default)]
+    pub all: bool,
 }
 
 /// A session that opened another, as the one it opened is told of it.

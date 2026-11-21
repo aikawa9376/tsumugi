@@ -72,6 +72,12 @@ cannot act as another.
 - **`sessions`** lists the sessions Tsumugi runs, each with its id, code, name,
   workspace, the directory it runs in, how it stands and which session opened
   it. It can be narrowed to one repository or directory.
+- **`ports`** lists the TCP ports the processes of sessions listen on, each
+  with its address, the process that listens and the session it belongs to.
+  It lists the caller's own worktree's sessions, or another worktree's by a
+  directory in it, or every session's; the same as `tsumugi ports`
+  (`--worktree <dir>` or `--all`), which lists the worktree of the directory
+  it runs in.
 - **`models`** lists, for each profile a session can start from, its agent,
   the folder of its own its login is kept in, if any, and the models its
   provider reports there, and

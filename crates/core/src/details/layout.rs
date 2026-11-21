@@ -37,6 +37,9 @@ pub enum Component {
     Running,
     /// The live processes the session started, each to stop.
     Processes,
+    /// The TCP ports the session's processes listen on, each to open,
+    /// copy or stop.
+    Ports,
     /// The facts of the session that change little.
     About,
     /// The sessions tied to the session.
@@ -164,6 +167,7 @@ impl Component {
         Component::Timeline,
         Component::Running,
         Component::Processes,
+        Component::Ports,
         Component::About,
         Component::Sessions,
         Component::Messages,
@@ -208,6 +212,7 @@ impl Component {
             Component::Timeline => "timeline",
             Component::Running => "running",
             Component::Processes => "processes",
+            Component::Ports => "ports",
             Component::About => "about",
             Component::Sessions => "sessions",
             Component::Messages => "messages",
@@ -253,6 +258,7 @@ impl Component {
             Component::Timeline => "Timeline",
             Component::Running => "Running",
             Component::Processes => "Processes",
+            Component::Ports => "Ports",
             Component::About => "About",
             Component::Sessions => "Sessions",
             Component::Messages => "Messages",
@@ -306,6 +312,9 @@ impl Component {
                 "Subagents at work, live processes and tied sessions still running; folded, how many of each."
             }
             Component::Processes => "The live processes the session started, each to stop.",
+            Component::Ports => {
+                "The TCP ports the session's processes listen on, each to open, copy or stop."
+            }
             Component::About => "The facts of the session that change little.",
             Component::Sessions => "The sessions tied to this one.",
             Component::Messages => "What the session sent and received through Tsumugi.",
@@ -361,6 +370,7 @@ impl Component {
             Component::Timeline => Icon::TimelineEvent,
             Component::Running => Icon::Loader,
             Component::Processes => Icon::Terminal,
+            Component::Ports => Icon::Server,
             Component::About => Icon::InfoCircle,
             Component::Sessions => Icon::UsersGroup,
             Component::Messages => Icon::Message,
@@ -406,6 +416,7 @@ impl Component {
             | Component::Timeline
             | Component::Running
             | Component::Processes
+            | Component::Ports
             | Component::About
             | Component::Sessions
             | Component::Messages
@@ -579,6 +590,7 @@ impl Component {
             self,
             Component::Running
                 | Component::Processes
+                | Component::Ports
                 | Component::About
                 | Component::Sessions
                 | Component::Messages
@@ -891,6 +903,7 @@ impl Surface {
                         p(C::Github),
                         p(C::Timeline).shown(3),
                         p(C::Running).folded(),
+                        p(C::Ports),
                         p(C::About).folded(),
                     ],
                 ),
@@ -1384,14 +1397,14 @@ components = ["timeline"]
         assert_eq!(
             names(&s),
             [
-                "session", "change", "running", "github", "timeline", "about"
+                "session", "change", "running", "github", "timeline", "ports", "about"
             ]
         );
         s.shift(Slot::Tab(0), 0, 9);
         assert_eq!(
             names(&s),
             [
-                "change", "running", "github", "timeline", "about", "session"
+                "change", "running", "github", "timeline", "ports", "about", "session"
             ]
         );
     }

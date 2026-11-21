@@ -153,6 +153,13 @@ pub fn link_sections(
                     format!("PID {} · {}", p.pid, p.command),
                 )
             }),
+            Entry::Port(p) => Some(LinkRow::plain(
+                at,
+                Icon::Server,
+                p.port.to_string(),
+                format!("{} · {}", p.process.name, p.process.pid),
+                p.address(),
+            )),
             Entry::Fact(f) => Some(LinkRow::plain(
                 at,
                 Icon::InfoCircle,

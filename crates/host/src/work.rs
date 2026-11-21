@@ -734,6 +734,7 @@ fn details_in_sight(change: &DetailsChange, sight: &Sight) -> bool {
         | DetailsChange::Thumbs { session, .. }
         | DetailsChange::Notes { session, .. }
         | DetailsChange::Processes { session, .. }
+        | DetailsChange::Ports { session, .. }
         | DetailsChange::Timeline { session, .. } => sight.session.as_ref() == Some(session),
         DetailsChange::SessionLeft { session } => {
             sight.session.as_ref() == Some(session) || sight.conversations.contains(session)
