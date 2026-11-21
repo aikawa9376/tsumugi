@@ -90,10 +90,16 @@ const START_SESSION: &str = include_str!("../plugin/skills/start-session/SKILL.m
 /// sha256 of every stub an earlier or this build wrote, by skill. A copy on
 /// disk is tsumugi's untouched one when it is only a `SKILL.md` whose digest
 /// is here. Changing a stub adds its digest; none is ever removed.
-const RELEASED: &[(&str, &str)] = &[(
-    "start-session",
-    "11abf0141e399ede1b4c8bb9300bdff33d4576af170bd56ba029a2fd72a24f97",
-)];
+const RELEASED: &[(&str, &str)] = &[
+    (
+        "start-session",
+        "11abf0141e399ede1b4c8bb9300bdff33d4576af170bd56ba029a2fd72a24f97",
+    ),
+    (
+        "start-session",
+        "264764778c3a6e1142c046ef2f543c3491638f12d479e5d92e71ff93320b676f",
+    ),
+];
 
 /// The file an agent reads a skill from, in the skill's folder.
 const FILE: &str = "SKILL.md";

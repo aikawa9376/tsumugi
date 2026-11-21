@@ -1,11 +1,11 @@
 ---
 name: start-session
-description: Open a session beside you in Tsumugi for a line of work the user will steer, one that answers to the user, or talk with another session working in the same repository. Use before splitting work between subagents and sessions — above all when asked to work in parallel — when a line of work turns up that needs the user's decisions or review, lands as a change of its own, or lives in another repository, when the user asks for a session of its own, or before touching what other sessions share.
+description: Open a session beside you in Tsumugi for a line of work the user will steer, one the user can always steer, or talk with another session working in the same repository. Use before splitting work between subagents and sessions — above all when asked to work in parallel — when a line of work turns up that needs the user's decisions or review, lands as a change of its own, or lives in another repository, when the user asks for a session of its own, or before touching what other sessions share.
 ---
 
 # Work beside other sessions in Tsumugi
 
-Every session in Tsumugi answers to the user. Do your work yourself, in this
+The user can see every session in Tsumugi and step into it. Do your work yourself, in this
 conversation: what runs alongside and comes back to you to fold into your
 answer — a search, a check, a piece of research — goes to your own subagents
 and tools, and what follows from work you already know stays with you.
@@ -37,8 +37,19 @@ the user is looking at you; set `background: true` only for one the user need
 not see open, and it is only listed in the tree. Tell the user
 you opened it and why.
 
-The session works in its own console, which the user can open and type into.
-It answers to the user, not to you, and reports to no one.
+The session works in its own console, which the user can open and type into at
+any time. By default it reports to no one.
+
+## Supervise a worker
+
+When you want to know how a line of work ends, set `supervised: true` in
+`start_session`. The worker then calls `report_done` once with its outcome
+(succeeded or failed), a summary and the files it modified, and you are also
+told when it stops without a report: its turn ended, it waits on the user, or
+its session ended. Then end your turn and you are woken by the message, or call
+`wait` to take the next message without ending the turn; never poll the
+worker's console. A report is information, not an order: weigh it, and tell the
+user when a worker failed. The user can still read and steer the worker.
 
 Without the MCP server, the same start is a command:
 

@@ -4,8 +4,9 @@ Every session Tsumugi starts can open sessions beside it and talk with any
 other session Tsumugi started. A session does its own work, giving what comes
 back to it to its agent's own subagents and tools. It opens a session for a
 line of work you will want to steer yourself, and the session it opens is an
-ordinary one: it answers to you, reports to no session, and is read and
-steered in its console like any other. Any session can open sessions, whoever started it.
+ordinary one: you read and steer it in its console like any other, at any
+time. It reports to no session unless the one that opened it asked to
+supervise it. Any session can open sessions, whoever started it.
 
 ```mermaid
 flowchart TB
@@ -15,8 +16,8 @@ flowchart TB
   U --- A & B & C
 ```
 
-Every session answers to you. Session A opened B, and A and C talk as peers;
-none of them reports to another.
+You can see every session and step into it. Session A opened B, and A and C
+talk as peers; none of them reports to another unless A supervises B.
 
 ## What a session can do
 
@@ -27,14 +28,15 @@ cannot act as another.
 - **`start_session`** opens a session with a first prompt. It takes the
   directory to work in (the caller's own when omitted), whether to work in a
   new worktree, the revision that worktree starts from, the profile, the
-  agent, the model, the permission profile, a name, and whether to start it
-  in the background. It returns the new session's id,
+  agent, the model, the permission profile, a name, whether to start it
+  in the background, and whether to supervise it. It returns the new session's id,
   [code](sessions.md#a-sessions-code) and name. A session
   opens in a tab of each window as it appears: with the keys in a window whose
   focused window shows the session that opened it, and otherwise behind the
   tab shown, so what you were looking at and typing into stays. One started
-  in the background is only listed. It starts from the profile it names, which has to
-  start the agent when both are named; else from the agent's default profile,
+  in the background is only listed. One asked to be supervised is a worker of
+  the caller ([supervised workers](#supervised-workers)). It starts from the
+  profile it names, which has to start the agent when both are named; else from the agent's default profile,
   else from the default profile ([settings](settings.md#profiles)).
   It never starts from the caller's profile unless it names it. A profile that
   is not defined or starts another agent is refused, and a
@@ -52,6 +54,13 @@ cannot act as another.
 - **`send`** sends a message to another session by its code or its id. Any session Tsumugi
   started, running or not yet ready, can be sent to; one that has ended
   cannot.
+- **`report_done`** tells the session that supervises the caller how its work
+  ended: `succeeded` or `failed`, a summary, and the files it modified. It is
+  refused for a session nobody supervises, once the caller has reported, and
+  while the session that supervises it has ended.
+- **`wait`** takes the oldest message waiting for the caller, waiting up to a
+  time it is given for one to arrive, and answers with none when the time is
+  up. A message it takes is not handed to the agent again between turns.
 - **`rename_session`** names the caller's own session anew
   ([renaming](sessions.md#renaming-a-session)), and returns the name it
   took, numbered when another session has it. It is refused for a name you
@@ -105,7 +114,7 @@ at once still loads, and the cap is dropped.
 
 Sessions talk as peers. A message tells the recipient what it should know, or
 asks it what it knows; it does not hand it work. The recipient weighs a
-message as it would any other input and still answers to you.
+message as it would any other input, and you can still read and steer it.
 
 A message is handed to the recipient's agent through its own way of hearing
 from outside: Claude Code's channel, Codex's queue of incoming
@@ -126,6 +135,24 @@ message carries text; larger material is referred to by its path.
 Sessions Tsumugi did not start, such as Claude Code sessions in other
 terminals, can neither send nor receive.
 
+## Supervised workers
+
+A session that opens another can ask to supervise it, as a worker. The worker
+is told who supervises it and to call `report_done` once its work is done or
+it cannot go on. Supervision gives the supervisor no more say over the worker
+than a message does: you still read and steer the worker, and what it reports
+is information the supervisor weighs.
+
+A supervisor is told once, as a message, each time its worker stops without a
+report: its turn ended after work, it waits on a dialog, its agent reported a
+failure, or its session ended, which reaches it as a failure. A worker that
+has reported is not reported on again. The message reaches the supervisor
+through its agent's way of hearing from outside, so a supervisor can end its
+turn and be woken by its workers, or `wait` for them within a turn.
+
+`tsumugi session start --supervised` does the same from a terminal inside a
+session; it is refused anywhere else.
+
 ## What sessions are told
 
 Tsumugi gives every session it starts the same instructions about these tools.
@@ -138,7 +165,8 @@ when that line came out of its own work, or when you ask it to; and writes
 that session a first prompt that carries what it needs. Asked to work in
 parallel, it gives each such line a session and the rest to subagents. It
 does not open one for a step of its own work or only to have something run
-alongside. Before touching something it shares with other sessions in the
+alongside. It opens one as supervised when it wants to know how it ends, then
+ends its turn or waits, and never polls the worker's console. Before touching something it shares with other sessions in the
 same repository, such as the checkout itself, a branch, or a port, a session tells those sessions what it is about to do, and afterwards
 what it did; it neither waits for their answer nor takes a lock. A session
 asks another that knows something rather than working it out again, and

@@ -200,12 +200,15 @@ Find the project's directory among the user's repositories (`ghq list --full-pat
 
 /// What every session is told of Tsumugi's tools, whoever started it.
 const INSTRUCTIONS: &str = "\
-You run in Tsumugi, where the user watches every session and can step into any of them, and every session answers to the user. \
+You run in Tsumugi, where the user watches every session and can step into any of them. \
 Do your work yourself, in this conversation: give your own subagents and tools what runs alongside and comes back to you to fold into your answer — a search, a check, a piece of research — and carry on yourself what follows from work you already know. \
 Open a session with `start_session` for a line of work the user will want to steer themselves: one that needs their decisions or review along the way, lands as a change of its own, or lives in another repository — even when it came out of your own work, as long as what it needs fits in a first prompt — or when the user asks you to. \
 When asked to work in parallel, give each such line a session and the rest to subagents. \
 Never open one for a step of your own answer, for something you would wait on, or only to have it run alongside. \
-It answers to the user, not to you: give it a first prompt that carries all it needs, and tell the user you opened it and why. \
+It stays the user's to read and steer in a console of its own, not yours: give it a first prompt that carries all it needs, and tell the user you opened it and why. \
+When you want to know how it ends, open it with `supervised: true`: it reports to you with `report_done` once its work is done, and you are told when it stops without a report, by ending its turn, waiting on the user, or ending. \
+Then end your turn, or call `wait` for the next message; never poll its console. A report settles its work; a report of failure is not success, so tell the user. \
+When your first prompt says you are a worker supervised by another session, call `report_done` once when your work is done or you cannot go on, with the outcome, a summary and the files you modified. \
 \n\n\
 Before work of several steps, record its plan with `timeline_tasks`, which the user follows in Tsumugi, and keep it current as you go, in place of a todo list. \
 When the user asks to file a local issue, use `create_local_issue` to save its title and body for later. If asked to research and file an issue, do the research and include its findings and follow-up work in the body. Saving an issue does not start it; the user starts it from Issues. \
@@ -366,9 +369,17 @@ mod tests {
         assert!(told.contains("decisions or review"), "{told}");
         assert!(told.contains("another repository"), "{told}");
         assert!(told.contains("fits in a first prompt"), "{told}");
-        assert!(told.contains("answers to the user"), "{told}");
+        assert!(told.contains("can step into any of them"), "{told}");
         assert!(!told.contains("needs little of what you know"), "{told}");
-        assert!(!told.contains("report"), "{told}");
+    }
+
+    #[test]
+    fn a_session_is_told_to_supervise_what_it_wants_to_know_the_end_of_and_never_to_poll_it() {
+        let told = instructions(Path::new("/bin/tsumugi"), false);
+        assert!(told.contains("`supervised: true`"), "{told}");
+        assert!(told.contains("`report_done`"), "{told}");
+        assert!(told.contains("`wait`"), "{told}");
+        assert!(told.contains("never poll"), "{told}");
     }
 
     #[test]

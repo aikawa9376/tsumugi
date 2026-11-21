@@ -341,6 +341,74 @@ pub(super) async fn close(context: &Context, caller: &Session) -> Result<Value> 
     answer(protocol::Closing { closing: true })
 }
 
+/// Tell the session that supervises the caller how its work ended.
+pub(super) async fn report_done(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::ReportDone,
+) -> Result<Value> {
+    let id = caller.id;
+    let reported = context
+        .call(move |store| {
+            store.report_done(id, asked.outcome.word(), &asked.summary, &asked.files)
+        })
+        .await?;
+    answer(protocol::Reported { reported })
+}
+
+/// How long a session waits when it says nothing, and the longest it may.
+const WAITING: Duration = Duration::from_secs(300);
+const WAITING_AT_MOST: Duration = Duration::from_secs(3600);
+/// How often what waits for a waiting session is looked for.
+const LOOKING: Duration = Duration::from_millis(200);
+
+/// Take the oldest message waiting for the caller, waiting for one to arrive
+/// for as long as asked. What it takes is not handed to the agent again
+/// between its turns.
+pub(super) async fn wait(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::Wait,
+) -> Result<Value> {
+    let limit = asked
+        .timeout_seconds
+        .map_or(WAITING, Duration::from_secs)
+        .min(WAITING_AT_MOST);
+    let until = tokio::time::Instant::now() + limit;
+    let id = caller.id;
+    loop {
+        let taken = context.call(move |store| store.take_next(id)).await?;
+        if let Some((message, sender)) = taken {
+            return answer(protocol::Waited {
+                message: Some(protocol::Delivery {
+                    id: message.id,
+                    from: message.sender,
+                    content: super::serve::envelope(&message, sender.as_ref()),
+                }),
+                timed_out: false,
+            });
+        }
+        if tokio::time::Instant::now() >= until {
+            return answer(protocol::Waited {
+                message: None,
+                timed_out: true,
+            });
+        }
+        tokio::time::sleep(LOOKING.min(until - tokio::time::Instant::now())).await;
+    }
+}
+
+/// `prompt`, told besides who supervises the session it starts.
+fn supervised_prompt(prompt: &str, supervisor: &Session) -> String {
+    format!(
+        "{prompt}\n\n---\nYou are a worker supervised by the session {} ({}). \
+         When your work is done, or you cannot go on, call the `report_done` tool once with the outcome \
+         (succeeded or failed), a summary and the files you modified. \
+         The user can read this session and step into it at any time.",
+        supervisor.name, supervisor.code
+    )
+}
+
 /// What the caller's agent is told as a prompt arrives or once its
 /// conversation was cleared: of its session's name, and, while nothing is on
 /// its timeline, to record the plan of its work there. Nothing when neither
@@ -425,7 +493,11 @@ pub(super) async fn start(
         profile: Some(profile),
         model: start.model,
         name: crate::starting::name_for(start.name.as_deref(), &prompt, &listed),
-        prompt,
+        prompt: if start.supervised {
+            supervised_prompt(&prompt, caller)
+        } else {
+            prompt
+        },
         permissions: start.permissions.unwrap_or_default(),
         env: crate::daemon::agent_env(),
         started_ms: crate::delegation::now_ms(),
@@ -451,6 +523,12 @@ pub(super) async fn start(
             };
             Error::new(code, failure.message)
         })?;
+    if start.supervised {
+        // Recorded as soon as it has started: its agent needs longer than
+        // that to make a first report.
+        let worker = started.recorded.id;
+        context.call(move |store| store.supervise(worker)).await?;
+    }
     answer(protocol::Started {
         id: started.recorded.id,
         code: started.recorded.code,

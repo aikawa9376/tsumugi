@@ -8,7 +8,7 @@ use tsumugi_model::timeline::Timeline;
 use tsumugi_model::{Agent, LocalIssueAction, SessionId};
 
 use super::Context;
-use super::commands::{close, listed, prompted, record_timeline, rename, start};
+use super::commands::{close, listed, prompted, record_timeline, rename, report_done, start, wait};
 use crate::delegation::{
     Code, Error, Message, Result, Session,
     protocol::{self, Command, Request, Response, VERSION},
@@ -101,6 +101,8 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::RemoveResource(asked) => super::commands::remove_resource(context, asked).await,
         Command::Rename(asked) => rename(context, &caller, asked).await,
         Command::Close => close(context, &caller).await,
+        Command::ReportDone(asked) => report_done(context, &caller, asked).await,
+        Command::Wait(asked) => wait(context, &caller, asked).await,
         Command::Prompted { cleared } => prompted(context, &caller, cleared).await,
         Command::TimelineTasks(asked) => record_timeline(context, &caller, asked).await,
         Command::Timeline => {

@@ -60,12 +60,12 @@ impl Drop for Background {
 
 /// The tools every session has, whoever started it.
 fn tools() -> Vec<Value> {
-    use super::protocol::{Ports, Rename, Send, Sessions, Start};
+    use super::protocol::{Ports, Rename, ReportDone, Send, Sessions, Start, Wait};
     let tool = |name: &str, description: &str, schema: schemars::Schema| json!({"name": name, "description": description, "inputSchema": schema});
     vec![
         tool(
             "start_session",
-            "Open a session beside you for a line of work the user will want to steer themselves — one that needs their decisions or review, lands as a change of its own, or lives in another repository — even when it came out of your own work, or when the user asks you to. What comes back to you to fold into your answer belongs to your own subagents instead. It answers to the user, not to you, in a console of its own; give it a first prompt that carries what it needs.",
+            "Open a session beside you for a line of work the user will want to steer themselves — one that needs their decisions or review, lands as a change of its own, or lives in another repository — even when it came out of your own work, or when the user asks you to. What comes back to you to fold into your answer belongs to your own subagents instead. It stays the user's to read and steer, in a console of its own; give it a first prompt that carries what it needs. Set `supervised` to learn how it ends: it reports to you with `report_done`, and you can `wait` for that instead of polling.",
             schemars::schema_for!(Start),
         ),
         tool(
@@ -117,6 +117,16 @@ fn tools() -> Vec<Value> {
             "send",
             "Send a message to another session by its code: what it should know, or a question about what it knows; never work for it to do. It reaches that session between its turns and costs it a turn: send only what it has to act on or answer, and plan nothing on a reply coming.",
             schemars::schema_for!(Send),
+        ),
+        tool(
+            "report_done",
+            "Tell the session that opened you to supervise you how your work ended: call it once, when your work is done or you cannot go on, with the outcome (succeeded or failed), a summary and the files you modified. Only a session opened as a supervised worker can; it is refused for any other. The user can still read and steer this session.",
+            schemars::schema_for!(ReportDone),
+        ),
+        tool(
+            "wait",
+            "Wait for a message to reach you and take it, instead of ending your turn or polling: a worker you opened as supervised reports with it, or stops without a report, and another session may write. It answers with the oldest message waiting at once, or when one arrives, or with none once the time is up; call it again for the next. A message it took is not handed to you again between turns.",
+            schemars::schema_for!(Wait),
         ),
         tool(
             "sessions",
@@ -226,6 +236,8 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "models" => Command::Models,
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
         "close_session" => Command::Close,
+        "report_done" => Command::ReportDone(serde_json::from_value(arguments).map_err(parsed)?),
+        "wait" => Command::Wait(serde_json::from_value(arguments).map_err(parsed)?),
         "timeline_tasks" => {
             Command::TimelineTasks(serde_json::from_value(arguments).map_err(parsed)?)
         }
@@ -639,6 +651,8 @@ mod tests {
                 "add_resource",
                 "remove_resource",
                 "send",
+                "report_done",
+                "wait",
                 "sessions",
                 "ports",
                 "rename_session",
@@ -647,6 +661,44 @@ mod tests {
                 "timeline",
                 "models"
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn reporting_and_waiting_are_asked_of_the_daemon_as_the_caller() {
+        let daemon = Fake::new();
+        let out = exchange(
+            daemon.clone(),
+            false,
+            &[
+                rpc(1, "initialize", json!({})),
+                rpc(
+                    2,
+                    "tools/call",
+                    json!({"name": "report_done", "arguments": {
+                        "outcome": "succeeded", "summary": "Fixed it", "files": ["a.rs"]
+                    }}),
+                ),
+                rpc(
+                    3,
+                    "tools/call",
+                    json!({"name": "wait", "arguments": {"timeout_seconds": 1}}),
+                ),
+                rpc(
+                    4,
+                    "tools/call",
+                    json!({"name": "report_done", "arguments": {"outcome": "meh", "summary": "x"}}),
+                ),
+            ],
+            Duration::from_millis(100),
+        )
+        .await;
+        assert_eq!(out[1]["result"]["isError"], false);
+        assert_eq!(out[2]["result"]["isError"], false);
+        assert_eq!(out[3]["result"]["isError"], true);
+        assert_eq!(
+            *daemon.asked.lock().unwrap(),
+            ["context", "report_done", "wait"]
         );
     }
 

@@ -11,7 +11,7 @@ use tsumugi_term::Daemon;
 use crate::scratch;
 use crate::starting;
 
-const USAGE: &str = "usage: tsumugi session start [--dir <path>] [--worktree [--base <rev>]] [--name <name>] [--background] [--permissions <default|read_only> | --permissions-file <path>] [--agent <claude|codex|pi|opencode|cursor>] [--profile <id>] [--model <model>] [-- <prompt>]";
+const USAGE: &str = "usage: tsumugi session start [--dir <path>] [--worktree [--base <rev>]] [--name <name>] [--background] [--supervised] [--permissions <default|read_only> | --permissions-file <path>] [--agent <claude|codex|pi|opencode|cursor>] [--profile <id>] [--model <model>] [-- <prompt>]";
 
 /// What `tsumugi session start` was asked for.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -27,6 +27,8 @@ struct Asked {
     model: Option<String>,
     /// Only listed, never opened in a window.
     background: bool,
+    /// Reports to the session the command runs in, which supervises it.
+    supervised: bool,
     /// `None` when the prompt is to be read from standard input.
     prompt: Option<String>,
 }
@@ -42,6 +44,7 @@ fn parse(args: &[String]) -> Option<Asked> {
             "--base" => asked.base = Some(rest.next()?.clone()),
             "--name" => asked.name = Some(rest.next()?.clone()),
             "--background" => asked.background = true,
+            "--supervised" => asked.supervised = true,
             "--permissions" if !permissions_given => {
                 asked.permissions = match rest.next()?.as_str() {
                     "default" => AgentPermissions::Default,
@@ -135,6 +138,7 @@ async fn start_as(
             permissions: Some(asked.permissions.clone()),
             name: asked.name.clone(),
             background: asked.background,
+            supervised: asked.supervised,
         });
     let started: crate::delegation::protocol::Started =
         crate::delegation::protocol::ask_for(root, credential, command, None)
@@ -194,6 +198,10 @@ pub fn cli(args: &[String]) -> i32 {
         }
     };
     let Some((credential, root)) = acting_as else {
+        if asked.supervised {
+            eprintln!("tsumugi: --supervised needs a session to report to; run it inside one");
+            return 2;
+        }
         let mut ask = vec!["session".to_string()];
         ask.extend(args.iter().cloned());
         return crate::work_host::run_command(ask, input);
@@ -409,6 +417,7 @@ mod tests {
                 profile: None,
                 model: None,
                 background: false,
+                supervised: false,
                 prompt: Some("find why --it fails".into()),
             })
         );
@@ -466,6 +475,16 @@ mod tests {
             parse(&args(&["--background", "--", "go"]))
                 .unwrap()
                 .background
+        );
+    }
+
+    #[test]
+    fn a_session_is_supervised_only_when_asked_to() {
+        assert!(!parse(&args(&["--", "go"])).unwrap().supervised);
+        assert!(
+            parse(&args(&["--supervised", "--", "go"]))
+                .unwrap()
+                .supervised
         );
     }
 

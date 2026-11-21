@@ -13,11 +13,12 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 mod issues;
 mod resources;
 mod saved_commands;
+mod workers;
 
 /// The tables as the first schema made them; a new database is made by it
 /// and then by every step in `MIGRATIONS`, so it ends as one carried forward.
@@ -144,6 +145,12 @@ const MIGRATIONS: &[&str] = &[
          project TEXT NOT NULL,
          label TEXT NOT NULL,
          command TEXT NOT NULL
+     );",
+    // The sessions opened to be supervised by the session that opened them,
+    // and what that session was last told of each.
+    "CREATE TABLE IF NOT EXISTS workers (
+         session TEXT PRIMARY KEY REFERENCES sessions(id),
+         event TEXT NOT NULL DEFAULT ''
      );",
 ];
 
@@ -785,16 +792,27 @@ fn insert(
     recipient: SessionId,
     body: &str,
 ) -> Result<MessageId> {
+    insert_kind(connection, sender, recipient, "message", body)
+}
+
+fn insert_kind(
+    connection: &Connection,
+    sender: SessionId,
+    recipient: SessionId,
+    kind: &str,
+    body: &str,
+) -> Result<MessageId> {
     if body.trim().is_empty() {
         return Err(Error::new(Code::Invalid, "a message needs a body"));
     }
     let id = MessageId::new();
     connection.execute(
-        "INSERT INTO messages (id, sender, recipient, kind, body, sent_ms) VALUES (?1, ?2, ?3, 'message', ?4, ?5)",
+        "INSERT INTO messages (id, sender, recipient, kind, body, sent_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             id.to_string(),
             sender.to_string(),
             recipient.to_string(),
+            kind,
             body,
             super::now_ms() as i64,
         ],
