@@ -90,6 +90,7 @@ fn App() -> Element {
             super::composer::ComposerDialog {}
             crate::resources::ResourceSheet {}
             ConfirmDialog {}
+            super::floating::FloatingTerminal {}
             super::lightbox::Lightbox {}
         }
     }

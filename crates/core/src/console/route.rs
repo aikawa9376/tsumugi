@@ -23,6 +23,8 @@ pub enum Typed {
     Prompt,
     /// The program in the console.
     Program,
+    /// The shell the floating terminal shows.
+    Floating,
     Nowhere,
 }
 

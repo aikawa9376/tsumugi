@@ -379,6 +379,10 @@ pub struct TerminalStart {
     pub diff: Option<tsumugi_model::repository::Spot>,
     /// The file Neovim starts on.
     pub file: Option<PathBuf>,
+    /// Start a floating terminal: a shell in the folder the work host's
+    /// settings name, whatever `cwd` says.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub floating: bool,
     pub cols: u16,
     pub rows: u16,
 }

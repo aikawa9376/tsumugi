@@ -188,6 +188,33 @@ A terminal has an identity apart from its name and its directory. It is not an
 agent session: it neither starts sessions nor sends or receives messages
 between them.
 
+### The floating terminal
+
+The floating terminal is a panel of shells over the window that belongs to no
+worktree: it is not listed in the tree, and what the content shows does not
+change it. `floating.toggle` opens it with the keys; pressed with it open
+but without the keys, it gives it them; pressed with the keys, it closes
+it. Closing only hides the panel: its shells keep running, their output
+and the programs in them untouched, and opening it again shows them as they
+were, whichever worktree, session or environment was shown meanwhile and
+after the window restarts.
+
+The panel has a tab for each shell. `floating.new` opens another,
+`floating.close_tab` ends the one shown and closes the panel with the last,
+and `floating.next` and `floating.prev` step through the tabs. Each
+environment has shells of its own, started on its work machine; the panel
+shows those of the environment the window shows. A shell starts in the
+folder `floating_terminal.directory` names in that environment's settings, its
+home folder unless one is chosen ([settings](reference/settings.md)).
+
+The panel moves the keys only when asked to: by its key, or by a click on it.
+A shell starting, a shell's output, closing the panel and a click elsewhere
+leave the keys where the user put them, and give them up to the prompt or
+the area clicked. While the panel has them, every key and every text typed
+goes to its shell but the keys bound in `floating` and `global`; running any
+other action of the window takes the keys to where it acts
+([keys](keys.md#areas)).
+
 ### From the command line
 
 These commands are run by the instance's work host, started when none runs,

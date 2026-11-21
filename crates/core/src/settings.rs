@@ -268,6 +268,8 @@ pub struct Settings {
     pub scratch_dir: String,
     /// Where the picker looks for directories to start a session in.
     pub picker: PickerSettings,
+    /// The shell that floats over the window.
+    pub floating_terminal: FloatingTerminalSettings,
     /// How the console takes keys and draws its cursor.
     pub console: ConsoleSettings,
     /// How much the details panel reads and shows.
@@ -384,12 +386,30 @@ impl Default for Settings {
             neovim: Launch::default(),
             scratch_dir: String::new(),
             picker: PickerSettings::default(),
+            floating_terminal: FloatingTerminalSettings::default(),
             console: ConsoleSettings::default(),
             details: DetailsSettings::default(),
             usage: UsageSettings::default(),
             panel: crate::details::DetailsLayout::default(),
             worktree_setup: WorktreeSetupSettings::default(),
             ai_actions: AiActionsSettings::default(),
+        }
+    }
+}
+
+/// The floating terminal: a shell over the window that every worktree shares.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct FloatingTerminalSettings {
+    /// The folder its shells start in, `~` standing for the home folder of the
+    /// machine they run on; empty for that home folder.
+    pub directory: String,
+}
+
+impl Default for FloatingTerminalSettings {
+    fn default() -> Self {
+        Self {
+            directory: "~".into(),
         }
     }
 }
@@ -619,6 +639,15 @@ impl Settings {
     pub fn scratch_folder(&self, home: &Path, data: &Path) -> PathBuf {
         match self.scratch_dir.trim() {
             "" => data.join("tsumugi").join("scratch"),
+            dir => expand(dir, home),
+        }
+    }
+
+    /// Where the floating terminal's shells start, `~` standing for `home`;
+    /// `home` itself when no directory is chosen.
+    pub fn floating_dir(&self, home: &Path) -> PathBuf {
+        match self.floating_terminal.directory.trim() {
+            "" => home.to_path_buf(),
             dir => expand(dir, home),
         }
     }

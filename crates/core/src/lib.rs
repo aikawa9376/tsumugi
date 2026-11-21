@@ -15,6 +15,7 @@ pub mod cursor;
 pub mod details;
 pub mod effect;
 pub mod file_icons;
+pub mod floating;
 pub mod fonts;
 pub mod graph;
 pub mod host;

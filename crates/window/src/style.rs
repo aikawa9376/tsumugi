@@ -41,6 +41,7 @@ pub const CSS: &str = concat!(
     include_str!("../assets/css/local-issues.css"),
     include_str!("../assets/css/resources.css"),
     include_str!("../assets/css/lightbox.css"),
+    include_str!("../assets/css/floating.css"),
 );
 
 /// The Settings window's stylesheet, on the main window's colours, with the

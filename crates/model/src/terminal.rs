@@ -33,6 +33,10 @@ pub struct TerminalSession {
     /// terminal keeps its screen until it is stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit: Option<i32>,
+    /// Whether it is a floating terminal: a shell of the window over the
+    /// content that belongs to no worktree and has no row in the tree.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub floating: bool,
     /// The daemon id of the interrupted terminal it was opened again for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restored_from: Option<String>,

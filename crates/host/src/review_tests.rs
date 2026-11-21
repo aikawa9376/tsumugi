@@ -9,6 +9,7 @@ fn diff_editors_keep_the_users_configuration_and_receive_a_structured_scope() {
     let launch = resolve_terminal(
         &crate::settings::Settings::default(),
         TerminalStartRequest {
+            floating: false,
             program: TerminalProgram::Neovim,
             cwd: "/repo".into(),
             diff: Some(Spot::Files(Rev::WorkingCopy)),

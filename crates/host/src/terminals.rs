@@ -416,6 +416,7 @@ async fn execute(
                 daemon,
                 &crate::settings::current(),
                 TerminalStartRequest {
+                    floating: false,
                     name,
                     cwd,
                     program,

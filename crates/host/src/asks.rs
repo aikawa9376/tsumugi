@@ -450,17 +450,32 @@ async fn start_session(watched: &Watched, start: SessionStart) -> Result<Answer,
     })
 }
 
+/// Where the terminal `start` asks for runs: the folder the settings name for a
+/// floating one, and otherwise the one asked for.
+fn terminal_dir(
+    start: &TerminalStart,
+    settings: &settings::Settings,
+    home: &std::path::Path,
+) -> Result<PathBuf, String> {
+    if start.floating {
+        return Ok(settings.floating_dir(home));
+    }
+    here(start.cwd.clone())
+}
+
 /// Start the shell, Neovim or command `start` asks for, held, and list it at
 /// once.
 async fn start_terminal(watched: &Watched, start: TerminalStart) -> Result<Answer, String> {
-    let cwd = here(start.cwd).map_err(|e| format!("cannot open {}: {e}", start.name))?;
     let settings = settings::current();
+    let cwd = terminal_dir(&start, &settings, &crate::paths::home())
+        .map_err(|e| format!("cannot open {}: {e}", start.name))?;
     let mut resolved = crate::execution::resolve_terminal(
         &settings,
         TerminalStartRequest {
             name: start.name,
             cwd,
             program: start.program,
+            floating: start.floating,
             // Not `agent_env`: a shell or Neovim keeps the user's own editor.
             env: daemon::terminal_env(),
             file: start.file,
@@ -688,6 +703,30 @@ mod tests {
         assert_eq!(
             here(away),
             Err("/w is on build-box, which cannot be reached".into())
+        );
+    }
+
+    #[test]
+    fn a_floating_terminal_starts_where_the_settings_say_whatever_directory_is_asked() {
+        let home = std::path::Path::new("/h");
+        let start = |floating| TerminalStart {
+            cwd: HostPath::local("/w"),
+            floating,
+            ..TerminalStart::default()
+        };
+        let settings =
+            settings::Settings::parse("[floating_terminal]\ndirectory = \"~/src\"\n").unwrap();
+        assert_eq!(
+            terminal_dir(&start(true), &settings, home),
+            Ok(PathBuf::from("/h/src"))
+        );
+        assert_eq!(
+            terminal_dir(&start(false), &settings, home),
+            Ok(PathBuf::from("/w"))
+        );
+        assert_eq!(
+            terminal_dir(&start(true), &settings::Settings::default(), home),
+            Ok(PathBuf::from("/h"))
         );
     }
 

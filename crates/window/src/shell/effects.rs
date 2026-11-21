@@ -30,6 +30,7 @@ impl Ui {
             Effect::BringBack { environment, ids } => self.bring_back(environment, ids),
             Effect::LetGo { environment, ids } => self.let_go(environment, ids),
             Effect::StartTerminal(ask) => self.start_terminal(ask),
+            Effect::StartFloating { environment } => self.start_floating(environment),
             Effect::SavedCommand(done) => self.saved_command(done),
             Effect::StartDiffEditor { place, spot } => self.start_terminal_review(
                 tsumugi_core::content::TerminalAsk {
@@ -101,6 +102,20 @@ impl Ui {
                 }
                 if let Some(p) = self.active_pane() {
                     p.key(&key);
+                }
+            }
+            Effect::FloatingKey(key) => {
+                if let Some(pane) = self.floating_pane() {
+                    pane.key(&key);
+                }
+            }
+            Effect::FloatingText { text, pasted } => {
+                if let Some(pane) = self.floating_pane() {
+                    if pasted {
+                        pane.paste(&text);
+                    } else {
+                        pane.type_text(&text);
+                    }
                 }
             }
             Effect::PaneScrollKey(key) => {

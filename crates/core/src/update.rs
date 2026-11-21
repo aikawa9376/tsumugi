@@ -115,6 +115,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
 
         Msg::ContentOpened { kept, scratch } => content::opened(&mut state.content, kept, scratch),
         Msg::Focus(area) => {
+            crate::floating::blur(state);
             // The message being written for a commit is given up with the prompt.
             if area != crate::content::Area::Prompt {
                 state.prompt.committing = None;
@@ -174,6 +175,9 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             }
         }
         Msg::RowClicked(item) => content::click_row(state, item),
+        Msg::Window(action) if crate::floating::is_own(&action) => {
+            crate::floating::act(state, action)
+        }
         Msg::Window(action) => content::act(state, action),
         Msg::WindowFocus(id) => content::focus_window(state, id),
         Msg::TabShow(at) => content::show_tab(state, at),
@@ -430,6 +434,30 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::LightboxOpen(thing) => overlay::lightbox::open(state, thing),
         Msg::LightboxAction(action) => overlay::lightbox::act(state, action),
         Msg::LightboxPan { dx, dy } => overlay::lightbox::pan(state, dx, dy),
+        Msg::FloatingFocus => {
+            crate::floating::focus(state);
+            Vec::new()
+        }
+        Msg::FloatingClose => {
+            crate::floating::close(state);
+            Vec::new()
+        }
+        Msg::FloatingBlur => {
+            crate::floating::blur(state);
+            Vec::new()
+        }
+        Msg::FloatingSelect { environment, id } => {
+            crate::floating::select(state, environment, id);
+            Vec::new()
+        }
+        Msg::FloatingStarted { environment, id } => {
+            crate::floating::started(state, environment, id);
+            Vec::new()
+        }
+        Msg::FloatingFailed { environment } => {
+            crate::floating::failed(state, &environment);
+            Vec::new()
+        }
         Msg::AddingOpen => overlay::adding(state, true),
         Msg::AddingClose => overlay::adding(state, false),
         Msg::Confirm(ask) => overlay::ask(state, *ask),

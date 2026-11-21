@@ -107,7 +107,8 @@ impl Tree {
 
     /// The tree with `terminals` in place of the terminals it held, each in the
     /// innermost worktree holding the directory it runs in. A shell no
-    /// worktree holds is left out: placing it needs git, which `build` asks.
+    /// worktree holds is left out: placing it needs git, which `build` asks. A floating shell
+    /// belongs to no worktree and is always left out.
     pub fn with_terminals(&self, terminals: &[TerminalSession]) -> Tree {
         let mut out = self.clone();
         for w in out
@@ -118,7 +119,7 @@ impl Tree {
             w.terminals.clear();
         }
         let paths: Vec<PathBuf> = out.worktrees().map(|w| w.worktree.path.clone()).collect();
-        for shell in terminals {
+        for shell in terminals.iter().filter(|t| !t.floating) {
             let Some(home) = innermost(&paths, &shell.cwd).cloned() else {
                 continue;
             };
@@ -172,7 +173,7 @@ pub fn build(
             .sessions
             .push(session.clone());
     }
-    for shell in terminals {
+    for shell in terminals.iter().filter(|t| !t.floating) {
         let (worktree, holder) = held(&shell.cwd);
         worktree_node(&mut tree, &worktree, holder);
     }
@@ -444,6 +445,26 @@ mod tests {
         assert_eq!(ids(&ws.worktrees[0]), ["a"]);
         assert_eq!(shell_ids(&ws.worktrees[0]), [1]);
         assert!(ws.flat());
+    }
+
+    #[test]
+    fn a_floating_shell_has_no_row_and_makes_no_workspace() {
+        let floating = TerminalSession {
+            floating: true,
+            ..shell(2, "/home/me")
+        };
+        let t = tree()
+            .terminal(shell(1, "/api"))
+            .terminal(floating.clone())
+            .checkout("/api", "/api", "main")
+            .found("/home/me", None)
+            .build();
+        assert_eq!(t.workspaces.len(), 1);
+        assert_eq!(shell_ids(&t.workspaces[0].worktrees[0]), [1]);
+        assert!(t.terminal(2).is_none());
+        let again = t.with_terminals(&[shell(1, "/api"), floating]);
+        assert!(again.terminal(2).is_none());
+        assert!(again.terminal(1).is_some());
     }
 
     #[test]

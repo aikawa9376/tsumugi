@@ -315,6 +315,7 @@ async fn open_tabs(
             daemon,
             settings,
             TerminalStartRequest {
+                floating: false,
                 name: tab.title.clone().unwrap_or_else(|| "Terminal".into()),
                 cwd: worktree.to_path_buf(),
                 program: if command.is_some() {
@@ -353,6 +354,7 @@ fn setup_request(
     let mut env = crate::daemon::terminal_env();
     env.extend(environment(primary, worktree));
     TerminalStartRequest {
+        floating: false,
         name: "Setup".into(),
         cwd: worktree.to_path_buf(),
         program: TerminalProgram::Command,

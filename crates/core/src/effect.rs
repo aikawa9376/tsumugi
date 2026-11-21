@@ -389,6 +389,13 @@ pub enum Effect {
     /// Type this into the program of the session `tab` shows, attaching to
     /// it if need be.
     TypeInto { tab: Tab, typing: Vec<Typing> },
+    /// Ask the work host of `environment` for a floating shell, and tell the
+    /// window by `Msg::FloatingStarted` or `Msg::FloatingFailed`.
+    StartFloating { environment: EnvironmentId },
+    /// Send this key to the shell the floating terminal shows.
+    FloatingKey(Key),
+    /// Type or paste this into the shell the floating terminal shows.
+    FloatingText { text: String, pasted: bool },
     /// End the shell by this id of `environment` and close its windows.
     EndShell {
         environment: EnvironmentId,

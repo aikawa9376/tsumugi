@@ -65,6 +65,12 @@ fn fitted(width: f64, room: f64, cell_width: f64, cell_height: f64) -> Size {
     }
 }
 
+/// The terminal of a floating panel's body drawn `width` by `height`, in cells
+/// `cell_width` by `cell_height`: all of it, as no prompt card is under it.
+pub(crate) fn panel_size(width: f64, height: f64, cell_width: f64, cell_height: f64) -> Size {
+    fitted(width, console_room(height, None), cell_width, cell_height)
+}
+
 /// What the focused window's console was last measured as: its box, the
 /// prompt card's height when one is shown, and the cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -317,6 +323,15 @@ mod tests {
         assert_eq!(session.rows, ((600.0 - 120.0 - CONSOLE_GAP) / 20.0) as u16);
         assert_eq!(terminal.rows, ((600.0 - SCREEN_TOP) / 20.0) as u16);
         assert_eq!(session.cols, terminal.cols);
+    }
+
+    #[test]
+    fn a_floating_panel_s_shell_takes_all_of_the_body_the_panel_leaves_it() {
+        let size = panel_size(644.0, 410.0, 8.0, 20.0);
+        assert_eq!(
+            (size.cols, size.rows),
+            (77, ((410.0 - SCREEN_TOP) / 20.0) as u16)
+        );
     }
 
     #[test]

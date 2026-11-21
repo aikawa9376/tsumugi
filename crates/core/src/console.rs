@@ -167,6 +167,9 @@ pub fn input_target(state: &ViewState, probe: &Probe) -> InputTarget {
     {
         return InputTarget::Gui;
     }
+    if state.floating.focused {
+        return InputTarget::Terminal;
+    }
     match receiver(state, probe) {
         Receiver::Reader => InputTarget::Neovim,
         Receiver::Prompt if state.console.prompt_runs && state.prompt.selected.is_none() => {
@@ -233,6 +236,9 @@ pub fn text_goes(state: &ViewState) -> Typed {
     )) {
         return Typed::Nowhere;
     }
+    if state.floating.focused {
+        return Typed::Floating;
+    }
     if state.content.reading_conversation() {
         return if state.content.focus == Area::Prompt {
             Typed::Prompt
@@ -271,6 +277,9 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
     if overlay::holder(state).is_some() {
         state.console.escaped_from = None;
         return overlay::press(state, key);
+    }
+    if state.floating.focused {
+        return crate::floating::press(state, key);
     }
     if let Some(effects) = escape::press(state, &key, &probe) {
         return effects;
@@ -504,6 +513,7 @@ pub(crate) fn text(state: &mut ViewState, text: String, pasted: bool) -> Vec<Eff
             }
             vec![Effect::PaneText { text, pasted }]
         }
+        Typed::Floating => vec![Effect::FloatingText { text, pasted }],
         Typed::Nowhere => Vec::new(),
     }
 }
@@ -523,6 +533,10 @@ pub(crate) fn image(state: &mut ViewState, mime: String, data: String) -> Vec<Ef
             effects
         }
         Typed::Program => vec![Effect::PaneText {
+            text: String::new(),
+            pasted: true,
+        }],
+        Typed::Floating => vec![Effect::FloatingText {
             text: String::new(),
             pasted: true,
         }],

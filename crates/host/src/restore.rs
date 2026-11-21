@@ -385,6 +385,7 @@ async fn reopen(
 ) -> BroughtBack {
     let old = kept.terminal.id;
     let request = crate::execution::TerminalStartRequest {
+        floating: kept.terminal.floating,
         name: kept.terminal.name.clone(),
         cwd: kept.terminal.cwd.clone(),
         program: kept.terminal.program,
