@@ -11,6 +11,7 @@ mod find;
 mod markup;
 #[cfg(all(test, target_os = "linux"))]
 mod native_tests;
+mod profiles;
 mod reach;
 mod reload;
 #[cfg(all(test, target_os = "linux"))]
@@ -21,7 +22,7 @@ mod viewport;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -29,7 +30,6 @@ use std::time::Duration;
 use dioxus::core::{Runtime, RuntimeGuard};
 use dioxus::desktop::wry::{WebContext, WebView, WebViewBuilder};
 use dioxus::prelude::*;
-use sha2::{Digest, Sha256};
 use tsumugi_core::actions::Action;
 use tsumugi_core::content::{BrowserId, Tab, WindowId};
 use tsumugi_core::msg::Msg;
@@ -123,16 +123,6 @@ fn sync_marks(page: &Page) {
     let _ = page
         .view
         .evaluate_script(&format!("window.tsumugiInspector?.marks([{keys}])"));
-}
-
-fn profile(root: &Path, environment: &EnvironmentId) -> PathBuf {
-    let digest = Sha256::digest(environment.to_string().as_bytes());
-    root.join(
-        digest
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>(),
-    )
 }
 
 fn address(typed: &str) -> Result<String, &'static str> {
@@ -356,7 +346,7 @@ struct Site {
 #[derive(Default)]
 struct Pool {
     pages: HashMap<BrowserId, Rc<Page>>,
-    contexts: HashMap<EnvironmentId, Site>,
+    contexts: HashMap<(EnvironmentId, Option<String>), Site>,
     #[cfg(target_os = "linux")]
     layer: Option<Rc<crate::native_layer::Layer>>,
 }
@@ -375,14 +365,16 @@ impl Pool {
             return Ok(page.clone());
         }
         let desktop = dioxus::desktop::window();
-        let directory = profile(
+        let profile = profiles::chosen(browser);
+        let directory = profiles::directory(
             &crate::paths::data_dir().join("tsumugi/browser"),
             environment,
+            profile.as_deref(),
         );
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
         let site = self
             .contexts
-            .entry(environment.clone())
+            .entry((environment.clone(), profile.clone()))
             .or_insert_with(|| Site {
                 context: Rc::new(RefCell::new(WebContext::new(Some(directory)))),
                 downloads: Default::default(),
@@ -512,7 +504,7 @@ impl Pool {
         let builder = {
             use dioxus::desktop::wry::WebViewBuilderExtDarwin;
             use objc2_foundation::{NSOperatingSystemVersion, NSProcessInfo};
-            let digest = Sha256::digest(environment.to_string().as_bytes());
+            let digest = profiles::digest(environment, profile.as_deref());
             let persistent = NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(
                 NSOperatingSystemVersion {
                     majorVersion: 14,
@@ -575,6 +567,7 @@ pub(crate) fn use_browsers(app: AppCtx) {
     let browsers = use_context_provider(Browsers::default);
     use_context_provider(|| Titles(Signal::new(HashMap::new())));
     let mut freed = use_context_provider(|| Freed(Signal::new(Default::default()))).0;
+    use_context_provider(|| Moves(Signal::new(0)));
     use_hook(move || {
         spawn(async move {
             loop {
@@ -663,8 +656,27 @@ async fn keep_screenshot(app: AppCtx, page: &Page, environment: &EnvironmentId, 
     }
 }
 
+/// How many times a page was moved to another profile, which builds its view
+/// again: the engine fixes a view's website data when it is made.
+#[derive(Clone, Copy)]
+struct Moves(Signal<u64>);
+
+/// The page `id`, shown by its own view in the profile it is in.
 #[component]
 pub(crate) fn BrowserWindow(
+    window: WindowId,
+    environment: EnvironmentId,
+    worktree: PathBuf,
+    id: BrowserId,
+) -> Element {
+    // A moved page is a new view; the old one goes with its component.
+    let _ = use_context::<Moves>().0();
+    let profile = profiles::chosen(id).unwrap_or_default();
+    rsx! { BrowserView { key: "{profile}", window, environment, worktree, id } }
+}
+
+#[component]
+fn BrowserView(
     window: WindowId,
     environment: EnvironmentId,
     worktree: PathBuf,
@@ -675,7 +687,8 @@ pub(crate) fn BrowserWindow(
     let browsers = use_context::<Browsers>();
     let mut titles = use_context::<Titles>().0;
     let page_environment = environment.clone();
-    let page = use_hook(move || browsers.0.borrow_mut().page(id, &page_environment, app));
+    let building = browsers.clone();
+    let page = use_hook(move || building.0.borrow_mut().page(id, &page_environment, app));
     let mut searching = find::use_find();
     let mut size = use_signal(move || viewport::chosen(id).unwrap_or("responsive"));
     // What was typed and not entered stays with the page, so that putting
@@ -685,6 +698,9 @@ pub(crate) fn BrowserWindow(
     let mut error = use_signal(String::new);
     let mut route = use_signal(|| reach::Route::Here);
     let mut shelf = use_signal(Vec::<downloads::Row>::new);
+    let moves = use_context::<Moves>().0;
+    let mut naming = use_signal(|| false);
+    let mut profile_typed = use_signal(String::new);
     let mut inspecting = use_signal(|| false);
     let mut grabbing = use_signal(|| false);
     // The element picked and waiting for its instruction, and the page
@@ -976,6 +992,28 @@ pub(crate) fn BrowserWindow(
         }
     };
     let shelves = page.clone();
+    // Move the page to `to`, the default profile for none, at the address it
+    // is at: its website data is the profile's, so its view is made again.
+    let move_to = {
+        let page = page.clone();
+        let moving = environment.clone();
+        Rc::new(move |to: Option<String>| {
+            let url = page.view.url().unwrap_or_default();
+            if !url.is_empty() && url != "about:blank" {
+                start_at(
+                    id,
+                    shown_address(&url, |local| app.work_port(&moving, local)),
+                );
+            }
+            profiles::choose(id, to);
+            browsers.0.borrow_mut().pages.remove(&id);
+            let mut moves = moves;
+            moves += 1;
+        })
+    };
+    let in_profile = profiles::chosen(id);
+    let made = profiles::made();
+    let (picked, named) = (move_to.clone(), move_to.clone());
     let back = page.clone();
     let forward = page.clone();
     let reload = page.clone();
@@ -1048,6 +1086,33 @@ pub(crate) fn BrowserWindow(
                         typed.set(value);
                     },
                     onenter: move |_| navigate.clone()(),
+                }
+                select {
+                    class: "browser-profile", aria_label: "Profile",
+                    title: "The profile whose cookies and website data the page uses",
+                    value: in_profile.as_ref().map_or_else(|| "d".to_string(), |name| format!("p:{name}")),
+                    onchange: move |e| match e.value().as_str() {
+                        "n" => { profile_typed.set(String::new()); naming.set(true); }
+                        "d" => picked(None),
+                        other => picked(other.strip_prefix("p:").map(str::to_string)),
+                    },
+                    option { value: "d", "{profiles::DEFAULT}" }
+                    for name in made {
+                        option { value: "p:{name}", "{name}" }
+                    }
+                    option { value: "n", "New profile…" }
+                }
+                if naming() {
+                    InlineField {
+                        class: "browser-profile-name", aria_label: "Profile name", placeholder: "Profile name", value: profile_typed(),
+                        focus: true, contained: true,
+                        oninput: move |value| profile_typed.set(value),
+                        onescape: move |_| naming.set(false),
+                        onenter: move |_| match profiles::make(&profile_typed.peek()) {
+                            Ok(name) => { naming.set(false); error.set(String::new()); named(Some(name)); }
+                            Err(message) => error.set(message),
+                        },
+                    }
                 }
                 select {
                     class: "browser-viewport", aria_label: "Page size",
@@ -1383,15 +1448,5 @@ mod tests {
         ] {
             assert!(address(typed).is_err(), "{typed}");
         }
-    }
-
-    #[test]
-    fn profile_names_never_interpret_environment_ids_as_paths() {
-        let root = std::path::Path::new("/profiles");
-        let a = profile(root, &tsumugi_model::EnvironmentId::new("../a"));
-        let b = profile(root, &tsumugi_model::EnvironmentId::new("a"));
-        assert_eq!(a.parent(), Some(root));
-        assert_ne!(a, b);
-        assert_ne!(profile(root, &Default::default()), b);
     }
 }

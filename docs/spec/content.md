@@ -168,6 +168,13 @@ way; the setting that lets it open Tsumugi's browser from the system's is off
 until it is chosen ([settings](settings.md)). Only web addresses are opened
 from a link.
 
+A page is in the Default profile until the user moves it to another from its
+toolbar, or makes a new one by name; moving a page loads it again at its address
+in the profile's website data, so cookies and local storage never mix between
+profiles. A page an agent opens is in the profile of the page it works on, and
+a link opens in, or shows, a page of the Default profile. Profiles are not
+removed.
+
 A file a page downloads is kept in this computer's downloads folder, never over
 a file already there. A shelf under the toolbar lists the downloads, running and
 ended, of the pages that share website data; a finished one can be opened or
@@ -183,8 +190,9 @@ position when it is shown, with the address that was being typed into its bar
 as it was. A page an agent is using, or one with unsent input or notes, is not
 freed, and freeing one page never frees another worktree's. Closing a page
 ends it; pages are not restored across application runs. Website data belongs to
-the environment, shared by its pages, and stays separate from that of other
-environments. On macOS before 14, website data is temporary.
+the environment and to the profile a page is in, shared by the pages of that
+pair, and stays separate from every other pair's. On macOS before 14, website
+data is temporary.
 
 The page takes its own keys. Ctrl+Shift+Escape gives the keys back to the
 workspace. Browsing runs on the computer displaying Tsumugi, including for

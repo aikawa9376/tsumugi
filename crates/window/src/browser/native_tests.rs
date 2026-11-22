@@ -113,9 +113,8 @@ fn browser_pages_keep_input_and_history_while_profiles_isolate_website_data() {
     let layer = crate::native_layer::Layer::wrap(&page).unwrap();
     assert!(layer.passes_input());
     let a = EnvironmentId::new("a");
-    let b = EnvironmentId::new("b");
-    let mut a_context = WebContext::new(Some(profile(data.path(), &a)));
-    let mut b_context = WebContext::new(Some(profile(data.path(), &b)));
+    let mut a_context = WebContext::new(Some(profiles::directory(data.path(), &a, None)));
+    let mut b_context = WebContext::new(Some(profiles::directory(data.path(), &a, Some("Admin"))));
     let messages = Rc::new(RefCell::new(Vec::<String>::new()));
     let build = |context: &mut WebContext| {
         let child = layer.interactive_child();

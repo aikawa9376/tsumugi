@@ -25,7 +25,8 @@ pub(super) fn forget(id: BrowserId) {
 }
 
 /// The page of `environment` under `worktree`, among `listed`, that is at
-/// `wanted`, or is on its way there.
+/// `wanted`, or is on its way there. A link comes from no page, so it is
+/// met only by a page in the default profile: another is another user.
 pub(super) fn existing(
     listed: &[(EnvironmentId, Listed)],
     environment: &EnvironmentId,
@@ -35,6 +36,7 @@ pub(super) fn existing(
     let candidates = listed
         .iter()
         .filter(|(env, page)| env == environment && page.worktree == worktree)
+        .filter(|(_, page)| super::profiles::chosen(page.id).is_none())
         .map(|(_, page)| {
             let address = super::START
                 .with(|start| start.borrow().get(&page.id).cloned())
@@ -154,6 +156,13 @@ mod tests {
             existing(&listed, &env, Path::new("/x"), "https://example.com/"),
             None
         );
+        crate::browser::profiles::choose(here.id, Some("Admin".into()));
+        assert_eq!(
+            existing(&listed, &env, Path::new("/w"), "https://example.com/"),
+            None,
+            "a page in another profile is another user's"
+        );
+        crate::browser::profiles::choose(here.id, None);
         forget(here.id);
         assert_eq!(
             existing(&listed, &env, Path::new("/w"), "https://example.com/"),

@@ -12,6 +12,9 @@
 .browser-tools .tool:hover { background:var(--line-strong); color:var(--text); }
 .browser-tools .tool.active { background:#3989ff; color:#fff; }
 
+.browser-profile { flex:none; max-width:9rem; background:var(--raised); color:var(--text); font:inherit; font-size:var(--ui-font-small); border:1px solid var(--line); border-radius:5px; padding:3px 5px; }
+.browser-toolbar input.browser-profile-name { flex:none; width:9rem; }
+@container (max-width:760px) { .browser-profile { max-width:6rem; } }
 .browser-viewport { flex:none; max-width:11rem; background:var(--raised); color:var(--text); font:inherit; font-size:var(--ui-font-small); border:1px solid var(--line); border-radius:5px; padding:3px 5px; }
 @container (max-width:760px) { .browser-viewport { max-width:6rem; } }
 

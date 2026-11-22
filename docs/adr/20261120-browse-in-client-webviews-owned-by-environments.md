@@ -10,7 +10,8 @@ may be used with different accounts in different environments.
 ## Decision
 
 Browse in client WebViews owned by environments, with a separate website
-data store for each environment.
+data store for each environment and, within an environment, for each named
+browser profile.
 
 ## Alternatives considered
 
@@ -25,5 +26,7 @@ data store for each environment.
 
 - Browsing uses the client's network, including its meaning of localhost.
 - Switching work environments can keep website accounts separate.
+- One environment can hold pages signed in as different users, each in a
+  profile of its own.
 - Browser pages have their own input focus and must give it back to the
   workspace explicitly.
