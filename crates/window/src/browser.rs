@@ -1,5 +1,6 @@
 //! Browsing belongs to the client window; an environment names its profile.
 
+mod agent;
 mod annotations;
 mod capture;
 mod card;
@@ -272,6 +273,9 @@ fn set_visible(view: &WebView, on: bool) {
 
 struct Page {
     view: WebView,
+    /// How many loads of this page have finished, which a command that
+    /// points it elsewhere waits on.
+    loads: Rc<Cell<u64>>,
     pending: Arc<Mutex<Option<String>>>,
     selection: Rc<RefCell<annotations::Selection>>,
     notes: Rc<RefCell<Vec<annotations::Note>>>,
@@ -297,7 +301,6 @@ impl Pool {
     fn page(
         &mut self,
         browser: BrowserId,
-        id: WindowId,
         environment: &EnvironmentId,
         app: AppCtx,
     ) -> Result<Rc<Page>, String> {
@@ -324,6 +327,8 @@ impl Pool {
         let selection = Rc::new(RefCell::new(annotations::Selection::default()));
         let receive = selection.clone();
         let loading = selection.clone();
+        let loads = Rc::new(Cell::new(0));
+        let loaded = loads.clone();
         let builder = WebViewBuilder::new_with_web_context(&mut context_ref)
             .with_url("about:blank")
             .with_visible(false)
@@ -337,27 +342,30 @@ impl Pool {
             .with_initialization_script(include_str!("../assets/js/browser.js"))
             .with_initialization_script(include_str!("../assets/js/browser-annotate.js"))
             .with_initialization_script(find::SCRIPT)
+            .with_initialization_script(include_str!("../assets/js/browser-agent.js"))
             .with_on_page_load_handler(move |event, _| {
                 // The picking goes on across pages; what was picked on the
                 // last one has gone with it.
-                if matches!(event, dioxus::desktop::wry::PageLoadEvent::Started) {
-                    loading.borrow_mut().pending.clear();
+                match event {
+                    dioxus::desktop::wry::PageLoadEvent::Started => {
+                        loading.borrow_mut().pending.clear();
+                    }
+                    dioxus::desktop::wry::PageLoadEvent::Finished => loaded.set(loaded.get() + 1),
                 }
             })
             .with_ipc_handler(move |request| {
                 let _guard = RuntimeGuard::new(runtime.clone());
                 // A page kept hidden runs its scripts too, so it is the page shown
-                // that the keys and focus answer to.
-                let shown = app.content.peek().shows_page(id, browser);
-                match request.body().as_str() {
-                    "focus" | "workspace" | "address" if !shown => {}
-                    "focus" => {
+                // that the keys and focus answer to, in whichever window shows it.
+                let shown = app.content.peek().window_of_page(browser);
+                match (request.body().as_str(), shown) {
+                    ("focus" | "workspace" | "address" | "find" | "reopen", None) => {}
+                    ("focus", Some(window)) => {
                         FOCUSED.set(true);
-                        app.dispatch(Msg::WindowFocus(id));
+                        app.dispatch(Msg::WindowFocus(window));
                         app.dispatch(Msg::Focus(tsumugi_core::content::Area::Console));
                     }
-                    "find" | "reopen" if !shown => {}
-                    "find" | "reopen" => {
+                    ("find" | "reopen", Some(_)) => {
                         FOCUSED.set(false);
                         let _ = return_to.webview.focus();
                         app.perform(
@@ -369,20 +377,20 @@ impl Pool {
                             None,
                         );
                     }
-                    "blur" => FOCUSED.set(false),
-                    "workspace" => {
+                    ("blur", _) => FOCUSED.set(false),
+                    ("workspace", Some(_)) => {
                         FOCUSED.set(false);
                         let _ = return_to.webview.focus();
                     }
-                    "address" => {
+                    ("address", Some(window)) => {
                         FOCUSED.set(false);
                         let _ = return_to.webview.focus();
                         let _ = return_to.webview.evaluate_script(&format!(
-                            "document.querySelector('#browser-toolbar-{id} input')?.focus()"
+                            "document.querySelector('#browser-toolbar-{window} input')?.focus()"
                         ));
                     }
-                    "annotation-cancel" => receive.borrow_mut().stop(),
-                    message => {
+                    ("annotation-cancel", _) => receive.borrow_mut().stop(),
+                    (message, _) => {
                         receive.borrow_mut().receive(message);
                     }
                 }
@@ -427,6 +435,7 @@ impl Pool {
         drop(context_ref);
         let page = Rc::new(Page {
             view,
+            loads,
             pending,
             selection,
             notes: Default::default(),
@@ -439,6 +448,8 @@ impl Pool {
         Ok(page)
     }
 }
+
+pub(crate) use agent::enqueue;
 
 pub(crate) fn use_browsers(app: AppCtx) {
     let browsers = use_context_provider(Browsers::default);
@@ -463,6 +474,11 @@ pub(crate) fn use_browsers(app: AppCtx) {
                     if let Some(page) = pool.pages.remove(&id) {
                         closed::closing(app, id, &page.view);
                     }
+                }
+                drop(pool);
+                for (environment, call) in agent::take() {
+                    let browsers = browsers.clone();
+                    spawn(agent::run(app, browsers, environment, call));
                 }
             }
         })
@@ -516,12 +532,7 @@ pub(crate) fn BrowserWindow(
     let browsers = use_context::<Browsers>();
     let mut titles = use_context::<Titles>().0;
     let page_environment = environment.clone();
-    let page = use_hook(move || {
-        browsers
-            .0
-            .borrow_mut()
-            .page(id, window, &page_environment, app)
-    });
+    let page = use_hook(move || browsers.0.borrow_mut().page(id, &page_environment, app));
     let mut searching = find::use_find();
     let mut size = use_signal(move || viewport::chosen(id).unwrap_or("responsive"));
     let mut typed = use_signal(String::new);

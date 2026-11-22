@@ -226,7 +226,7 @@ fn receive(environment: &EnvironmentId, host: &mut Host, event: Event) -> Vec<Ef
         }
         // Told the window as a whole, not its link; an answer goes to
         // what asked.
-        Event::Told(_) | Event::Type { .. } | Event::Answer { .. } => {}
+        Event::Told(_) | Event::Type { .. } | Event::Answer { .. } | Event::Browser(_) => {}
     }
     Vec::new()
 }
@@ -257,6 +257,7 @@ pub(crate) fn told(state: &mut ViewState, environment: EnvironmentId, event: Eve
             host.failed = Some(text.clone());
             status_line::set(status, Some(named(&state.hosts, text)))
         }
+        Event::Browser(call) => vec![Effect::Browser { environment, call }],
         Event::Type { session, typing } => vec![Effect::TypeInto {
             tab: Tab::Session(environment, session),
             typing,

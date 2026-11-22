@@ -2389,3 +2389,23 @@ fn a_session_whose_program_exited_keeps_its_tab_and_says_why_it_rests() {
     assert_eq!(rest_of(hosts, &session_tab("b")), None);
     assert!(!waits_to_come_back(hosts, &a));
 }
+
+#[test]
+fn a_page_is_found_in_the_window_of_the_tab_shown_that_shows_it_and_nowhere_else() {
+    let (a, b) = (Tab::browser(here(), "/r/a"), Tab::browser(here(), "/r/b"));
+    let (Tab::Browser { id: a_id, .. }, Tab::Browser { id: b_id, .. }) = (&a, &b) else {
+        unreachable!()
+    };
+    let (a_id, b_id) = (*a_id, *b_id);
+    let run = two_worktrees()
+        .send(show_at(a, "/r/a"))
+        .send(show_at(b, "/r/b"));
+    let content = &run.state().content;
+    // The page of the worktree put away is open, but no window of the layout
+    // shown shows it.
+    assert_eq!(content.window_of_page(a_id), None);
+    assert_eq!(
+        content.window_of_page(b_id),
+        content.windows.focused_window()
+    );
+}

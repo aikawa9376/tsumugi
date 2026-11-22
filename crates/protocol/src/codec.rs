@@ -1152,6 +1152,59 @@ mod tests {
     }
 
     #[test]
+    fn a_browser_command_and_what_came_of_it_round_trip_and_answering_is_no_change() {
+        use crate::{Ask, BrowserCall, BrowserCommand, BrowserResult};
+        for command in [
+            BrowserCommand::Goto {
+                url: "http://localhost:3000/日本語?a=b".into(),
+            },
+            BrowserCommand::Snapshot {
+                interactive: true,
+                delta: false,
+                selector: Some("main > form".into()),
+                depth: Some(3),
+            },
+            BrowserCommand::Click {
+                element: "@e3".into(),
+            },
+            BrowserCommand::Fill {
+                element: "@e1".into(),
+                value: "line\nbreak".into(),
+            },
+            BrowserCommand::Screenshot,
+            BrowserCommand::TabList,
+            BrowserCommand::TabCreate { url: None },
+            BrowserCommand::TabSwitch { index: 2 },
+        ] {
+            round_trips(Event::Browser(BrowserCall {
+                call: 9,
+                dir: "/work/日本語".into(),
+                command,
+            }));
+        }
+        for result in [
+            BrowserResult::Done {
+                value: serde_json::json!({"tabs": [{"index": 0, "url": "https://example.com/"}]}),
+            },
+            BrowserResult::Image {
+                data: "iVBORw0KGgo=".into(),
+            },
+            BrowserResult::Failed {
+                text: "stale ref".into(),
+            },
+        ] {
+            let ask = Ask::BrowserResult { call: 9, result };
+            // A remote window may answer without a stamp: answering twice
+            // changes nothing.
+            assert!(!ask.mutates());
+            round_trips(Request::Ask {
+                asked: 4,
+                ask: Box::new(ask),
+            });
+        }
+    }
+
+    #[test]
     fn a_line_that_is_not_a_message_is_an_error() {
         assert!(decode::<Request>("{\"type\":\"no_such\"}").is_err());
         assert!(decode::<Event>("not json").is_err());

@@ -174,6 +174,8 @@ pub struct Host {
     /// until the host's watchers start.
     quit: mpsc::UnboundedSender<u128>,
     quits: Option<mpsc::UnboundedReceiver<u128>>,
+    /// The commands agents gave the browser, which windows have not answered.
+    browser: std::sync::Arc<crate::browser::Relay>,
 }
 
 impl Default for Host {
@@ -204,7 +206,17 @@ impl Host {
             queued: Some(queued),
             quit,
             quits: Some(quits),
+            browser: Default::default(),
         }
+    }
+
+    /// The windows the host serves, by their numbers.
+    pub(crate) fn windows(&self) -> Vec<WindowId> {
+        self.windows.keys().copied().collect()
+    }
+
+    pub(crate) fn browser(&self) -> std::sync::Arc<crate::browser::Relay> {
+        self.browser.clone()
     }
 
     pub fn work(&self) -> &Work {
@@ -374,6 +386,7 @@ impl Host {
     /// The window `window` is gone: nothing more is read for what it showed
     /// alone, and what it typed no longer counts.
     pub fn leave(&mut self, window: WindowId) {
+        self.browser.window_left(window);
         if self.windows.remove(&window).is_none() {
             return;
         }

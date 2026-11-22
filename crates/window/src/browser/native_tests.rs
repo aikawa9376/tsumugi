@@ -403,3 +403,71 @@ fn drawing_on_a_still_exports_the_still_with_the_marks() {
         window.destroy();
     }
 }
+
+#[test]
+#[ignore = "requires a GTK display and WebKitGTK"]
+fn an_agent_reads_a_page_by_references_and_acts_on_them_without_reading_a_password() {
+    gtk::init().unwrap();
+    let site = Site::start();
+    let window = gtk::Window::new(gtk::WindowType::Toplevel);
+    window.set_default_size(800, 500);
+    let host = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    window.add(&host);
+    let ready = Rc::new(Cell::new(false));
+    let loaded_once = ready.clone();
+    let view = WebViewBuilder::new()
+        .with_url(format!("{}/one", site.url))
+        .with_initialization_script(include_str!("../../assets/js/browser-agent.js"))
+        .with_on_page_load_handler(move |event, _| {
+            if matches!(event, dioxus::desktop::wry::PageLoadEvent::Finished) {
+                loaded_once.set(true);
+            }
+        })
+        .build_gtk(&host)
+        .unwrap();
+    window.show_all();
+    let start = Instant::now();
+    while !ready.get() {
+        pump();
+        assert!(start.elapsed() < Duration::from_secs(15), "no load");
+    }
+    // A script answers with the JSON text of its object.
+    let said = |js: &str| -> serde_json::Value {
+        let text = value(&view, js);
+        serde_json::from_str(text.as_str().unwrap()).unwrap()
+    };
+    let read = said("window.tsumugiAgent.snapshot({})");
+    let tree = read["snapshot"].as_str().unwrap();
+    assert!(tree.contains(r#"textbox [ref=@e1]"#), "{tree}");
+    assert!(tree.contains("value=(hidden)"), "{tree}");
+    assert!(!tree.contains("private-secret"), "{tree}");
+    assert!(tree.contains(r#"button "Save""#), "{tree}");
+    assert_eq!(
+        said(r#"window.tsumugiAgent.fill("@e1", "typed")"#)["filled"],
+        "@e1"
+    );
+    assert_eq!(
+        value(&view, "document.getElementById('field').value"),
+        "typed"
+    );
+    assert!(
+        said(r#"window.tsumugiAgent.click("@e9")"#)["error"]
+            .as_str()
+            .unwrap()
+            .contains("stale")
+    );
+    let link = tree
+        .lines()
+        .find(|line| line.contains(r#"link "Next""#))
+        .and_then(|line| line.split("[ref=").nth(1))
+        .and_then(|rest| rest.split(']').next())
+        .unwrap()
+        .to_string();
+    said(&format!(r#"window.tsumugiAgent.click("{link}")"#));
+    loaded(&view, "/two");
+    drop(view);
+    // SAFETY: this test owns the GTK window and every child on this thread.
+    unsafe {
+        window.destroy();
+    }
+}

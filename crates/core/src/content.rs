@@ -615,6 +615,18 @@ impl ContentView {
         })
     }
 
+    /// The window of the tab shown that shows the page `page`, if there is
+    /// one: a page kept hidden or in a layout put away has none, and what it
+    /// asks of the workspace is not answered.
+    pub fn window_of_page(&self, page: tab::BrowserId) -> Option<WindowId> {
+        self.windows.current().and_then(|tab| {
+            tab.windows()
+                .iter()
+                .find(|w| matches!(w.shows, Tab::Browser { id, .. } if id == page))
+                .map(|w| w.id)
+        })
+    }
+
     /// The browser pages open in any window, as the tree lists them: those of
     /// the layout shown and of every worktree's layout put away, which a page
     /// stays open in until its window closes.

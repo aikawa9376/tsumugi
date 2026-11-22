@@ -441,6 +441,13 @@ pub enum Effect {
         no_images: bool,
         tab: Option<Tab>,
     },
+    /// A session's agent of `environment` gave a command to the browser pages
+    /// of its worktree, which the window renders; it answers the host with
+    /// `Ask::BrowserResult`.
+    Browser {
+        environment: EnvironmentId,
+        call: tsumugi_protocol::BrowserCall,
+    },
     /// Type this into the program of the session `tab` shows, attaching to
     /// it if need be.
     TypeInto { tab: Tab, typing: Vec<Typing> },

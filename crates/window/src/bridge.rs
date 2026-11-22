@@ -548,6 +548,15 @@ impl AppCtx {
     ) {
         self.link_of(environment).query_remote(stamp);
     }
+    /// The browser pages of the worktree of `environment` holding `dir`, which
+    /// an agent working there may act on.
+    pub(crate) fn reach(
+        &self,
+        environment: &EnvironmentId,
+        dir: &std::path::Path,
+    ) -> Result<tsumugi_core::agent_browser::Reach, String> {
+        tsumugi_core::agent_browser::reach(&self.view.read(), environment, dir)
+    }
     /// The port of this computer that reaches `port` of `environment`'s
     /// loopback: `port` itself where the environment is on this computer.
     pub(crate) fn forward_port(
@@ -1527,6 +1536,7 @@ impl AppCtx {
             | Effect::RestartDaemon(_)
             | Effect::BringBack { .. }
             | Effect::LetGo { .. }
+            | Effect::Browser { .. }
             | Effect::TypeInto { .. }) => self.hand(effect),
             Effect::Perform(action) => self.perform(action, None),
             Effect::PerformKey(action, key) => self.perform(action, Some(key)),

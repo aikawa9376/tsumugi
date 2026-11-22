@@ -28,7 +28,8 @@ impl Ask {
     pub fn mutates(&self) -> bool {
         !matches!(
             self,
-            Self::TerminalHost
+            Self::BrowserResult { .. }
+                | Self::TerminalHost
                 | Self::PathEntries { .. }
                 | Self::PastPreview { .. }
                 | Self::Drafts

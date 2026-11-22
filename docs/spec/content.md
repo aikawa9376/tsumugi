@@ -204,6 +204,30 @@ text and attachments are preserved. The user reviews the prompt and sends it
 as usual. Notes stay with the page when switching tabs until they are added to
 a prompt or removed; closing the page ends its unsent notes.
 
+### An agent's browser
+
+A session's agent can drive the pages of its own worktree's browser, the ones
+the user watches, through the `tsumugi` MCP server's browser tools and
+`tsumugi browser` ([sessions](opening-sessions.md#what-a-session-can-do)). It
+opens an address, reads the page as a tree whose controls carry references,
+clicks and fills by those references, takes a screenshot of the visible part,
+and lists the worktree's pages and chooses the one its commands act on. A page
+an agent opens is an ordinary page, listed, shown and closed like any other,
+and opens behind the tab shown. The user can use a page while an agent does.
+
+An agent reaches the pages of the worktree its session works in, in its own
+environment, and no other: it cannot name another worktree's page or another
+session's, and a session working outside every worktree has none to reach.
+Password fields are never read to an agent. The page's scripts cannot reach the
+workspace or the agent's tools; what a page shows an agent is the web's
+content.
+
+The pages render on the computer displaying Tsumugi, so a command needs a
+window of Tsumugi open for the environment: with none open, or when it closes
+before it answers, the command fails saying so. An address is held to the
+rules of the address field, a loopback one of a remote environment reaching
+the work machine through a forward.
+
 ## Terminals
 
 A terminal runs a shell, Neovim or any other program, apart from agent

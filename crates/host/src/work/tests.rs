@@ -1086,3 +1086,31 @@ fn the_configuration_read_reaches_every_window_once_whatever_it_shows() {
         vec![Change::Config(read("zoom = 1.5\n"))]
     );
 }
+
+#[tokio::test]
+async fn a_window_that_leaves_fails_the_browser_command_it_was_handed() {
+    let mut host = two_windows("a", "b");
+    let (relay, windows) = (host.browser(), host.windows());
+    assert_eq!(windows, [A, B]);
+    let asked = tokio::spawn(async move {
+        relay
+            .call(
+                &windows,
+                |_, _| {},
+                "/work".into(),
+                tsumugi_protocol::BrowserCommand::TabList,
+                std::time::Duration::from_secs(30),
+            )
+            .await
+    });
+    // The command waits on the oldest window; the other leaving changes
+    // nothing, and the oldest leaving ends the wait.
+    while host.browser().pending() == 0 {
+        tokio::task::yield_now().await;
+    }
+    host.leave(B);
+    assert!(!asked.is_finished());
+    host.leave(A);
+    let failed = asked.await.unwrap().unwrap_err();
+    assert!(failed.contains("window closed"), "{failed}");
+}

@@ -554,3 +554,24 @@ fn a_host_s_failure_is_named_after_its_environment_while_several_are_shown() {
         Some("There: cannot reach the work host")
     );
 }
+
+#[test]
+fn a_browser_command_from_a_host_is_handed_to_the_window_with_the_environment_it_came_from() {
+    use tsumugi_protocol::{BrowserCall, BrowserCommand};
+
+    let call = BrowserCall {
+        call: 5,
+        dir: "/r".into(),
+        command: BrowserCommand::TabList,
+    };
+    for environment in [here(), there()] {
+        let run = Scenario::new().event_from(environment.clone(), Event::Browser(call.clone()));
+        assert!(
+            run.last_effects().contains(&Effect::Browser {
+                environment: environment.clone(),
+                call: call.clone(),
+            }),
+            "{environment}"
+        );
+    }
+}

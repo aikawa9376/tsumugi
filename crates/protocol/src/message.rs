@@ -136,6 +136,10 @@ pub enum Event {
     },
     /// What came of the ask numbered `asked`, for the one that asked it.
     Answer { asked: u64, answer: Answer },
+    /// A session's agent asks for a command on the browser pages of its
+    /// worktree, which this window renders; it answers with
+    /// `Ask::BrowserResult`.
+    Browser(crate::BrowserCall),
 }
 
 /// What the host says of a request it carried out.

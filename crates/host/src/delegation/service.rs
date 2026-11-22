@@ -14,6 +14,7 @@ use tsumugi_term::Daemon;
 use super::{Code, Error, Result, protocol, store::Store};
 use crate::settings::Settings;
 
+mod browsing;
 mod commands;
 #[cfg(test)]
 mod fixtures;
@@ -37,6 +38,8 @@ pub struct Context {
     program: PathBuf,
     root: PathBuf,
     settings: SettingsSource,
+    /// The way to the windows, which render the browser pages agents drive.
+    watched: crate::watch::Watched,
 }
 
 impl Context {
@@ -83,6 +86,7 @@ impl Service {
         daemon: Daemon,
         program: PathBuf,
         settings: impl Fn() -> std::result::Result<Settings, String> + Send + Sync + 'static,
+        watched: crate::watch::Watched,
     ) -> Result<Self> {
         tsumugi_sys::fs::private_dir(root).map_err(Error::storage)?;
         let claim = tsumugi_sys::fs::lockable(root).map_err(Error::storage)?;
@@ -95,6 +99,7 @@ impl Service {
             program,
             root: root.to_path_buf(),
             settings: Arc::new(settings),
+            watched,
         };
         let socket = protocol::socket(root);
         tsumugi_term::own_dir(&socket).map_err(Error::storage)?;
