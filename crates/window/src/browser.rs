@@ -11,6 +11,9 @@ mod markup;
 #[cfg(all(test, target_os = "linux"))]
 mod native_tests;
 mod reach;
+mod reload;
+#[cfg(all(test, target_os = "linux"))]
+mod reload_native_tests;
 mod retention;
 mod reuse;
 mod viewport;
@@ -208,13 +211,17 @@ fn target(typed: &str, forward: impl FnOnce(u16) -> Result<u16, String>) -> Resu
 
 /// Load `page` again. A page that went through a forward goes through one
 /// made again, as the one it was loaded through went with the connection that
-/// made it; any other is reloaded as it is.
-fn reload_page(app: AppCtx, page: &Page, mut error: Signal<String>) {
+/// made it; any other is reloaded as it is, past the cache when `hard`.
+fn reload_page(app: AppCtx, page: &Page, mut error: Signal<String>, hard: bool) {
     let home = page.home.borrow().clone();
     let url = page.view.url().unwrap_or_default();
     let blank = url.is_empty() || url == "about:blank";
     let reach::Reload::Through(home) = reach::reload(&home, blank) else {
-        let _ = page.view.reload();
+        if hard {
+            reload::hard(&page.view);
+        } else {
+            let _ = page.view.reload();
+        }
         return;
     };
     match target(home, |port| app.forward_port(&page.environment, port)) {
@@ -843,7 +850,7 @@ pub(crate) fn BrowserWindow(
                         // connection: once it is back, load the page through one
                         // made again.
                         if was_away && !reached.is_away() {
-                            reload_page(app, &page, error);
+                            reload_page(app, &page, error, false);
                         }
                     }
                     if !app.held().is_empty()
@@ -969,7 +976,19 @@ pub(crate) fn BrowserWindow(
             div { id: "browser-toolbar-{window}", class: "browser-toolbar",
                 IconButton { icon: Icon::SquareArrowLeft, title: "Back", onclick: move |_| { let _ = back.view.evaluate_script("history.back()"); } }
                 IconButton { icon: Icon::SquareArrowRight, title: "Forward", onclick: move |_| { let _ = forward.view.evaluate_script("history.forward()"); } }
-                IconButton { icon: Icon::Refresh, title: "Reload", onclick: move |_| reload_page(app, &reload, error) }
+                IconButton {
+                    icon: Icon::Refresh,
+                    title: "Reload (Shift-click or right-click: past the cache)",
+                    onmousedown: {
+                        let page = reload.clone();
+                        move |e: MouseEvent| {
+                            if e.trigger_button() == Some(dioxus::html::input_data::MouseButton::Secondary) {
+                                reload_page(app, &page, error, true);
+                            }
+                        }
+                    },
+                    onclick: move |e: MouseEvent| reload_page(app, &reload, error, e.modifiers().shift()),
+                }
                 if let reach::Route::Through { host, connected } = route() {
                     span {
                         class: if connected { "browser-host" } else { "browser-host offline" },
@@ -1101,7 +1120,7 @@ pub(crate) fn BrowserWindow(
                         button { class: "button", r#type: "button",
                             onclick: move |_| {
                                 app.retry_remote(&retrying);
-                                reload_page(app, &retry, error);
+                                reload_page(app, &retry, error, false);
                             },
                             "Retry"
                         }

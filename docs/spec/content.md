@@ -138,7 +138,8 @@ worktree it was opened in, beside that worktree's sessions and terminals
 ([the tree](tree.md)). A page is shown, closed and told apart from the others
 as any row there is, and is named after the site it shows. Its address field
 opens web pages and local development servers; the toolbar goes back, forward
-and reloads. Links requesting a new window open in the same page.
+and reloads, and a Shift-click or right-click on reload does it past the cache,
+to see changed assets. Links requesting a new window open in the same page.
 
 Find in the page opens a bar under the toolbar that searches the page's text,
 without regard to case, and says how many matches there are and which is

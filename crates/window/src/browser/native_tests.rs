@@ -53,7 +53,7 @@ impl Drop for Site {
     }
 }
 
-fn pump() {
+pub(super) fn pump() {
     while gtk::events_pending() {
         gtk::main_iteration_do(false);
     }
