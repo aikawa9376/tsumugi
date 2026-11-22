@@ -210,17 +210,24 @@ A session's agent can drive the pages of its own worktree's browser, the ones
 the user watches, through the `tsumugi` MCP server's browser tools and
 `tsumugi browser` ([sessions](opening-sessions.md#what-a-session-can-do)). It
 opens an address, reads the page as a tree whose controls carry references,
-clicks and fills by those references, takes a screenshot of the visible part,
-and lists the worktree's pages and chooses the one its commands act on. A page
-an agent opens is an ordinary page, listed, shown and closed like any other,
-and opens behind the tab shown. The user can use a page while an agent does.
+clicks and fills by those references, waits for an element, text, address or
+load state, takes a screenshot of the visible part or of the whole page, exports
+it as a PDF, and lists the worktree's pages and chooses the one its commands act
+on. It reads the latest of what the page wrote to its console and which
+requests it made, since the page loaded or capture last started, and shows the
+page at the size of one of the browser's device sizes, as the user's size menu
+does. The pictures and the PDF work on a page the user is not looking at. A wait
+takes no script of the agent's own. A page an agent opens is an ordinary page,
+listed, shown and closed like any other, and opens behind the tab shown. The
+user can use a page while an agent does.
 
 An agent reaches the pages of the worktree its session works in, in its own
 environment, and no other: it cannot name another worktree's page or another
 session's, and a session working outside every worktree has none to reach.
 Password fields are never read to an agent. The page's scripts cannot reach the
-workspace or the agent's tools; what a page shows an agent is the web's
-content.
+workspace or the agent's tools; what a page shows an agent, its text and what it
+wrote to its console, is the web's content. The console and the requests are
+kept without bodies or headers, and only the latest entries are given.
 
 The pages render on the computer displaying Tsumugi, so a command needs a
 window of Tsumugi open for the environment: with none open, or when it closes

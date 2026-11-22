@@ -72,6 +72,55 @@ pub(super) fn preset(id: &str) -> Option<Preset> {
     PRESETS.iter().copied().find(|p| p.id == id)
 }
 
+/// What an agent's device name means: a preset, or the page's room again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Device {
+    Preset(Preset),
+    Responsive,
+}
+
+impl Device {
+    /// The id `choose` takes.
+    pub(super) fn id(self) -> &'static str {
+        match self {
+            Self::Preset(preset) => preset.id,
+            Self::Responsive => "responsive",
+        }
+    }
+}
+
+/// The device `name` names, by a preset's id (`mobile-m`) or by its name
+/// without its size (`Mobile M`), in any case; or `Responsive`.
+pub(super) fn device(name: &str) -> Result<Device, String> {
+    let wanted = name.trim().to_ascii_lowercase();
+    let same = |other: &str| {
+        let squash = |text: &str| {
+            text.to_ascii_lowercase()
+                .split(|c: char| c == '-' || c.is_whitespace())
+                .filter(|word| !word.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        squash(other) == squash(&wanted)
+    };
+    if same("responsive") {
+        return Ok(Device::Responsive);
+    }
+    PRESETS
+        .iter()
+        .find(|preset| same(preset.id) || same(preset.label.split(" — ").next().unwrap_or("")))
+        .map(|preset| Device::Preset(*preset))
+        .ok_or_else(|| {
+            let names = PRESETS
+                .iter()
+                .map(|preset| preset.label.split(" — ").next().unwrap_or(preset.id))
+                .chain(["Responsive"])
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("There is no device {name:?}: the sizes are {names}")
+        })
+}
+
 /// The id of the preset the page `page` is shown at, or none for its room.
 pub(super) fn chosen(page: BrowserId) -> Option<&'static str> {
     CHOSEN.with(|chosen| chosen.borrow().get(&page).copied())
@@ -149,6 +198,29 @@ mod tests {
         choose(one, "responsive");
         assert_eq!(chosen(one), None);
         assert_eq!(chosen(two), Some("laptop"));
+    }
+
+    #[test]
+    fn a_device_is_named_by_a_presets_id_or_its_name_in_any_case_or_is_responsive() {
+        for name in ["mobile-m", "Mobile M", "  mobile m ", "MOBILE-M"] {
+            assert_eq!(device(name).map(Device::id), Ok("mobile-m"), "{name:?}");
+        }
+        assert_eq!(device("Laptop L").map(Device::id), Ok("laptop-l"));
+        assert_eq!(device("laptop").map(Device::id), Ok("laptop"));
+        assert_eq!(device("Tablet").map(Device::id), Ok("tablet"));
+        assert_eq!(device("Responsive"), Ok(Device::Responsive));
+        assert_eq!(Device::Responsive.id(), "responsive");
+    }
+
+    #[test]
+    fn an_unknown_device_is_refused_with_the_names_there_are() {
+        let failed = device("iPhone 12").unwrap_err();
+        assert!(failed.contains("iPhone 12"), "{failed}");
+        for preset in ["Mobile S", "Tablet", "Desktop", "Responsive"] {
+            assert!(failed.contains(preset), "{failed}");
+        }
+        assert!(device("").is_err());
+        assert!(device("mobile").is_err());
     }
 
     #[test]

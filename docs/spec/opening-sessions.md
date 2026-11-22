@@ -132,13 +132,17 @@ cannot act as another.
   (`--worktree <dir>` or `--all`), which lists the worktree of the directory
   it runs in.
 - **`browser_goto`**, **`browser_snapshot`**, **`browser_click`**,
-  **`browser_fill`**, **`browser_screenshot`**, **`browser_tab_list`**,
-  **`browser_tab_create`** and **`browser_tab_switch`** drive the browser pages
-  of the caller's own worktree ([an agent's
+  **`browser_fill`**, **`browser_wait`**, **`browser_screenshot`**,
+  **`browser_full_screenshot`**, **`browser_pdf`**, **`browser_tab_list`**,
+  **`browser_tab_create`**, **`browser_tab_switch`**, **`browser_console`**,
+  **`browser_network`**, **`browser_capture_start`**,
+  **`browser_capture_stop`** and **`browser_set_device`** drive the browser
+  pages of the caller's own worktree ([an agent's
   browser](content.md#an-agents-browser)); `tsumugi browser goto`, `snapshot`,
-  `click`, `fill`, `screenshot` and `tab list|create|switch` do the same from a
-  terminal inside the session, and are refused anywhere else. A screenshot is
-  saved on the work machine and its path returned.
+  `click`, `fill`, `wait`, `screenshot`, `full-screenshot`, `pdf`, `console`,
+  `network`, `capture start|stop`, `set device` and `tab list|create|switch` do
+  the same from a terminal inside the session, and are refused anywhere else.
+  A screenshot or a PDF is saved on the work machine and its path returned.
 - **`models`** lists, for each profile a session can start from, its agent,
   the folder of its own its login is kept in, if any, and the models its
   provider reports there, and

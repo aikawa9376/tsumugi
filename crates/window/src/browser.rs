@@ -673,6 +673,11 @@ pub(crate) fn BrowserWindow(
                         FOCUSED.set(false);
                         let _ = dioxus::desktop::window().webview.focus();
                     }
+                    // An agent can choose the size of the page too.
+                    let chosen = viewport::chosen(id).unwrap_or("responsive");
+                    if *size.peek() != chosen {
+                        size.set(chosen);
+                    }
                     if find::take(window) {
                         searching.open.set(true);
                         searching.asked += 1;

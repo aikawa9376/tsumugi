@@ -34,6 +34,8 @@ ttf-parser = "0.25.1"
 # GTK 0.19 uses a different GLib ABI crate; match Tao/Wry's GTK types.
 gtk = "0.18.2"
 libc.workspace = true
+# The file a page is printed to.
+tempfile.workspace = true
 wuff = "0.2.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]

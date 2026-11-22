@@ -471,3 +471,192 @@ fn an_agent_reads_a_page_by_references_and_acts_on_them_without_reading_a_passwo
         window.destroy();
     }
 }
+
+/// Run `future` while the GTK main loop goes on, as the window's own does.
+fn block<T>(future: impl std::future::Future<Output = T>) -> T {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let mut future = Box::pin(future);
+        loop {
+            match tokio::time::timeout(Duration::from_millis(5), &mut future).await {
+                Ok(out) => return out,
+                Err(_) => pump(),
+            }
+        }
+    })
+}
+
+#[test]
+#[ignore = "requires a GTK display and WebKitGTK"]
+fn an_agent_waits_for_a_page_reads_what_it_logged_and_photographs_it_though_it_is_not_shown() {
+    gtk::init().unwrap();
+    let site = Site::start();
+    let window = gtk::Window::new(gtk::WindowType::Toplevel);
+    window.set_default_size(800, 500);
+    let host = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    window.add(&host);
+    let ready = Rc::new(Cell::new(false));
+    let loaded_once = ready.clone();
+    let view = WebViewBuilder::new()
+        .with_url(format!("{}/one", site.url))
+        .with_initialization_script(include_str!("../../assets/js/browser-agent.js"))
+        .with_on_page_load_handler(move |event, _| {
+            if matches!(event, dioxus::desktop::wry::PageLoadEvent::Finished) {
+                loaded_once.set(true);
+            }
+        })
+        .build_gtk(&host)
+        .unwrap();
+    window.show_all();
+    let start = Instant::now();
+    while !ready.get() {
+        pump();
+        assert!(start.elapsed() < Duration::from_secs(15), "no load");
+    }
+    let said = |js: &str| -> serde_json::Value {
+        let text = value(&view, js);
+        serde_json::from_str(text.as_str().unwrap()).unwrap()
+    };
+
+    // What the page logs is kept, in order, with its level.
+    value(
+        &view,
+        "console.log('hello', {a: 1}); console.warn('careful'); console.error(new Error('boom').message); 1",
+    );
+    let logged = said("window.tsumugiAgent.console(10)");
+    let entries = logged["entries"].as_array().unwrap();
+    assert_eq!(logged["total"], 3);
+    assert_eq!(
+        entries[0],
+        serde_json::json!({"level": "log", "text": "hello {\"a\":1}"})
+    );
+    assert_eq!(entries[1]["level"], "warning");
+    assert_eq!(entries[2]["text"], "boom");
+    // Only the latest entries are given.
+    assert_eq!(
+        said("window.tsumugiAgent.console(1)")["entries"][0]["text"],
+        "boom"
+    );
+    assert_eq!(said("window.tsumugiAgent.console(1)")["total"], 3);
+
+    // The page's requests are kept with their status and kind, and no body.
+    value(
+        &view,
+        "fetch('/two').then(() => { window.fetched = true; }); 1",
+    );
+    let start = Instant::now();
+    while value(&view, "window.fetched === true") != true {
+        pump();
+        assert!(start.elapsed() < Duration::from_secs(15), "no fetch");
+    }
+    let requests = said("window.tsumugiAgent.network(50)");
+    let entries = requests["entries"].as_array().unwrap();
+    let document = &entries[0];
+    assert_eq!(document["method"], "GET");
+    assert!(
+        document["url"].as_str().unwrap().ends_with("/one"),
+        "{document}"
+    );
+    let fetched = entries
+        .iter()
+        .find(|entry| entry["url"].as_str().unwrap().ends_with("/two"))
+        .unwrap_or_else(|| panic!("no /two in {requests}"));
+    assert_eq!(fetched["status"], 200);
+    assert_eq!(fetched["mimeType"], "text/html");
+
+    // A stopped capture keeps what it has; a started one begins afresh.
+    assert_eq!(
+        said("window.tsumugiAgent.capture(false)")["capturing"],
+        false
+    );
+    value(&view, "console.log('after stop'); 1");
+    assert_eq!(said("window.tsumugiAgent.console(10)")["total"], 3);
+    assert_eq!(said("window.tsumugiAgent.capture(true)")["capturing"], true);
+    assert_eq!(said("window.tsumugiAgent.console(10)")["total"], 0);
+
+    // A wait looks at what the page shows, and never at what a field holds.
+    let check = |wanted: serde_json::Value| {
+        said(&format!("window.tsumugiAgent.check({wanted})"))["met"].clone()
+    };
+    assert_eq!(check(serde_json::json!({"text": "BROWSER_FIXTURE"})), true);
+    assert_eq!(check(serde_json::json!({"text": "private-secret"})), false);
+    assert_eq!(check(serde_json::json!({"text": "Save"})), true);
+    assert_eq!(check(serde_json::json!({"selector": "#save"})), true);
+    assert_eq!(
+        check(serde_json::json!({"selector": "#save", "state": "hidden"})),
+        false
+    );
+    assert_eq!(check(serde_json::json!({"selector": "#absent"})), false);
+    assert_eq!(
+        check(serde_json::json!({"selector": "#absent", "state": "hidden"})),
+        true
+    );
+    assert_eq!(check(serde_json::json!({"load": "load"})), true);
+    assert_eq!(check(serde_json::json!({"load": "domcontentloaded"})), true);
+    assert!(said("window.tsumugiAgent.check({selector: '!!'})")["error"].is_string());
+    // A page that has made no request for half a second is idle.
+    let start = Instant::now();
+    while check(serde_json::json!({"load": "networkidle"})) != true {
+        pump();
+        assert!(start.elapsed() < Duration::from_secs(15), "never idle");
+    }
+
+    // The whole page is taller than the part in view.
+    value(&view, "document.body.style.height = '3000px'; 1");
+    let size = said("window.tsumugiAgent.size()");
+    assert!(size["height"].as_f64().unwrap() >= 3000.0, "{size}");
+    let url = view.url().unwrap();
+    let shown = block(capture::page(&view, &url)).unwrap().0;
+    let whole = block(capture::whole(
+        &view,
+        &url,
+        [
+            size["width"].as_f64().unwrap(),
+            size["height"].as_f64().unwrap(),
+        ],
+    ))
+    .unwrap();
+    assert!(
+        whole.height() > shown.height() * 2,
+        "{} {}",
+        whole.height(),
+        shown.height()
+    );
+    let jpeg = capture::encode_as(&whole, tsumugi_protocol::ImageFormat::Jpeg).unwrap();
+    assert_eq!(&jpeg[..2], &[0xFF, 0xD8]);
+
+    // The page is a PDF.
+    let pdf = block(capture::pdf(&view)).unwrap();
+    assert_eq!(&pdf[..5], b"%PDF-", "{:?}", &pdf[..pdf.len().min(16)]);
+
+    // A page that is not shown can still be photographed and exported.
+    let _ = view.set_visible(false);
+    host.hide();
+    pump();
+    let hidden = block(capture::page(&view, &url));
+    let hidden_whole = block(capture::whole(&view, &url, [800.0, 3000.0]));
+    let hidden_pdf = block(capture::pdf(&view));
+    assert!(hidden.is_ok(), "hidden screenshot: {:?}", hidden.err());
+    assert!(
+        hidden_whole.is_ok(),
+        "hidden full: {:?}",
+        hidden_whole.err()
+    );
+    assert!(hidden_pdf.is_ok(), "hidden pdf: {:?}", hidden_pdf.err());
+    let hidden = hidden.unwrap().0;
+    assert!(
+        hidden
+            .to_rgba8()
+            .pixels()
+            .any(|p| p.0 != [0, 0, 0, 0] && p.0 != hidden.to_rgba8().get_pixel(0, 0).0),
+        "the hidden page's picture is blank"
+    );
+    drop(view);
+    // SAFETY: this test owns the GTK window and every child on this thread.
+    unsafe {
+        window.destroy();
+    }
+}
