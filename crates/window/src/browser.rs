@@ -3,7 +3,9 @@
 mod annotations;
 mod capture;
 mod card;
+mod closed;
 mod feedback;
+mod find;
 mod markup;
 #[cfg(all(test, target_os = "linux"))]
 mod native_tests;
@@ -19,6 +21,7 @@ use dioxus::core::{Runtime, RuntimeGuard};
 use dioxus::desktop::wry::{WebContext, WebView, WebViewBuilder};
 use dioxus::prelude::*;
 use sha2::{Digest, Sha256};
+use tsumugi_core::actions::Action;
 use tsumugi_core::content::{BrowserId, Tab, WindowId};
 use tsumugi_core::msg::Msg;
 use tsumugi_model::EnvironmentId;
@@ -49,6 +52,10 @@ fn take_screenshot(window: WindowId) -> bool {
         asked
     })
 }
+
+pub(crate) use closed::{open_at, reopen};
+/// The page of the window `window` is asked to open its search bar.
+pub(crate) use find::ask as ask_find;
 
 /// The page `id` goes to `url` once its view is made.
 pub(crate) fn start_at(id: BrowserId, url: String) {
@@ -328,6 +335,7 @@ impl Pool {
             })
             .with_initialization_script(include_str!("../assets/js/browser.js"))
             .with_initialization_script(include_str!("../assets/js/browser-annotate.js"))
+            .with_initialization_script(find::SCRIPT)
             .with_on_page_load_handler(move |event, _| {
                 // The picking goes on across pages; what was picked on the
                 // last one has gone with it.
@@ -346,6 +354,19 @@ impl Pool {
                         FOCUSED.set(true);
                         app.dispatch(Msg::WindowFocus(id));
                         app.dispatch(Msg::Focus(tsumugi_core::content::Area::Console));
+                    }
+                    "find" | "reopen" if !shown => {}
+                    "find" | "reopen" => {
+                        FOCUSED.set(false);
+                        let _ = return_to.webview.focus();
+                        app.perform(
+                            if request.body() == "find" {
+                                Action::BrowserFind
+                            } else {
+                                Action::BrowserReopen
+                            },
+                            None,
+                        );
                     }
                     "blur" => FOCUSED.set(false),
                     "workspace" => {
@@ -428,18 +449,20 @@ pub(crate) fn use_browsers(app: AppCtx) {
                 // A page stays open with its worktree's layout put away, and is
                 // told apart by its own identity: layouts number their windows
                 // each from 1.
-                let ids: Vec<BrowserId> = app
-                    .content
-                    .peek()
-                    .pages()
-                    .into_iter()
-                    .map(|(_, page)| page.id)
-                    .collect();
-                browsers
-                    .0
-                    .borrow_mut()
+                let listed = app.content.peek().pages();
+                closed::track(&listed);
+                let mut pool = browsers.0.borrow_mut();
+                let gone: Vec<BrowserId> = pool
                     .pages
-                    .retain(|id, _| ids.contains(id));
+                    .keys()
+                    .filter(|id| !listed.iter().any(|(_, page)| page.id == **id))
+                    .copied()
+                    .collect();
+                for id in gone {
+                    if let Some(page) = pool.pages.remove(&id) {
+                        closed::closing(app, id, &page.view);
+                    }
+                }
             }
         })
     });
@@ -498,6 +521,7 @@ pub(crate) fn BrowserWindow(
             .borrow_mut()
             .page(id, window, &page_environment, app)
     });
+    let mut searching = find::use_find();
     let mut typed = use_signal(String::new);
     let mut current = use_signal(String::new);
     let mut error = use_signal(String::new);
@@ -635,6 +659,10 @@ pub(crate) fn BrowserWindow(
                         }
                         FOCUSED.set(false);
                         let _ = dioxus::desktop::window().webview.focus();
+                    }
+                    if find::take(window) {
+                        searching.open.set(true);
+                        searching.asked += 1;
                     }
                     if take_screenshot(window) {
                         let (page, environment, worktree) = (
@@ -845,6 +873,9 @@ pub(crate) fn BrowserWindow(
                         "Cancel"
                     }
                 }
+            }
+            if searching.open.read().clone() {
+                find::Bar { window, page: find::Searched(page.clone()), find: searching }
             }
             if !error().is_empty() { div { class: "browser-error", "{error}" } }
             if !sending.error.read().is_empty() && drawing().is_some() { div { class: "browser-error", "{sending.error}" } }

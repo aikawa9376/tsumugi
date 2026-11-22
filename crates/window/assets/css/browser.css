@@ -12,6 +12,13 @@
 .browser-tools .tool:hover { background:var(--line-strong); color:var(--text); }
 .browser-tools .tool.active { background:#3989ff; color:#fff; }
 
+/* The bar that searches the page, under the toolbar. */
+.browser-find { display:flex; align-items:center; gap:6px; padding:4px 8px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--raised); }
+.browser-find .find-field { flex:1; min-width:60px; max-width:24rem; padding:4px 8px; border:1px solid var(--line); border-radius:5px; background:var(--ground); color:var(--text); font:inherit; }
+.browser-find .find-status { min-width:5rem; color:var(--text-3); font-size:var(--ui-font-small); white-space:nowrap; }
+.browser-find .find-step { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border:0; border-radius:5px; background:transparent; color:var(--text-2); cursor:default; }
+.browser-find .find-step:hover { background:var(--line-strong); color:var(--text); }
+
 /* What the picker says while it is on. */
 .browser-banner { display:flex; align-items:center; gap:8px; padding:5px 12px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--raised); color:var(--text-2); font-size:var(--ui-font-small); }
 .browser-banner .banner-text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

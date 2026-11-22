@@ -826,6 +826,10 @@ pub(crate) fn perform(
         Action::ZoomIn => step(state, Msg::Zoom(zoom::Step::In)),
         Action::ZoomOut => step(state, Msg::Zoom(zoom::Step::Out)),
         Action::ZoomReset => step(state, Msg::Zoom(zoom::Step::Reset)),
+        Action::BrowserFind => crate::browser::find(state),
+        Action::BrowserReopen => crate::browser::reopen(state),
+        // A browser page has no list to filter; the key searches the page.
+        Action::Filter if crate::browser::has_the_keys(state) => crate::browser::find(state),
         Action::Filter => {
             let mut effects = step(state, Msg::Focus(Area::Sidebar));
             let message = if state.sidebar.panel == crate::sidebar::Panel::Agents {

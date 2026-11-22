@@ -1352,17 +1352,12 @@ impl AppCtx {
                 worktree,
                 url,
                 how,
-            } => {
-                let thing = Tab::browser(environment.clone(), worktree.clone());
-                if let Tab::Browser { id, .. } = &thing {
-                    crate::browser::start_at(*id, url);
-                }
-                self.dispatch(Msg::Show {
-                    thing,
-                    place: Some(tsumugi_core::tree::Place::at(&environment, worktree)),
-                    how: Some(how),
-                });
-            }
+            } => crate::browser::open_at(*self, environment, worktree, url, how),
+            Effect::FindInPage(window) => crate::browser::ask_find(window),
+            Effect::ReopenPage {
+                environment,
+                worktree,
+            } => crate::browser::reopen(*self, environment, worktree),
             Effect::KeepResource {
                 environment,
                 dir,
@@ -1562,7 +1557,7 @@ impl AppCtx {
 }
 
 impl AppCtx {
-    fn perform(&self, action: Action, key: Option<Key>) {
+    pub(crate) fn perform(&self, action: Action, key: Option<Key>) {
         let performer = self.performer.read().clone();
         if let Some(perform) = performer {
             perform(action, key);

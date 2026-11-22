@@ -140,6 +140,16 @@ as any row there is, and is named after the site it shows. Its address field
 opens web pages and local development servers; the toolbar goes back, forward
 and reloads. Links requesting a new window open in the same page.
 
+Find in the page opens a bar under the toolbar that searches the page's text,
+without regard to case, and says how many matches there are and which is
+shown. Enter shows the next match, Shift+Enter the previous, and Escape closes
+the bar and lets go of the match. Reopen the closed page opens again the page
+closed last in the worktree the keys are in, at the address it was closed at;
+it says so when there is none. A page closed before it showed anything is not
+kept, and closed pages are not kept across application runs. With the keys in
+the page, Ctrl+F (Cmd+F) searches it and Ctrl+Shift+T (Cmd+Shift+T) reopens,
+as in a browser.
+
 Switching tabs or worktrees keeps the page and its unfinished input, and the
 tree keeps listing a worktree's pages while another is shown. Closing a page ends
 it; pages are not restored across application runs. Website data belongs to

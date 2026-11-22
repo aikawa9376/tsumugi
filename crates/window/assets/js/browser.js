@@ -14,5 +14,15 @@
       event.preventDefault();
       tell('address');
     }
+    // As in a browser, the page's own keys for searching it and for
+    // bringing back the page closed last are the workspace's.
+    if (event.isTrusted && (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      tell('find');
+    }
+    if (event.isTrusted && (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 't') {
+      event.preventDefault();
+      tell('reopen');
+    }
   }, true);
 })();

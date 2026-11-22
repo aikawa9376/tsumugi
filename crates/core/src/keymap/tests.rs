@@ -49,6 +49,7 @@ fn the_window_s_own_mod_keys_are_global_bindings() {
         ("Mod+w", Action::TabClose),
         ("Mod+p", Action::SessionPick),
         ("Mod+t", Action::SessionNew),
+        ("Mod+Alt+t", Action::BrowserReopen),
         ("Mod+n", Action::WindowOpen),
         ("Mod+o", Action::SessionResume),
         ("Mod+j", Action::WaitingNext),

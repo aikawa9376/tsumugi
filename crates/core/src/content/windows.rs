@@ -319,7 +319,11 @@ pub(crate) fn draft_written(
 
 /// The worktree a page opened now for `environment` hangs under: the one
 /// the keys are in, else the first the environment lists.
-fn browser_worktree(state: &ViewState, environment: &EnvironmentId, on_list: bool) -> PathBuf {
+pub(crate) fn browser_worktree(
+    state: &ViewState,
+    environment: &EnvironmentId,
+    on_list: bool,
+) -> PathBuf {
     let tree = tree::listed(state.hosts.work(environment));
     let here = match state.content.active() {
         Some(Tab::Browser { worktree, .. }) if !on_list => Some(worktree.clone()),
