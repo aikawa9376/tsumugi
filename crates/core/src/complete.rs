@@ -62,6 +62,7 @@ pub fn commands_dir(tree: &Tree, tab: Option<&Tab>, place: Option<&Place>) -> Op
             | Tab::Viewer(_, _)
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }
+            | Tab::CheckLog { .. }
             | Tab::Diff { .. }
             | Tab::Browser { .. },
         ) => None,

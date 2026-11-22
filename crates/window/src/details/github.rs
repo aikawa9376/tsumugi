@@ -352,7 +352,8 @@ pub(crate) fn GitHubChecks(
     listing: Listing,
     number: u64,
 ) -> Element {
-    let read = use_thread(environment, root, listing, number);
+    let app = use_context::<AppCtx>();
+    let read = use_thread(environment.clone(), root.clone(), listing, number);
     rsx! {
         match &*read.read() {
             None => rsx! { div { class: "details-block timeline-empty", "Reading…" } },
@@ -364,9 +365,26 @@ pub(crate) fn GitHubChecks(
                         ListRow { key: "{i}-{check.name}",
                             kind: "details-link",
                             title: "{check.said}",
-                            onclick: move |_| {
-                                if !check.link.is_empty() {
-                                    crate::bridge::open([check.link.clone()]);
+                            onclick: {
+                                let (environment, root) = (environment.clone(), root.clone());
+                                let check = check.clone();
+                                move |_| {
+                                    // A check that failed or still runs is read in
+                                    // its log; any other opens where it tells more.
+                                    if let Some(thing) = tsumugi_core::content::Tab::check_log(
+                                        environment.clone(),
+                                        root.clone(),
+                                        number,
+                                        &check,
+                                    ) {
+                                        app.dispatch(tsumugi_core::msg::Msg::Show {
+                                            thing,
+                                            place: None,
+                                            how: None,
+                                        });
+                                    } else if !check.link.is_empty() {
+                                        crate::bridge::open([check.link.clone()]);
+                                    }
                                 }
                             },
                             {

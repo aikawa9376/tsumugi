@@ -1,5 +1,6 @@
 //! What a window shows, by the kind of thing it shows.
 
+mod check_log;
 mod conversation;
 mod diff;
 mod draft;
@@ -9,6 +10,7 @@ mod session;
 mod terminal;
 mod viewer;
 
+pub(crate) use check_log::*;
 pub(crate) use conversation::*;
 pub(crate) use diff::*;
 pub(crate) use draft::*;

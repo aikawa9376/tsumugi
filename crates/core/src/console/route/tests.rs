@@ -207,6 +207,33 @@ fn a_pull_request_or_an_issue_has_keys_of_its_own_before_the_viewer_s() {
 }
 
 #[test]
+fn a_check_s_log_runs_its_failed_jobs_again_with_r_and_is_read_with_the_viewer_s_keys() {
+    use crate::actions::Action;
+    use crate::keymap::{Keymap, Step};
+    use tsumugi_model::Key;
+    let tab = Tab::CheckLog {
+        environment: here(),
+        repository: "/r".into(),
+        number: 7,
+        job: std::sync::Arc::new(crate::content::CheckJob {
+            id: 42,
+            run: Some(9),
+            name: "test".into(),
+        }),
+    };
+    let contexts = help_contexts(Area::Console, Some(&tab));
+    assert_eq!(
+        contexts,
+        vec![Context::Check, Context::Viewer, Context::Global]
+    );
+    let map = Keymap::defaults();
+    let press = |key: &str| map.resolve(&contexts, &[], &Key::new(key));
+    assert_eq!(press("r"), Step::Run(Action::CheckRerun));
+    assert_eq!(press("j"), Step::Run(Action::ScrollDown));
+    assert_eq!(press("G"), Step::Run(Action::ScrollBottom));
+}
+
+#[test]
 fn the_footer_names_what_the_keys_do_where_they_are() {
     let session = Tab::Session(here(), "s".into());
     let shell = Tab::Terminal(here(), 1);

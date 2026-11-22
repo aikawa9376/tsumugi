@@ -198,6 +198,7 @@ changes them ([keys](../keys.md)).
 | `github.auto_merge` |  | in a pull request's tab, have GitHub merge it once what it waits on is met, or stop it where that is on, after asking; offered only while something holds the merge back | `github`: `m a` |
 | `github.close` |  | in a pull request's tab, close it, or open it again where it is closed, after asking | `github`: `m c` |
 | `github.ready` |  | in a pull request's tab, mark a draft ready for review, or make an open one a draft, after asking | `github`: `m d` |
+| `check.rerun` |  | in a check's log, run the failed jobs of its Actions run again, after asking; a check whose address does not name its Actions run is said instead of asked ([tree](../tree.md#reading-a-checks-log)) | `check`: `r` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -570,6 +571,9 @@ changes them ([keys](../keys.md)).
 "m a" = "github.auto_merge"
 "m c" = "github.close"
 "m d" = "github.ready"
+
+[check]
+"r" = "check.rerun"
 
 [lightbox]
 "l" = "lightbox.next"

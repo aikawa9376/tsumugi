@@ -273,6 +273,12 @@ pub enum Ask {
         number: u64,
         checks: bool,
     },
+    /// Read the log of the Actions job `job` of the repository at
+    /// `repository`, as far as it can be read. Reads only.
+    GitHubCheckLog {
+        repository: PathBuf,
+        job: u64,
+    },
     /// Write `write` on the pull request or the issue `number` of the
     /// repository at `repository`, as the login `gh` uses there.
     GitHubWrite {
@@ -508,6 +514,10 @@ pub enum Answer {
     /// What a request to fix a pull request needs, read afresh.
     FixContext {
         context: tsumugi_model::github::FixContext,
+    },
+    /// A check's job log, as far as it could be read.
+    CheckLog {
+        log: tsumugi_model::github::CheckLog,
     },
     /// The image asked for, or none when it cannot be read or shown.
     Picture {

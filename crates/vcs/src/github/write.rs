@@ -98,6 +98,9 @@ fn done(listing: Listing, number: u64, write: &Write) -> String {
         Write::Close { closed: false } => format!("Reopened {what} #{number}"),
         Write::Draft { draft: true } => format!("Made {what} #{number} a draft"),
         Write::Draft { draft: false } => format!("Marked {what} #{number} ready for review"),
+        Write::Rerun { run } => {
+            format!("Re-ran the failed jobs of run {run} on {what} #{number}")
+        }
     }
 }
 
@@ -241,6 +244,20 @@ fn args(slug: &str, listing: Listing, number: u64, write: &Write) -> Result<Vec<
                 return Err("Only a pull request is merged, closed or made ready".into());
             }
             pull_command(slug, number, write)
+        }
+        Write::Rerun { run } => {
+            if listing != Listing::Pulls {
+                return Err("Only a pull request has checks to run again".into());
+            }
+            // `--failed` runs again the jobs that failed and those that
+            // needed them, not the ones that passed.
+            vec![
+                "run".into(),
+                "rerun".into(),
+                run.to_string(),
+                "--failed".into(),
+                format!("--repo={slug}"),
+            ]
         }
     })
 }
@@ -550,6 +567,22 @@ mod tests {
         assert_eq!(
             one(Write::Draft { draft: true }),
             ["pr", "ready", "7", "--undo", "--repo=o/r"]
+        );
+    }
+
+    #[test]
+    fn a_run_is_run_again_for_its_failed_jobs_only() {
+        assert_eq!(
+            pulls(&Write::Rerun { run: 123 }).unwrap(),
+            ["run", "rerun", "123", "--failed", "--repo=o/r"]
+        );
+        assert_eq!(
+            done(Listing::Pulls, 7, &Write::Rerun { run: 123 }),
+            "Re-ran the failed jobs of run 123 on pull request #7"
+        );
+        assert!(
+            args("o/r", Listing::Issues, 7, &Write::Rerun { run: 1 }).is_err(),
+            "only a pull request has checks"
         );
     }
 

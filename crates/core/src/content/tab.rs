@@ -67,6 +67,15 @@ pub enum Tab {
         listing: tsumugi_model::github::Listing,
         number: u64,
     },
+    /// The log of the Actions job `job` that is the check `name` of the pull
+    /// request `number` in the repository at `repository`, which `run` ran in
+    /// where its address said so, read from GitHub.
+    CheckLog {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        number: u64,
+        job: std::sync::Arc<CheckJob>,
+    },
     /// An image `session`'s console drew, `width` by `height` pixels, shown
     /// in the image viewer from the copy the window keeps by `id`.
     Drawn {
@@ -76,6 +85,17 @@ pub enum Tab {
         width: u32,
         height: u32,
     },
+}
+
+/// The Actions job of a check whose log a window shows.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckJob {
+    /// The job's id, which its log is read by.
+    pub id: u64,
+    /// The run that ran it, where the check's address said so.
+    pub run: Option<u64>,
+    /// The check's name.
+    pub name: String,
 }
 
 /// Whether the prompt is shown under the console of a window showing `tab`, or
@@ -90,6 +110,7 @@ pub fn shows_prompt(tab: Option<&Tab>) -> bool {
                 | Tab::Browser { .. }
                 | Tab::Viewer(..)
                 | Tab::Drawn { .. }
+                | Tab::CheckLog { .. }
                 | Tab::Diff { .. }
         )
     )
@@ -130,6 +151,32 @@ impl Tab {
         }
     }
 
+    /// The tab that shows the log of `check`, a check of the pull request
+    /// `number` in the repository at `repository`: none for one that passed
+    /// or was skipped, which has no failure to read, and for one that is not
+    /// an Actions job, whose log `gh` cannot read.
+    pub fn check_log(
+        environment: EnvironmentId,
+        repository: PathBuf,
+        number: u64,
+        check: &tsumugi_model::github::Check,
+    ) -> Option<Self> {
+        use tsumugi_model::github::Outcome;
+        if !matches!(check.outcome, Outcome::Failed | Outcome::Pending) {
+            return None;
+        }
+        Some(Self::CheckLog {
+            environment,
+            repository,
+            number,
+            job: std::sync::Arc::new(CheckJob {
+                id: check.job()?,
+                run: check.run(),
+                name: check.name.clone(),
+            }),
+        })
+    }
+
     pub fn environment(&self) -> &EnvironmentId {
         match self {
             Tab::Session(environment, _)
@@ -139,6 +186,7 @@ impl Tab {
             | Tab::Draft { environment, .. }
             | Tab::Drawn { environment, .. }
             | Tab::GitHub { environment, .. }
+            | Tab::CheckLog { environment, .. }
             | Tab::Diff { environment, .. } => environment,
         }
     }
@@ -417,6 +465,7 @@ pub fn kept_name(tab: &Tab) -> Option<String> {
         | Tab::Viewer(..)
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
+        | Tab::CheckLog { .. }
         | Tab::Diff { .. } => {
             return None;
         }
@@ -495,6 +544,41 @@ mod tests {
             DraftOptions::for_new_draft(&mut next),
             DraftOptions::default()
         );
+    }
+
+    #[test]
+    fn a_failed_or_running_actions_check_opens_its_log_and_any_other_check_opens_its_page() {
+        use tsumugi_model::github::{Check, Outcome};
+        let check = |outcome, by: &str, link: &str| Check {
+            name: "test".into(),
+            by: by.into(),
+            outcome,
+            link: link.into(),
+            said: String::new(),
+        };
+        let job = "https://github.com/o/r/actions/runs/9/job/42";
+        let log = |c: &Check| Tab::check_log(here(), "/r".into(), 7, c);
+        assert_eq!(
+            log(&check(Outcome::Failed, "GitHub Actions", job)),
+            Some(Tab::CheckLog {
+                environment: here(),
+                repository: "/r".into(),
+                number: 7,
+                job: std::sync::Arc::new(CheckJob {
+                    id: 42,
+                    run: Some(9),
+                    name: "test".into(),
+                }),
+            })
+        );
+        assert!(log(&check(Outcome::Pending, "GitHub Actions", job)).is_some());
+        assert_eq!(log(&check(Outcome::Passed, "GitHub Actions", job)), None);
+        assert_eq!(log(&check(Outcome::Skipped, "GitHub Actions", job)), None);
+        assert_eq!(
+            log(&check(Outcome::Failed, "Buildkite", "https://x/runs/3")),
+            None
+        );
+        assert_eq!(log(&check(Outcome::Failed, "", job)), None);
     }
 
     #[test]

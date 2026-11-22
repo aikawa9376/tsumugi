@@ -655,7 +655,7 @@ pub fn place_of_tab(tree: &Tree, terminals: &[TerminalSession], tab: &Tab) -> Op
                 .map(|w| at(w))
         }
         Tab::Drawn { session, .. } => nav::find(tree, session).map(|(p, _)| at(p)),
-        Tab::GitHub { repository, .. } => Some(at(repository)),
+        Tab::GitHub { repository, .. } | Tab::CheckLog { repository, .. } => Some(at(repository)),
         Tab::Diff { worktree, .. } => Some(at(worktree)),
     }
 }
@@ -703,6 +703,7 @@ pub fn crumbs(showing: &Showing, work: Option<&WorkSnapshot>) -> Option<Crumbs> 
         Tab::GitHub { number, .. } => {
             github_title(work, tab).unwrap_or_else(|| format!("#{number}"))
         }
+        Tab::CheckLog { job, .. } => format!("Log: {}", job.name),
     };
     Some(Crumbs {
         workspace,

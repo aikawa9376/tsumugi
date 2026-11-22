@@ -60,7 +60,7 @@ pub(super) fn window_strip(
         Tab::Terminal(_, id) => StripMark::Terminal(runs_of(terminals, *id)),
         Tab::Draft { .. } => StripMark::Draft,
         Tab::Browser { .. } => StripMark::Browser,
-        Tab::GitHub { .. } | Tab::Diff { .. } => StripMark::File(
+        Tab::GitHub { .. } | Tab::CheckLog { .. } | Tab::Diff { .. } => StripMark::File(
             file_icons::find(std::path::Path::new("README.md"), file_icons::Kind::File).glyph,
             String::new(),
         ),

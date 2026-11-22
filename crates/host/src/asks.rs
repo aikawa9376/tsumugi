@@ -192,6 +192,9 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         } => tsumugi_vcs::github::fix_context(&repository, number, checks)
             .await
             .map(|context| Answer::FixContext { context }),
+        Ask::GitHubCheckLog { repository, job } => Ok(Answer::CheckLog {
+            log: tsumugi_vcs::github::job_log(&repository, job).await,
+        }),
         Ask::GitHubWrite {
             repository,
             listing,

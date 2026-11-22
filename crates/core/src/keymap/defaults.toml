@@ -345,6 +345,9 @@
 "m c" = "github.close"
 "m d" = "github.ready"
 
+[check]
+"r" = "check.rerun"
+
 [lightbox]
 "l" = "lightbox.next"
 "ArrowRight" = "lightbox.next"

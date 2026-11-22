@@ -48,10 +48,11 @@ pub(crate) fn perform(
     let on_console = area == Area::Console && pane;
     let half = i32::from((probe.rows / 2).max(1));
     let thing = state.content.active().cloned();
-    // Reading the work again reads again the pull request or issue shown.
+    // Reading the work again reads again the pull request, issue or check
+    // log shown.
     if area == Area::Console
         && action == Action::Refresh
-        && let Some(tab @ Tab::GitHub { .. }) = &thing
+        && let Some(tab @ (Tab::GitHub { .. } | Tab::CheckLog { .. })) = &thing
         && let Some(window) = state.content.windows.focused_window()
     {
         let mut effects = vec![Effect::Viewer {
@@ -67,7 +68,11 @@ pub(crate) fn perform(
         && let Some(tab) = &thing
         && (matches!(
             tab,
-            Tab::Viewer(_, _) | Tab::Drawn { .. } | Tab::GitHub { .. } | Tab::Diff { .. }
+            Tab::Viewer(_, _)
+                | Tab::Drawn { .. }
+                | Tab::GitHub { .. }
+                | Tab::CheckLog { .. }
+                | Tab::Diff { .. }
         ) || state.content.conversation(tab))
         && let Some(action) = ViewerAction::of(&action)
         && let Some(window) = state.content.windows.focused_window()
@@ -132,6 +137,7 @@ pub(crate) fn perform(
         | Action::GithubAutoMerge
         | Action::GithubClose
         | Action::GithubReady
+        | Action::CheckRerun
         | Action::OverlayClose
         | Action::OverlayDown
         | Action::OverlayUp

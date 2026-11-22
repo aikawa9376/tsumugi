@@ -53,4 +53,11 @@
 .diff-review-scroll { flex: 1; overflow: auto; padding: 12px; }
 .diff-review-file { display: flex; width: 100%; gap: 10px; padding: 5px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; font: inherit; }
 .diff-review-file:hover { background: var(--select); }
+.check-log-name { padding: 0 9px; font-weight: 600; }
+.check-log-for { color: var(--text-3); font-size: var(--ui-font-small); margin-right: auto; }
+.check-log-scroll { padding: 8px 12px; }
+.check-log-text { margin: 0; font-family: var(--mono); font-size: var(--ui-font-small); }
+.check-log-line { white-space: pre-wrap; word-break: break-all; min-height: 1em; }
+.check-log-line.first-error { background: var(--select); color: var(--fail); }
+.check-log-note { color: var(--text-3); font-size: var(--ui-font-small); white-space: pre-wrap; margin: 0 0 8px; }
 .diff-structural { white-space: pre; min-height: 1em; }

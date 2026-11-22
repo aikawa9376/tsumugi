@@ -29,6 +29,8 @@ pub enum ViewerAction {
     Reload,
     /// What a pull request's or an issue's tab does with its cards.
     Github(Github),
+    /// Run the failed jobs of the check whose log is shown again.
+    Rerun,
 }
 
 /// What a key does in a pull request's or an issue's tab to its cards.
@@ -109,6 +111,7 @@ impl ViewerAction {
             Action::GithubAutoMerge => V::Github(Github::AutoMerge),
             Action::GithubClose => V::Github(Github::Close),
             Action::GithubReady => V::Github(Github::Ready),
+            Action::CheckRerun => V::Rerun,
             Action::WindowQuit => V::Close,
             _ => return None,
         })
@@ -340,7 +343,7 @@ impl ViewerState {
             A::Close => Effect::Close,
             A::Reload => Effect::Reload,
             // Only a diff of lines has comments to act on.
-            A::Review(_) | A::Github(_) => Effect::Nothing,
+            A::Review(_) | A::Github(_) | A::Rerun => Effect::Nothing,
         }
     }
 }

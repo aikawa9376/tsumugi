@@ -249,6 +249,8 @@ pub enum Write {
     Close { closed: bool },
     /// Mark the pull request as a draft, or as ready for review.
     Draft { draft: bool },
+    /// Run again the jobs that failed in the Actions run `run`.
+    Rerun { run: u64 },
 }
 
 /// How GitHub merges a pull request.
@@ -438,6 +440,49 @@ pub struct Check {
     /// What it said of itself, in a line.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub said: String,
+}
+
+impl Check {
+    /// The id of the Actions job the check is, from the address it tells
+    /// more at; none for a status, another app's check, or an address that
+    /// names a whole run, whose jobs are not known.
+    pub fn job(&self) -> Option<u64> {
+        if self.by != "GitHub Actions" {
+            return None;
+        }
+        // `/actions/runs/<run>/job/<job>` names the job; a check run's own
+        // page, `/runs/<id>`, is the job's id too.
+        number_after(&self.link, "/job/").or_else(|| {
+            let before = self.link.split_once("/runs/")?.0;
+            (!before.ends_with("/actions")).then(|| number_after(&self.link, "/runs/"))?
+        })
+    }
+
+    /// The id of the Actions run the check belongs to, where its address
+    /// says: `/actions/runs/<run>`, with or without the job after it.
+    pub fn run(&self) -> Option<u64> {
+        if self.by != "GitHub Actions" {
+            return None;
+        }
+        number_after(&self.link, "/actions/runs/")
+    }
+}
+
+/// The number that follows the first `marker` in `text`.
+fn number_after(text: &str, marker: &str) -> Option<u64> {
+    let rest = text.split_once(marker)?.1;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// What a check's job log came to when it was opened.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckLog {
+    pub log: Log,
+    /// The line of the log's text at which the first error shows, which the
+    /// window scrolls to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_error: Option<usize>,
 }
 
 /// How a check ended, or that it has not.
@@ -642,6 +687,42 @@ mod tests {
         for no in ["TRIAGE", "READ"] {
             assert!(!merge(no).may_merge(), "{no}");
         }
+    }
+
+    fn run_check(by: &str, link: &str) -> Check {
+        Check {
+            name: "a".into(),
+            by: by.into(),
+            outcome: Outcome::Failed,
+            link: link.into(),
+            said: String::new(),
+        }
+    }
+
+    #[test]
+    fn the_job_and_run_of_an_actions_check_come_from_its_address() {
+        let job = run_check(
+            "GitHub Actions",
+            "https://github.com/o/r/actions/runs/9/job/42",
+        );
+        assert_eq!((job.run(), job.job()), (Some(9), Some(42)));
+        // A check run's own page names its job and not its run.
+        let page = run_check(
+            "GitHub Actions",
+            "https://github.com/o/r/runs/77?check_suite_focus=true",
+        );
+        assert_eq!((page.run(), page.job()), (None, Some(77)));
+    }
+
+    #[test]
+    fn no_job_is_named_by_a_whole_run_a_status_or_another_app() {
+        let whole = run_check("GitHub Actions", "https://github.com/o/r/actions/runs/9");
+        let other = run_check("Buildkite", "https://x/runs/3");
+        let status = run_check("", "https://y/job/4");
+        assert_eq!(whole.job(), None);
+        assert_eq!(whole.run(), Some(9));
+        assert_eq!((other.job(), other.run()), (None, None));
+        assert_eq!((status.job(), status.run()), (None, None));
     }
 
     #[test]
