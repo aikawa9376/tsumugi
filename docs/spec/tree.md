@@ -355,6 +355,21 @@ nothing is deleted until it is answered yes. A branch whose commits nothing
 else has is kept, as deleting a worktree keeps it. What the list says of
 GitHub is left out where it cannot be asked, and nothing is chosen beforehand.
 
+## Putting a worktree to sleep
+
+Sleep, from a worktree's row or its menu ([keys](reference/keys.md#actions)),
+puts the worktree to sleep: the programs of its sessions are stopped and its
+terminals end, while its files, its branch and its sessions' rows and tabs stay.
+The row is marked as asleep while every session in it sleeps. Wake brings its
+sleeping sessions back with their conversations, as focusing one does
+([hibernation](sessions.md#hibernation)); a session that sleeps wakes the same
+way whichever way it was put to sleep.
+
+Nothing is asked where the sessions are done and no terminal runs. A session
+in the middle of a turn, or a terminal, is stopped only after a question that
+says so. A session that cannot be woken into its conversation again is not put
+to sleep, and the status line names it.
+
 The filter at the top of the tree narrows it as it is typed into, by the
 fuzzy match the pickers use, fzf's syntax included, on the names of
 sessions, terminals, worktrees and workspaces; a worktree or a workspace that

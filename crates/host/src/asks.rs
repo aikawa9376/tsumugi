@@ -162,6 +162,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             watched.read_again();
             done.map(|setup| Answer::WorktreeSetup { setup })
         }
+        Ask::Sleep { ids } => {
+            let slept = crate::hibernation::sleep_now(&ids).await;
+            watched.relist();
+            slept.map(|(count, left)| Answer::Slept { count, left })
+        }
         Ask::CleanupEntries { repository } => {
             // GitHub's word on each branch is asked only where it can be
             // had; without it the entries are listed all the same.

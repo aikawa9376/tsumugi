@@ -119,6 +119,8 @@ pub enum Action {
     WorktreeMerge,
     WorktreeDelete,
     WorktreeCleanup,
+    WorktreeSleep,
+    WorktreeWake,
     WindowClose,
     WindowOpen,
     Refresh,
@@ -559,6 +561,12 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeCleanup, "worktree.cleanup", "list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](tree.md#cleaning-up-worktrees))")
         .icon(Icon::Trash)
         .row("Clean Up Worktrees…", End),
+    S::new(A::WorktreeSleep, "worktree.sleep", "put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](tree.md#putting-a-worktree-to-sleep))")
+        .icon(Icon::SunMoon)
+        .row("Sleep worktree…", End),
+    S::new(A::WorktreeWake, "worktree.wake", "wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](tree.md#putting-a-worktree-to-sleep))")
+        .icon(Icon::SunMoon)
+        .row("Wake worktree", End),
     S::new(A::WindowClose, "window.close", "close the window; the instance's other windows stay open, and its sessions run on").bar("Close Window", Icon::AppWindow),
     S::new(A::WindowOpen, "window.open", "open another window of the instance ([windows](sessions.md#windows))").bar("New Window", Icon::CopyPlus),
     S::new(A::Refresh, "refresh", "read the sessions, and what git says of where they run, again now").bar("Refresh", Icon::Refresh),
@@ -953,6 +961,8 @@ mod tests {
             WorktreeMerge,
             WorktreeDelete,
             WorktreeCleanup,
+            WorktreeSleep,
+            WorktreeWake,
             WindowClose,
             WindowOpen,
             Refresh,

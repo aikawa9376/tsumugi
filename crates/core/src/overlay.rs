@@ -611,6 +611,7 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
         ask @ (Ask::MergeWorktree { .. } | Ask::ResolveMerge { .. }) => {
             crate::worktree::merge_confirmed(ask)
         }
+        ask @ Ask::SleepWorktree { .. } => crate::worktree::slept_confirmed(ask),
         Ask::CleanUpWorktrees {
             environment,
             doomed,

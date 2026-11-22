@@ -143,6 +143,8 @@ pub fn entries(
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),
                 offer(Action::WorktreeCleanup),
+                offer(Action::WorktreeSleep),
+                offer(Action::WorktreeWake),
             ])
             .collect(),
         Target::Row(Item::Workspace(_, _)) => [fold, copy_path, mute]

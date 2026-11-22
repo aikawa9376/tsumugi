@@ -541,6 +541,13 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             _ => false,
         }
     };
+    let sleeping = match &own {
+        Item::Worktree(_, path) => t
+            .worktrees()
+            .find(|w| &w.worktree.path == path)
+            .is_some_and(|w| w.sleeping()),
+        _ => false,
+    };
     let kind = if has_summary {
         format!("{kind} with-summary")
     } else {
@@ -609,6 +616,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 } else { "{text}" }
             }
             SessionMark { mark }
+            if sleeping {
+                span { class: "muted-mark", title: "Asleep: its sessions' programs are stopped; Wake brings them back",
+                    IconView { icon: Icon::SunMoon, size: 12 }
+                }
+            }
             if muted {
                 span { class: "muted-mark", title: "Notifications are off; the row still shows how its work stands",
                     IconView { icon: Icon::BellOff, size: 12 }

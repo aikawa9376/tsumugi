@@ -871,6 +871,18 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::Sleep { environment, ids } => {
+                let asked = self.ask_in(&environment, Ask::Sleep { ids });
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::Slept { count, left } => Ok((count, left)),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::Slept { result });
+                });
+            }
             Effect::CleanupScan {
                 environment,
                 repository,

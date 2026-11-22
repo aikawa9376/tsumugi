@@ -604,6 +604,11 @@ pub enum Msg {
     ComposerKey(Key),
     /// The place to start from in row `n` of the dialog's list chosen.
     ComposerCursor(usize),
+    /// The work host put sessions to sleep: how many, and the names of those
+    /// that run on; or why it could not.
+    Slept {
+        result: Result<(usize, Vec<String>), String>,
+    },
     /// A key while the list of worktrees to clean up holds the keys.
     CleanupKey(Key),
     /// The worktree in this row of the list is chosen, or unchosen.

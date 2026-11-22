@@ -123,6 +123,12 @@ pub enum Effect {
         id: u64,
         choice: tsumugi_model::SetupChoice,
     },
+    /// Ask the work host of `environment` to put the sessions with these ids
+    /// to sleep.
+    Sleep {
+        environment: EnvironmentId,
+        ids: Vec<String>,
+    },
     /// Ask the work host of `environment` to list the worktrees of the
     /// repository at `repository` for a cleanup.
     CleanupScan {

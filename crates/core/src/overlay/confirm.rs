@@ -73,6 +73,16 @@ pub enum Ask {
         environment: EnvironmentId,
         doomed: Vec<crate::worktree::Doomed>,
     },
+    /// Put the worktree by this name to sleep: end these terminals and stop
+    /// the programs of the sessions with these ids, `working` of which are
+    /// in the middle of a turn.
+    SleepWorktree {
+        environment: EnvironmentId,
+        name: String,
+        ids: Vec<String>,
+        working: usize,
+        terminals: Vec<u128>,
+    },
     /// Run the setup script of the pending worktree `id`, made at `worktree`
     /// of `repository` and called `name`, which the repository lists and the
     /// user's policy leaves to be asked about.
@@ -285,6 +295,27 @@ The main checkout is not touched. {base} is merged into {name} in its worktree i
                 ),
                 "Resolve in the branch",
             ),
+            Self::SleepWorktree {
+                name,
+                working,
+                terminals,
+                ..
+            } => {
+                let mut lines = vec![format!(
+                    "Its files and branch stay, and so do its sessions' rows and tabs; waking it brings the conversations back."
+                )];
+                if !terminals.is_empty() {
+                    lines.push(format!("{} end, and what runs in them is lost.", counted(terminals.len(), "terminal").unwrap_or_default()));
+                }
+                if *working > 0 {
+                    lines.push(if *working == 1 {
+                        "1 session is working: its turn is cut short.".into()
+                    } else {
+                        format!("{working} sessions are working: their turns are cut short.")
+                    });
+                }
+                (Icon::SunMoon, format!("Put {name} to sleep?"), lines.join("\n"), "Sleep")
+            }
             Self::CleanUpWorktrees { doomed, .. } => {
                 let lines: Vec<String> = doomed
                     .iter()
@@ -438,6 +469,7 @@ The main checkout is not touched. {base} is merged into {name} in its worktree i
                     || !terminals.is_empty()
                     || (*delete_branch && standing.unmerged > 0)
             }
+            Self::SleepWorktree { terminals, .. } => !terminals.is_empty(),
             Self::CleanUpWorktrees { doomed, .. } => doomed.iter().any(|d| {
                 d.standing.dirty()
                     || d.standing.unpushed > 0

@@ -60,14 +60,11 @@ fn finished(state: &State) -> bool {
 /// opened still runs.
 pub fn due(session: &Session, opened_running: bool, quiet_ms: u64, after: u32) -> bool {
     after != 0
-        && session.rest.is_none()
         && finished(&session.state)
         && !opened_running
-        && session.delegation.is_some()
         // One that kept no conversation could not be woken into it, and
         // Cursor's cannot be resumed from Tsumugi.
-        && !session.session_id.is_empty()
-        && session.agent != Agent::Cursor
+        && session.wakeable()
         && quiet_ms >= u64::from(after) * MINUTE_MS
 }
 
@@ -100,6 +97,51 @@ pub async fn tick(watched: &Watched, quiet: &mut Quiet, sessions: &[Session]) {
             tracing::warn!(%error, session = %session.name, "cannot put a session to sleep");
         }
     }
+}
+
+/// Of `sessions`, those `ids` name that can be woken again, and the names of
+/// those that cannot. A session is put to sleep as the person asked, whether
+/// or not it is done.
+fn asked<'a>(sessions: &'a [Session], ids: &[String]) -> (Vec<&'a Session>, Vec<String>) {
+    sessions.iter().filter(|s| ids.contains(&s.id)).fold(
+        (Vec::new(), Vec::new()),
+        |(mut slept, mut left), s| {
+            if s.wakeable() {
+                slept.push(s);
+            } else {
+                left.push(s.name.clone());
+            }
+            (slept, left)
+        },
+    )
+}
+
+/// Put to sleep the sessions `ids` name, as a person asked for a worktree to
+/// sleep, and say how many slept and the names of those that cannot be woken
+/// again and so run on.
+pub async fn sleep_now(ids: &[String]) -> Result<(usize, Vec<String>), String> {
+    let daemon = crate::daemon::daemon();
+    let listed = daemon.sessions().await.map_err(|e| e.to_string())?;
+    let sessions: Vec<Session> = listed
+        .iter()
+        .filter_map(crate::sessions::read)
+        .filter_map(|kept| match kept {
+            crate::sessions::Kept::Agent(session) => Some(session),
+            crate::sessions::Kept::Terminal(_) => None,
+        })
+        .collect();
+    let (slept, mut left) = asked(&sessions, ids);
+    let mut count = 0;
+    for session in slept {
+        match hibernate(session).await {
+            Ok(()) => count += 1,
+            Err(error) => {
+                tracing::warn!(%error, session = %session.name, "cannot put a session to sleep");
+                left.push(session.name.clone());
+            }
+        }
+    }
+    Ok((count, left))
 }
 
 /// Stop `session`'s program, recording first that it sleeps, so it is never
@@ -185,6 +227,25 @@ mod tests {
         let mut asleep = done("d");
         asleep.rest = Some(tsumugi_model::Rest::Hibernated);
         assert!(!due(&asleep, false, 1000 * HOUR, 1));
+    }
+
+    #[test]
+    fn putting_to_sleep_by_hand_takes_the_asked_sessions_that_can_be_woken_and_names_the_rest() {
+        let mut working = done("a");
+        working.state = State::Working;
+        let mut cursor = done("b");
+        cursor.agent = Agent::Cursor;
+        let other = done("c");
+        let sessions = [working, cursor, other];
+
+        let (slept, left) = asked(&sessions, &["a".into(), "b".into()]);
+
+        assert_eq!(
+            slept.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            ["a"],
+            "a session mid-turn sleeps too, as the person asked"
+        );
+        assert_eq!(left, ["b"]);
     }
 
     #[test]

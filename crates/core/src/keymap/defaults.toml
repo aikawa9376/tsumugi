@@ -151,6 +151,7 @@
 "I" = "worktree.merge"
 "D" = "worktree.delete"
 "C" = "worktree.cleanup"
+"Z" = "worktree.sleep"
 "N" = "file.new"
 "K" = "directory.new"
 "}" = "workspace.next"

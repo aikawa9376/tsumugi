@@ -488,6 +488,19 @@ mod tests {
             }),
         });
         round_trips(Request::Ask {
+            asked: 20,
+            ask: Box::new(crate::Ask::Sleep {
+                ids: vec!["7".into(), "9".into()],
+            }),
+        });
+        round_trips(Event::Answer {
+            asked: 20,
+            answer: crate::Answer::Slept {
+                count: 1,
+                left: vec!["review".into()],
+            },
+        });
+        round_trips(Request::Ask {
             asked: 19,
             ask: Box::new(crate::Ask::MergeStanding {
                 path: "/w-wt/fix-login".into(),

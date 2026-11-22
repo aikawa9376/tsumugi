@@ -797,6 +797,14 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::merge(state, &row),
             None => Vec::new(),
         },
+        Action::WorktreeSleep => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::sleep(state, &row),
+            None => Vec::new(),
+        },
+        Action::WorktreeWake => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::wake(state, &row),
+            None => Vec::new(),
+        },
         Action::WorktreeCleanup => match cur.filter(|_| on_list) {
             Some(row) => crate::worktree::cleanup_open(state, &row),
             None => Vec::new(),

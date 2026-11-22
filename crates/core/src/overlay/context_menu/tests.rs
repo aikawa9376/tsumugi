@@ -187,7 +187,9 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
                 Action::WorktreeMerge,
                 Action::WorktreeClose,
                 Action::WorktreeDelete,
-                Action::WorktreeCleanup
+                Action::WorktreeCleanup,
+                Action::WorktreeSleep,
+                Action::WorktreeWake
             ]
         ]
         .concat()
