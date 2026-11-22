@@ -182,7 +182,13 @@ fn took(asked: &Result<Vec<u8>, tsumugi_net::Error>) -> Result<(), String> {
 
 /// Pairs as `pair_with` does and adds an environment for the work machine.
 pub fn pair_cli(address: &str, name: Option<&str>, show: impl Fn(&str)) -> Result<String, String> {
-    pair_cli_as(address, name, &format!("Work machine at {address}"), show)
+    pair_cli_as(
+        address,
+        name,
+        &format!("Work machine at {address}"),
+        None,
+        show,
+    )
 }
 
 /// [`pair_cli`], naming the environment it adds `environment_name`.
@@ -190,6 +196,7 @@ pub fn pair_cli_as(
     address: &str,
     name: Option<&str>,
     environment_name: &str,
+    ssh: Option<&str>,
     show: impl Fn(&str),
 ) -> Result<String, String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -209,25 +216,45 @@ pub fn pair_cli_as(
     let server = server.clone();
     let path = crate::environments::Catalog::path();
     let mut catalog = crate::environments::Catalog::load(&path)?;
-    if let Some(known) = catalog.environments.iter().find(|p| p.target == target) {
-        return Ok(format!(
-            "Paired with the work machine {} again; its environment \"{}\" uses it",
-            &server[..16],
-            known.name
-        ));
-    }
     let expected = catalog.revision;
-    catalog
-        .environments
-        .push(crate::environments::Environment::new(
-            environment_name,
-            target,
-        ));
-    catalog.save(&path, expected)?;
-    Ok(format!(
-        "Paired with the work machine {} and added the environment \"{environment_name}\"",
-        &server[..16]
-    ))
+    let before = catalog.environments.clone();
+    let known = remember(&mut catalog, environment_name, target, ssh);
+    // A machine paired again with nothing new to keep is left as it is.
+    if catalog.environments != before {
+        catalog.save(&path, expected)?;
+    }
+    Ok(match known {
+        Some(known) => format!(
+            "Paired with the work machine {} again; its environment \"{known}\" uses it",
+            &server[..16]
+        ),
+        None => format!(
+            "Paired with the work machine {} and added the environment \"{environment_name}\"",
+            &server[..16]
+        ),
+    })
+}
+
+/// Keeps the work machine `target` in `catalog` as an environment called
+/// `name`, reached through ssh by `ssh` when that is given. A machine kept
+/// already stays one environment, whose name is returned, taking the ssh
+/// destination it did not have.
+fn remember(
+    catalog: &mut crate::environments::Catalog,
+    name: &str,
+    target: Target,
+    ssh: Option<&str>,
+) -> Option<String> {
+    if let Some(known) = catalog.environments.iter_mut().find(|p| p.target == target) {
+        if known.ssh.is_none() {
+            known.ssh = ssh.map(String::from);
+        }
+        return Some(known.name.clone());
+    }
+    let mut environment = crate::environments::Environment::new(name, target);
+    environment.ssh = ssh.map(String::from);
+    catalog.environments.push(environment);
+    None
 }
 
 /// A work machine heard on the local network.
@@ -546,6 +573,37 @@ impl Tunnel {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_work_machine_reached_through_ssh_is_kept_with_its_destination_once() {
+        let target = Target::Native {
+            address: "127.0.0.1:47201".into(),
+            server: "ab".repeat(32),
+        };
+        let mut catalog = crate::environments::Catalog::default();
+        assert_eq!(
+            remember(
+                &mut catalog,
+                "ai-box (ssh)",
+                target.clone(),
+                Some("me@ai-box")
+            ),
+            None
+        );
+        assert_eq!(catalog.environments[0].ssh.as_deref(), Some("me@ai-box"));
+        // Again, it is the same environment, which keeps what it was given.
+        assert_eq!(
+            remember(&mut catalog, "other", target.clone(), Some("elsewhere")),
+            Some("ai-box (ssh)".into())
+        );
+        assert_eq!(catalog.environments.len(), 1);
+        assert_eq!(catalog.environments[0].ssh.as_deref(), Some("me@ai-box"));
+        // One paired before ssh was used for it learns the destination.
+        let mut catalog = crate::environments::Catalog::default();
+        remember(&mut catalog, "box", target.clone(), None);
+        remember(&mut catalog, "box", target, Some("me@ai-box"));
+        assert_eq!(catalog.environments[0].ssh.as_deref(), Some("me@ai-box"));
+    }
+
     use super::*;
 
     struct NoHosts;

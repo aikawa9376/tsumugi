@@ -106,6 +106,7 @@ pub enum Action {
     EnvironmentRename,
     EnvironmentRetry,
     EnvironmentPair,
+    EnvironmentEditor,
     WorkspaceAdd,
     LocalIssues,
     LocalIssuesLeader,
@@ -533,6 +534,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::EnvironmentPair, "environment.pair", "pair again with the work machine of the environment selected in the tree, or else of the tab shown, as when it no longer accepts this computer or answers at another address ([details](environments.md#create-and-configure))")
         .icon(Icon::Link)
         .row("Pair again…", Reach),
+    S::new(A::EnvironmentEditor, "environment.editor", "open the editor on the work machine of the environment selected in the tree, or else of the tab shown, when the environment was made by `tsumugi connect ssh`: VS Code, VS Code Insiders or Cursor through Remote-SSH, or Zed by its ssh address, whichever `$TSUMUGI_REMOTE_EDITOR` names, VS Code when it names none ([details](remote-execution.md#through-ssh))")
+        .icon(Icon::Code)
+        .row("Open in editor (Remote-SSH)", Reach),
     S::new(A::WorkspaceAdd, "workspace.add", "open the picker on the directories alone, to add the one chosen to the tree with nothing running there ([details](tree.md#going-to-a-session-or-starting-one))")
         .bar("Add to Tree…", Icon::FolderPlus)
         .row("Add to tree…", Start),
@@ -998,6 +1002,7 @@ mod tests {
             EnvironmentRename,
             EnvironmentRetry,
             EnvironmentPair,
+            EnvironmentEditor,
             WorkspaceAdd,
             LocalIssues,
             LocalIssuesLeader,

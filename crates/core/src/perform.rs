@@ -729,6 +729,9 @@ pub(crate) fn perform(
             ))]
         }
         Action::EnvironmentPair => vec![Effect::PairAgain(content::focused_environment(state))],
+        Action::EnvironmentEditor => vec![Effect::OpenRemoteEditor(content::focused_environment(
+            state,
+        ))],
         Action::WorkspaceRemove => match cur.filter(|_| on_list) {
             Some(Item::Workspace(environment, root)) => {
                 let tree = tree::listed(state.hosts.work(&environment));

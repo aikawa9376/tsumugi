@@ -17,6 +17,10 @@ pub struct Environment {
     pub legacy_client: Option<String>,
     #[serde(default)]
     pub work_instance: Option<String>,
+    /// What `ssh` takes for the destination of the work machine, for an
+    /// environment made by `tsumugi connect ssh`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh: Option<String>,
 }
 
 impl Environment {
@@ -30,6 +34,7 @@ impl Environment {
             archived: false,
             legacy_client: None,
             work_instance: None,
+            ssh: None,
         }
     }
 

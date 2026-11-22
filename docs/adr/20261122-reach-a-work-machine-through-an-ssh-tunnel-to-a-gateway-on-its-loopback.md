@@ -37,5 +37,6 @@ as it would over any other network: ssh only carries the bytes.
   reach the tunnel's end still has to be paired.
 - A tunnel that is lost ends the client's connection, which the window shows
   as any lost connection; connecting again makes a new tunnel.
-- Tsumugi has to be installed on the work machine before the client can
-  connect; the client says so when it is not.
+- Tsumugi, of the client's version, has to be on the work machine before the
+  client can connect; the client says so when it is not, and sends its own
+  only when asked.

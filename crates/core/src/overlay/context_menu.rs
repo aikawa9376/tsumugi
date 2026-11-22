@@ -195,6 +195,7 @@ pub fn entries(
                 ])
                 .chain(retry.then(|| offer(Action::EnvironmentRetry)))
                 .chain(machine.then(|| offer(Action::EnvironmentPair)))
+                .chain(machine.then(|| offer(Action::EnvironmentEditor)))
                 .chain((environment != own).then(|| offer(Action::EnvironmentRemove)))
                 .collect()
         }

@@ -375,6 +375,7 @@ mod tests {
             archived,
             legacy_client: None,
             work_instance: None,
+            ssh: None,
         }
     }
 

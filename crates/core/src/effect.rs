@@ -492,6 +492,9 @@ pub enum Effect {
     /// Open the sheet adding an environment on pairing again with the work
     /// machine of `environment`.
     PairAgain(EnvironmentId),
+    /// Open an editor on the work machine of `environment`, which was
+    /// reached through ssh.
+    OpenRemoteEditor(EnvironmentId),
 
     // The overlays.
     /// Run `action` where the keys are now.

@@ -630,6 +630,21 @@ pub(crate) fn work_machine(environment: &EnvironmentId) -> Option<Machine> {
     machine_in(&Catalog::load(&Catalog::path()).ok()?, environment)
 }
 
+/// What `ssh` takes for the destination of the work machine `environment`
+/// was made to reach by `tsumugi connect ssh`, as the catalog keeps it now.
+pub(crate) fn ssh_destination(environment: &EnvironmentId) -> Option<String> {
+    ssh_destination_in(&Catalog::load(&Catalog::path()).ok()?, environment)
+}
+
+fn ssh_destination_in(catalog: &Catalog, environment: &EnvironmentId) -> Option<String> {
+    catalog
+        .environments
+        .iter()
+        .find(|e| EnvironmentId::new(&e.id) == *environment)?
+        .ssh
+        .clone()
+}
+
 /// The work machine `environment` works on in `catalog`, none for one on
 /// this computer or one not kept.
 fn machine_in(catalog: &Catalog, environment: &EnvironmentId) -> Option<Machine> {
@@ -685,6 +700,24 @@ mod tests {
         );
         assert_eq!(kept(&here), None);
         assert_eq!(machine_in(&catalog, &EnvironmentId::new("gone")), None);
+    }
+
+    #[test]
+    fn only_an_environment_made_through_ssh_has_a_destination_to_open_an_editor_on() {
+        let target = Target::Native {
+            address: "127.0.0.1:47201".into(),
+            server: "ab".repeat(32),
+        };
+        let mut through = Environment::new("Box (ssh)", target.clone());
+        through.ssh = Some("me@ai-box".into());
+        let plain = Environment::new("Box", target);
+        let catalog = Catalog {
+            environments: vec![through.clone(), plain.clone()],
+            ..Catalog::default()
+        };
+        let of = |e: &Environment| ssh_destination_in(&catalog, &EnvironmentId::new(&e.id));
+        assert_eq!(of(&through).as_deref(), Some("me@ai-box"));
+        assert_eq!(of(&plain), None);
     }
 
     fn remote(edit: impl FnOnce(&mut RemoteStatus)) -> RemoteStatus {

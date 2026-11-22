@@ -192,13 +192,24 @@ nothing. Without it, the command assumes a gateway is serving there already.
 The tunnel ends in the same port on this computer for the same host, which
 `--port` chooses otherwise, so the environment keeps its address; running the
 command again makes the tunnel again when it was lost, and uses it while it
-answers. A lost tunnel is a lost connection, shown as any other. Tsumugi
-is not installed for the user on the work machine by this command: it says
-so when it is missing there.
+answers. A lost tunnel is a lost connection, shown as any other.
+
+The work machine has to run the same version of `tsumugi` as this computer.
+The command says so when it has none, or one that says another version.
+`--install` sends this computer's `tsumugi` to `~/.local/bin` there over the
+same connection instead, when both run the same system and architecture, and
+leaves a matching one alone; nothing is sent without it.
 
 The command fails, saying why and pairing nothing, when `ssh` cannot be run
-or cannot connect, when the work machine has no `tsumugi`, when the tunnel
-does not come up, or when no gateway answers through it.
+or cannot connect, when the work machine has no matching `tsumugi` and
+`--install` was not given or cannot send one, when the tunnel does not come
+up, or when no gateway answers through it.
+
+The environment made this way remembers its ssh destination. Its heading's
+menu then offers Open in editor (Remote-SSH), which opens VS Code, VS Code
+Insiders or Cursor through Remote-SSH, or Zed by its ssh address, on that work
+machine; `$TSUMUGI_REMOTE_EDITOR` names the editor's program, VS Code's
+`code` when it is not set.
 
 ## Changes across a lost connection
 

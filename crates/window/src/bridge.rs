@@ -1501,6 +1501,30 @@ impl AppCtx {
                         .into(),
                 ),
             },
+            Effect::OpenRemoteEditor(environment) => {
+                let editor = std::env::var("TSUMUGI_REMOTE_EDITOR")
+                    .ok()
+                    .filter(|editor| !editor.trim().is_empty())
+                    .unwrap_or_else(|| "code".into());
+                match crate::connection::ssh_destination(&environment) {
+                    None => self.notice(
+                        "this environment was not made by `tsumugi connect ssh`, so there is no ssh destination to open an editor on".into(),
+                    ),
+                    Some(host) => match tsumugi_connect::ssh::remote_editor(&editor, &host, None) {
+                        None => self.notice(format!(
+                            "cannot open {editor} on {host}: only VS Code, VS Code Insiders, Cursor and Zed open ssh hosts; name one in $TSUMUGI_REMOTE_EDITOR"
+                        )),
+                        Some(words) => {
+                            if let Err(e) = std::process::Command::new(&words[0])
+                                .args(&words[1..])
+                                .spawn()
+                            {
+                                self.notice(format!("cannot run {}: {e}", words[0]));
+                            }
+                        }
+                    },
+                }
+            }
             Effect::ArchiveEnvironment(environment) => {
                 match crate::environments::archive(&Catalog::path(), &environment) {
                     Ok(()) => self.follow_catalog(),
