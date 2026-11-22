@@ -76,6 +76,8 @@ pub struct Session {
     pub code: tsumugi_model::SessionCode,
     /// Why it is listed though it ended: its program exited on its own.
     pub rest: Option<tsumugi_model::Rest>,
+    /// How its program left, when it exited on its own and that was seen.
+    pub exit: Option<tsumugi_model::Exit>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -3,7 +3,7 @@
 //! exited.
 
 use dioxus::prelude::*;
-use tsumugi_core::content::{Tab, rest_of, waits_to_come_back};
+use tsumugi_core::content::{Tab, exit_of, rest_of, waits_to_come_back};
 use tsumugi_model::Rest;
 
 use crate::bridge::AppCtx;
@@ -42,9 +42,18 @@ pub(crate) fn Starting(tab: Tab) -> Element {
                 }
             };
         }
+        let exit = exit_of(&app.hosts.read(), &tab);
         return rsx! {
             EmptyState { kind: "detached", icon: Icon::PlayerStop, title: "Exited",
-                div { "Its program {rest.word()}. Restart continues the conversation where it left off." }
+                if let Some((said, tail)) = exit {
+                    div { "{said}" }
+                    if !tail.is_empty() {
+                        pre { class: "exit-tail", role: "status", "{tail}" }
+                    }
+                } else {
+                    div { "Its program {rest.word()}." }
+                }
+                div { "Restart continues the conversation where it left off." }
                 Button { kind: "primary", onclick: move |_| ui.bring_back(environment.clone(), vec![id.clone()]), "Restart" }
             }
         };

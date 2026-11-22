@@ -616,3 +616,50 @@ fn an_agent_without_a_profile_starts_as_tsumugi_s_own_and_is_given_one_when_edit
             .via_shell
     );
 }
+
+#[test]
+fn a_draft_offers_the_catalog_s_agents_after_the_profiles_but_not_those_a_profile_takes_the_id_of()
+{
+    let mut s = settings();
+    let ids =
+        |s: &Settings| -> Vec<String> { offered(s).iter().map(|p| p.id.to_string()).collect() };
+    let all = ids(&s);
+    let own = startable(&s).len();
+    assert_eq!(all[..own], ids_of(&startable(&s))[..]);
+    assert!(all[own..].contains(&"gemini".to_string()), "{all:?}");
+    assert_eq!(
+        offered(&s)[own].agent(),
+        Agent::Generic,
+        "a catalog agent starts as a command agent"
+    );
+    // A profile of the same id is the one offered, once.
+    s.profiles.push(AgentProfile {
+        name: "My Gemini".into(),
+        ..tsumugi_model::catalog::entry_of("gemini")
+            .unwrap()
+            .profile()
+    });
+    let all = ids(&s);
+    assert_eq!(all.iter().filter(|id| *id == "gemini").count(), 1);
+    assert!(
+        offered(&s)
+            .iter()
+            .any(|p| p.id.as_str() == "gemini" && p.name == "My Gemini")
+    );
+}
+
+fn ids_of(profiles: &[AgentProfile]) -> Vec<String> {
+    profiles.iter().map(|p| p.id.to_string()).collect()
+}
+
+#[test]
+fn a_command_agent_is_marked_by_whether_its_program_is_found_and_no_other_is() {
+    use tsumugi_model::profile::LoginStanding::{LoggedIn, LoggedOut, Missing, Unknown};
+    let mark = |agent, standing| with_install_mark("Label".into(), agent, standing);
+    assert_eq!(mark(Agent::Generic, Some(LoggedIn)), "Label · installed");
+    assert_eq!(mark(Agent::Generic, Some(Missing)), "Label · not installed");
+    assert_eq!(mark(Agent::Generic, Some(Unknown)), "Label");
+    assert_eq!(mark(Agent::Generic, None), "Label");
+    assert_eq!(mark(Agent::Claude, Some(Missing)), "Label");
+    assert_eq!(mark(Agent::Codex, Some(LoggedOut)), "Label");
+}

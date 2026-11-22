@@ -148,6 +148,18 @@ pub fn rest_of(hosts: &Hosts, tab: &Tab) -> Option<tsumugi_model::Rest> {
     listed.tree.find(id)?.2.rest
 }
 
+/// How the program of the session `tab` shows left, once its exit was seen:
+/// when it left after it started, and the last lines it wrote.
+pub fn exit_of(hosts: &Hosts, tab: &Tab) -> Option<(String, String)> {
+    let Tab::Session(environment, id) = tab else {
+        return None;
+    };
+    let listed = hosts.work(environment)?.tree.listed.as_deref()?;
+    let session = listed.tree.find(id)?.2;
+    let exit = session.exit.as_ref()?;
+    Some((exit.said(session.started_ms), exit.tail.clone()))
+}
+
 /// Whether `tab` shows what the terminal host took with it, waiting in
 /// `listed` to be brought back.
 fn waits(listed: &Listed, tab: &Tab) -> bool {

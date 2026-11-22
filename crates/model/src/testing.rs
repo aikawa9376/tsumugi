@@ -52,6 +52,12 @@ impl SessionBuilder {
         self
     }
 
+    /// Left as this says, for a session whose program exited.
+    pub fn exit(mut self, exit: crate::Exit) -> Self {
+        self.0.exit = Some(exit);
+        self
+    }
+
     pub fn state(mut self, state: State) -> Self {
         self.0.state = state;
         self

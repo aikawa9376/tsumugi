@@ -8,6 +8,7 @@
 .console-empty > .icon { color: var(--text-3); }
 .console > .console-empty { bottom: var(--composer, 0px); overflow-y: auto; justify-content: safe center; padding: 24px 32px; }
 .console-empty.detached { background: var(--veil); }
+.console-empty .exit-tail { max-width: 100%; margin: 0; padding: 8px 12px; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: var(--ui-font-small); color: var(--fail); background: var(--fail-tint); border-radius: 6px; }
 .console-empty code, .console-empty-hint code { font-family: var(--mono); font-size: var(--ui-font-small); background: var(--raised); padding: 1px 6px; border-radius: 4px; }
 .screen { position: relative; font-family: var(--term-font); font-size: var(--term-size); font-weight: var(--term-weight); line-height: var(--cell-h); white-space: pre; }
 .screen-line { height: var(--cell-h); display: flex; }

@@ -152,6 +152,10 @@ pub struct Session {
     /// restarted or woken takes its place. None for a session that runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rest: Option<Rest>,
+    /// How its program left when it exited on its own; none for one that
+    /// runs, one that slept, or one whose exit was not seen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<Exit>,
 }
 
 /// Why a listed session runs no program.
@@ -163,6 +167,52 @@ pub enum Rest {
     /// Tsumugi stopped its program as it had been done and left alone for a
     /// while; focusing it or sending to it wakes it.
     Hibernated,
+}
+
+/// How the program of a session left when it exited on its own: when, and
+/// the last lines on its screen, which tell why. The terminal host reports no
+/// exit code, so this is all there is to say.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Exit {
+    /// When it was seen to have exited, in milliseconds since the Unix epoch.
+    pub at_ms: u64,
+    /// The last non-blank lines of its screen, a line a row.
+    pub tail: String,
+}
+
+/// How many of the last lines of a screen a [`Exit`] keeps.
+pub const EXIT_TAIL_LINES: usize = 12;
+/// The most characters of those lines it keeps, the end of them.
+pub const EXIT_TAIL_CHARS: usize = 1500;
+
+impl Exit {
+    /// The exit seen at `at_ms` of a program whose screen held `screen`.
+    pub fn seen(at_ms: u64, screen: &[String]) -> Self {
+        let lines: Vec<&str> = screen
+            .iter()
+            .map(|line| line.trim_end())
+            .filter(|line| !line.trim().is_empty())
+            .collect();
+        let tail = lines[lines.len().saturating_sub(EXIT_TAIL_LINES)..].join("\n");
+        let skipped = tail.chars().count().saturating_sub(EXIT_TAIL_CHARS);
+        Self {
+            at_ms,
+            tail: tail.chars().skip(skipped).collect(),
+        }
+    }
+
+    /// How long it ran before it exited, said for the banner of a session
+    /// started at `started_ms`.
+    pub fn said(&self, started_ms: Option<u64>) -> String {
+        match started_ms.map(|started| self.at_ms.saturating_sub(started)) {
+            Some(ms) if ms < 1000 => "Its program exited as it started.".into(),
+            Some(ms) if ms < 120_000 => {
+                format!("Its program exited {} s after it started.", ms / 1000)
+            }
+            Some(ms) => format!("Its program exited after {} min.", ms / 60_000),
+            None => "Its program exited.".into(),
+        }
+    }
 }
 
 impl Rest {
@@ -312,6 +362,43 @@ pub fn parse_agents(json: &str) -> Result<Vec<Running>, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_exit_keeps_the_last_lines_that_say_something_and_the_end_of_a_long_one() {
+        let screen: Vec<String> = ["", "gemini: boom", "   ", "see the log  ", ""]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(Exit::seen(5, &screen).tail, "gemini: boom\nsee the log");
+        let many: Vec<String> = (0..40).map(|n| format!("line {n}")).collect();
+        let kept = Exit::seen(5, &many).tail;
+        assert_eq!(kept.lines().count(), EXIT_TAIL_LINES);
+        assert!(kept.ends_with("line 39"));
+        let wide = vec!["x".repeat(5000)];
+        assert_eq!(Exit::seen(5, &wide).tail.chars().count(), EXIT_TAIL_CHARS);
+        assert_eq!(Exit::seen(5, &[]).tail, "");
+    }
+
+    #[test]
+    fn an_exit_says_how_soon_after_the_start_the_program_left() {
+        let exit = |at_ms| Exit {
+            at_ms,
+            tail: String::new(),
+        };
+        assert_eq!(
+            exit(10_400).said(Some(10_000)),
+            "Its program exited as it started."
+        );
+        assert_eq!(
+            exit(13_900).said(Some(10_000)),
+            "Its program exited 3 s after it started."
+        );
+        assert_eq!(
+            exit(10_000 + 5 * 60_000).said(Some(10_000)),
+            "Its program exited after 5 min."
+        );
+        assert_eq!(exit(1).said(None), "Its program exited.");
+    }
 
     #[test]
     fn each_agent_is_called_by_its_program_s_own_name() {

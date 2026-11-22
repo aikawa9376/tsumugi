@@ -141,6 +141,7 @@ pub fn read_any_environment(session: &tsumugi_term::Session) -> Option<Kept> {
             tsumugi_editor: tags::value(t, EDITOR).is_some(),
             restored_from: tags::value(t, RESTORED),
             rest: None,
+            exit: None,
         })),
         None if kind == "terminal" => Some(Kept::Terminal(TerminalSession {
             id: session.id,

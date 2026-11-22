@@ -117,6 +117,11 @@ impl Store {
 mod tests {
     use super::*;
 
+    /// The schema versions a database is at before the step that makes the
+    /// checkpoints table, and the one that gives it the timeline's notes.
+    const TABLE_STEP: i64 = 17;
+    const NOTES_STEP: i64 = 18;
+
     fn store() -> (tempfile::TempDir, Store) {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(&dir.path().join("state.sqlite3")).unwrap();
@@ -222,16 +227,13 @@ mod tests {
         let path = directory.path().join("state.sqlite3");
         drop(Store::open(&path).unwrap());
         let connection = rusqlite::Connection::open(&path).unwrap();
-        let before: i64 = connection
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .unwrap();
         connection
             .execute_batch(&format!(
                 "DROP TABLE checkpoints;
                  CREATE TABLE checkpoints (worktree TEXT PRIMARY KEY, comment TEXT NOT NULL, status TEXT, updated_ms INTEGER NOT NULL);
                  INSERT INTO checkpoints VALUES ('/w', 'tests are red', 'in_review', 4);
                  PRAGMA user_version = {};",
-                before - 1
+                NOTES_STEP
             ))
             .unwrap();
         drop(connection);
@@ -253,13 +255,10 @@ mod tests {
         let path = directory.path().join("state.sqlite3");
         drop(Store::open(&path).unwrap());
         let connection = rusqlite::Connection::open(&path).unwrap();
-        let before: i64 = connection
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .unwrap();
         connection
             .execute_batch(&format!(
                 "DROP TABLE checkpoints; PRAGMA user_version = {};",
-                before - 2
+                TABLE_STEP
             ))
             .unwrap();
         drop(connection);

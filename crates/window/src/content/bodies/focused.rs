@@ -55,12 +55,21 @@ pub(crate) fn FocusedBody(
     let (current_profile, offered) = {
         let config = app.config.read();
         let settings = &config.settings;
-        let offered: Vec<ProfileChoice> = tsumugi_core::profiles::startable(settings)
+        let environment = hosts.environment_of(active_tab.as_ref());
+        let logins = app.logins.read();
+        let offered: Vec<ProfileChoice> = tsumugi_core::profiles::offered(settings)
             .iter()
             .map(|p| ProfileChoice {
                 id: p.id.clone(),
                 agent: p.agent(),
-                label: tsumugi_core::profiles::offered_as(p),
+                label: tsumugi_core::profiles::with_install_mark(
+                    tsumugi_core::profiles::offered_as(p),
+                    p.agent(),
+                    match logins.get(environment, &p.id) {
+                        Some(crate::logins::Login::Is(standing, _)) => Some(*standing),
+                        _ => None,
+                    },
+                ),
             })
             .collect();
         (

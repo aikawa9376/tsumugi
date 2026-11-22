@@ -904,7 +904,7 @@ fn switch_profile(state: &mut ViewState, forward: bool) -> Vec<Effect> {
             Msg::Notice("Only a session not started yet can change its profile".into()),
         );
     }
-    let offered = crate::profiles::startable(&state.config.settings);
+    let offered = crate::profiles::offered(&state.config.settings);
     let now = content::profile_of(state, tab.as_ref());
     let Some(at) = offered.iter().position(|p| p.id == now) else {
         return Vec::new();
