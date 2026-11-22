@@ -252,8 +252,23 @@ sessions and terminals have the same lifetime as those started by the desktop
 build. On a work machine its gateway keeps the hosts running
 ([remote hosts](remote-execution.md)).
 
-A session ends when its program exits or when it is ended from Tsumugi. Its
-console then says so, and it is listed no more.
+A session ends when it is ended from Tsumugi, and is then listed no more. A
+session whose program exits on its own is not ended
+([below](#when-a-program-exits)).
+
+### When a program exits
+
+A session whose agent's program exits on its own, cleanly or not, stays in the
+tree and keeps its tabs, shown as exited, with a Restart chip in its console.
+Restart, or `session.restart` on its row or tab, starts the same agent in the
+same directory, from the same profile and under the same code, continuing its
+conversation, and the new session takes the row's tabs in place; a session
+that never told its conversation starts afresh. A session that exited is
+told to its supervisor as a failure, as any end without a report is. It
+survives the work host starting again. Ending it, as for any session, lists it
+no more; its conversation can still be resumed
+([resuming](#resuming-a-past-conversation)). Restart is refused, and the
+session stays, when its directory is gone.
 
 ### When a task is done
 

@@ -2136,3 +2136,23 @@ fn opening_a_diff_in_neovim_targets_the_work_machine_and_the_opened_commit_file(
     )));
     assert!(run.state().content.active().is_none());
 }
+
+#[test]
+fn a_session_whose_program_exited_keeps_its_tab_and_says_why_it_rests() {
+    let a = session_tab("a");
+    let run = listed_with([session("a").cwd("/r"), session("b").cwd("/r")])
+        .send(show(a.clone()))
+        .event(
+            patch(2).listed(
+                listed()
+                    .session(session("a").cwd("/r").rest(tsumugi_model::Rest::Exited))
+                    .session(session("b").cwd("/r")),
+            ),
+        );
+
+    assert_eq!(shown(&run), std::slice::from_ref(&a));
+    let hosts = &run.state().hosts;
+    assert_eq!(rest_of(hosts, &a), Some(tsumugi_model::Rest::Exited));
+    assert_eq!(rest_of(hosts, &session_tab("b")), None);
+    assert!(!waits_to_come_back(hosts, &a));
+}

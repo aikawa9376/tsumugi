@@ -129,6 +129,11 @@ pub async fn ended(root: &Path, id: SessionId) -> Result<()> {
     with_store(root, move |store| store.end(id)).await
 }
 
+/// Records that `id`, whose program exited, is listed no more.
+pub async fn let_go(root: &Path, id: SessionId) -> Result<()> {
+    with_store(root, move |store| store.let_go(id)).await
+}
+
 /// The settings `id` was started with, as Tsumugi recorded them.
 pub async fn launch_of(root: &Path, id: SessionId) -> Result<Option<Settings>> {
     with_store(root, move |store| store.launch(id)).await

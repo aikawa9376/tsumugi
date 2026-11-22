@@ -133,10 +133,7 @@ pub(crate) fn use_console_sizes(ui: &Ui) {
                 tab.windows().iter().any(|window| {
                     connected(&window.shows)
                         && needs_attach(&window.shows, &hub.panes)
-                        && !tsumugi_core::content::waits_to_come_back(
-                            &app.hosts.peek(),
-                            &window.shows,
-                        )
+                        && !tsumugi_core::content::runs_nothing(&app.hosts.peek(), &window.shows)
                 })
             })
         }

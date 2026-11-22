@@ -66,7 +66,7 @@ pub(crate) fn ensure_pane(
     }
     // Nothing holds it any more: what stands for it takes the tab once
     // brought back.
-    if tsumugi_core::content::waits_to_come_back(&app.hosts.peek(), tab) {
+    if tsumugi_core::content::runs_nothing(&app.hosts.peek(), tab) {
         return None;
     }
     let id = kept_id(tab)?;

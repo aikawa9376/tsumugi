@@ -33,6 +33,7 @@ pub fn record(name: &str) -> RecordBuilder {
         brought_back_by: None,
         name_given: false,
         code: tsumugi_model::SessionCode::random(),
+        rest: None,
     })
 }
 

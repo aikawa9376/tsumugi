@@ -78,6 +78,40 @@ pub fn listed(sessions: &[Session], terminals: &[KeptTerminal]) -> Vec<Interrupt
     sessions.chain(terminals).collect()
 }
 
+/// Whether a program that `listed` says exited, as the terminal host lists
+/// it, ended on its own, rather than being ended from Tsumugi, which is not
+/// listed once it is. Only the first leaves the session to be restarted.
+pub fn exited_on_its_own(listed: Option<bool>) -> bool {
+    listed == Some(true)
+}
+
+/// The sessions of `records` that are listed with no program running, as the
+/// daemon id they ran as names them.
+pub fn resting(records: &[Session]) -> Vec<tsumugi_model::Session> {
+    records
+        .iter()
+        .filter_map(|record| {
+            Some(tsumugi_model::Session {
+                delegation: Some(record.id),
+                code: Some(record.code.clone()),
+                parent: record.parent,
+                agent: record.agent,
+                profile: record.profile.clone(),
+                home: record.home.clone(),
+                id: crate::sessions::hex(record.terminal?),
+                session_id: record.conversation.clone().unwrap_or_default(),
+                name: record.name.clone(),
+                cwd: record.cwd.clone(),
+                state: tsumugi_model::State::Idle,
+                started_ms: Some(record.started_ms),
+                permissions: record.permissions.clone(),
+                rest: Some(record.rest?),
+                ..Default::default()
+            })
+        })
+        .collect()
+}
+
 /// What waits to be brought back as `daemon` lists its sessions now: what
 /// was recorded as interrupted, and what is about to be, so a window never
 /// takes what the terminal host took for what ended in the moment between.
@@ -164,7 +198,7 @@ pub fn plan(
         .filter(|r| r.brought_back_by.is_some())
         .map(|r| r.id)
         .collect();
-    for record in records.iter().filter(|r| r.interrupted) {
+    for record in records.iter().filter(|r| r.interrupted || r.rest.is_some()) {
         let Some(id) = record.terminal.map(crate::sessions::hex) else {
             continue;
         };
@@ -177,7 +211,10 @@ pub fn plan(
             why,
             held_by,
         };
-        let Some(conversation) = record.conversation.clone().filter(|c| !c.is_empty()) else {
+        // A session whose program exited before its agent told the
+        // conversation starts afresh; one the terminal host took cannot.
+        let conversation = record.conversation.clone().filter(|c| !c.is_empty());
+        if conversation.is_none() && record.rest.is_none() {
             steps.push(refuse(
                 format!(
                     "{} never told which conversation it held",
@@ -186,7 +223,7 @@ pub fn plan(
                 None,
             ));
             continue;
-        };
+        }
         if !exists(&record.cwd) {
             steps.push(refuse(
                 format!("{} is not there any more", record.cwd.display()),
@@ -194,11 +231,13 @@ pub fn plan(
             ));
             continue;
         }
-        if let Some(by) = held.get(&(record.agent, conversation.clone())) {
-            steps.push(refuse("its conversation runs already".into(), *by));
-            continue;
+        if let Some(conversation) = conversation {
+            if let Some(by) = held.get(&(record.agent, conversation.clone())) {
+                steps.push(refuse("its conversation runs already".into(), *by));
+                continue;
+            }
+            held.insert((record.agent, conversation), None);
         }
-        held.insert((record.agent, conversation), None);
         resumed.insert(record.id);
         let parent = record.parent.filter(|parent| resumed.contains(parent));
         steps.push(Step::Resume {
@@ -427,9 +466,12 @@ async fn refuse(
     id: &str,
     held_by: Option<SessionId>,
 ) {
+    // A session whose program exited stays listed, to be restarted when what
+    // refused it is put right.
     let record = records
         .iter()
         .find(|r| r.terminal.map(crate::sessions::hex).as_deref() == Some(id))
+        .filter(|r| r.rest.is_none())
         .map(|r| r.id);
     let terminal = terminals
         .iter()
@@ -690,5 +732,74 @@ mod tests {
             ]
         );
         assert_eq!(listed[1].cwd, PathBuf::from("/repo"));
+    }
+
+    fn exited(name: &str, terminal: u128, conversation: Option<&str>) -> Session {
+        let mut built = record(name).build();
+        built.conversation = conversation.map(Into::into);
+        built.terminal = Some(terminal);
+        built.ended = true;
+        built.rest = Some(tsumugi_model::Rest::Exited);
+        built
+    }
+
+    #[test]
+    fn a_session_whose_program_exited_comes_back_by_the_daemon_id_it_ran_as() {
+        let records = [exited("a", 1, Some("c1")), exited("b", 2, Some("c2"))];
+
+        let steps = plan(&chosen(&[2]), &records, &[], &[], |_| true);
+
+        assert_eq!(outcomes(&steps), ["resume b"]);
+    }
+
+    #[test]
+    fn a_session_that_exited_before_its_conversation_was_known_restarts_afresh() {
+        let records = [exited("a", 1, None)];
+
+        let steps = plan(&chosen(&[1]), &records, &[], &[], |_| true);
+
+        assert_eq!(outcomes(&steps), ["resume a"]);
+    }
+
+    #[test]
+    fn a_session_that_exited_in_a_directory_gone_is_refused_saying_so() {
+        let records = [exited("a", 1, Some("c1"))];
+
+        let steps = plan(&chosen(&[1]), &records, &[], &[], |_| false);
+
+        assert_eq!(outcomes(&steps), ["refuse a: /repo is not there any more"]);
+    }
+
+    #[test]
+    fn a_session_that_was_ended_from_tsumugi_does_not_come_back_by_restarting() {
+        let mut ended = record("a").conversation("c1").ended().build();
+        ended.terminal = Some(1);
+
+        assert!(plan(&chosen(&[1]), &[ended], &[], &[], |_| true).is_empty());
+    }
+
+    #[test]
+    fn a_session_whose_program_exited_is_listed_as_resting_by_the_daemon_id_it_ran_as() {
+        let mut gone = record("gone").build();
+        gone.terminal = Some(9);
+        let records = [exited("a", 1, Some("c1")), gone];
+
+        let listed = resting(&records);
+
+        assert_eq!(listed.len(), 1);
+        let shown = &listed[0];
+        assert_eq!(shown.id, crate::sessions::hex(1));
+        assert_eq!(shown.delegation, Some(records[0].id));
+        assert_eq!(shown.code, Some(records[0].code.clone()));
+        assert_eq!(shown.session_id, "c1");
+        assert_eq!(shown.rest, Some(tsumugi_model::Rest::Exited));
+        assert_eq!(shown.state, tsumugi_model::State::Idle);
+    }
+
+    #[test]
+    fn a_program_that_exited_on_its_own_is_told_from_one_that_was_ended() {
+        assert!(exited_on_its_own(Some(true)));
+        assert!(!exited_on_its_own(Some(false)));
+        assert!(!exited_on_its_own(None));
     }
 }

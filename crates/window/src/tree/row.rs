@@ -18,7 +18,7 @@ use crate::bridge::AppCtx;
 use crate::completion::Completions;
 use crate::components::{
     AgentBadge, DraftMark, FileLook, FileRow, IconButton, ListRow, PlaceMark, SessionMark,
-    StateGlyph, TerminalMark, glyph, runs_of, session_mark,
+    StateGlyph, TerminalMark, glyph, runs_of, session_glyph, session_mark,
 };
 use crate::connection;
 use crate::content::Tab;
@@ -356,7 +356,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                     .and_then(|s| s.code.as_ref())
                     .map(ToString::to_string)
                     .unwrap_or_default(),
-                s.and_then(|s| glyph(context.completions.read().state(&s))),
+                s.and_then(|s| session_glyph(s.rest, context.completions.read().state(&s))),
             )
         }
         Item::Terminal(_, id) => {

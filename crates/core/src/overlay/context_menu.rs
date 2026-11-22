@@ -75,6 +75,9 @@ pub fn entries(
     let ending = session.map(|_| offer(Action::SessionStop));
     let rename = session.map(|_| offer(Action::SessionRename));
     let unread = session.map(|_| offer(Action::SessionMarkUnread));
+    let restart = session
+        .filter(|s| s.rest.is_some())
+        .map(|_| offer(Action::SessionRestart));
     let mute = offer(Action::NotificationsMute);
     // The key says where a row opens, as in fern.
     let opens = [
@@ -109,6 +112,7 @@ pub fn entries(
         }
         Target::Row(Item::Session(_, _) | Item::Waiting(_, _)) => opens
             .into_iter()
+            .chain(restart)
             .chain(rename)
             .chain(unread)
             .chain([mute, copy_name])

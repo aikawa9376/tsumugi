@@ -81,6 +81,7 @@ pub enum Action {
     SessionScratch,
     SessionResume,
     SessionBringBack,
+    SessionRestart,
     NoticesOpen,
     SessionStop,
     SessionRename,
@@ -454,6 +455,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::SessionResume, "session.resume", "list the conversations Claude Code and Codex kept, to resume one in a new session ([details](sessions.md#resuming-a-past-conversation))").bar("Resume Conversation…", Icon::TransferIn),
     S::new(A::NoticesOpen, "notices.open", "open the list of what needed you, the sessions that began waiting on you, failed or finished a turn, to go through them, mark them read or unread and go to their sessions ([details](notices.md))").bar("Notices…", Icon::Bell),
     S::new(A::SessionBringBack, "session.bring_back", "list what the terminal host took with it when it went, to bring a session or a shell back ([details](sessions.md#when-the-terminal-host-goes))").bar("Bring Back Sessions…", Icon::Restore),
+    S::new(A::SessionRestart, "session.restart", "start a session whose program exited again: the same agent in the same directory, continuing its conversation; the session keeps its row and its tabs ([details](sessions.md#when-a-program-exits))")
+        .row("Restart", Go)
+        .icon(Icon::Restore),
     S::new(A::SessionStop, "session.stop", "end a session Tsumugi runs after asking; Claude Code keeps its conversation, for `/resume` in a session started later; on a terminal's row, end that terminal")
         .bar("End…", Icon::PlayerStop)
         .row("End…", End),
@@ -893,6 +897,7 @@ mod tests {
             SessionScratch,
             SessionResume,
             SessionBringBack,
+            SessionRestart,
             NoticesOpen,
             SessionStop,
             SessionRename,

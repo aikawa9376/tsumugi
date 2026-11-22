@@ -46,6 +46,12 @@ impl SessionBuilder {
         self
     }
 
+    /// Listed with no program running, for this reason.
+    pub fn rest(mut self, rest: crate::Rest) -> Self {
+        self.0.rest = Some(rest);
+        self
+    }
+
     pub fn state(mut self, state: State) -> Self {
         self.0.state = state;
         self

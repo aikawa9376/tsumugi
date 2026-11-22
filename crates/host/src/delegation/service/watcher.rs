@@ -96,6 +96,9 @@ impl Watcher {
                         context.call(move |store| store.interrupt(id)).await?;
                         interrupted = true;
                     }
+                    Fate::Ended if crate::restore::exited_on_its_own(listed.map(|n| n.exited)) => {
+                        context.call(move |store| store.exit(id)).await?;
+                    }
                     Fate::Ended => context.call(move |store| store.end(id)).await?,
                     Fate::Runs | Fate::Unknown => {}
                 }
