@@ -132,6 +132,7 @@
 "X" = "session.stop"
 "R" = "session.rename"
 "U" = "session.mark_unread"
+"Ctrl+r" = "session.restart"
 "M" = "notifications.mute"
 "y" = "cursor.copy"
 "g x" = "cursor.browse"
@@ -179,6 +180,7 @@
 "X" = "session.stop"
 "R" = "session.rename"
 "U" = "session.mark_unread"
+"Ctrl+r" = "session.restart"
 "n" = "session.new"
 "i" = "prompt.write"
 "a" = "prompt.write"
@@ -286,6 +288,7 @@
 "o" = "prompt.write"
 "O" = "prompt.write"
 "X" = "session.stop"
+"Ctrl+r" = "session.restart"
 
 [console.claude]
 "Tab" = "prompt.write"

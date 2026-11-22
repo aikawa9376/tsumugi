@@ -255,6 +255,12 @@ pub struct Settings {
     /// restarted, crashed or went with the machine, come back: offered by the
     /// window to bring back, at once, or never.
     pub restore_sessions: RestoreSessions,
+    /// How many minutes a session whose turn is done waits, out of view and
+    /// left alone, before Tsumugi stops its program to spare the machine and
+    /// keeps its row and tabs; focusing it or sending to it wakes it with its
+    /// conversation. 0, the default, never does. One that works, waits on a
+    /// dialog or has sessions it opened still running is never stopped.
+    pub hibernate_after: u32,
     /// Close a command's tabs and splits when it finishes successfully; its
     /// output stays available from the tree. Off, its windows stay open too.
     pub close_successful_commands: bool,
@@ -397,6 +403,7 @@ impl Default for Settings {
             usage_left: true,
             rename_sessions: true,
             restore_sessions: RestoreSessions::Ask,
+            hibernate_after: 0,
             close_successful_commands: true,
             shell: ShellLaunch::default(),
             neovim: Launch::default(),

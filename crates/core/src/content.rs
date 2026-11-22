@@ -30,7 +30,7 @@ pub(crate) use editing::*;
 pub use focus::*;
 pub use layout::*;
 pub(crate) use listing::{listed, tell_live};
-pub use listing::{newly_waiting, waits_to_come_back};
+pub use listing::{newly_waiting, rest_of, runs_nothing, waits_to_come_back};
 pub use moving::*;
 pub use naming::*;
 pub use tab::*;

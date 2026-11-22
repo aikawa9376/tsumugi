@@ -74,6 +74,8 @@ pub struct Session {
     /// The code it keeps for as long as its record is kept, handed on to the
     /// record that brings it back or resumes its conversation.
     pub code: tsumugi_model::SessionCode,
+    /// Why it is listed though it ended: its program exited on its own.
+    pub rest: Option<tsumugi_model::Rest>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

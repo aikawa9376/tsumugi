@@ -23,6 +23,7 @@ pub(super) async fn watch(mut watched: Watched) {
     let mut cache: HashMap<PathBuf, (Instant, Option<Worktree>)> = HashMap::new();
     let mut lists: HashMap<PathBuf, (Instant, Vec<Worktree>)> = HashMap::new();
     let mut ran = Ran::default();
+    let mut quiet = crate::hibernation::Quiet::default();
     let mut notices = crate::notices::Kept::open(&crate::paths::instance_state());
     loop {
         // Due before the terminal host is asked, so that a time is settled
@@ -39,6 +40,7 @@ pub(super) async fn watch(mut watched: Watched) {
                         Vec::new()
                     }
                 };
+                crate::hibernation::tick(&watched, &mut quiet, &sessions).await;
                 if let Err(error) = crate::delegation::app::follow_workers(&sessions).await {
                     tracing::warn!(%error, "cannot tell supervisors how their workers stand");
                 }
@@ -356,7 +358,30 @@ pub async fn read_sessions(
             .tag(id, tsumugi_term::tags::tagged(key, &value), held)
             .await;
     }
+    // Listed after what runs is read, which they take no part in: no program
+    // of theirs runs to report, show a screen or hold a conversation open.
+    own.extend(resting_sessions().await);
     Ok((own, kept_shells))
+}
+
+/// The sessions whose program exited on its own, which stay listed to be
+/// restarted; none while their records cannot be read.
+async fn resting_sessions() -> Vec<Session> {
+    let root = crate::delegation::app::root();
+    let records = match crate::delegation::app::with_store(&root, |store| store.rested()).await {
+        Ok(records) => records,
+        Err(error) => {
+            tracing::warn!(%error, "cannot read the sessions that exited");
+            return Vec::new();
+        }
+    };
+    let mut resting = crate::restore::resting(&records);
+    for session in &mut resting {
+        if let Ok(context) = crate::programs::of_session(session).await {
+            session.profile_name = context.profile_name;
+        }
+    }
+    resting
 }
 
 /// Whether the screen of a session whose program reports `reported` is read

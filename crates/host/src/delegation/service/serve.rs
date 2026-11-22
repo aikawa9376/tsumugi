@@ -111,11 +111,31 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
             Ok(Value::String(Timeline::replay(&entries).text()))
         }
         Command::Send(send) => {
-            let id = context
+            let wanted = send.to.clone();
+            let to = context
                 .call(move |store| {
-                    let to = addressed(store, &send.to)?;
-                    store.send(caller.id, to, &send.body)
+                    let to = addressed(store, &wanted)?;
+                    store.known(to)
                 })
+                .await?;
+            // A session asleep is woken to take the message, which then goes
+            // to the session that stands for it.
+            let to = match to.rest {
+                Some(tsumugi_model::Rest::Hibernated) => {
+                    crate::restore::restart(to.id)
+                        .await
+                        .map_err(|why| {
+                            Error::new(
+                                Code::Refused,
+                                format!("{} sleeps and could not be woken: {why}", to.name),
+                            )
+                        })?
+                        .id
+                }
+                _ => to.id,
+            };
+            let id = context
+                .call(move |store| store.send(caller.id, to, &send.body))
                 .await?;
             answer(protocol::Sent { sent: id })
         }

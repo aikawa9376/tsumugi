@@ -79,6 +79,7 @@ changes them ([keys](../keys.md)).
 | `session.resume` | Resume Conversation… | list the conversations Claude Code and Codex kept, to resume one in a new session ([details](../sessions.md#resuming-a-past-conversation)) | `global`: `Mod+o`<br>`tree`: `O` |
 | `notices.open` | Notices… | open the list of what needed you, the sessions that began waiting on you, failed or finished a turn, to go through them, mark them read or unread and go to their sessions ([details](../notices.md)) | `global`: `Ctrl+q i` |
 | `session.bring_back` | Bring Back Sessions… | list what the terminal host took with it when it went, to bring a session or a shell back ([details](../sessions.md#when-the-terminal-host-goes)) |  |
+| `session.restart` |  | start a session whose program exited again: the same agent in the same directory, continuing its conversation; the session keeps its row and its tabs ([details](../sessions.md#when-a-program-exits)) | `tree`: `Ctrl+r`<br>`agents`: `Ctrl+r`<br>`console`: `Ctrl+r` |
 | `session.stop` | End… | end a session Tsumugi runs after asking; Claude Code keeps its conversation, for `/resume` in a session started later; on a terminal's row, end that terminal | `global`: `Mod+Backspace`<br>`tree`: `X`<br>`agents`: `X`<br>`console`: `X` |
 | `session.rename` | Rename… | edit the name of a session Tsumugi runs in place; the tree shows it, and the session is sent Claude Code's `/rename` so its own interface says it too | `tree`: `R`<br>`agents`: `R` |
 | `session.mark_unread` |  | mark a session unread, as if it had finished out of view: its row is drawn bold and counted in the window's title until a window in front shows it anew ([details](../sessions.md#unread-sessions)) | `tree`: `U`<br>`agents`: `U` |
@@ -382,6 +383,7 @@ changes them ([keys](../keys.md)).
 "X" = "session.stop"
 "R" = "session.rename"
 "U" = "session.mark_unread"
+"Ctrl+r" = "session.restart"
 "M" = "notifications.mute"
 "y" = "cursor.copy"
 "g x" = "cursor.browse"
@@ -429,6 +431,7 @@ changes them ([keys](../keys.md)).
 "X" = "session.stop"
 "R" = "session.rename"
 "U" = "session.mark_unread"
+"Ctrl+r" = "session.restart"
 "n" = "session.new"
 "i" = "prompt.write"
 "a" = "prompt.write"
@@ -536,6 +539,7 @@ changes them ([keys](../keys.md)).
 "o" = "prompt.write"
 "O" = "prompt.write"
 "X" = "session.stop"
+"Ctrl+r" = "session.restart"
 
 [console.claude]
 "Tab" = "prompt.write"

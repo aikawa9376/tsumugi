@@ -27,6 +27,7 @@ pub mod gateway;
 mod generate;
 pub mod governor;
 mod held;
+mod hibernation;
 mod issue_cli;
 mod jobs;
 pub mod kept;

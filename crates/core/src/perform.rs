@@ -306,6 +306,23 @@ pub(crate) fn perform(
             let environment = content::focused_environment(state);
             step(state, Msg::InterruptedOpen(environment))
         }
+        Action::SessionRestart => {
+            match crate::unread::session_of(cur.as_ref(), on_list, thing.as_ref()) {
+                Some((environment, id))
+                    if content::rest_of(
+                        &state.hosts,
+                        &Tab::Session(environment.clone(), id.clone()),
+                    )
+                    .is_some() =>
+                {
+                    vec![Effect::BringBack {
+                        environment,
+                        ids: vec![id],
+                    }]
+                }
+                _ => Vec::new(),
+            }
+        }
         Action::SessionProfileNext => switch_profile(state, true),
         Action::SessionProfilePrev => switch_profile(state, false),
         // On a shell's row, that shell closes, whichever tab is shown; ending

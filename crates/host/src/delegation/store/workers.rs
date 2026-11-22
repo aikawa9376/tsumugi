@@ -1,7 +1,7 @@
 //! The sessions a session opened to supervise, and what they tell it: a
 //! report of their own, or that they stopped without making one.
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
-use tsumugi_model::{Session as Shown, SessionId, State};
+use tsumugi_model::{Rest, Session as Shown, SessionId, State};
 
 use super::{
     Code, Error, MESSAGE_COLUMNS, Message, MessageId, Result, Session, Store, insert_kind,
@@ -192,6 +192,10 @@ impl Store {
             let Some(record) = session(&transaction, worker)? else {
                 continue;
             };
+            // Asleep, not ended: it is woken as the same worker.
+            if record.rest == Some(Rest::Hibernated) {
+                continue;
+            }
             let standing = if record.ended {
                 Some(Standing::Ended)
             } else {
@@ -488,6 +492,30 @@ mod tests {
 
         let told = told(&mut store, supervisor);
         assert!(told[0].contains("outcome: failed"), "{told:?}");
+    }
+
+    #[test]
+    fn a_worker_asleep_is_not_reported_as_failed_and_goes_on_supervised_once_woken() {
+        let (_dir, mut store) = store();
+        let (supervisor, worker) = supervised(&mut store);
+        follow(&mut store, worker, State::Working);
+        store.hibernate(worker).unwrap();
+
+        store.follow_workers(&[]).unwrap();
+        assert!(told(&mut store, supervisor).is_empty());
+
+        let woken = register(&mut store, Some(supervisor), "worker");
+        store.brought_back(worker, woken).unwrap();
+        follow(&mut store, woken, State::Working);
+        store.end(woken).unwrap();
+        store.follow_workers(&[]).unwrap();
+
+        let told = told(&mut store, supervisor);
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert!(
+            told[0].starts_with("worker_stopped\nevent: ended\n"),
+            "{told:?}"
+        );
     }
 
     #[test]

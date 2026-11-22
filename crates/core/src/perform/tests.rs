@@ -1129,3 +1129,36 @@ fn muting_with_nothing_shown_does_nothing() {
     ));
     assert!(run.last_effects().is_empty());
 }
+
+fn exited_listing() -> SnapshotBuilder {
+    snapshot().listed(
+        listed()
+            .session(session("a").rest(tsumugi_model::Rest::Exited))
+            .session(session("b")),
+    )
+}
+
+#[test]
+fn restarting_asks_the_host_to_bring_back_the_session_that_exited_and_no_other() {
+    let run = Scenario::new()
+        .event(exited_listing())
+        .send(Msg::ShowSession(here(), "a".into()))
+        .send(Msg::Focus(Area::Console))
+        .send(perform(Action::SessionRestart, None, Probe::default()));
+    assert!(run.last_effects().contains(&Effect::BringBack {
+        environment: here(),
+        ids: vec!["a".into()],
+    }));
+
+    let running = Scenario::new()
+        .event(exited_listing())
+        .send(Msg::ShowSession(here(), "b".into()))
+        .send(Msg::Focus(Area::Console))
+        .send(perform(Action::SessionRestart, None, Probe::default()));
+    assert!(
+        !running
+            .last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::BringBack { .. }))
+    );
+}

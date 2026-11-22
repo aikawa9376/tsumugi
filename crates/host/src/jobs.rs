@@ -60,6 +60,10 @@ pub(crate) async fn apply(watched: &Watched, window: WindowId, mut job: Request)
 }
 
 async fn authorize(job: &mut Request) -> Result<(), String> {
+    // No program runs for it, so the terminal host holds nothing to check.
+    if matches!(job, Request::Stop { session } if session.rest.is_some()) {
+        return Ok(());
+    }
     let id = match job {
         Request::Stop { session } | Request::Kill { session, .. } => {
             id_of(&session.id).ok_or("invalid session ID")?
@@ -110,6 +114,9 @@ async fn stop(watched: &Watched, window: WindowId, asked: Session) -> Result<(),
     let Some(id) = id_of(&asked.id) else {
         return Err("invalid session ID".into());
     };
+    if asked.rest.is_some() {
+        return put_away(watched, window, &asked).await;
+    }
     let result = match crate::daemon::daemon().end(id).await {
         Ok(()) => {
             watched.tell(window, notice(format!("ended {}", asked.name)));
@@ -132,6 +139,26 @@ async fn stop(watched: &Watched, window: WindowId, asked: Session) -> Result<(),
             Err(e.to_string())
         }
     };
+    watched.relist();
+    result
+}
+
+/// End a session whose program exited, which the terminal host holds no
+/// more: list it no more; its agent keeps its conversation.
+async fn put_away(watched: &Watched, window: WindowId, asked: &Session) -> Result<(), String> {
+    let result = match asked.delegation {
+        Some(record) => crate::delegation::app::let_go(&crate::delegation::app::root(), record)
+            .await
+            .map_err(|error| error.to_string()),
+        None => Ok(()),
+    };
+    match &result {
+        Ok(()) => watched.tell(window, notice(format!("ended {}", asked.name))),
+        Err(error) => watched.tell(
+            window,
+            failure(format!("cannot end {}: {error}", asked.name)),
+        ),
+    }
     watched.relist();
     result
 }

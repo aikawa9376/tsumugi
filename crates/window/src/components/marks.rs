@@ -2,7 +2,7 @@
 //! stands, whether it only reads, and what a terminal runs.
 
 use dioxus::prelude::*;
-use tsumugi_model::{State, TerminalProgram, TerminalSession};
+use tsumugi_model::{Rest, State, TerminalProgram, TerminalSession};
 
 use crate::icons::{Icon, IconView};
 
@@ -18,6 +18,21 @@ pub(crate) fn glyph(state: &State) -> Option<(&'static str, Icon, &'static str)>
         State::Failed => ("state-glyph fail", Icon::AlertTriangle),
     };
     Some((class, icon, state.word()))
+}
+
+/// A session's mark: why it runs no program when it runs none, else its
+/// state's.
+pub(crate) fn session_glyph(
+    rest: Option<Rest>,
+    state: &State,
+) -> Option<(&'static str, Icon, &'static str)> {
+    match rest {
+        Some(Rest::Exited) => Some(("state-glyph idle", Icon::PlayerStop, Rest::Exited.word())),
+        Some(Rest::Hibernated) => {
+            Some(("state-glyph idle", Icon::SunMoon, Rest::Hibernated.word()))
+        }
+        None => glyph(state),
+    }
 }
 
 /// The mark of a session or a draft that only reads.
@@ -113,6 +128,16 @@ mod tests {
             assert_eq!(shown, icon, "{state:?}");
             assert_eq!(word, state.word());
         }
+    }
+
+    #[test]
+    fn a_session_whose_program_exited_is_marked_so_whatever_its_state_was() {
+        let (_, icon, word) = session_glyph(Some(Rest::Exited), &State::Done).unwrap();
+        assert_eq!((icon, word), (Icon::PlayerStop, "exited"));
+        let (_, icon, word) = session_glyph(Some(Rest::Hibernated), &State::Idle).unwrap();
+        assert_eq!((icon, word), (Icon::SunMoon, "hibernated"));
+        assert_eq!(session_glyph(None, &State::Idle), None);
+        assert_eq!(session_glyph(None, &State::Done), glyph(&State::Done));
     }
 
     #[test]

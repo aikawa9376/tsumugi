@@ -252,8 +252,23 @@ sessions and terminals have the same lifetime as those started by the desktop
 build. On a work machine its gateway keeps the hosts running
 ([remote hosts](remote-execution.md)).
 
-A session ends when its program exits or when it is ended from Tsumugi. Its
-console then says so, and it is listed no more.
+A session ends when it is ended from Tsumugi, and is then listed no more. A
+session whose program exits on its own is not ended
+([below](#when-a-program-exits)).
+
+### When a program exits
+
+A session whose agent's program exits on its own, cleanly or not, stays in the
+tree and keeps its tabs, shown as exited, with a Restart chip in its console.
+Restart, or `session.restart` on its row or tab, starts the same agent in the
+same directory, from the same profile and under the same code, continuing its
+conversation, and the new session takes the row's tabs in place; a session
+that never told its conversation starts afresh. A session that exited is
+told to its supervisor as a failure, as any end without a report is. It
+survives the work host starting again. Ending it, as for any session, lists it
+no more; its conversation can still be resumed
+([resuming](#resuming-a-past-conversation)). Restart is refused, and the
+session stays, when its directory is gone.
 
 ### When a task is done
 
@@ -264,6 +279,21 @@ When you agree, the session ends itself as ending it from Tsumugi would: its
 worktree stays, and its conversation can be resumed
 ([resuming](#resuming-a-past-conversation)). Otherwise it goes on, to tell you
 what it did, do the work again, or take more.
+
+### Hibernation
+
+With `hibernate_after` set to a number of minutes in the
+[settings](settings.md), a session whose turn is done and which has been out
+of view and left alone for that long is put to sleep: its program is stopped,
+and its row and tabs stay, shown as hibernated. Focusing it, or sending it a
+message, wakes it as a restart does, with its conversation, under its code and
+opened by the session that opened it, and the message is waiting for it when
+it is ready. A session that works, waits on a dialog or is still starting, one
+whose own sessions still run, one that never told its conversation and a
+Cursor CLI session are never put to sleep. A supervisor is not told that a
+worker that sleeps failed. Ending a sleeping session lists it no more; its
+conversation can be resumed ([resuming](#resuming-a-past-conversation)). Set
+to 0, the default, no session sleeps.
 
 ## When the terminal host goes
 

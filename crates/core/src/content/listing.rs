@@ -123,6 +123,12 @@ fn successor(listed: &Listed, tab: &Tab) -> Option<Tab> {
     }
 }
 
+/// Whether nothing runs for `tab`, which waits to come back or shows a session
+/// whose program exited, so no screen is to be had for it.
+pub fn runs_nothing(hosts: &Hosts, tab: &Tab) -> bool {
+    waits_to_come_back(hosts, tab) || rest_of(hosts, tab).is_some()
+}
+
 /// Whether `tab` shows what the terminal host took with it, waiting in its
 /// environment's listing to be brought back.
 pub fn waits_to_come_back(hosts: &Hosts, tab: &Tab) -> bool {
@@ -130,6 +136,16 @@ pub fn waits_to_come_back(hosts: &Hosts, tab: &Tab) -> bool {
         .work(tab.environment())
         .and_then(|w| w.tree.listed.as_deref())
         .is_some_and(|listed| waits(listed, tab))
+}
+
+/// Why the session `tab` shows runs no program though it is listed; none for
+/// a tab of anything else and for a session that runs.
+pub fn rest_of(hosts: &Hosts, tab: &Tab) -> Option<tsumugi_model::Rest> {
+    let Tab::Session(environment, id) = tab else {
+        return None;
+    };
+    let listed = hosts.work(environment)?.tree.listed.as_deref()?;
+    listed.tree.find(id)?.2.rest
 }
 
 /// Whether `tab` shows what the terminal host took with it, waiting in

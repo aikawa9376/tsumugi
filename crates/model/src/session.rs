@@ -130,6 +130,38 @@ pub struct Session {
     /// The daemon id of the interrupted session it was brought back for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restored_from: Option<String>,
+    /// Why nothing runs for it though it is listed: a session that is
+    /// restarted or woken takes its place. None for a session that runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest: Option<Rest>,
+}
+
+/// Why a listed session runs no program.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Rest {
+    /// Its program exited, cleanly or not, without being ended from Tsumugi.
+    Exited,
+    /// Tsumugi stopped its program as it had been done and left alone for a
+    /// while; focusing it or sending to it wakes it.
+    Hibernated,
+}
+
+impl Rest {
+    /// The reason in one word.
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Exited => "exited",
+            Self::Hibernated => "hibernated",
+        }
+    }
+
+    /// The reason a word names.
+    pub fn parse(word: &str) -> Option<Self> {
+        [Self::Exited, Self::Hibernated]
+            .into_iter()
+            .find(|rest| rest.word() == word)
+    }
 }
 
 impl Session {

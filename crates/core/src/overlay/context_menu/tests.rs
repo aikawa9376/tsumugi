@@ -397,3 +397,18 @@ fn a_commit_of_the_log_offers_what_can_be_done_with_it_and_runs_it_on_that_row()
     }
     assert_eq!(all.len(), 7);
 }
+
+#[test]
+fn a_session_whose_program_exited_is_offered_a_restart_first() {
+    let mut s = session();
+    s.rest = Some(tsumugi_model::Rest::Exited);
+    let offered = actions(Target::Row(Item::Session(here(), "a".into())), Some(&s));
+    assert_eq!(offered[OPENS.len()], Action::SessionRestart);
+    assert!(
+        !actions(
+            Target::Row(Item::Session(here(), "a".into())),
+            Some(&session())
+        )
+        .contains(&Action::SessionRestart)
+    );
+}

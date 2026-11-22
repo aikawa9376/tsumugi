@@ -4,9 +4,10 @@ use tsumugi_core::actions::Action;
 use tsumugi_core::content::Area;
 use tsumugi_core::msg::Msg;
 use tsumugi_core::sidebar::{Counts, Identity, Panel, Row};
+use tsumugi_model::Rest;
 
 use crate::bridge::AppCtx;
-use crate::components::{StateGlyph, glyph};
+use crate::components::{StateGlyph, session_glyph};
 use crate::connection;
 use crate::icons::{Icon, IconView};
 use crate::rename::{Place as RenamePlace, SessionName};
@@ -240,13 +241,13 @@ fn AgentRow(row: Row, parent_name: Option<String>) -> Element {
                     }
                 } else { span { class: "agent-leaf" } }
                 if let Some(session) = &row.session {
-                    if let Some((class, icon, title)) = glyph(&session.state) {
+                    if let Some((class, icon, title)) = session_glyph(session.rest, &session.state) {
                         StateGlyph { class, icon, title, size: 13 }
                     }
                     span { class: "agent-name",
                         SessionName { environment: row.key.environment.clone(), id: session.id.clone(), name: name.clone(), place: RenamePlace::Sidebar, sidebar_panel: Panel::Agents }
                     }
-                    span { class: "agent-state", "{session.state.word()}" }
+                    span { class: "agent-state", "{session.rest.map_or(session.state.word(), Rest::word)}" }
                 } else {
                     IconView { icon: Icon::GitBranch, size: 13 }
                     span { class: "agent-name", "{name}" }

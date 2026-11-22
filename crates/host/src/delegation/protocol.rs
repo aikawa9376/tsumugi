@@ -422,6 +422,9 @@ pub struct Listed {
     pub repository: Option<PathBuf>,
     pub readiness: super::Readiness,
     pub opened_by: Option<Opener>,
+    /// Whether Tsumugi stopped its program to sleep; sending to it wakes it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub asleep: bool,
 }
 
 /// The answer to [`Command::Send`]: the message sent.
@@ -632,6 +635,7 @@ mod tests {
                 repository: None,
                 readiness: super::super::Readiness::Ready,
                 opened_by: Some(opener()),
+                asleep: false,
             }),
             json!({"id": id, "code": "ku8c", "name": "review", "agent": "codex",
                 "dir": "/repo", "repository": null, "readiness": "ready",

@@ -8,12 +8,12 @@ use tsumugi_sys::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tsumugi_model::profile::ProfileId;
 use tsumugi_model::timeline::Entry;
-use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
+use tsumugi_model::{Agent, AgentPermissions, Rest, SessionCode, TerminalSession};
 
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 16;
+const SCHEMA_VERSION: i64 = 17;
 
 mod issues;
 mod resources;
@@ -190,6 +190,12 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS schedule_ticks (
          schedule TEXT PRIMARY KEY REFERENCES schedules(id) ON DELETE CASCADE,
          held_ms INTEGER NOT NULL
+     );",
+    // Why a session that ended is still listed: its program exited on its own,
+    // which a restart brings back.
+    "CREATE TABLE IF NOT EXISTS rests (
+         session TEXT PRIMARY KEY REFERENCES sessions(id),
+         rest TEXT NOT NULL
      );",
 ];
 
@@ -508,22 +514,100 @@ impl Store {
             .collect()
     }
 
+    /// Records that the program of `id` exited on its own, so the session
+    /// is listed still, to be restarted; one that had ended already stays as
+    /// it ended.
+    pub fn exit(&mut self, id: SessionId) -> Result<()> {
+        self.rest(id, Rest::Exited)
+    }
+
+    /// Records that `id` was stopped to sleep, so the session is listed
+    /// still, to be woken; one that had ended already stays as it ended.
+    pub fn hibernate(&mut self, id: SessionId) -> Result<()> {
+        self.rest(id, Rest::Hibernated)
+    }
+
+    /// Records that the program of `id`, which was to be stopped to sleep,
+    /// was not, so it runs on.
+    pub fn stay_awake(&mut self, id: SessionId) -> Result<()> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let slept = transaction.execute(
+            "DELETE FROM rests WHERE session = ?1 AND rest = ?2",
+            params![id.to_string(), Rest::Hibernated.word()],
+        )?;
+        if slept > 0 {
+            transaction.execute(
+                "UPDATE sessions SET ended = 0 WHERE id = ?1",
+                [id.to_string()],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    fn rest(&mut self, id: SessionId, rest: Rest) -> Result<()> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        if known(&transaction, id)?.ended {
+            return Ok(());
+        }
+        transaction.execute(
+            "UPDATE sessions SET ended = 1 WHERE id = ?1",
+            [id.to_string()],
+        )?;
+        transaction.execute(
+            "INSERT OR REPLACE INTO rests (session, rest) VALUES (?1, ?2)",
+            params![id.to_string(), rest.word()],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// The sessions listed with no program running, neither brought back nor
+    /// let go, in the order they were registered.
+    pub fn rested(&self) -> Result<Vec<Session>> {
+        let mut statement = self.connection.prepare(&format!(
+            "SELECT {SESSION_COLUMNS} FROM sessions WHERE id IN (SELECT session FROM rests) ORDER BY rowid"
+        ))?;
+        let rows = statement.query_map([], read_session)?;
+        rows.map(|row| row.map_err(Error::from).and_then(|row| row))
+            .collect()
+    }
+
     /// Records that the interrupted `id` was brought back as `by`.
     pub fn brought_back(&mut self, id: SessionId, by: SessionId) -> Result<()> {
+        let slept = known(&self.connection, id)?.rest == Some(Rest::Hibernated);
+        if slept {
+            // Woken, it goes on being supervised by the session that
+            // supervised it, as the same worker.
+            self.connection.execute(
+                "UPDATE OR IGNORE workers SET session = ?2 WHERE session = ?1",
+                params![id.to_string(), by.to_string()],
+            )?;
+        }
         self.update(
             id,
             "UPDATE sessions SET interrupted = 0, brought_back_by = ?2 WHERE id = ?1",
             by.to_string(),
-        )
+        )?;
+        self.connection
+            .execute("DELETE FROM rests WHERE session = ?1", [id.to_string()])?;
+        Ok(())
     }
 
-    /// Records that the interrupted `id` is not to be brought back.
+    /// Records that the interrupted `id`, or the session that exited, is not
+    /// to be brought back.
     pub fn let_go(&mut self, id: SessionId) -> Result<()> {
         known(&self.connection, id)?;
         self.connection.execute(
             "UPDATE sessions SET interrupted = 0 WHERE id = ?1",
             [id.to_string()],
         )?;
+        self.connection
+            .execute("DELETE FROM rests WHERE session = ?1", [id.to_string()])?;
         Ok(())
     }
 
@@ -696,7 +780,7 @@ impl Store {
     }
 }
 
-const SESSION_COLUMNS: &str = "id, parent, agent, name, cwd, terminal, conversation, readiness, started_ms, ended, profile, home, model, permissions, generation, interrupted, brought_back_by, name_given, code";
+const SESSION_COLUMNS: &str = "id, parent, agent, name, cwd, terminal, conversation, readiness, started_ms, ended, profile, home, model, permissions, generation, interrupted, brought_back_by, name_given, code, (SELECT rest FROM rests WHERE session = sessions.id) AS rest";
 
 fn read_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Session>> {
     let id: String = row.get("id")?;
@@ -718,6 +802,7 @@ fn read_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Session>> {
     let brought_back_by: Option<String> = row.get("brought_back_by")?;
     let name_given = row.get("name_given")?;
     let code: Option<String> = row.get("code")?;
+    let rest: Option<String> = row.get("rest")?;
     Ok((|| {
         Ok(Session {
             id: id.parse().map_err(Error::storage)?,
@@ -752,6 +837,7 @@ fn read_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Session>> {
                 .transpose()
                 .map_err(Error::storage)?,
             name_given,
+            rest: rest.as_deref().and_then(Rest::parse),
             code: code
                 .ok_or_else(|| Error::storage("a session has no code"))?
                 .parse()
@@ -1572,6 +1658,84 @@ PRAGMA user_version = 1;
         assert!(store.interrupted().unwrap().is_empty());
         assert_eq!(store.known(back).unwrap().brought_back_by, Some(by));
         assert!(store.known(gone).unwrap().ended);
+    }
+
+    #[test]
+    fn a_session_whose_program_exited_has_ended_and_stays_to_be_restarted() {
+        let (_dir, mut store) = store();
+        let (id, token) = store.register(new(None, "a")).unwrap();
+        let ended = register(&mut store, None, "b");
+        store.end(ended).unwrap();
+        store.exit(id).unwrap();
+        store.exit(ended).unwrap();
+
+        let kept = store.known(id).unwrap();
+        assert!(kept.ended && !kept.interrupted);
+        assert_eq!(kept.rest, Some(Rest::Exited));
+        assert_eq!(store.authenticate(&token).unwrap_err().code, Code::Refused);
+        assert_eq!(
+            store
+                .rested()
+                .unwrap()
+                .into_iter()
+                .map(|s| s.id)
+                .collect::<Vec<_>>(),
+            [id],
+            "one ended by Tsumugi stays ended"
+        );
+    }
+
+    #[test]
+    fn a_session_stopped_to_sleep_has_ended_and_stays_listed_as_hibernated() {
+        let (_dir, mut store) = store();
+        let id = register(&mut store, None, "a");
+
+        store.hibernate(id).unwrap();
+
+        let kept = store.known(id).unwrap();
+        assert!(kept.ended && !kept.interrupted);
+        assert_eq!(kept.rest, Some(Rest::Hibernated));
+        assert_eq!(store.rested().unwrap().len(), 1);
+        let sender = register(&mut store, None, "b");
+        assert_eq!(
+            store.send(sender, id, "hello").unwrap_err().code,
+            Code::Refused,
+            "a message is sent to what woke it, not to the record that slept"
+        );
+    }
+
+    #[test]
+    fn a_session_whose_program_could_not_be_stopped_to_sleep_runs_on() {
+        let (_dir, mut store) = store();
+        let id = register(&mut store, None, "a");
+        store.hibernate(id).unwrap();
+
+        store.stay_awake(id).unwrap();
+
+        let kept = store.known(id).unwrap();
+        assert!(!kept.ended);
+        assert_eq!(kept.rest, None);
+        let gone = register(&mut store, None, "b");
+        store.exit(gone).unwrap();
+        store.stay_awake(gone).unwrap();
+        assert!(store.known(gone).unwrap().ended, "one that exited stays so");
+    }
+
+    #[test]
+    fn a_session_that_exited_and_was_restarted_or_closed_rests_no_more() {
+        let (_dir, mut store) = store();
+        let back = register(&mut store, None, "back");
+        let closed = register(&mut store, None, "closed");
+        store.exit(back).unwrap();
+        store.exit(closed).unwrap();
+        let by = register(&mut store, None, "back");
+
+        store.brought_back(back, by).unwrap();
+        store.let_go(closed).unwrap();
+
+        assert!(store.rested().unwrap().is_empty());
+        assert_eq!(store.known(back).unwrap().brought_back_by, Some(by));
+        assert_eq!(store.known(back).unwrap().rest, None);
     }
 
     #[test]
