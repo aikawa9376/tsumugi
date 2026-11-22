@@ -25,6 +25,11 @@ pub(super) async fn watch(mut watched: Watched) {
     let mut ran = Ran::default();
     let mut notices = crate::notices::Kept::open(&crate::paths::instance_state());
     loop {
+        // Due before the terminal host is asked, so that a time is settled
+        // even while the sessions cannot be listed.
+        if let Err(error) = crate::schedules::tick(&watched, tsumugi_model::time::now_ms()).await {
+            tracing::warn!(%error, "cannot run the schedules");
+        }
         match read_sessions(&daemon, &watched.inputs()).await {
             Ok((sessions, terminals)) => {
                 let issue_dirs = match crate::local_issues::advance(&watched, &sessions).await {
@@ -42,6 +47,9 @@ pub(super) async fn watch(mut watched: Watched) {
                 }
                 if let Err(error) = crate::saved_commands::publish(&watched).await {
                     tracing::warn!(%error, "cannot read the commands projects keep");
+                }
+                if let Err(error) = crate::schedules::publish(&watched).await {
+                    tracing::warn!(%error, "cannot read the schedules");
                 }
                 let mut kept = kept_workspaces();
                 kept.extend(issue_dirs.into_iter().filter(|dir| dir.is_dir()));

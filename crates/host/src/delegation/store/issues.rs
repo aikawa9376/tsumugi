@@ -66,8 +66,9 @@ impl Store {
     /// which a deletion never hands on to another issue.
     pub fn numbered_local_issues(&self) -> Result<Vec<(u64, LocalIssue)>> {
         let mut query = self.connection.prepare(
-            "SELECT i.id, i.dir, i.title, i.body, i.state, i.session, s.terminal, i.error, i.seq
-             FROM local_issues i LEFT JOIN sessions s ON s.id = i.session ORDER BY i.seq",
+            "SELECT i.id, i.dir, i.title, i.body, i.state, i.session, s.terminal, i.error, i.seq, o.schedule
+             FROM local_issues i LEFT JOIN sessions s ON s.id = i.session
+             LEFT JOIN schedule_issues o ON o.issue = i.id ORDER BY i.seq",
         )?;
         let rows = query.query_map([], |row| {
             let state: String = row.get(4)?;
@@ -88,6 +89,7 @@ impl Store {
                     .map_err(|e| parse_error(Box::new(e)))?,
                 session: row.get(6)?,
                 error: row.get(7)?,
+                schedule: row.get(9)?,
             };
             Ok((row.get::<_, i64>(8)?.unsigned_abs(), issue))
         })?;

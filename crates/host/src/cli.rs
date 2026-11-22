@@ -35,6 +35,8 @@ pub enum Command {
     Skills(Vec<String>),
     /// Save, read and change local issues.
     Issue(Vec<String>),
+    /// Keep, read and change schedules.
+    Schedule(Vec<String>),
     /// Start an agent's program in a login of its own, as the last step
     /// of its launch; never typed by hand, so left out of the usage.
     InOwnLogin(Vec<String>),
@@ -273,6 +275,7 @@ impl Command {
             self,
             Command::Session(_)
                 | Command::Issue(_)
+                | Command::Schedule(_)
                 | Command::Terminal(_)
                 | Command::Ports(_)
                 | Command::Mcp(_)
@@ -325,6 +328,7 @@ pub fn command(args: &[String]) -> Option<Command> {
         Some("session") => Some(Command::Session(rest())),
         Some("skills") => Some(Command::Skills(rest())),
         Some("issue") => Some(Command::Issue(rest())),
+        Some("schedule") => Some(Command::Schedule(rest())),
         Some("remote") => remote(&args[1..]),
         Some(tsumugi_agents::own_login::SUBCOMMAND) => Some(Command::InOwnLogin(rest())),
         Some("daemon") => match &args[1..] {
@@ -433,6 +437,7 @@ mod tests {
             &["mcp"],
             &["editor", "/tmp/p.md"],
             &["issue", "list"],
+            &["schedule", "list"],
             &["connect"],
         ] {
             assert!(asked(words).unwrap().routed(), "{words:?}");

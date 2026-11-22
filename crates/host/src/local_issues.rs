@@ -80,6 +80,7 @@ pub(crate) fn view(number: u64, issue: &LocalIssue) -> serde_json::Value {
         "state": issue.state,
         "session": issue.session,
         "error": issue.error,
+        "schedule": issue.schedule,
     })
 }
 
@@ -97,7 +98,7 @@ async fn edit(
     Ok(Answer::Done)
 }
 
-async fn publish(watched: &Watched) -> Result<(), String> {
+pub(crate) async fn publish(watched: &Watched) -> Result<(), String> {
     let issues = with_store(&root(), |store| store.local_issues())
         .await
         .map_err(|e| e.to_string())?;
@@ -141,7 +142,18 @@ pub(crate) async fn advance(
 
 async fn start(issue: &tsumugi_model::LocalIssue) -> Result<(), String> {
     let settings = crate::settings::current();
-    let context = crate::programs::starting(&settings, None, None)?;
+    let profile = with_store(&root(), {
+        let id = issue.id.clone();
+        move |store| store.local_issue_profile(&id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map(|name| {
+        name.parse::<tsumugi_model::profile::ProfileId>()
+            .map_err(|e| e.to_string())
+    })
+    .transpose()?;
+    let context = crate::programs::starting(&settings, None, profile.as_ref())?;
     let daemon = crate::daemon::daemon();
     let listed = daemon.sessions().await.map_err(|e| e.to_string())?;
     let name = crate::starting::name_for(Some(&issue.title), &issue.body, &listed);

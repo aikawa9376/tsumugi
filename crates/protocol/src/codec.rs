@@ -102,6 +102,76 @@ mod tests {
     }
 
     #[test]
+    fn schedule_requests_and_listings_round_trip_and_all_change_the_host() {
+        use crate::Ask;
+        use tsumugi_model::{
+            Cadence, NewSchedule, RunOutcome, Schedule, ScheduleEdit, ScheduleRun, ScheduleTarget,
+            Weekday,
+        };
+        let id = tsumugi_model::SessionId::new().to_string();
+        let new = NewSchedule {
+            id: id.clone(),
+            name: "週次の点検".into(),
+            prompt: "First line\nSecond line".into(),
+            dir: "/project with spaces/日本語".into(),
+            profile: Some("work".into()),
+            timezone: "Asia/Tokyo".into(),
+            cadence: Cadence::Weekly {
+                days: vec![Weekday::Mon, Weekday::Thu],
+                hour: 9,
+                minute: 30,
+            },
+            target: ScheduleTarget::Session {
+                code: "ab12".into(),
+            },
+            grace_minutes: 720,
+        };
+        for ask in [
+            Ask::SaveSchedule(new.clone()),
+            Ask::EditSchedule {
+                id: id.clone(),
+                edit: ScheduleEdit {
+                    profile: Some(None),
+                    cadence: Some(Cadence::Hourly { minute: 5 }),
+                    ..Default::default()
+                },
+            },
+            Ask::SetScheduleEnabled {
+                id: id.clone(),
+                enabled: true,
+            },
+            Ask::RunSchedule { id: id.clone() },
+            Ask::DeleteSchedule { id: id.clone() },
+        ] {
+            assert!(ask.mutates());
+            round_trips(ask);
+        }
+        round_trips(TreeChange::Schedules {
+            schedules: vec![Schedule {
+                id,
+                number: 2,
+                name: new.name,
+                prompt: new.prompt,
+                dir: new.dir,
+                profile: None,
+                timezone: new.timezone,
+                cadence: new.cadence,
+                target: ScheduleTarget::Queue,
+                enabled: true,
+                grace_minutes: 720,
+                next_ms: Some(1),
+                last: Some(ScheduleRun {
+                    due_ms: 0,
+                    at_ms: 1,
+                    outcome: RunOutcome::Failed,
+                    issue: None,
+                    note: Some("The directory is gone".into()),
+                }),
+            }],
+        });
+    }
+
+    #[test]
     fn local_issue_requests_and_progress_round_trip_without_losing_the_request() {
         use crate::Ask;
         use tsumugi_model::{LocalIssue, LocalIssueState, NewLocalIssue};
@@ -189,6 +259,7 @@ mod tests {
                 record: Some(tsumugi_model::SessionId::new()),
                 session: Some("ffff".into()),
                 error: None,
+                schedule: None,
             }],
         });
     }

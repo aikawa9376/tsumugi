@@ -16,3 +16,11 @@
 .local-issue-description { resize: vertical; min-height: 96px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--raised); color: var(--text); font: inherit; outline: none; }
 .local-issue-description:focus { border-color: var(--input-focus); }
 .local-issue-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.schedules { display: flex; flex-direction: column; gap: 8px; }
+.schedules-title { margin: 0; font-size: var(--ui-font-small); color: var(--text-2); font-weight: 500; }
+.schedule-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.schedule-head .local-issue-state { float: none; margin-left: 0; }
+.local-issue-state.enabled { color: var(--run); }
+.schedule-next, .schedule-last { color: var(--text-3); font-size: var(--ui-font-caption); overflow-wrap: anywhere; }
+.schedule-when { display: flex; flex-wrap: wrap; gap: 8px; }
+.schedule-when .adding-input { flex: 1 1 120px; min-width: 0; }

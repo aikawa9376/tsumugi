@@ -43,7 +43,7 @@ fn main() {
     }
     // An instance named on the command line wins over the one the session it
     // is typed in belongs to.
-    if let Some(Command::Issue(rest)) = &asked
+    if let Some(Command::Issue(rest) | Command::Schedule(rest)) = &asked
         && named_instance(rest).is_some()
     {
         for name in routing_and_credential() {
@@ -59,7 +59,7 @@ fn main() {
         Some(Command::Window { instance, .. } | Command::Remote { instance, .. }) => {
             instance.clone()
         }
-        Some(Command::Issue(rest)) => named_instance(rest),
+        Some(Command::Issue(rest) | Command::Schedule(rest)) => named_instance(rest),
         Some(Command::Host(_) | Command::Daemon(_)) => std::env::var("TSUMUGI_WORK_INSTANCE").ok(),
         _ => None,
     };
@@ -133,6 +133,7 @@ fn main() {
             Some(
                 Command::Session(_)
                     | Command::Issue(_)
+                    | Command::Schedule(_)
                     | Command::Terminal(_)
                     | Command::Ports(_)
                     | Command::Mcp(_)
@@ -236,6 +237,7 @@ fn main() {
         Some(Command::Session(rest)) => std::process::exit(tsumugi_host::session_cli(&rest)),
         Some(Command::Skills(rest)) => std::process::exit(tsumugi_host::skills::cli(&rest)),
         Some(Command::Issue(rest)) => std::process::exit(tsumugi_host::issue_cli(&rest)),
+        Some(Command::Schedule(rest)) => std::process::exit(tsumugi_host::schedule_cli(&rest)),
         Some(Command::Mcp(rest)) => {
             std::process::exit(tsumugi_host::delegation::bridge::cli(&rest))
         }

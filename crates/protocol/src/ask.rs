@@ -39,6 +39,27 @@ pub enum Ask {
     DeleteSavedCommand {
         id: String,
     },
+    /// Keep a schedule, disabled.
+    SaveSchedule(tsumugi_model::NewSchedule),
+    /// Change what the schedule of `id` says.
+    EditSchedule {
+        id: String,
+        edit: tsumugi_model::ScheduleEdit,
+    },
+    /// Enable the schedule of `id`, which allows its times from now on, or
+    /// pause it.
+    SetScheduleEnabled {
+        id: String,
+        enabled: bool,
+    },
+    /// Queue the request of the schedule of `id` now.
+    RunSchedule {
+        id: String,
+    },
+    /// Keep the schedule of `id` no more; what it queued stays.
+    DeleteSchedule {
+        id: String,
+    },
     /// Keep `target`, an address or a path, in the project holding `dir`; a
     /// relative path is one of `dir`. One the project keeps already keeps its
     /// identity and takes the label and note given anew.

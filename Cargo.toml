@@ -67,5 +67,6 @@ thiserror = "2.0.21"
 toml = { version = "1.1.8", features = ["preserve_order"] }
 toml_edit = "0.25.17"
 tempfile = "3.27.0"
+jiff = { version = "1.0.2", features = ["tzdb-bundle-always"] }
 uuid = { version = "1.28.0", features = ["v4"] }
 windows-sys = "0.61.2"

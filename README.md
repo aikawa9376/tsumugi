@@ -25,6 +25,7 @@ limited platform coverage; issues and small, focused contributions are welcome.
 - Read changes, conversation history and session activity beside the work.
 - Keep Tree and Agents together in the sidebar, with more room for the section in focus.
 - Queue local issues from a `+` menu for the default agent to work through.
+- Schedule recurring requests (hourly, daily, weekdays, weekly) that the work host queues as local issues, from the same sheet or `tsumugi schedule`.
 - Close a window and return to the sessions still running in the background.
 - Use an integrated Linux header, system clipboard, notifications and display scaling.
 
