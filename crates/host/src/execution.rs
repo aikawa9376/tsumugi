@@ -266,6 +266,7 @@ pub fn resolve(
 ) -> Result<ResolvedLaunch, String> {
     let (mut context, target) = configured(settings, &request)?;
     context.tsumugi = tsumugi_program.to_path_buf();
+    found(&context)?;
     if request.delegation.is_some()
         && let Some(options) = context.pi_mut()
         && options.tools.iter().any(|tool| !tool.trim().is_empty())
@@ -392,6 +393,35 @@ pub fn resolve(
     })
 }
 
+/// Why a command agent cannot start: its profile names no command, or the
+/// program is not found where it is started. Other agents are not asked.
+fn found(context: &tsumugi_agents::AgentContext) -> Result<(), String> {
+    if context.agent() != Agent::Generic {
+        return Ok(());
+    }
+    let Some(program) = tsumugi_agents::generic::program(context) else {
+        return Err(format!(
+            "profile `{}` starts a command agent and names no command: set `launch.command` in the profile",
+            context.profile
+        ));
+    };
+    let path = std::env::var_os("PATH");
+    if tsumugi_agents::generic::standing(context, path.as_deref())
+        == tsumugi_model::profile::LoginStanding::Missing
+    {
+        let homepage = tsumugi_model::catalog::entry_of(context.profile.as_str())
+            .map(|entry| entry.homepage)
+            .filter(|homepage| !homepage.is_empty())
+            .map(|homepage| format!(" (see {homepage})"))
+            .unwrap_or_default();
+        return Err(format!(
+            "`{program}`, which profile `{}` starts, is not found on this machine's PATH: install it{homepage}, or give its full path in `launch.command`",
+            context.profile
+        ));
+    }
+    Ok(())
+}
+
 fn configured(
     settings: &Settings,
     request: &StartRequest,
@@ -417,6 +447,12 @@ fn configured(
         }
         (AgentPermissions::ReadOnly, Agent::Cursor) => {
             tsumugi_agents::cursor::read_only(&mut context);
+        }
+        (AgentPermissions::ReadOnly, Agent::Generic) => {
+            return Err(
+                "a command agent cannot be kept read-only: Tsumugi knows nothing of what its program can do"
+                    .into(),
+            );
         }
         (AgentPermissions::ReadOnly, Agent::Claude) => {
             if let Some(options) = context.claude_mut() {

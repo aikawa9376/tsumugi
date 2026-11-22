@@ -221,6 +221,9 @@ mod tests {
         let mut cursor = done("b");
         cursor.agent = Agent::Cursor;
         assert!(!due(&cursor, false, 1000 * HOUR, 1));
+        let mut command = done("e");
+        command.agent = Agent::Generic;
+        assert!(!due(&command, false, 1000 * HOUR, 1));
         let mut unrecorded = done("c");
         unrecorded.delegation = None;
         assert!(!due(&unrecorded, false, 1000 * HOUR, 1));

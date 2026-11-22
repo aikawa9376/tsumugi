@@ -3,6 +3,7 @@
 //! about the directories they run in.
 
 mod ai_action;
+pub mod catalog;
 mod clone;
 mod code;
 mod command;

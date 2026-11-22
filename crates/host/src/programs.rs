@@ -121,7 +121,7 @@ pub fn recorded(
 /// login: the profiles, and the one tsumugi comes with for an agent that has
 /// none.
 pub fn profiles(settings: &Settings) -> Vec<AgentContext> {
-    let builtin = Agent::ALL
+    let builtin = Agent::BUILTIN
         .iter()
         .map(|a| settings.profile_of(*a))
         .filter(|p| matches!(p, Cow::Owned(_)))
@@ -137,8 +137,10 @@ pub fn profiles(settings: &Settings) -> Vec<AgentContext> {
 /// there, else through the first profile that does: what is kept in the
 /// logins a new session can run in.
 pub fn logins(settings: &Settings) -> Vec<AgentContext> {
-    let defaults: Vec<Cow<'_, AgentProfile>> =
-        Agent::ALL.iter().map(|a| settings.profile_of(*a)).collect();
+    let defaults: Vec<Cow<'_, AgentProfile>> = Agent::BUILTIN
+        .iter()
+        .map(|a| settings.profile_of(*a))
+        .collect();
     let others = settings.profiles.iter();
     let mut out: Vec<AgentContext> = Vec::new();
     for profile in defaults.iter().map(|p| p.as_ref()).chain(others) {
@@ -529,7 +531,7 @@ agent = "codex"
         )
         .unwrap();
         for s in [deleted, moved, keyed] {
-            for agent in Agent::ALL {
+            for agent in Agent::BUILTIN {
                 let offered = s.profile_of(agent).id.clone();
                 let started = starting(&s, Some(agent), Some(&offered));
                 assert_eq!(

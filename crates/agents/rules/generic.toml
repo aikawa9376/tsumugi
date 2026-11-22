@@ -1,0 +1,31 @@
+# How a command-line agent Tsumugi has no adapter for stands, read from its
+# screen while it reports no status: working while a hint to interrupt shows
+# in the last rows, idle once it has drawn anything else.
+#
+# These signs are common to many terminal agents and are not checked against
+# any one of them. A program that reports its status tells better, and a set
+# of your own at `screen-rules/generic.toml` replaces this one.
+
+agent = "generic"
+
+[lines]
+interrupt = '(?i)esc(ape)? to (interrupt|cancel|stop)|ctrl\+c to (interrupt|stop|cancel)'
+drawn = '\S'
+
+[regions]
+foot = { tail_non_empty = 4 }
+
+[[rules]]
+id = "interrupt_hint"
+state = "working"
+when = { in = "foot", has = "interrupt" }
+
+[[rules]]
+id = "something_drawn"
+state = "idle"
+default = true
+when = { has = "drawn" }
+
+[[rules]]
+id = "nothing_yet"
+default = true

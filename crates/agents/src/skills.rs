@@ -182,8 +182,9 @@ pub fn guide(skill: &Shipped, program: &Path) -> String {
 
 /// The folder in which `context`'s agent finds the user's skills, in its
 /// state directory: the login's own, else where the agent's variable or its
-/// usual place in `home` puts it.
-pub fn skills_folder(context: &AgentContext, home: &Path) -> PathBuf {
+/// usual place in `home` puts it; none for a command agent, whose folder
+/// Tsumugi does not know.
+pub fn skills_folder(context: &AgentContext, home: &Path) -> Option<PathBuf> {
     use tsumugi_model::Agent;
     let state = |variable: &str, usual: PathBuf| {
         context
@@ -192,20 +193,23 @@ pub fn skills_folder(context: &AgentContext, home: &Path) -> PathBuf {
             .or_else(|| context.variable(variable))
             .unwrap_or(usual)
     };
-    match context.agent() {
-        Agent::Claude => state("CLAUDE_CONFIG_DIR", home.join(".claude")),
-        Agent::Codex => state("CODEX_HOME", home.join(".codex")),
-        Agent::Pi => state("PI_CODING_AGENT_DIR", home.join(".pi").join("agent")),
-        Agent::Cursor => state("CURSOR_CONFIG_DIR", home.join(".cursor")),
-        Agent::OpenCode => context
-            .home
-            .as_ref()
-            .map(|dir| dir.join("config"))
-            .or_else(|| context.variable("XDG_CONFIG_HOME"))
-            .unwrap_or_else(|| home.join(".config"))
-            .join("opencode"),
-    }
-    .join("skills")
+    Some(
+        match context.agent() {
+            Agent::Generic => return None,
+            Agent::Claude => state("CLAUDE_CONFIG_DIR", home.join(".claude")),
+            Agent::Codex => state("CODEX_HOME", home.join(".codex")),
+            Agent::Pi => state("PI_CODING_AGENT_DIR", home.join(".pi").join("agent")),
+            Agent::Cursor => state("CURSOR_CONFIG_DIR", home.join(".cursor")),
+            Agent::OpenCode => context
+                .home
+                .as_ref()
+                .map(|dir| dir.join("config"))
+                .or_else(|| context.variable("XDG_CONFIG_HOME"))
+                .unwrap_or_else(|| home.join(".config"))
+                .join("opencode"),
+        }
+        .join("skills"),
+    )
 }
 
 /// What `folder`, the folder of `skill`, holds.
@@ -678,8 +682,8 @@ mod tests {
             (Agent::OpenCode, "/w/config/opencode/skills"),
         ] {
             assert_eq!(
-                skills_folder(&own(agent, "/w"), home),
-                Path::new(expected),
+                skills_folder(&own(agent, "/w"), home).as_deref(),
+                Some(Path::new(expected)),
                 "{agent:?}"
             );
         }

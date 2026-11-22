@@ -7,6 +7,7 @@ mod codex;
 pub mod commands;
 pub mod cursor;
 mod delivery;
+pub mod generic;
 mod integration;
 pub mod links;
 pub mod login;
@@ -31,7 +32,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tsumugi_model::Agent;
 use tsumugi_model::config::{
-    CodexOptions, CursorOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
+    CodexOptions, CursorOptions, GenericOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
 };
 use tsumugi_model::profile::{AgentOptions, AgentProfile, ProfileId};
 
@@ -268,6 +269,12 @@ impl AgentContext {
 
     pub fn cursor_mut(&mut self) -> Option<&mut CursorOptions> {
         self.options.cursor_mut()
+    }
+
+    /// A command agent's options; nothing chosen for a profile of another
+    /// agent.
+    pub fn generic(&self) -> GenericOptions {
+        self.options.generic().cloned().unwrap_or_default()
     }
 }
 
@@ -629,6 +636,7 @@ pub fn adapter(agent: Agent) -> &'static dyn AgentAdapter {
         Agent::Pi => &pi::Pi,
         Agent::OpenCode => &opencode::OpenCode,
         Agent::Cursor => &cursor::Cursor,
+        Agent::Generic => &generic::Generic,
     }
 }
 

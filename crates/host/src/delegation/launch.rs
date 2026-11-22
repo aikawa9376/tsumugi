@@ -89,6 +89,9 @@ impl Delegation {
             // and projects keep, never from a flag of one run, and Tsumugi writes
             // none into them: a Cursor session starts no sessions of its own.
             Agent::Cursor => Vec::new(),
+            // A command agent is given no server either: Tsumugi knows no way to
+            // hand one to a program it has no adapter for.
+            Agent::Generic => Vec::new(),
             // OpenCode takes a server for one run only through its configuration;
             // it inherits the session's credential from the server it runs under.
             Agent::OpenCode => tsumugi_agents::opencode::config_args(json!({

@@ -8,7 +8,8 @@ closed, if that still runs.
 
 ## Agents
 
-A session runs Claude Code, Codex CLI, Pi, OpenCode or Cursor CLI in its own terminal interface. Each
+A session runs Claude Code, Codex CLI, Pi, OpenCode, Cursor CLI or any other
+command-line agent ([command agents](#command-agents)) in its own terminal interface. Each
 session is given its profile, and with it its agent and login
 ([settings](settings.md#profiles)), while it is still a
 draft, before its first prompt is sent. The empty window and drafts offer
@@ -127,6 +128,21 @@ to show, and its conversations are not read into the details panel. Its
 conversations are listed and resumed like the others
 ([resuming](#resuming-a-past-conversation)), but cannot be forked. A Cursor
 session starts no sessions of its own.
+
+### Command agents
+
+Any other command-line agent runs as a **command agent**: the profile's
+`launch.command` is its program and arguments, and `[profiles.generic]` says
+how its first prompt reaches it ([settings](settings.md#profiles)). Tsumugi
+knows a list of well-known ones, such as Gemini CLI, GitHub Copilot, Aider,
+Goose and Amp, by profile id: starting from one of those ids needs no profile
+to be written, and a profile of that id replaces it. A command agent stands as
+the status its program reports says, or as its screen says by rules the user
+may replace ([screen rules](screen-rules.md)); it has no login, model or
+conversation Tsumugi reads, cannot be kept read-only, starts no sessions of its
+own and is never put to sleep. It fails to start, saying what to do, when its
+profile names no command or the program is not found where it starts; its
+profile's login row says "CLI not found" in the same case.
 
 ## Instances
 
@@ -292,7 +308,7 @@ message, wakes it as a restart does, with its conversation, under its code and
 opened by the session that opened it, and the message is waiting for it when
 it is ready. A session that works, waits on a dialog or is still starting, one
 whose own sessions still run, one that never told its conversation and a
-Cursor CLI session are never put to sleep. A supervisor is not told that a
+Cursor CLI or command agent session are never put to sleep. A supervisor is not told that a
 worker that sleeps failed. Ending a sleeping session lists it no more; its
 conversation can be resumed ([resuming](#resuming-a-past-conversation)). Set
 to 0, the default, no session sleeps.

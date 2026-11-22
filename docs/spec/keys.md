@@ -158,7 +158,7 @@ takes the keys away, so they do nothing there.
 | `filer` | a file tree: the tree's, before its own while a file or a directory is selected, and the picker's |
 | `details` | the details panel |
 | `console` | the console while it shows a session |
-| `console.claude`, `console.codex`, `console.pi`, `console.opencode`, `console.cursor` | the console while it shows a session of that agent, live or read, before the console's own |
+| `console.claude`, `console.codex`, `console.pi`, `console.opencode`, `console.cursor`, `console.generic` | the console while it shows a session of that agent, live or read, before the console's own |
 | `prompt` | the prompt, before Neovim |
 | `draft` | before the area's bindings while a new session is shown, including the prompt in insert mode |
 | `viewer` | a viewer in the focused window |

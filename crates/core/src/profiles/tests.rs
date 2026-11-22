@@ -37,7 +37,7 @@ fn id(text: &str) -> ProfileId {
 /// still started from a profile that is found as it is offered.
 fn holds(s: &Settings) {
     tsumugi_model::profile::check(&s.profile, &s.profiles).unwrap();
-    for agent in Agent::ALL {
+    for agent in Agent::BUILTIN {
         let offered = s.profile_of(agent).into_owned();
         let found = s.find_profile(&offered.id).map(|p| p.into_owned());
         assert_eq!(found.as_ref(), Some(&offered), "{agent:?}");

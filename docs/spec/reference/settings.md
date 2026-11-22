@@ -284,7 +284,7 @@ The profiles sessions start from, each `[[profiles]]` table one of them ([settin
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode`, `cursor` |  | The agent it starts, `claude`, `codex`, `pi`, `opencode` or `cursor`. |
+| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode`, `cursor`, `generic` |  | The agent it starts, `claude`, `codex`, `pi`, `opencode`, `cursor` or `generic`, any other command-line agent, whose program is `launch.command`. |
 | `profiles.home` | string |  | The folder of its own its agent keeps its login, history and settings in, as an absolute path without `~`, `.` or `..` and with no `/` doubled or at its end, which no other profile names; it is fixed when the login is made, since the CLIs tell logins apart by it as it is written. Left out, the agent runs in its own environment, shared with the terminal. |
 | `profiles.id` | string |  | The profile's id, kept when it is renamed: lowercase letters, digits and `-`. |
 | `profiles.name` | string | `""` | What the profile is called; empty for its id. |
@@ -321,6 +321,15 @@ Cursor CLI's model, mode and sandbox, for a `cursor` profile; empty values leave
 | `profiles.cursor.mode` | string | `""` | The mode it starts in: empty for its agent mode, `plan` or `ask`. |
 | `profiles.cursor.model` | string | `""` | Cursor's model, as `agent models` lists it; empty for its own choice. |
 | `profiles.cursor.sandbox` | string | `""` | Whether its sandbox is `enabled` or `disabled`; empty for its own setting. |
+
+### `[profiles.generic]`
+
+How the first prompt reaches a command agent, for a `generic` profile, which names its program in `launch.command`.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `profiles.generic.prompt` | one of `argv`, `separated`, `flag`, `typed` | `"argv"` | How the first prompt reaches the program: `argv`, as the last argument; `separated`, as the last argument after `--`, for a program whose own words it could be taken for; `flag`, after the flag `prompt_flag` names; or `typed`, not at all, the program starting bare with the prompt left to be typed into it. |
+| `profiles.generic.prompt_flag` | string | `""` | The flag that takes the prompt, for `prompt = "flag"`. |
 
 ### `[profiles.launch]`
 
