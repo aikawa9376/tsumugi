@@ -38,6 +38,46 @@ pub fn followed(sessions: &[Session], tabs: &HashSet<Tab>) -> HashSet<Tab> {
 /// a workspace or a worktree whose own name matches keeps everything beneath
 /// it. A `text` that asks nothing keeps everything.
 pub fn narrowed(tree: &Tree, text: &str) -> Tree {
+    narrowed_by(tree, text, &[])
+}
+
+/// [`narrowed`], with the words `status:<status>` in `text` keeping only
+/// the worktrees whose checkpoint is in one of the statuses named, with all
+/// they hold; the rest of `text` narrows as it does alone.
+pub fn narrowed_by(tree: &Tree, text: &str, checkpoints: &[tsumugi_model::Checkpoint]) -> Tree {
+    let (statuses, rest) = split_statuses(text);
+    if statuses.is_empty() {
+        return narrowed_to_names(tree, text);
+    }
+    let mut kept = tree.clone();
+    for ws in &mut kept.workspaces {
+        ws.worktrees.retain(|w| {
+            checkpoints.iter().any(|c| {
+                c.worktree == w.worktree.path && c.status.is_some_and(|s| statuses.contains(&s))
+            })
+        });
+    }
+    kept.workspaces.retain(|ws| !ws.worktrees.is_empty());
+    narrowed_to_names(&kept, &rest)
+}
+
+/// The statuses `text` names by `status:` words, and the words left.
+fn split_statuses(text: &str) -> (Vec<tsumugi_model::WorktreeStatus>, String) {
+    let mut statuses = Vec::new();
+    let mut rest = Vec::new();
+    for word in text.split_whitespace() {
+        match word
+            .strip_prefix("status:")
+            .and_then(tsumugi_model::WorktreeStatus::parse)
+        {
+            Some(status) => statuses.push(status),
+            None => rest.push(word),
+        }
+    }
+    (statuses, rest.join(" "))
+}
+
+fn narrowed_to_names(tree: &Tree, text: &str) -> Tree {
     let query = Query::new(text);
     if query.is_empty() {
         return tree.clone();

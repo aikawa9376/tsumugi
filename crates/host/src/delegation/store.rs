@@ -13,8 +13,9 @@ use tsumugi_model::{Agent, AgentPermissions, Rest, SessionCode, TerminalSession}
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 17;
+const SCHEMA_VERSION: i64 = 18;
 
+mod checkpoints;
 mod issues;
 mod resources;
 mod saved_commands;
@@ -196,6 +197,13 @@ const MIGRATIONS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS rests (
          session TEXT PRIMARY KEY REFERENCES sessions(id),
          rest TEXT NOT NULL
+     );",
+    // The line and the status each worktree shows of how its work stands.
+    "CREATE TABLE IF NOT EXISTS checkpoints (
+         worktree TEXT PRIMARY KEY,
+         comment TEXT NOT NULL,
+         status TEXT,
+         updated_ms INTEGER NOT NULL
      );",
 ];
 

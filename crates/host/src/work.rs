@@ -686,6 +686,7 @@ fn common(change: &Change) -> bool {
                 | TreeChange::LocalIssues { .. }
                 | TreeChange::Resources { .. }
                 | TreeChange::SavedCommands { .. }
+                | TreeChange::Checkpoints { .. }
                 | TreeChange::Schedules { .. }
                 | TreeChange::Notices { .. }
         ) | Change::Details(
@@ -708,6 +709,7 @@ fn in_sight(change: &Change, sight: &Sight) -> bool {
             | TreeChange::LocalIssues { .. }
             | TreeChange::Resources { .. }
             | TreeChange::SavedCommands { .. }
+            | TreeChange::Checkpoints { .. }
             | TreeChange::Schedules { .. }
             | TreeChange::Notices { .. },
         ) => true,

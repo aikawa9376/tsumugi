@@ -53,6 +53,9 @@ pub(super) async fn watch(mut watched: Watched) {
                 if let Err(error) = crate::saved_commands::publish(&watched).await {
                     tracing::warn!(%error, "cannot read the commands projects keep");
                 }
+                if let Err(error) = crate::checkpoints::publish(&watched).await {
+                    tracing::warn!(%error, "cannot read what worktrees say of their work");
+                }
                 if let Err(error) = crate::schedules::publish(&watched).await {
                     tracing::warn!(%error, "cannot read the schedules");
                 }

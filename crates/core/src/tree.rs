@@ -421,7 +421,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
     let mut rows = Vec::new();
     for (environment, host) in hosts.each() {
         let facts = facts(host.work.as_ref());
-        let mut narrowed = nav::narrowed(facts.tree(), &view.filter);
+        let mut narrowed = nav::narrowed_by(facts.tree(), &view.filter, &facts.checkpoints);
         view.organize.order(environment, &mut narrowed);
         let hidden = view.organize.hidden(environment, &narrowed);
         let of = |tree: &Tree| inbox(tree).into_iter().map(|i| (environment.clone(), i));
