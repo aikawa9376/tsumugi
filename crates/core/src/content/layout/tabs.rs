@@ -25,7 +25,7 @@ pub enum Opening {
 pub struct Content<T> {
     pub(super) tabs: Vec<ContentTab<T>>,
     pub(super) current: usize,
-    pub(super) last: Option<u64>,
+    pub(super) recent: Vec<u64>,
     pub(super) next: u64,
 }
 
@@ -34,7 +34,7 @@ impl<T> Default for Content<T> {
         Self {
             tabs: Vec::new(),
             current: 0,
-            last: None,
+            recent: Vec::new(),
             next: 1,
         }
     }
@@ -117,9 +117,50 @@ impl<T: Clone + PartialEq> Content<T> {
 
     fn set_current(&mut self, at: usize) {
         if at != self.current && at < self.tabs.len() {
-            self.last = self.current().map(|t| t.id);
+            self.remember(self.current().map(|t| t.id));
             self.current = at;
+            self.keep_last();
         }
+    }
+
+    /// Put the tab `shown`, which stops being shown, first among those shown
+    /// before.
+    fn remember(&mut self, shown: Option<u64>) {
+        if let Some(id) = shown {
+            self.recent.retain(|r| *r != id);
+            self.recent.insert(0, id);
+        }
+    }
+
+    /// The tab shown before the one shown now.
+    fn last(&self) -> Option<u64> {
+        self.recent.first().copied()
+    }
+
+    /// The tabs by when each was shown last, the one shown now first; tabs
+    /// never shown come after, in the order of the tabs.
+    pub fn recent_tabs(&self) -> Vec<&ContentTab<T>> {
+        let shown = self.current().map(|t| t.id);
+        let by = |id: u64| self.tabs.iter().find(|t| t.id == id);
+        let mut out: Vec<&ContentTab<T>> = shown.and_then(by).into_iter().collect();
+        out.extend(self.recent.iter().filter_map(|id| by(*id)));
+        let rest: Vec<_> = self
+            .tabs
+            .iter()
+            .filter(|t| !out.iter().any(|o| o.id == t.id))
+            .collect();
+        out.extend(rest);
+        out
+    }
+
+    /// Show the tab `key` names, whichever place it is in; `false` when no
+    /// tab has it.
+    pub fn go_to_tab_keyed(&mut self, key: u64) -> bool {
+        let Some(at) = self.tabs.iter().position(|t| t.id == key) else {
+            return false;
+        };
+        self.set_current(at);
+        true
     }
 
     /// Show `thing` in a new tab after the one shown.
@@ -264,14 +305,12 @@ impl<T: Clone + PartialEq> Content<T> {
         self.keep_last();
     }
 
+    /// Forget the tabs shown before that are gone, and the one shown now.
     fn keep_last(&mut self) {
         let shown = self.current().map(|t| t.id);
-        if self
-            .last
-            .is_some_and(|l| Some(l) == shown || !self.tabs.iter().any(|t| t.id == l))
-        {
-            self.last = None;
-        }
+        let tabs = &self.tabs;
+        self.recent
+            .retain(|r| Some(*r) != shown && tabs.iter().any(|t| t.id == *r));
     }
 
     /// Close every window but the focused one.
@@ -472,7 +511,7 @@ impl<T: Clone + PartialEq> Content<T> {
         let tab = &mut self.tabs[at];
         tab.insert_at(beside, side, window);
         if shown != Some(to) {
-            self.last = shown;
+            self.remember(shown);
         }
         self.current = at;
         self.keep_last();
@@ -536,7 +575,7 @@ impl<T: Clone + PartialEq> Content<T> {
         let tab = &mut self.tabs[at];
         put(tab, merged);
         if shown != Some(into) {
-            self.last = shown;
+            self.remember(shown);
         }
         self.current = at;
         self.keep_last();
@@ -567,7 +606,7 @@ impl<T: Clone + PartialEq> Content<T> {
     /// The tab shown before the one shown now, or else the tab beside it,
     /// the one before it unless it is the first; none when it is alone.
     fn tab_before(&self) -> Option<usize> {
-        let before = self.tabs.iter().position(|t| Some(t.id) == self.last);
+        let before = self.tabs.iter().position(|t| Some(t.id) == self.last());
         let beside = match self.current {
             0 => 1,
             n => n - 1,
@@ -605,6 +644,21 @@ impl<T: Clone + PartialEq> Content<T> {
         }
     }
 
+    /// Show the tab `delta` after the shown one among the tabs of the same
+    /// `kind`, going round at the ends; the tabs of other kinds are passed.
+    /// A tab alone of its kind stays shown.
+    pub fn cycle_tab_of<K: PartialEq>(&mut self, delta: isize, kind: impl Fn(&T) -> K) {
+        let Some(here) = self.current().map(|t| kind(&t.focused().shows)) else {
+            return;
+        };
+        let of_kind: Vec<usize> = (0..self.tabs.len())
+            .filter(|&at| kind(&self.tabs[at].focused().shows) == here)
+            .collect();
+        if let Some(from) = of_kind.iter().position(|&at| at == self.current) {
+            self.set_current(of_kind[cursor::wrap(from, delta, of_kind.len())]);
+        }
+    }
+
     /// Show the tab at `at`, counted from 0, or the last tab when there are
     /// not that many.
     pub fn go_to_tab(&mut self, at: usize) {
@@ -624,7 +678,7 @@ impl<T: Clone + PartialEq> Content<T> {
 
     /// Show the tab shown before the one shown now.
     pub fn go_to_last_tab(&mut self) {
-        if let Some(at) = self.tabs.iter().position(|t| Some(t.id) == self.last) {
+        if let Some(at) = self.tabs.iter().position(|t| Some(t.id) == self.last()) {
             self.set_current(at);
         }
     }

@@ -92,6 +92,49 @@ fn a_browser_opens_new_work_in_the_worktree_it_hangs_under() {
     );
 }
 
+fn viewer(name: &str) -> Tab {
+    Tab::Viewer(here(), format!("/w/{name}").into())
+}
+
+fn three_kinds() -> Scenario {
+    Scenario::new()
+        .send(show(viewer("a.png")))
+        .send(show(Tab::Terminal(here(), 1)))
+        .send(show(viewer("b.png")))
+        .send(show(Tab::Terminal(here(), 2)))
+        .send(show(viewer("c.png")))
+        .send(Msg::Focus(Area::Console))
+}
+
+#[test]
+fn the_next_and_previous_tab_of_the_same_kind_pass_the_tabs_of_other_kinds() {
+    let run = three_kinds().send(Msg::Window(Action::TabNextSame));
+    assert_eq!(run.state().content.active(), Some(&viewer("a.png")));
+    let run = run.send(Msg::Window(Action::TabNextSame));
+    assert_eq!(run.state().content.active(), Some(&viewer("b.png")));
+    let run = run
+        .send(Msg::Window(Action::TabPrevSame))
+        .send(Msg::Window(Action::TabPrevSame));
+    assert_eq!(run.state().content.active(), Some(&viewer("c.png")));
+}
+
+#[test]
+fn closing_the_file_tabs_leaves_what_is_not_a_file_open() {
+    let run = three_kinds().send(Msg::Window(Action::TabCloseFiles));
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 1), Tab::Terminal(here(), 2)]);
+    assert_eq!(run.state().content.active(), Some(&Tab::Terminal(here(), 2)));
+}
+
+#[test]
+fn closing_the_file_tabs_closes_the_file_windows_of_a_tab_that_holds_others() {
+    let run = three_kinds()
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(show(Tab::Terminal(here(), 9)))
+        .send(Msg::Window(Action::TabCloseFiles));
+    assert!(shown(&run).contains(&Tab::Terminal(here(), 9)));
+    assert!(!shown(&run).iter().any(|t| matches!(t, Tab::Viewer(..))));
+}
+
 fn shown(run: &Scenario) -> Vec<Tab> {
     run.state()
         .content

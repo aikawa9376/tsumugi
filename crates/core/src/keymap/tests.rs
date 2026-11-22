@@ -190,8 +190,11 @@ fn the_tabs_are_switched_by_the_keys_each_platform_and_vim_switch_tabs_with() {
     ] {
         let areas = [ctx, Context::Global];
         for (pending, key, action) in [
-            (&[][..], "Ctrl+Tab", Action::TabNext),
-            (&[], "Ctrl+Shift+Tab", Action::TabPrev),
+            (&[][..], "Ctrl+Tab", Action::TabRecent),
+            (&[], "Ctrl+Shift+Tab", Action::TabRecentPrev),
+            (&[], "Mod+Alt+]", Action::TabNextSame),
+            (&[], "Mod+Alt+[", Action::TabPrevSame),
+            (&[], "Mod+Alt+w", Action::TabCloseFiles),
             (&[], "Ctrl+PageDown", Action::TabNext),
             (&[], "Ctrl+PageUp", Action::TabPrev),
             (&[], "Cmd+}", Action::TabNext),
@@ -244,7 +247,7 @@ fn a_ctrl_key_bound_alone_everywhere_reaches_the_window_from_the_prompt_s_insert
     let inserting = [Context::Prompt];
     assert_eq!(
         step(&map, &inserting, &[], "Ctrl+Tab"),
-        Step::Run(Action::TabNext)
+        Step::Run(Action::TabRecent)
     );
     assert_eq!(
         step(&map, &inserting, &[], "Ctrl+PageUp"),

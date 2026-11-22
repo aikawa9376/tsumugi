@@ -469,6 +469,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::LightboxOpen(thing) => overlay::lightbox::open(state, thing),
         Msg::LightboxAction(action) => overlay::lightbox::act(state, action),
         Msg::LightboxPan { dx, dy } => overlay::lightbox::pan(state, dx, dy),
+        Msg::SwitcherRelease => overlay::switcher::commit(state),
         Msg::FloatingFocus => {
             crate::floating::focus(state);
             Vec::new()

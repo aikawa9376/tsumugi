@@ -15,6 +15,16 @@ it, from any worktree. Closing a tab closes every window in it. The tab shown
 is moved a place to either side by keys ([keys](reference/keys.md#actions)),
 and any tab is dragged to another place among the tabs.
 
+A switcher over the window lists the tabs by when each was shown last, the one
+shown now first, or in their order when the settings say so
+([settings](reference/settings.md)). Each press of its key moves to the next
+tab in the list, and the tab moved to is shown once the modifier keys are let
+go; Escape gives the switcher up and leaves the tab shown as it was. Switching
+only shows a tab: what it holds, a console, a Neovim or a viewer, keeps running
+as it was, and so does its focus. Keys also show the next or previous tab that
+holds the same kind of thing as the tab shown, and close every file tab at
+once.
+
 ## Windows
 
 A window is split side by side or one above the other; the new window lies

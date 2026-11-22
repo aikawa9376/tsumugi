@@ -41,11 +41,16 @@ changes them ([keys](../keys.md)).
 | `window.to_tab` | Move Window to a New Tab | move the focused window to a new tab, unless it is the only one of its tab | `global`: `Ctrl+q T` |
 | `window.edit` |  | switch the focused window between a document's viewer and a Neovim on the document, which runs on hidden while the window shows the viewer ([content](../content.md#viewers)) | `global`: `Ctrl+q e`<br>`viewer`: `e` |
 | `tab.merge_last` |  | merge the content's tab shown into the tab shown before it, or else the tab beside it: every window of it, as it is split, right of every window there, the focused one keeping the focus ([content](../content.md)) | `global`: `Ctrl+q M`, `Ctrl+q m m` |
-| `tab.next` | Next Tab | show the next tab of the area the keys are in: the details panel's tabs there, elsewhere the content's tabs; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+Tab`, `Ctrl+PageDown`, `Cmd+}`, `Ctrl+q g t`<br>`details`: `Tab` |
-| `tab.prev` | Previous Tab | show the previous tab of the area the keys are in: the details panel's tabs there, elsewhere the content's tabs; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+Shift+Tab`, `Ctrl+PageUp`, `Cmd+{`, `Ctrl+q g T`<br>`details`: `Shift+Tab` |
+| `tab.next` | Next Tab | show the next tab of the area the keys are in: the details panel's tabs there, elsewhere the content's tabs; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+PageDown`, `Cmd+}`, `Ctrl+q g t`<br>`details`: `Tab` |
+| `tab.prev` | Previous Tab | show the previous tab of the area the keys are in: the details panel's tabs there, elsewhere the content's tabs; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+PageUp`, `Cmd+{`, `Ctrl+q g T`<br>`details`: `Shift+Tab` |
 | `tab.last` | Tab Before | show the content's tab shown before the one shown now | `global`: `Ctrl+q g Tab` |
 | `tab.move_prev` |  | move the content's tab shown one place toward the first; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+q g <`, `Ctrl+Shift+PageUp` |
 | `tab.move_next` |  | move the content's tab shown one place toward the last; repeats ([keys](../keys.md#repeating)) | `global`: `Ctrl+q g >`, `Ctrl+Shift+PageDown` |
+| `tab.recent` |  | open the tab switcher on the content's tabs, by when each was shown last or else in their order, and move to the next in the list; pressed again while it is open, move on; the tab moved to is shown once the modifier keys are let go, or on Enter ([content](../content.md#tabs)) | `global`: `Ctrl+Tab` |
+| `tab.recent_prev` |  | open the tab switcher as `tab.recent` does, and move to the previous in the list instead of the next | `global`: `Ctrl+Shift+Tab` |
+| `tab.next_same` |  | show the next tab of the content that shows the same kind of thing as the tab shown does, going round at the end: sessions, terminals, files, browser pages or the rest | `global`: `Mod+Alt+]` |
+| `tab.prev_same` |  | show the previous tab of the content that shows the same kind of thing as the tab shown does, going round at the start | `global`: `Mod+Alt+[` |
+| `tab.close_files` |  | close every window of the content that shows a file in a viewer, and the tabs left empty; what else is shown stays | `global`: `Mod+Alt+w` |
 | `cursor.down` |  | move the selection in the tree to the next row; in the details panel, in the list it shows, or scroll what else it shows | `tree`: `j`, `ArrowDown`<br>`agents`: `j`, `ArrowDown`<br>`details`: `j`, `ArrowDown` |
 | `cursor.up` |  | move the selection in the tree to the previous row; in the details panel, in the list it shows, or scroll what else it shows | `tree`: `k`, `ArrowUp`<br>`agents`: `k`, `ArrowUp`<br>`details`: `k`, `ArrowUp` |
 | `cursor.first` |  | move the selection in the tree to the first row; in the details panel, in the list it shows, or scroll what else it shows | `tree`: `g g`<br>`agents`: `g g`<br>`details`: `g g` |
@@ -297,12 +302,15 @@ changes them ([keys](../keys.md)).
 "Ctrl+q M" = "tab.merge_last"
 "Ctrl+q m m" = "tab.merge_last"
 "Ctrl+q [" = "console.read"
-"Ctrl+Tab" = "tab.next"
-"Ctrl+Shift+Tab" = "tab.prev"
+"Ctrl+Tab" = "tab.recent"
+"Ctrl+Shift+Tab" = "tab.recent_prev"
 "Ctrl+PageDown" = "tab.next"
 "Ctrl+PageUp" = "tab.prev"
 "Cmd+}" = "tab.next"
 "Cmd+{" = "tab.prev"
+"Mod+Alt+]" = "tab.next_same"
+"Mod+Alt+[" = "tab.prev_same"
+"Mod+Alt+w" = "tab.close_files"
 "Ctrl+q g t" = "tab.next"
 "Ctrl+q g T" = "tab.prev"
 "Ctrl+q 1" = "tab.go 1"

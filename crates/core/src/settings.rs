@@ -38,6 +38,19 @@ impl RestoreSessions {
     }
 }
 
+/// How the tab switcher orders the tabs it lists.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum TabSwitchOrder {
+    /// By when each was shown last, the tab shown now first.
+    #[default]
+    Mru,
+    /// In the order of the tabs.
+    Sequential,
+}
+
 /// Which Option keys count as Alt, sending Meta, in a console; the others type
 /// what macOS makes of the key with Option, as `Option-2` typing `™`.
 #[derive(
@@ -261,6 +274,9 @@ pub struct Settings {
     /// conversation. 0, the default, never does. One that works, waits on a
     /// dialog or has sessions it opened still running is never stopped.
     pub hibernate_after: u32,
+    /// How the tab switcher, which Ctrl+Tab opens, orders its tabs: `mru`,
+    /// by when each was shown last, or `sequential`, in the order of the tabs.
+    pub tab_switch_order: TabSwitchOrder,
     /// Close a command's tabs and splits when it finishes successfully; its
     /// output stays available from the tree. Off, its windows stay open too.
     pub close_successful_commands: bool,
@@ -404,6 +420,7 @@ impl Default for Settings {
             rename_sessions: true,
             restore_sessions: RestoreSessions::Ask,
             hibernate_after: 0,
+            tab_switch_order: TabSwitchOrder::Mru,
             close_successful_commands: true,
             shell: ShellLaunch::default(),
             neovim: Launch::default(),

@@ -55,6 +55,11 @@ impl<T: Clone + PartialEq> ContentTab<T> {
         out
     }
 
+    /// What tells this tab from the others, whichever place it is in.
+    pub fn key(&self) -> u64 {
+        self.id
+    }
+
     pub(super) fn has(&self, id: WindowId) -> bool {
         self.root.path(id).is_some()
     }

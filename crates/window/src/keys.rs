@@ -65,6 +65,8 @@ pub enum Message {
     /// A key reached the page, wherever in it the keys were and whatever
     /// became of it.
     Seen,
+    /// The last of the modifier keys held, other than Shift, was let go.
+    Released,
 }
 
 /// What to do with what the script sent.
@@ -516,6 +518,12 @@ mod tests {
         assert_eq!(u.dropped(false), Lost::Nothing);
         assert_eq!(u.dropped(false), Lost::Nothing);
         assert_eq!(u.dropped(false), Lost::Reset(3));
+    }
+
+    #[test]
+    fn the_page_telling_of_the_modifier_keys_let_go_is_read() {
+        assert_eq!(read(r#"{"kind":"released"}"#), Message::Released);
+        assert!(!Message::Released.tells_of_a_key());
     }
 
     #[test]

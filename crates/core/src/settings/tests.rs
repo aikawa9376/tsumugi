@@ -409,6 +409,7 @@ fn settings_written_read_back_the_same() {
         rename_sessions: true,
         restore_sessions: RestoreSessions::Always,
         hibernate_after: 45,
+        tab_switch_order: TabSwitchOrder::Sequential,
         close_successful_commands: false,
         shell: ShellLaunch {
             command: vec!["/bin/bash".into(), "-l".into()],
@@ -658,6 +659,17 @@ fn what_a_terminal_host_took_with_it_is_offered_back_unless_the_settings_say_oth
         assert_eq!(read.name(), written);
     }
     assert!(Settings::parse("restore_sessions = \"sometimes\"\n").is_err());
+}
+
+#[test]
+fn the_tab_switcher_lists_the_tabs_by_when_each_was_shown_unless_the_settings_say_otherwise() {
+    assert_eq!(
+        Settings::parse("").unwrap().tab_switch_order,
+        TabSwitchOrder::Mru
+    );
+    let settings = Settings::parse("tab_switch_order = \"sequential\"\n").unwrap();
+    assert_eq!(settings.tab_switch_order, TabSwitchOrder::Sequential);
+    assert!(Settings::parse("tab_switch_order = \"random\"\n").is_err());
 }
 
 #[test]
@@ -1177,7 +1189,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `hibernate_after`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `hibernate_after`, `tab_switch_order`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),

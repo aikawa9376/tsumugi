@@ -167,7 +167,6 @@ fn keys_that_start_differently_stand_apart_in_the_order_of_the_file() {
     assert_eq!(
         next.keys,
         [
-            alone("Ctrl+Tab"),
             alone("Ctrl+PageDown"),
             alone("Cmd+}"),
             after(&["Ctrl+q", "g"], &["t"]),
@@ -198,7 +197,7 @@ fn the_folded_row_stands_where_its_first_number_is_bound() {
         .unwrap()
         .rows;
     let at = |label: &str| global.iter().position(|r| r.label == label).unwrap();
-    assert_eq!(at("Go to tab 1–9"), at(&Action::TabPrev.label()) + 1);
+    assert_eq!(at("Go to tab 1–9"), at(&Action::TabCloseFiles.label()) + 1);
 }
 
 #[test]

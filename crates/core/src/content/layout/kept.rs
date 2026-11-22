@@ -84,7 +84,7 @@ impl<T> Content<T> {
         Content {
             tabs,
             current: self.current,
-            last: self.last,
+            recent: self.recent,
             next: self.next,
         }
     }

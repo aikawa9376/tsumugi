@@ -8,7 +8,7 @@ use tsumugi_model::github::Listing;
 use tsumugi_model::{EnvironmentId, TerminalProgram};
 
 use super::{
-    Area, Axis, Content, Dir, Opening, Shown, Spot, Tab, TerminalAsk, closing, corner, cycled,
+    Area, Axis, Content, Dir, Opening, Shown, Spot, Tab, TabKind, TerminalAsk, closing, corner, cycled,
     draft, draft_at, moved, settled, shows_prompt, spot_of,
 };
 use crate::actions::Action;
@@ -149,6 +149,13 @@ pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
         Action::TabMergeLast => edit(view, &Content::merge_into_last_tab),
         Action::TabGo(n) => edit(view, &|c| c.go_to_numbered_tab(n)),
         Action::TabLast => edit(view, &Content::go_to_last_tab),
+        Action::TabRecent => crate::overlay::switcher::step(state, 1),
+        Action::TabRecentPrev => crate::overlay::switcher::step(state, -1),
+        Action::TabNextSame => edit(view, &|c| c.cycle_tab_of(1, Tab::kind)),
+        Action::TabPrevSame => edit(view, &|c| c.cycle_tab_of(-1, Tab::kind)),
+        Action::TabCloseFiles => closing(view, |c| {
+            c.close_showing(|t| t.kind() == TabKind::File)
+        }),
         Action::TabMovePrev => edit(view, &|c| c.shift_tab(-1)),
         Action::TabMoveNext => edit(view, &|c| c.shift_tab(1)),
         // The tabs of the area the keys are in: the details panel's sheets

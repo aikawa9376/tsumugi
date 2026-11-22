@@ -90,6 +90,21 @@ pub enum Tab {
     },
 }
 
+/// What kind of thing a tab shows, which stepping through the tabs of one
+/// kind tells them apart by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabKind {
+    /// An agent session, or one not started yet.
+    Session,
+    /// A shell, a Neovim or a command.
+    Terminal,
+    /// A file in a viewer, or an image a console drew.
+    File,
+    Browser,
+    /// A review, a pull request or issue, a check's log, the agent board.
+    Other,
+}
+
 /// The Actions job of a check whose log a window shows.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CheckJob {
@@ -179,6 +194,18 @@ impl Tab {
                 name: check.name.clone(),
             }),
         })
+    }
+
+    pub fn kind(&self) -> TabKind {
+        match self {
+            Tab::Session(..) | Tab::Draft { .. } => TabKind::Session,
+            Tab::Terminal(..) => TabKind::Terminal,
+            Tab::Viewer(..) | Tab::Drawn { .. } => TabKind::File,
+            Tab::Browser { .. } => TabKind::Browser,
+            Tab::Diff { .. } | Tab::GitHub { .. } | Tab::CheckLog { .. } | Tab::Board(_) => {
+                TabKind::Other
+            }
+        }
     }
 
     pub fn environment(&self) -> &EnvironmentId {

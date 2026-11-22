@@ -1,0 +1,8 @@
+/* The tab switcher: the tabs listed near the top of the window while the modifier keys are held; it takes no clicks. */
+.switcher { position: fixed; inset: 0; z-index: 26; display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; pointer-events: none; }
+.switcher-frame { width: min(360px, calc(100vw - 48px)); max-height: min(288px, 60vh); overflow: hidden; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4); }
+.switcher-title { padding: 4px 8px; border-bottom: 1px solid var(--line); color: var(--text-3); font-size: var(--ui-font-caption); font-weight: 600; }
+.switcher-row { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; color: var(--text); font-size: var(--ui-font-small); }
+.switcher-row.selected { background: var(--select); }
+.switcher-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switcher-kind { flex: none; color: var(--text-3); font-size: var(--ui-font-caption); }

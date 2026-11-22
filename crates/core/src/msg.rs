@@ -549,6 +549,9 @@ pub enum Msg {
         dx: f64,
         dy: f64,
     },
+    /// The modifier keys that opened the tab switcher were let go: the tab
+    /// moved to is shown.
+    SwitcherRelease,
     /// The panel of floating shells has the keys: it was clicked.
     FloatingFocus,
     /// The floating terminal was closed with its own button, its shells left
