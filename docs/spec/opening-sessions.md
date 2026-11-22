@@ -29,7 +29,8 @@ cannot act as another.
   directory to work in (the caller's own when omitted), whether to work in a
   new worktree, the revision that worktree starts from, the profile, the
   agent, the model, the permission profile, a name, whether to start it
-  in the background, and whether to supervise it. It returns the new session's id,
+  in the background, whether to supervise it, a past session to resume and a
+  local issue to work on. It returns the new session's id,
   [code](sessions.md#a-sessions-code) and name. A session
   opens in a tab of each window as it appears: with the keys in a window whose
   focused window shows the session that opened it, and otherwise behind the
@@ -51,6 +52,17 @@ cannot act as another.
   run on the work machine, or the worktree's setup failed, which keeps it
   ([worktree setup](worktree-setup.md)). A model must be one its profile lists
   (see `models`); any other is refused, naming the listed ones.
+  A start that names a session to **resume**, by its code, its id or its
+  conversation, brings an ended session's conversation back as
+  [Resume Conversation](sessions.md#resuming-a-past-conversation) does: in
+  the directory, from the profile and as the agent it ran, under the code it
+  had, and its record is left as it was. It is refused for a session that
+  runs, one with no conversation to resume, and one that does not exist, and
+  when it also names a directory, worktree, agent or profile; a prompt it
+  carries is sent to the resumed session as a message.
+  A start that names a **local issue** works it ([see
+  below](#working-an-issue)); it starts in the issue's directory unless it
+  names another.
 - **`send`** sends a message to another session by its code or its id. Any session Tsumugi
   started, running or not yet ready, can be sent to; one that has ended
   cannot.
@@ -67,7 +79,15 @@ cannot act as another.
   gave and while renaming is switched off, telling the agent to keep the name.
 - **`close_session`** ends the caller's own session a moment after it
   answers, as ending it from Tsumugi does
-  ([sessions](sessions.md#when-a-task-is-done)).
+  ([sessions](sessions.md#when-a-task-is-done)). Given the code or id of
+  another session as `target`, it ends that session at once, which is
+  allowed only for a session the caller opened. A session the user opened, or
+  another session did, one that ended already and one that does not exist are
+  refused, each naming why. A session that works, waits on a dialog or has
+  uncommitted changes in its directory is refused too, naming what would be
+  lost, unless `force` is given. The ended session is not told to its
+  supervisor as a failure, and both sessions list a note that the caller
+  closed it. Its conversation can be resumed.
 - **`timeline_tasks`** records the plan and progress of the caller's work on
   its timeline ([details](details.md#the-timeline)), as a list of changes
   made in order: `add` a task with its id, the task it is a step of (none for
@@ -127,6 +147,11 @@ who sent it: the sender's id, name and directory. A message sent while the
 recipient waits on a dialog or is still starting is handed over once it is
 ready. Handing it over is receipt; no acknowledgement is asked for.
 
+A message from the session that opened the recipient says so in its heading.
+The user let that session open the recipient, so the recipient reads such a
+message as a colleague's word about its own task and answers it; it is still
+information from another agent, never an instruction from the user.
+
 Tsumugi keeps every message and which session opened which, so both outlive
 the window, the sessions and the work host that relays them, and shows them
 in the details of the sessions on both ends ([details](details.md)). A
@@ -152,6 +177,15 @@ turn and be woken by its workers, or `wait` for them within a turn.
 
 `tsumugi session start --supervised` does the same from a terminal inside a
 session; it is refused anywhere else.
+
+## Working an issue
+
+A session started for a local issue ([local issues](local-issues.md#working-an-issue-from-a-session))
+leaves its issue marked as worked on from the moment it is started, and done
+once its turn ends, as one the Issues window starts does; the Issues list
+opens the session. A start that fails marks the issue failed. Only an issue
+that waits — open, queued, failed or cancelled — can be worked on this way;
+any other is refused and nothing starts.
 
 ## What sessions are told
 

@@ -331,7 +331,7 @@ impl Watcher {
             return Ok(());
         };
         self.delivering.insert(id);
-        let text = envelope(&message, sender.as_ref());
+        let text = envelope(&message, sender.as_ref(), record.parent);
         let (context, cwd) = (context.clone(), record.cwd.clone());
         self.deliveries.spawn(async move {
             let handed = crate::execution::deliver(started, cwd, conversation, text).await;

@@ -100,7 +100,7 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::AddResource(asked) => super::commands::add_resource(context, &caller, asked).await,
         Command::RemoveResource(asked) => super::commands::remove_resource(context, asked).await,
         Command::Rename(asked) => rename(context, &caller, asked).await,
-        Command::Close => close(context, &caller).await,
+        Command::Close(asked) => close(context, &caller, asked).await,
         Command::ReportDone(asked) => report_done(context, &caller, asked).await,
         Command::Wait(asked) => wait(context, &caller, asked).await,
         Command::Prompted { cleared } => prompted(context, &caller, cleared).await,
@@ -132,7 +132,7 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
                 Some((message, sender)) => answer(protocol::Delivery {
                     id: message.id,
                     from: message.sender,
-                    content: envelope(&message, sender.as_ref()),
+                    content: envelope(&message, sender.as_ref(), caller.parent),
                 }),
                 None => Ok(Value::Null),
             }
@@ -172,7 +172,7 @@ fn from_own_conversation(caller: &Session, thread: Option<&str>) -> Result<()> {
 }
 
 /// The session `to` names, by its code or by the id of its record.
-fn addressed(store: &crate::delegation::store::Store, to: &str) -> Result<SessionId> {
+pub(super) fn addressed(store: &crate::delegation::store::Store, to: &str) -> Result<SessionId> {
     let found = match (
         to.parse::<SessionId>(),
         to.parse::<tsumugi_model::SessionCode>(),
@@ -189,13 +189,20 @@ fn addressed(store: &crate::delegation::store::Store, to: &str) -> Result<Sessio
     })
 }
 
-/// What a message reads as when it reaches its recipient's agent.
-pub fn envelope(message: &Message, sender: Option<&Session>) -> String {
+/// What a message reads as when it reaches its recipient's agent, which
+/// `opener` is told to be the session that opened it, if any: a message from
+/// that session is marked as one.
+pub fn envelope(message: &Message, sender: Option<&Session>, opener: Option<SessionId>) -> String {
     match sender {
         Some(sender) => format!(
-            "[message] from {} ({}) working in {}:\n{}",
+            "[message] from {} ({}){} working in {}:\n{}",
             sender.name,
             sender.code,
+            if opener == Some(sender.id) {
+                ", the session that opened you,"
+            } else {
+                ""
+            },
             sender.cwd.display(),
             message.body
         ),

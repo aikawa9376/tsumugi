@@ -319,7 +319,7 @@ const CLOSING: Duration = Duration::from_secs(1);
 /// End the caller's session as the user ends one, a moment after it is
 /// answered: ending it at once would cut its agent off before the answer
 /// reached it, and the agent would show the call as failed.
-pub(super) async fn close(context: &Context, caller: &Session) -> Result<Value> {
+async fn close_own(context: &Context, caller: &Session) -> Result<Value> {
     let terminal = caller
         .terminal
         .ok_or_else(|| Error::new(Code::Refused, "the session has no terminal yet"))?;
@@ -339,6 +339,108 @@ pub(super) async fn close(context: &Context, caller: &Session) -> Result<Value> 
         }
     });
     answer(protocol::Closing { closing: true })
+}
+
+/// End the caller's own session, or the one `asked` names, which the caller
+/// opened.
+pub(super) async fn close(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::CloseSession,
+) -> Result<Value> {
+    let Some(wanted) = asked.target.clone() else {
+        return close_own(context, caller).await;
+    };
+    let record = context
+        .call(move |store| {
+            let id = super::serve::addressed(store, &wanted)?;
+            store.known(id)
+        })
+        .await?;
+    if record.id == caller.id {
+        return close_own(context, caller).await;
+    }
+    if record.parent != Some(caller.id) {
+        return Err(Error::new(
+            Code::Refused,
+            format!(
+                "{} ({}) was not opened by this session; only the session that opened a session can end it",
+                record.name, record.code
+            ),
+        ));
+    }
+    if record.ended {
+        return Err(Error::new(
+            Code::Refused,
+            format!("{} ({}) has ended already", record.name, record.code),
+        ));
+    }
+    let terminal = record
+        .terminal
+        .ok_or_else(|| Error::new(Code::Refused, "the session has no terminal yet"))?;
+    if !asked.force {
+        let listed = context.daemon.sessions().await.map_err(Error::storage)?;
+        let state = crate::sessions::agents(&listed)
+            .find(|shown| crate::sessions::id_of(&shown.id) == Some(terminal))
+            .map(|shown| shown.state);
+        // A directory that is no repository holds no changes to lose.
+        let changes = tsumugi_vcs::git::changes(&record.cwd)
+            .await
+            .map_or(0, |changes| changes.len());
+        let found = losses(state.as_ref(), changes);
+        if !found.is_empty() {
+            return Err(Error::new(
+                Code::Refused,
+                format!(
+                    "{} ({}) {}; call close_session again with force to end it anyway",
+                    record.name,
+                    record.code,
+                    found.join(" and ")
+                ),
+            ));
+        }
+    }
+    let (id, opener) = (record.id, caller.id);
+    let note = format!(
+        "[closed] The session {} ({}) that opened this one closed it.",
+        caller.name, caller.code
+    );
+    // Its end is the opener's own, so the opener is not told of it as a
+    // worker's failure.
+    context.call(move |store| store.release_worker(id)).await?;
+    context.daemon.end(terminal).await.map_err(Error::storage)?;
+    context
+        .call(move |store| {
+            // A note both sessions list, which is how the user sees who ended
+            // the session, beside the tree showing it ended.
+            let note = store.send(opener, id, &note)?;
+            store.delivered(note)?;
+            store.end(id)
+        })
+        .await?;
+    answer(protocol::Closed {
+        closed: record.id,
+        code: record.code,
+        name: record.name,
+    })
+}
+
+/// What ending a session would lose, in words: work in hand, as it stands
+/// in the tree, and changes its directory holds that no commit keeps.
+fn losses(state: Option<&tsumugi_model::State>, changes: usize) -> Vec<String> {
+    use tsumugi_model::State;
+    let mut found = Vec::new();
+    match state {
+        Some(State::Working | State::Background) => found.push("is working".to_owned()),
+        Some(State::Waiting(wait)) => found.push(format!("waits on the user ({wait})")),
+        _ => {}
+    }
+    if changes > 0 {
+        found.push(format!(
+            "has {changes} uncommitted changes in its directory"
+        ));
+    }
+    found
 }
 
 /// Tell the session that supervises the caller how its work ended.
@@ -383,7 +485,7 @@ pub(super) async fn wait(
                 message: Some(protocol::Delivery {
                     id: message.id,
                     from: message.sender,
-                    content: super::serve::envelope(&message, sender.as_ref()),
+                    content: super::serve::envelope(&message, sender.as_ref(), caller.parent),
                 }),
                 timed_out: false,
             });
@@ -449,13 +551,81 @@ async fn naming(context: &Context, caller: &Session, cleared: bool) -> Result<Op
     Ok((!caller.name_given).then(|| crate::delegation::launch::naming_at_prompt(&caller.name)))
 }
 
+/// The ended session `wanted` names, by its code, its id or its
+/// conversation, among `all`, whose conversation is to be resumed: the
+/// newest record that fits. A conversation a running session holds is not
+/// resumed a second time.
+fn resumption(all: &[Session], wanted: &str) -> Result<Session> {
+    let wanted = wanted.trim();
+    let named = |session: &&Session| {
+        session.id.to_string() == wanted
+            || session.code.as_str() == wanted
+            || session.conversation.as_deref() == Some(wanted)
+    };
+    let old = all.iter().rev().find(named).ok_or_else(|| {
+        Error::new(
+            Code::NotFound,
+            format!("no session has the code, id or conversation {wanted}"),
+        )
+    })?;
+    let conversation = old.conversation.as_deref().filter(|c| !c.is_empty());
+    let held = all
+        .iter()
+        .find(|session| !session.ended && session.conversation.as_deref() == conversation)
+        .filter(|_| conversation.is_some());
+    if let Some(running) = held.or((!old.ended).then_some(old)) {
+        return Err(Error::new(
+            Code::Refused,
+            format!(
+                "{} ({}) runs this conversation; send to it instead of resuming it",
+                running.name, running.code
+            ),
+        ));
+    }
+    if conversation.is_none() {
+        return Err(Error::new(
+            Code::Refused,
+            format!("{} ({}) kept no conversation to resume", old.name, old.code),
+        ));
+    }
+    Ok(old.clone())
+}
+
+/// The start that brings `old`'s conversation back as `name`: where, as
+/// which agent and from which profile it ran, as it was started, and under
+/// the same code.
+fn resumed_request(old: &Session, name: String) -> crate::execution::StartRequest {
+    crate::execution::StartRequest {
+        agent: old.agent,
+        profile: Some(old.profile.clone()),
+        model: old.model.clone(),
+        name,
+        name_given: old.name_given,
+        cwd: old.cwd.clone(),
+        permissions: old.permissions.clone(),
+        resume: old.conversation.clone(),
+        home: old.home.clone(),
+        ..Default::default()
+    }
+}
+
+/// What a session working an issue is first told: the issue, then what its
+/// opener adds.
+fn issue_prompt(number: u64, issue: &tsumugi_model::LocalIssue, added: &str) -> String {
+    let issue = format!("Local issue #{number}: {}\n\n{}", issue.title, issue.body);
+    match added.trim() {
+        "" => issue,
+        added => format!("{issue}\n\n---\n{added}"),
+    }
+}
+
 pub(super) async fn start(
     context: &Context,
     caller: &Session,
     start: protocol::Start,
 ) -> Result<Value> {
     let prompt = start.prompt.trim().to_owned();
-    if prompt.is_empty() {
+    if prompt.is_empty() && start.resume.is_none() && start.issue.is_none() {
         return Err(Error::new(Code::Invalid, "the prompt is empty"));
     }
     let settings = context.settings()?;
@@ -465,18 +635,61 @@ pub(super) async fn start(
             "the user has switched off sessions opening sessions; carry on yourself, or ask the user to open the session",
         ));
     }
+    let resumed = match &start.resume {
+        Some(wanted) => {
+            if start.dir.is_some()
+                || start.worktree
+                || start.base.is_some()
+                || start.agent.is_some()
+                || start.profile.is_some()
+            {
+                return Err(Error::new(
+                    Code::Invalid,
+                    "a resume runs where, as which agent and from which profile the session ran; leave dir, worktree, base, agent and profile out",
+                ));
+            }
+            let wanted = wanted.clone();
+            Some(
+                context
+                    .call(move |store| resumption(&store.sessions()?, &wanted))
+                    .await?,
+            )
+        }
+        None => None,
+    };
+    let worked = match &start.issue {
+        Some(wanted) => {
+            let wanted = wanted.clone();
+            Some(
+                context
+                    .call(move |store| store.local_issue_named(&wanted))
+                    .await?,
+            )
+        }
+        None => None,
+    };
     // The caller's own profile is not passed on: a session starts from the
-    // one it names, else from the default.
-    let chosen = crate::programs::starting(&settings, start.agent, start.profile.as_ref())
-        .map_err(|error| Error::new(Code::Invalid, error))?;
+    // one it names, else from the default; a resume from the one it ran from.
+    let chosen = match &resumed {
+        Some(old) => crate::programs::starting(&settings, Some(old.agent), Some(&old.profile)),
+        None => crate::programs::starting(&settings, start.agent, start.profile.as_ref()),
+    }
+    .map_err(|error| Error::new(Code::Invalid, error))?;
     let (agent, profile) = (chosen.agent(), chosen.profile);
-    context
-        .models
-        .lock()
-        .expect("the models' lock")
-        .check(&profile, start.model.as_deref())
-        .map_err(|error| Error::new(Code::Invalid, error))?;
-    let dir = start.dir.clone().unwrap_or_else(|| caller.cwd.clone());
+    if resumed.is_none() {
+        context
+            .models
+            .lock()
+            .expect("the models' lock")
+            .check(&profile, start.model.as_deref())
+            .map_err(|error| Error::new(Code::Invalid, error))?;
+    }
+    let dir = match (&resumed, &start.dir, &worked) {
+        (Some(old), _, _) => old.cwd.clone(),
+        (None, Some(dir), _) => dir.clone(),
+        (None, None, Some((_, issue))) => issue.dir.clone(),
+        (None, None, None) => caller.cwd.clone(),
+    };
     let dir = tsumugi_sys::fs::canonicalize(&dir)
         .ok()
         .filter(|dir| dir.is_dir())
@@ -487,47 +700,51 @@ pub(super) async fn start(
             "a base revision needs a new worktree (worktree: true)",
         ));
     }
-    let listed = context.daemon.sessions().await.map_err(Error::storage)?;
-    let request = crate::execution::StartRequest {
-        agent,
-        profile: Some(profile),
-        model: start.model,
-        name: crate::starting::name_for(start.name.as_deref(), &prompt, &listed),
-        prompt: if start.supervised {
-            supervised_prompt(&prompt, caller)
-        } else {
-            prompt
-        },
-        permissions: start.permissions.unwrap_or_default(),
-        env: crate::daemon::agent_env(),
-        started_ms: crate::delegation::now_ms(),
-        show: !start.background,
-        ..Default::default()
+    // Taken up before anything runs, so the issue holds its directory against
+    // the queue from now on; a start that then fails marks it failed, as a
+    // queued one does.
+    let taken = match &worked {
+        Some((_, issue)) => {
+            let id = issue.id.clone();
+            Some(
+                context
+                    .call(move |store| store.begin_local_issue(&id))
+                    .await?,
+            )
+        }
+        None => None,
     };
-    let place = crate::starting::Place {
-        dir,
-        worktree: start.worktree,
-        base: start.base,
-    };
-    let host = crate::starting::Host {
-        daemon: &context.daemon,
-        root: &context.root,
-        program: &context.program,
-    };
-    let started = crate::starting::start(host, &settings, Some(caller.id), place, request)
-        .await
-        .map_err(|failure| {
-            let code = match failure.stage {
-                Stage::Refused => Code::Invalid,
-                Stage::NotStarted | Stage::MayHaveRun | Stage::SetupFailed => Code::Storage,
-            };
-            Error::new(code, failure.message)
-        })?;
+    let launched = launch(
+        context,
+        caller,
+        &settings,
+        &start,
+        resumed,
+        taken.as_ref(),
+        (agent, profile, dir),
+    )
+    .await;
+    if let (Err(error), Some((_, issue))) = (&launched, &taken) {
+        let (id, message) = (issue.id.clone(), error.message.clone());
+        if let Err(error) = context
+            .call(move |store| store.fail_local_issue(&id, &message))
+            .await
+        {
+            tracing::warn!(%error, "cannot mark an issue whose session did not start as failed");
+        }
+    }
+    let started = launched?;
     if start.supervised {
         // Recorded as soon as it has started: its agent needs longer than
         // that to make a first report.
         let worker = started.recorded.id;
         context.call(move |store| store.supervise(worker)).await?;
+    }
+    if start.resume.is_some() && !prompt.is_empty() {
+        let (opener, resumed) = (caller.id, started.recorded.id);
+        context
+            .call(move |store| store.send(opener, resumed, &prompt))
+            .await?;
     }
     answer(protocol::Started {
         id: started.recorded.id,
@@ -535,6 +752,72 @@ pub(super) async fn start(
         name: started.name,
         dir: started.dir,
     })
+}
+
+/// Start the session `start` asks for, once what it asks was found fit.
+async fn launch(
+    context: &Context,
+    caller: &Session,
+    settings: &crate::settings::Settings,
+    start: &protocol::Start,
+    resumed: Option<Session>,
+    taken: Option<&(u64, tsumugi_model::LocalIssue)>,
+    (agent, profile, dir): (
+        tsumugi_model::Agent,
+        tsumugi_model::profile::ProfileId,
+        std::path::PathBuf,
+    ),
+) -> Result<crate::starting::Started> {
+    let listed = context.daemon.sessions().await.map_err(Error::storage)?;
+    let mut request = match &resumed {
+        Some(old) => {
+            let name = crate::starting::name_for(Some(&old.name), &old.name, &listed);
+            resumed_request(old, name)
+        }
+        None => {
+            let prompt = start.prompt.trim();
+            let prompt = match taken {
+                Some((number, issue)) => issue_prompt(*number, issue, prompt),
+                None => prompt.to_owned(),
+            };
+            crate::execution::StartRequest {
+                agent,
+                profile: Some(profile),
+                model: start.model.clone(),
+                name: crate::starting::name_for(start.name.as_deref(), &prompt, &listed),
+                prompt: if start.supervised {
+                    supervised_prompt(&prompt, caller)
+                } else {
+                    prompt
+                },
+                permissions: start.permissions.clone().unwrap_or_default(),
+                ..Default::default()
+            }
+        }
+    };
+    request.env = crate::daemon::agent_env();
+    request.started_ms = crate::delegation::now_ms();
+    request.show = !start.background;
+    request.local_issue = taken.map(|(_, issue)| issue.id.clone());
+    let place = crate::starting::Place {
+        dir,
+        worktree: start.worktree,
+        base: start.base.clone(),
+    };
+    let host = crate::starting::Host {
+        daemon: &context.daemon,
+        root: &context.root,
+        program: &context.program,
+    };
+    crate::starting::start(host, settings, Some(caller.id), place, request)
+        .await
+        .map_err(|failure| {
+            let code = match failure.stage {
+                Stage::Refused => Code::Invalid,
+                Stage::NotStarted | Stage::MayHaveRun | Stage::SetupFailed => Code::Storage,
+            };
+            Error::new(code, failure.message)
+        })
 }
 
 /// The ports the sessions of a worktree listen on: the caller's own unless

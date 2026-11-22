@@ -107,6 +107,17 @@ impl Store {
         Ok(())
     }
 
+    /// Records that the session that supervises `worker` ends it itself, so
+    /// its session ending is not told to that session as a failure. A worker
+    /// that reported, or that nobody supervises, is left as it is.
+    pub fn release_worker(&mut self, worker: SessionId) -> Result<()> {
+        self.connection.execute(
+            "UPDATE workers SET event = ?2 WHERE session = ?1 AND event != ?3",
+            params![worker.to_string(), ENDED, REPORTED],
+        )?;
+        Ok(())
+    }
+
     /// Tells the session that opened `worker` how its work ended, once: a
     /// report that is refused leaves the worker free to make it again.
     pub fn report_done(
@@ -522,6 +533,39 @@ mod tests {
         store.follow_workers(&[]).unwrap();
 
         assert!(told(&mut store, opener).is_empty());
+    }
+
+    #[test]
+    fn a_worker_its_supervisor_ended_is_not_reported_as_a_failure() {
+        let (_dir, mut store) = store();
+        let (supervisor, worker) = supervised(&mut store);
+        follow(&mut store, worker, State::Working);
+
+        store.release_worker(worker).unwrap();
+        store.end(worker).unwrap();
+        store.follow_workers(&[]).unwrap();
+
+        assert!(told(&mut store, supervisor).is_empty());
+    }
+
+    #[test]
+    fn releasing_a_worker_that_reported_or_was_never_supervised_changes_nothing() {
+        let (_dir, mut store) = store();
+        let (supervisor, worker) = supervised(&mut store);
+        let alone = register(&mut store, Some(supervisor), "alone");
+        store.report_done(worker, "succeeded", "done", &[]).unwrap();
+
+        store.release_worker(worker).unwrap();
+        store.release_worker(alone).unwrap();
+
+        assert_eq!(
+            store
+                .report_done(worker, "failed", "again", &[])
+                .unwrap_err()
+                .message,
+            "this session already reported"
+        );
+        assert!(super::event_of(&store.connection, alone).unwrap().is_none());
     }
 
     #[test]

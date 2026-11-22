@@ -186,6 +186,29 @@ impl Store {
             .collect())
     }
 
+    /// Take up the issue `selector` names for a session another session
+    /// starts for it, as a claim does for the queue's: it is `starting` and
+    /// holds its directory against the queue, whatever else works there. Only
+    /// an issue that waits can be taken up.
+    pub fn begin_local_issue(&mut self, selector: &str) -> Result<(u64, LocalIssue)> {
+        let (number, issue) = self.local_issue_named(selector)?;
+        let changed = self.connection.execute(
+            "UPDATE local_issues SET state = 'starting', session = NULL, error = NULL, worked = 0
+             WHERE id = ?1 AND state IN ('open', 'queued', 'failed', 'cancelled')",
+            [&issue.id],
+        )?;
+        if changed != 1 {
+            return Err(Error::new(
+                Code::Refused,
+                format!(
+                    "Issue #{number} is {}: only an open, queued, failed or cancelled issue can be worked on",
+                    issue.state.word()
+                ),
+            ));
+        }
+        self.local_issue_named(&issue.id)
+    }
+
     /// Link the durable record before its program can run.
     pub fn attach_local_issue(&mut self, issue: &str, session: SessionId) -> Result<()> {
         let changed = self.connection.execute(
@@ -763,6 +786,79 @@ mod tests {
                 .unwrap_err()
                 .code,
             Code::NotFound
+        );
+    }
+
+    #[test]
+    fn a_session_takes_up_an_issue_that_is_open_queued_failed_or_cancelled_and_no_other() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let new = issue("/project", "taken up");
+        let id = new.id.clone();
+        store.add_local_issue(new).unwrap();
+        let stand = |store: &mut Store, state: &str| {
+            store
+                .connection
+                .execute(
+                    "UPDATE local_issues SET state = ?2 WHERE id = ?1",
+                    params![id, state],
+                )
+                .unwrap();
+        };
+        for state in ["open", "queued", "failed", "cancelled"] {
+            stand(&mut store, state);
+            let (number, taken) = store.begin_local_issue("1").unwrap();
+            assert_eq!((number, taken.state), (1, State::Starting), "{state}");
+        }
+        for state in ["starting", "running", "waiting", "done", "closed"] {
+            stand(&mut store, state);
+            let refused = store.begin_local_issue("1").unwrap_err();
+            assert_eq!(refused.code, Code::Refused, "{state}");
+        }
+        assert_eq!(
+            store.begin_local_issue("9").unwrap_err().code,
+            Code::NotFound
+        );
+    }
+
+    #[test]
+    fn an_issue_taken_up_holds_its_directory_against_the_queue_and_keeps_its_session_across_restarts()
+     {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.sqlite3");
+        let mut store = Store::open(&path).unwrap();
+        let (taken, waiting) = (issue("/project", "taken"), issue("/project", "waiting"));
+        store.add_local_issue(taken.clone()).unwrap();
+        queue(&mut store, waiting.clone());
+        let (_, begun) = store.begin_local_issue("1").unwrap();
+        let record = store
+            .register(NewSession {
+                parent: None,
+                agent: Agent::Claude,
+                profile: ProfileId::builtin(Agent::Claude),
+                home: None,
+                name: "taken".into(),
+                cwd: "/project".into(),
+                launch: Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: true,
+                code: None,
+            })
+            .unwrap()
+            .0;
+        store.attach_local_issue(&begun.id, record).unwrap();
+        store.attach(record, 15, None).unwrap();
+
+        assert!(store.claim_local_issues().unwrap().is_empty());
+        drop(store);
+        let store = Store::open(&path).unwrap();
+        let kept = &store.local_issues().unwrap()[0];
+        assert_eq!(kept.record, Some(record));
+        assert_eq!(
+            kept.session.as_deref(),
+            Some("0000000000000000000000000000000f")
         );
     }
 

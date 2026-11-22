@@ -266,7 +266,9 @@ async fn a_session_closing_itself_is_answered_before_it_ends_and_is_recorded_end
         .unwrap();
     let caller = context.store.lock().unwrap().known(caller.id).unwrap();
 
-    close(&context, &caller).await.unwrap();
+    close(&context, &caller, protocol::CloseSession::default())
+        .await
+        .unwrap();
 
     let runs =
         |sessions: &[tsumugi_term::Session]| sessions.iter().any(|s| s.id == terminal && !s.exited);
@@ -295,14 +297,16 @@ async fn a_session_closing_itself_is_answered_before_it_ends_and_is_recorded_end
 async fn a_session_with_no_terminal_yet_cannot_close_itself() {
     let (_dir, context, caller, _) = conversation_watch("review");
 
-    let refused = close(&context, &caller).await.unwrap_err();
+    let refused = close(&context, &caller, protocol::CloseSession::default())
+        .await
+        .unwrap_err();
 
     assert_eq!(refused.code, Code::Refused);
 }
 
 #[test]
 fn a_codex_subagent_cannot_close_its_session() {
-    assert!(Command::Close.acts());
+    assert!(Command::Close(protocol::CloseSession::default()).acts());
 }
 
 fn renaming(name: &str) -> protocol::Rename {
@@ -879,4 +883,337 @@ fn a_start_supervises_only_when_asked_to() {
 
     assert!(!start(json!({"prompt": "go"})).supervised);
     assert!(start(json!({"prompt": "go", "supervised": true})).supervised);
+}
+
+/// A session `caller` opened, running in `terminal` and working in `cwd`.
+async fn opened_by(context: &Context, caller: &Session, cwd: &Path, terminal: u128) -> Session {
+    let (opener, cwd) = (caller.id, cwd.to_path_buf());
+    context
+        .call(move |store| {
+            let (id, _) = store.register(crate::delegation::store::NewSession {
+                parent: Some(opener),
+                agent: tsumugi_model::Agent::Claude,
+                profile: tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude),
+                home: None,
+                name: "child".into(),
+                cwd,
+                launch: Settings::default(),
+                model: None,
+                permissions: Default::default(),
+                started_ms: 1,
+                name_given: false,
+                code: None,
+            })?;
+            store.attach(id, terminal, None)?;
+            store.known(id)
+        })
+        .await
+        .unwrap()
+}
+
+fn target(session: &Session) -> protocol::CloseSession {
+    protocol::CloseSession {
+        target: Some(session.code.to_string()),
+        force: false,
+    }
+}
+
+fn private_dir() -> tempfile::TempDir {
+    let dir = tempfile::Builder::new()
+        .prefix("tsumugi-")
+        .tempdir_in(tsumugi_sys::local::temp_dir())
+        .unwrap();
+    tsumugi_sys::fs::set_mode(dir.path(), 0o700).unwrap();
+    dir
+}
+
+async fn runs(daemon: &Daemon, terminal: u128) -> bool {
+    daemon
+        .sessions()
+        .await
+        .unwrap()
+        .iter()
+        .any(|s| s.id == terminal && !s.exited)
+}
+
+#[tokio::test]
+#[cfg_attr(windows, ignore = "runs its terminal's program with /bin/sh")]
+async fn a_session_ends_a_session_it_opened_and_leaves_a_note_the_user_reads_in_both() {
+    let dir = private_dir();
+    let (_state, mut context, caller, _) = conversation_watch("lead");
+    let (daemon, terminal) = serving(dir.path()).await;
+    context.daemon = daemon.clone();
+    let child = opened_by(&context, &caller, dir.path(), terminal).await;
+    let worker = child.id;
+    context
+        .call(move |store| store.supervise(worker))
+        .await
+        .unwrap();
+
+    let answered = close(&context, &caller, target(&child)).await.unwrap();
+
+    assert_eq!(answered["closed"], json!(child.id));
+    assert_eq!(answered["code"], child.code.as_str());
+    assert!(!runs(&daemon, terminal).await);
+    let (id, caller_id) = (child.id, caller.id);
+    let (ended, notes, told) = context
+        .call(move |store| {
+            store.follow_workers(&[])?;
+            Ok((
+                store.known(id)?.ended,
+                store.messages_of(id)?,
+                store.messages_of(caller_id)?,
+            ))
+        })
+        .await
+        .unwrap();
+    assert!(ended);
+    assert!(
+        notes
+            .iter()
+            .any(|m| m.sender == caller.id && m.delivered && m.body.contains("closed")),
+        "{notes:?}"
+    );
+    assert!(
+        told.iter().all(|m| !m.body.contains("worker_stopped")),
+        "a supervisor is not told of the end it made itself: {told:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_session_cannot_end_one_the_user_or_another_session_opened() {
+    let (_state, context, caller, _) = conversation_watch("lead");
+    let (users, others) = context
+        .call(|store| {
+            let new = |parent, name: &str| crate::delegation::store::NewSession {
+                parent,
+                agent: tsumugi_model::Agent::Claude,
+                profile: tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude),
+                home: None,
+                name: name.into(),
+                cwd: "/repo".into(),
+                launch: Settings::default(),
+                model: None,
+                permissions: Default::default(),
+                started_ms: 1,
+                name_given: false,
+                code: None,
+            };
+            let (users, _) = store.register(new(None, "users"))?;
+            let (second, _) = store.register(new(None, "second"))?;
+            let (others, _) = store.register(new(Some(second), "others"))?;
+            Ok((store.known(users)?, store.known(others)?))
+        })
+        .await
+        .unwrap();
+
+    for session in [&users, &others] {
+        let refused = close(&context, &caller, target(session)).await.unwrap_err();
+        assert_eq!(refused.code, Code::Refused, "{}", session.name);
+        assert!(refused.message.contains("opened"), "{}", refused.message);
+    }
+    let all = context.call(|store| store.sessions()).await.unwrap();
+    assert!(all.iter().all(|s| !s.ended));
+}
+
+#[tokio::test]
+async fn a_session_that_does_not_exist_or_ended_already_is_named_as_such() {
+    let (_state, context, caller, _) = conversation_watch("lead");
+    let child = opened_by(&context, &caller, Path::new("/repo"), 7).await;
+    let id = child.id;
+    context.call(move |store| store.end(id)).await.unwrap();
+
+    let unknown = close(
+        &context,
+        &caller,
+        protocol::CloseSession {
+            target: Some("zzzz".into()),
+            force: false,
+        },
+    )
+    .await
+    .unwrap_err();
+    let ended = close(&context, &caller, target(&child)).await.unwrap_err();
+
+    assert_eq!(unknown.code, Code::NotFound);
+    assert_eq!(ended.code, Code::Refused);
+    assert!(ended.message.contains("already"), "{}", ended.message);
+}
+
+#[tokio::test]
+#[cfg_attr(windows, ignore = "runs its terminal's program with /bin/sh")]
+async fn uncommitted_changes_refuse_the_end_of_a_session_until_it_is_forced() {
+    let dir = private_dir();
+    let work = tempfile::tempdir().unwrap();
+    let repo = crate::testing::repository(work.path());
+    std::fs::write(repo.join("draft.txt"), "unsaved").unwrap();
+    let (_state, mut context, caller, _) = conversation_watch("lead");
+    let (daemon, terminal) = serving(dir.path()).await;
+    context.daemon = daemon.clone();
+    let child = opened_by(&context, &caller, &repo, terminal).await;
+
+    let refused = close(&context, &caller, target(&child)).await.unwrap_err();
+
+    assert_eq!(refused.code, Code::Refused);
+    assert!(
+        refused.message.contains("uncommitted"),
+        "{}",
+        refused.message
+    );
+    assert!(refused.message.contains("force"), "{}", refused.message);
+    assert!(runs(&daemon, terminal).await);
+    let forced = protocol::CloseSession {
+        force: true,
+        ..target(&child)
+    };
+    close(&context, &caller, forced).await.unwrap();
+    assert!(!runs(&daemon, terminal).await);
+}
+
+#[test]
+fn what_ending_a_session_may_lose_is_its_work_in_hand_and_its_unsaved_changes() {
+    use tsumugi_model::{State, Wait};
+    assert!(losses(Some(&State::Idle), 0).is_empty());
+    assert!(losses(None, 0).is_empty());
+    assert!(losses(Some(&State::Done), 0).is_empty());
+    assert!(losses(Some(&State::Working), 0)[0].contains("working"));
+    assert!(losses(Some(&State::Waiting(Wait::Permission)), 0)[0].contains("waits"));
+    let both = losses(Some(&State::Working), 2);
+    assert_eq!(both.len(), 2);
+    assert!(both[1].contains("2 uncommitted"), "{both:?}");
+}
+
+fn ended_with(name: &str, conversation: &str) -> Session {
+    record(name).conversation(conversation).ended().build()
+}
+
+#[test]
+fn an_ended_session_is_found_to_resume_by_its_code_its_id_or_its_conversation() {
+    let old = ended_with("old", "c-1");
+    let all = [old.clone(), record("other").build()];
+
+    for wanted in [old.code.to_string(), old.id.to_string(), "c-1".to_string()] {
+        assert_eq!(resumption(&all, &wanted).unwrap().id, old.id, "{wanted}");
+    }
+    assert_eq!(resumption(&all, "nobody").unwrap_err().code, Code::NotFound);
+}
+
+#[test]
+fn a_session_that_runs_a_conversation_is_not_resumed_a_second_time() {
+    let running = record("running").conversation("c-1").build();
+    let ended = ended_with("ended", "c-1");
+
+    let by_code = resumption(std::slice::from_ref(&running), running.code.as_str()).unwrap_err();
+    let by_conversation = resumption(&[ended.clone(), running], "c-1").unwrap_err();
+    let none = resumption(&[record("none").ended().build()], "none").unwrap_err();
+
+    assert_eq!(by_code.code, Code::Refused);
+    assert!(by_code.message.contains("runs"), "{}", by_code.message);
+    assert_eq!(by_conversation.code, Code::Refused);
+    assert_eq!(none.code, Code::NotFound);
+}
+
+#[test]
+fn a_session_ended_without_a_conversation_cannot_be_resumed() {
+    let old = record("old").ended().build();
+
+    let refused = resumption(std::slice::from_ref(&old), old.code.as_str()).unwrap_err();
+
+    assert_eq!(refused.code, Code::Refused);
+    assert!(
+        refused.message.contains("conversation"),
+        "{}",
+        refused.message
+    );
+}
+
+#[test]
+fn a_resumed_session_runs_where_the_old_one_ran_as_the_old_one_was_started() {
+    let mut old = ended_with("old", "c-1");
+    old.agent = tsumugi_model::Agent::Codex;
+    old.profile = tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Codex);
+    old.home = Some("/login".into());
+    old.cwd = "/repo/wt".into();
+    old.model = Some("m".into());
+    old.name_given = true;
+
+    let request = resumed_request(&old, "old-2".into());
+
+    assert_eq!(request.resume.as_deref(), Some("c-1"));
+    assert_eq!(request.agent, old.agent);
+    assert_eq!(request.profile.as_ref(), Some(&old.profile));
+    assert_eq!(request.home, old.home);
+    assert_eq!(request.cwd, old.cwd);
+    assert_eq!(request.model, old.model);
+    assert_eq!(request.name, "old-2");
+    assert!(request.name_given);
+    assert!(request.code.is_none());
+}
+
+#[tokio::test]
+async fn a_resume_names_no_place_of_its_own_and_one_that_cannot_be_found_leaves_nothing() {
+    let (_state, context, caller, _) = conversation_watch("lead");
+    let request = |value: Value| serde_json::from_value::<protocol::Start>(value).unwrap();
+
+    for (field, value) in [
+        ("dir", json!("/repo")),
+        ("worktree", json!(true)),
+        ("agent", json!("codex")),
+        ("profile", json!("claude")),
+    ] {
+        let mut asked = json!({"resume": "zzzz"});
+        asked[field] = value;
+        let refused = start(&context, &caller, request(asked)).await.unwrap_err();
+        assert_eq!(refused.code, Code::Invalid, "{field}");
+    }
+    let missing = start(&context, &caller, request(json!({"resume": "zzzz"})))
+        .await
+        .unwrap_err();
+
+    assert_eq!(missing.code, Code::NotFound);
+    assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+}
+
+#[test]
+fn an_issue_is_worked_from_its_own_text_followed_by_what_the_opener_adds() {
+    let issue = tsumugi_model::LocalIssue {
+        id: "a".into(),
+        dir: "/repo".into(),
+        title: "Fix login".into(),
+        body: "It fails.".into(),
+        state: tsumugi_model::LocalIssueState::Open,
+        record: None,
+        session: None,
+        error: None,
+    };
+
+    let alone = issue_prompt(41, &issue, "");
+    let added = issue_prompt(41, &issue, "Start with the tests.");
+
+    assert!(alone.contains("#41"), "{alone}");
+    assert!(alone.contains("Fix login") && alone.contains("It fails."));
+    assert!(added.starts_with(&alone), "{added}");
+    assert!(added.ends_with("Start with the tests."), "{added}");
+}
+
+#[tokio::test]
+async fn an_issue_that_does_not_exist_or_cannot_be_worked_on_refuses_the_start_and_leaves_nothing()
+{
+    let (dir, context, caller, _) = conversation_watch("lead");
+    let id = saved(&context, &caller, "later", dir.path()).await;
+    context
+        .call(move |store| store.close_local_issue(&id))
+        .await
+        .unwrap();
+    let request = |issue: &str| {
+        serde_json::from_value::<protocol::Start>(json!({"issue": issue, "background": true}))
+            .unwrap()
+    };
+
+    let missing = start(&context, &caller, request("99")).await.unwrap_err();
+    let closed = start(&context, &caller, request("1")).await.unwrap_err();
+
+    assert_eq!(missing.code, Code::NotFound);
+    assert_eq!(closed.code, Code::Refused);
+    assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
 }

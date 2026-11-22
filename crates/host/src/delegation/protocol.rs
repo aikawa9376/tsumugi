@@ -73,8 +73,9 @@ pub enum Command {
     Models,
     /// Name the caller's own session anew.
     Rename(Rename),
-    /// End the caller's own session, once its user agreed.
-    Close,
+    /// End the caller's own session, once its user agreed, or a session the
+    /// caller opened.
+    Close(CloseSession),
     /// Tell the session that supervises the caller how its work ended.
     ReportDone(ReportDone),
     /// Block until a message arrives for the caller, and take it.
@@ -111,7 +112,7 @@ impl Command {
                 | Self::RemoveResource(_)
                 | Self::Send(_)
                 | Self::Rename(_)
-                | Self::Close
+                | Self::Close(_)
                 | Self::ReportDone(_)
                 | Self::Wait(_)
         )
@@ -187,12 +188,31 @@ pub struct RemoveResource {
     pub id: String,
 }
 
+/// End a session.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CloseSession {
+    /// The code or id of a session you opened with `start_session`, to end it; your own session when omitted. A session the user or another session opened is refused.
+    #[serde(default)]
+    pub target: Option<String>,
+    /// End the session although it works or has uncommitted changes, which otherwise refuse the call and are named in the refusal.
+    #[serde(default)]
+    pub force: bool,
+}
+
 /// Open a session beside you with a first prompt.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Start {
-    /// The complete first prompt: the line of work and all it needs to know of what you know.
+    /// The complete first prompt: the line of work and all it needs to know of what you know. Optional with `resume`, where it is sent to the resumed session as a message; with `issue` it follows the issue's own text.
+    #[serde(default)]
     pub prompt: String,
+    /// The code, id or conversation id of an ended session to bring back with its conversation, in its own directory, agent and profile: `dir`, `worktree`, `base`, `agent` and `profile` are refused with it. Its record stays as it was.
+    #[serde(default)]
+    pub resume: Option<String>,
+    /// The number of a local issue (see `local_issues`) the session works on: the issue is marked as worked on, finished when the session's turn ends, and opens the session from the Issues list. It starts in the issue's directory unless `dir` is given.
+    #[serde(default)]
+    pub issue: Option<String>,
     /// The directory to work in, or to make the worktree of; your own when omitted.
     #[serde(default)]
     pub dir: Option<PathBuf>,
@@ -410,6 +430,15 @@ pub struct Renamed {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Closing {
     pub closing: bool,
+}
+
+/// The answer to [`Command::Close`] naming a session the caller opened: the
+/// session ended, and the user told so.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Closed {
+    pub closed: SessionId,
+    pub code: SessionCode,
+    pub name: String,
 }
 
 /// The answer to [`Command::Prompted`]: what the caller's agent is told, if
@@ -632,6 +661,41 @@ mod tests {
         let answer = ask(&root, "credential", Command::Context, None).await;
         assert_eq!(answer.unwrap(), Value::from("answered"));
         replacing.await.unwrap();
+    }
+
+    #[test]
+    fn a_close_naming_no_session_is_the_close_hooks_of_an_earlier_tsumugi_send() {
+        let old: Command = serde_json::from_value(json!({"op": "close"})).unwrap();
+        assert!(matches!(
+            old,
+            Command::Close(CloseSession {
+                target: None,
+                force: false
+            })
+        ));
+        let named: Command =
+            serde_json::from_value(json!({"op": "close", "target": "k7f3", "force": true}))
+                .unwrap();
+        assert!(matches!(
+            named,
+            Command::Close(CloseSession {
+                target: Some(_),
+                force: true
+            })
+        ));
+        assert!(Command::Close(CloseSession::default()).acts());
+    }
+
+    #[test]
+    fn a_start_resumes_or_works_an_issue_with_a_prompt_that_may_be_left_out() {
+        let start = |value: Value| serde_json::from_value::<Start>(value);
+        let resumed = start(json!({"resume": "k7f3"})).unwrap();
+        assert_eq!(resumed.resume.as_deref(), Some("k7f3"));
+        assert!(resumed.prompt.is_empty());
+        assert_eq!(
+            start(json!({"issue": "3"})).unwrap().issue.as_deref(),
+            Some("3")
+        );
     }
 
     #[test]
