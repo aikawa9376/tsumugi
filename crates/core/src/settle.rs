@@ -41,6 +41,7 @@ const RULES: &[Rule] = &[
     sidebar_rows,
     tree_completions,
     tree_changes,
+    board_synced,
     tree_filter_left,
     overlay_rename,
     overlay_naming,
@@ -234,6 +235,13 @@ fn tree_changes(state: &mut ViewState, _: &mut Vec<Effect>) {
                 .see(environment, tree::listed(host.work.as_ref()));
         }
     }
+}
+
+/// The board takes in the states the hosts list, and its cursor stays with
+/// its card.
+fn board_synced(state: &mut ViewState, _: &mut Vec<Effect>) {
+    let (hosts, completions) = (&state.hosts, &state.tree.completions);
+    state.board.sync(hosts, completions);
 }
 
 /// Leaving the sidebar, or opening a menu, stops typing into the filter.
@@ -435,6 +443,18 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
                 Tab::Session(e, id) if e == environment => Some(id.clone()),
                 _ => None,
             })
+            // The cards of a board that is shown say what was last said.
+            .chain(
+                state
+                    .content
+                    .windows
+                    .shown()
+                    .iter()
+                    .any(|tab| matches!(tab, Tab::Board(_)))
+                    .then(|| board_sessions(state, environment))
+                    .into_iter()
+                    .flatten(),
+            )
             .collect(),
         // A window that shows no meter says so, rather than leave the host
         // to sample what its own settings name.
@@ -488,4 +508,12 @@ pub fn settle(state: &mut ViewState) -> Vec<Effect> {
         rule(state, &mut effects);
     }
     effects
+}
+
+/// The sessions the host of an environment lists, which the cards of a board are of.
+fn board_sessions(state: &ViewState, environment: &EnvironmentId) -> Vec<String> {
+    tree::listed(state.hosts.work(environment))
+        .sessions()
+        .map(|(_, s)| s.id.clone())
+        .collect()
 }

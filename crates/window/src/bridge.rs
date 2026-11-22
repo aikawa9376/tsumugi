@@ -119,6 +119,7 @@ pub(crate) struct AppCtx {
     pub(crate) content: Signal<ContentView>,
     pub(crate) tree: Signal<TreeView>,
     pub(crate) sidebar: Signal<tsumugi_core::sidebar::Sidebar>,
+    pub(crate) board: Signal<tsumugi_core::board::BoardView>,
     pub(crate) details: Signal<Details>,
     pub(crate) picker: Signal<PickerView>,
     pub(crate) notices: Signal<tsumugi_core::notices::NoticeView>,
@@ -260,6 +261,7 @@ pub(crate) fn use_app() -> AppCtx {
             content: Signal::new(view.content.clone()),
             tree: Signal::new(view.tree.clone()),
             sidebar: Signal::new(view.sidebar.clone()),
+            board: Signal::new(view.board.clone()),
             details: Signal::new(view.details.clone()),
             picker: Signal::new(view.picker.clone()),
             notices: Signal::new(view.notices.clone()),
@@ -657,6 +659,7 @@ impl AppCtx {
         set_changed(self.content, &view.content);
         set_changed(self.tree, &view.tree);
         set_changed(self.sidebar, &view.sidebar);
+        set_changed(self.board, &view.board);
         set_changed(self.details, &view.details);
         set_changed(self.picker, &view.picker);
         set_changed(self.notices, &view.notices);
@@ -1369,6 +1372,7 @@ impl AppCtx {
             | Effect::TakeSuggestion { .. }
             | Effect::EndShell { .. }
             | Effect::FilterFocus(_)
+            | Effect::BoardSearch(_)
             | Effect::PromptOffer(_)
             | Effect::PromptCommands(_)
             | Effect::Palette(_)

@@ -39,6 +39,8 @@ pub(crate) struct Local {
     pub viewer_command: Signal<Option<(WindowId, viewers::Command)>>,
     /// The filter's field, which takes the keys while it is typed into.
     pub filter_field: Signal<Option<Rc<MountedData>>>,
+    /// The board's search field, which takes the keys while it is typed into.
+    pub board_field: Signal<Option<Rc<MountedData>>>,
 }
 
 /// The window's own handles, made once for the component that calls it,
@@ -57,12 +59,22 @@ pub(crate) fn use_local() -> Local {
         gallery: use_signal(Gallery::default),
         viewer_command: use_signal(|| None),
         filter_field: use_signal(|| None),
+        board_field: use_signal(|| None),
     };
     use_context_provider(|| CellHeight(local.cell_height));
     local
 }
 
 impl Local {
+    /// Give the board's search field the keys, or take them from it.
+    pub(crate) fn focus_board_search(&self, on: bool) {
+        if let Some(field) = self.board_field.peek().clone() {
+            spawn(async move {
+                let _ = field.set_focus(on).await;
+            });
+        }
+    }
+
     /// Give the filter's field the keys, or take them from it.
     pub(crate) fn focus_filter(&self, on: bool) {
         if let Some(field) = self.filter_field.peek().clone() {

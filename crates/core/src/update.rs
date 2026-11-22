@@ -39,6 +39,30 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             state.sidebar.filtering = on;
             Vec::new()
         }
+        Msg::BoardClock(now_ms) => {
+            state.board.tick(now_ms);
+            Vec::new()
+        }
+        Msg::BoardQuery(text) => {
+            state.board.query = text;
+            Vec::new()
+        }
+        Msg::BoardProject(name) => {
+            crate::board::toggle(&mut state.board.projects, name);
+            Vec::new()
+        }
+        Msg::BoardLane(lane) => {
+            crate::board::toggle(&mut state.board.states, lane);
+            Vec::new()
+        }
+        Msg::BoardSelect(environment, id) => {
+            state.board.select(environment, id);
+            Vec::new()
+        }
+        Msg::BoardSearching(on) => {
+            state.board.searching = on;
+            Vec::new()
+        }
         Msg::ResourcesClose => {
             state.overlays.resources = None;
             Vec::new()

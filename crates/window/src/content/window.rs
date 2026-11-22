@@ -60,10 +60,12 @@ pub(super) fn window_strip(
         Tab::Terminal(_, id) => StripMark::Terminal(runs_of(terminals, *id)),
         Tab::Draft { .. } => StripMark::Draft,
         Tab::Browser { .. } => StripMark::Browser,
-        Tab::GitHub { .. } | Tab::CheckLog { .. } | Tab::Diff { .. } => StripMark::File(
-            file_icons::find(std::path::Path::new("README.md"), file_icons::Kind::File).glyph,
-            String::new(),
-        ),
+        Tab::GitHub { .. } | Tab::CheckLog { .. } | Tab::Board(_) | Tab::Diff { .. } => {
+            StripMark::File(
+                file_icons::find(std::path::Path::new("README.md"), file_icons::Kind::File).glyph,
+                String::new(),
+            )
+        }
         Tab::Viewer(_, _) | Tab::Drawn { .. } => {
             // A drawn image is marked as a picture file is, being kept as one.
             let path = match shows {

@@ -36,6 +36,7 @@ fn kept_id(tab: &Tab) -> Option<u128> {
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
         | Tab::CheckLog { .. }
+        | Tab::Board(_)
         | Tab::Diff { .. } => None,
     }
 }
@@ -200,6 +201,7 @@ impl Ui {
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }
             | Tab::CheckLog { .. }
+            | Tab::Board(_)
             | Tab::Diff { .. } => true,
         });
         let live = |e: &EnvironmentId, id: &str| e != environment || sessions.contains(id);

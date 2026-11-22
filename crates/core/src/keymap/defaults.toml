@@ -16,6 +16,7 @@
 "Ctrl+q s" = "window.split"
 "Ctrl+q n" = "window.new"
 "Ctrl+q i" = "notices.open"
+"Ctrl+q a" = "board.open"
 "Ctrl+q c" = "window.quit"
 "Ctrl+q o" = "window.only"
 "Ctrl+q H" = "window.move_left"
@@ -354,6 +355,30 @@
 
 [check]
 "r" = "check.rerun"
+
+[board]
+"Escape Escape" = "tree.focus"
+"] ]" = "window.next"
+"[ [" = "window.prev"
+"h" = "board.left"
+"ArrowLeft" = "board.left"
+"l" = "board.right"
+"ArrowRight" = "board.right"
+"j" = "board.down"
+"ArrowDown" = "board.down"
+"k" = "board.up"
+"ArrowUp" = "board.up"
+"g g" = "board.first"
+"G" = "board.last"
+"Enter" = "board.enter"
+"i" = "board.idle"
+"o" = "board.group"
+"Space" = "board.expand"
+"p" = "board.project"
+"s" = "board.state"
+"x" = "board.clear"
+"/" = "board.search"
+"q" = "window.quit"
 
 [lightbox]
 "l" = "lightbox.next"

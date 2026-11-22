@@ -284,6 +284,8 @@ pub enum Effect {
     // The tree.
     /// Give the filter's field the keys, or take them from it.
     FilterFocus(bool),
+    /// Give the board's search field the keys, or take them from it.
+    BoardSearch(bool),
 
     // The console.
     /// Send this key to the focused window's program.

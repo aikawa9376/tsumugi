@@ -15,15 +15,15 @@ changes them ([keys](../keys.md)).
 | `window.down` | Window Below | move to the window below: a session's prompt lies below its console | `global`: `Ctrl+q j`, `Ctrl+q ArrowDown` |
 | `window.up` | Window Above | move to the window above: a session's console lies above its prompt | `global`: `Ctrl+q k`, `Ctrl+q ArrowUp` |
 | `window.right` | Right Window | move to the window to the right: the details panel lies right of the content's windows | `global`: `Ctrl+q l`, `Ctrl+q ArrowRight` |
-| `window.next` | Next Window | move to the window after the one the keys are in, from the tree through the content's windows, each console before its prompt, to the details panel, going round at the end | `global`: `Ctrl+q q`<br>`tree`: `] ]`<br>`agents`: `] ]`<br>`details`: `] ]`<br>`console`: `] ]`<br>`viewer`: `] ]` |
-| `window.prev` | Previous Window | move to the window before the one the keys are in, in the order `window.next` goes, going round at the start | `global`: `Ctrl+q Q`<br>`tree`: `[ [`<br>`agents`: `[ [`<br>`details`: `[ [`<br>`console`: `[ [`<br>`viewer`: `[ [` |
+| `window.next` | Next Window | move to the window after the one the keys are in, from the tree through the content's windows, each console before its prompt, to the details panel, going round at the end | `global`: `Ctrl+q q`<br>`tree`: `] ]`<br>`agents`: `] ]`<br>`details`: `] ]`<br>`console`: `] ]`<br>`viewer`: `] ]`<br>`board`: `] ]` |
+| `window.prev` | Previous Window | move to the window before the one the keys are in, in the order `window.next` goes, going round at the start | `global`: `Ctrl+q Q`<br>`tree`: `[ [`<br>`agents`: `[ [`<br>`details`: `[ [`<br>`console`: `[ [`<br>`viewer`: `[ [`<br>`board`: `[ [` |
 | `window.top` | First Window | move to the first window, the tree when shown | `global`: `Ctrl+q t` |
 | `window.bottom` | Last Window | move to the last window, the details panel when shown | `global`: `Ctrl+q b` |
 | `window.back` | Back to Window Before | move back to the window the keys were in before | `global`: `Ctrl+q p` |
 | `window.split` | Split One Above the Other | split the focused window one above the other, the new window, below it, showing the same ([content](../content.md)) | `global`: `Ctrl+q s` |
 | `window.vsplit` | Split Side by Side | split the focused window side by side, the new window, right of it, showing the same ([content](../content.md)) | `global`: `Ctrl+q v` |
 | `window.new` | Split for a New Session | split the focused window one above the other and start writing a new session in the new one, in the worktree the focused window shows | `global`: `Ctrl+q n` |
-| `window.quit` | Close Split | close the focused window, and its tab when it was the last; what it showed runs on | `global`: `Ctrl+q c`<br>`viewer`: `q` |
+| `window.quit` | Close Split | close the focused window, and its tab when it was the last; what it showed runs on | `global`: `Ctrl+q c`<br>`viewer`: `q`<br>`board`: `q` |
 | `window.only` | Close Other Splits | close every other window of the tab | `global`: `Ctrl+q o` |
 | `window.move_left` | Move Window to the Left | move the focused window to the left of its tab, as tall as the tab | `global`: `Ctrl+q H` |
 | `window.move_down` | Move Window to the Bottom | move the focused window to the bottom of its tab, as wide as the tab | `global`: `Ctrl+q J` |
@@ -136,7 +136,7 @@ changes them ([keys](../keys.md)).
 | `zoom.out` | Zoom Out | draw the window a step smaller | `global`: `Mod+-` |
 | `zoom.reset` | Actual Size | draw the window at the zoom the settings give | `global`: `Mod+0` |
 | `tree.toggle` | Toggle Tree | show or hide the tree | `global`: `Mod+b` |
-| `tree.focus` |  | show and focus the file tree; from outside the sidebar, two Escapes run it while the first Escape keeps its usual meaning ([keys](../keys.md#where-the-keys-go)) | `details`: `Escape Escape`<br>`console`: `Escape Escape`<br>`prompt`: `Escape Escape`<br>`viewer`: `Escape Escape` |
+| `tree.focus` |  | show and focus the file tree; from outside the sidebar, two Escapes run it while the first Escape keeps its usual meaning ([keys](../keys.md#where-the-keys-go)) | `details`: `Escape Escape`<br>`console`: `Escape Escape`<br>`prompt`: `Escape Escape`<br>`viewer`: `Escape Escape`<br>`board`: `Escape Escape` |
 | `sidebar.next` |  | focus the other sidebar section, giving its list more room ([agents](../agents-panel.md)) | `tree`: `Tab`, `Shift+Tab`<br>`agents`: `Tab`, `Shift+Tab` |
 | `agents.expand` |  | expand the selected agent family or move to its first child | `agents`: `l`, `ArrowRight` |
 | `agents.collapse` |  | fold the selected agent family or move to its parent | `agents`: `h`, `ArrowLeft` |
@@ -206,6 +206,21 @@ changes them ([keys](../keys.md)).
 | `github.close` |  | in a pull request's tab, close it, or open it again where it is closed, after asking | `github`: `m c` |
 | `github.ready` |  | in a pull request's tab, mark a draft ready for review, or make an open one a draft, after asking | `github`: `m d` |
 | `check.rerun` |  | in a check's log, run the failed jobs of its Actions run again, after asking; a check whose address does not name its Actions run is said instead of asked ([tree](../tree.md#reading-a-checks-log)) | `check`: `r` |
+| `board.open` |  | open the agent board, a window of every session as a card in the lane of what it asks of you; where it is open, go to it ([board](../board.md)) | `global`: `Ctrl+q a` |
+| `board.left` |  | in the agent board, go to the lane on the left, skipping lanes without cards | `board`: `h`, `ArrowLeft` |
+| `board.right` |  | in the agent board, go to the lane on the right, skipping lanes without cards | `board`: `l`, `ArrowRight` |
+| `board.down` |  | in the agent board, go to the next card of the lane | `board`: `j`, `ArrowDown` |
+| `board.up` |  | in the agent board, go to the previous card of the lane | `board`: `k`, `ArrowUp` |
+| `board.first` |  | in the agent board, go to the first card of the lane | `board`: `g g` |
+| `board.last` |  | in the agent board, go to the last card of the lane | `board`: `G` |
+| `board.enter` |  | in the agent board, open the session of the card | `board`: `Enter` |
+| `board.idle` |  | in the agent board, show or hide the lane of idle sessions, those that finished and have been quiet for half an hour | `board`: `i` |
+| `board.group` |  | in the agent board, fold the sessions a session opened under its card, or give each its own card | `board`: `o` |
+| `board.expand` |  | in the agent board, list or fold the sessions under the card, while they are grouped | `board`: `Space` |
+| `board.project` |  | in the agent board, narrow it to the next project in turn, and then to none | `board`: `p` |
+| `board.state` |  | in the agent board, narrow it to the next lane in turn, and then to none | `board`: `s` |
+| `board.clear` |  | in the agent board, drop the search and every filter | `board`: `x` |
+| `board.search` |  | in the agent board, type what to search the cards for; Enter keeps it and Esc clears it | `board`: `/` |
 | `lightbox.next` |  | in the lightbox, show the next image of the session's Resources, going round at the end ([images in the console](../content.md#images-in-the-console)) | `lightbox`: `l`, `ArrowRight` |
 | `lightbox.prev` |  | in the lightbox, show the previous image, going round at the start | `lightbox`: `h`, `ArrowLeft` |
 | `lightbox.zoom_in` |  | in the lightbox, draw the image larger | `lightbox`: `Plus`, `=` |
@@ -250,6 +265,7 @@ changes them ([keys](../keys.md)).
 "Ctrl+q s" = "window.split"
 "Ctrl+q n" = "window.new"
 "Ctrl+q i" = "notices.open"
+"Ctrl+q a" = "board.open"
 "Ctrl+q c" = "window.quit"
 "Ctrl+q o" = "window.only"
 "Ctrl+q H" = "window.move_left"
@@ -588,6 +604,30 @@ changes them ([keys](../keys.md)).
 
 [check]
 "r" = "check.rerun"
+
+[board]
+"Escape Escape" = "tree.focus"
+"] ]" = "window.next"
+"[ [" = "window.prev"
+"h" = "board.left"
+"ArrowLeft" = "board.left"
+"l" = "board.right"
+"ArrowRight" = "board.right"
+"j" = "board.down"
+"ArrowDown" = "board.down"
+"k" = "board.up"
+"ArrowUp" = "board.up"
+"g g" = "board.first"
+"G" = "board.last"
+"Enter" = "board.enter"
+"i" = "board.idle"
+"o" = "board.group"
+"Space" = "board.expand"
+"p" = "board.project"
+"s" = "board.state"
+"x" = "board.clear"
+"/" = "board.search"
+"q" = "window.quit"
 
 [lightbox]
 "l" = "lightbox.next"

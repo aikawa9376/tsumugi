@@ -29,6 +29,19 @@ pub enum Msg {
     SidebarFold(crate::sidebar::NodeKey),
     SidebarFilter(String),
     SidebarFiltering(bool),
+    /// It is now `0` milliseconds since the Unix epoch, which the board
+    /// tells how long its cards have been quiet by.
+    BoardClock(u64),
+    /// The board is searched for `0`.
+    BoardQuery(String),
+    /// The board is narrowed to a project, or no longer is.
+    BoardProject(String),
+    /// The board is narrowed to a lane, or no longer is.
+    BoardLane(crate::board::Lane),
+    /// The card of a session was pointed at.
+    BoardSelect(EnvironmentId, String),
+    /// The board's search field took the keys, or gave them back.
+    BoardSearching(bool),
     LocalIssuesClose,
     /// Put the sheet of resources away.
     ResourcesClose,

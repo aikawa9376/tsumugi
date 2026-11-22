@@ -126,6 +126,7 @@ pub(crate) fn FocusedBody(
         Some(Tab::Viewer(_, path)) => file_name(path),
         Some(Tab::Drawn { width, height, .. }) => format!("Image {width} × {height}"),
         Some(Tab::CheckLog { job, .. }) => format!("Log: {}", job.name),
+        Some(Tab::Board(_)) => "Agents".into(),
         Some(tab @ Tab::GitHub { number, .. }) => {
             tree_view::github_title(work, tab).unwrap_or_else(|| format!("#{number}"))
         }

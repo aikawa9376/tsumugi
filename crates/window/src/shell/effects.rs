@@ -74,6 +74,7 @@ impl Ui {
             } => self.take_suggestion(key, session, hands_back, no_images, tab),
             Effect::ConsoleLive => self.console_live(),
             Effect::FilterFocus(on) => self.local.focus_filter(on),
+            Effect::BoardSearch(on) => self.local.focus_board_search(on),
             Effect::Viewer { window, action, .. } => {
                 let mut command = self.local.viewer_command;
                 let seq = command.peek().as_ref().map_or(1, |(_, c)| c.seq + 1);

@@ -76,6 +76,9 @@ pub enum Tab {
         number: u64,
         job: std::sync::Arc<CheckJob>,
     },
+    /// The agent board of the environment the window is in: every session of
+    /// every environment as a card in the lane of what it asks of the user.
+    Board(EnvironmentId),
     /// An image `session`'s console drew, `width` by `height` pixels, shown
     /// in the image viewer from the copy the window keeps by `id`.
     Drawn {
@@ -111,6 +114,7 @@ pub fn shows_prompt(tab: Option<&Tab>) -> bool {
                 | Tab::Viewer(..)
                 | Tab::Drawn { .. }
                 | Tab::CheckLog { .. }
+                | Tab::Board(_)
                 | Tab::Diff { .. }
         )
     )
@@ -187,6 +191,7 @@ impl Tab {
             | Tab::Drawn { environment, .. }
             | Tab::GitHub { environment, .. }
             | Tab::CheckLog { environment, .. }
+            | Tab::Board(environment)
             | Tab::Diff { environment, .. } => environment,
         }
     }
@@ -466,6 +471,7 @@ pub fn kept_name(tab: &Tab) -> Option<String> {
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
         | Tab::CheckLog { .. }
+        | Tab::Board(_)
         | Tab::Diff { .. } => {
             return None;
         }

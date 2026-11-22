@@ -252,6 +252,7 @@ fn go(state: &mut ViewState, taken: Taken) -> Vec<Effect> {
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }
             | Tab::CheckLog { .. }
+            | Tab::Board(_)
             | Tab::Diff { .. }
             | Tab::Browser { .. },
         )

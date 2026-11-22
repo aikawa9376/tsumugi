@@ -60,6 +60,7 @@ fn every_other_area_follows_in_the_order_the_file_names_them() {
             Context::Draft,
             Context::GitHub,
             Context::Check,
+            Context::Board,
             Context::Lightbox,
             Context::Floating,
             Context::Overlay,

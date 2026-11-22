@@ -201,6 +201,7 @@ pub fn entries(
             | Tab::Drawn { .. }
             | Tab::GitHub { .. }
             | Tab::CheckLog { .. }
+            | Tab::Board(_)
             | Tab::Diff { .. },
         ) => vec![close_tab],
         Target::Link { file, .. } => [Action::CursorGo, Action::CursorCopy]

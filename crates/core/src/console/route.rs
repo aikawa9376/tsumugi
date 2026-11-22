@@ -127,6 +127,7 @@ pub fn help_contexts(area: Area, shown: Option<&Tab>) -> Vec<Context> {
                     Tab::Viewer(_, _)
                         | Tab::GitHub { .. }
                         | Tab::CheckLog { .. }
+                        | Tab::Board(_)
                         | Tab::Diff { .. }
                 )
             ) =>
@@ -135,6 +136,8 @@ pub fn help_contexts(area: Area, shown: Option<&Tab>) -> Vec<Context> {
                 &[Context::GitHub, Context::Viewer, Context::Global]
             } else if matches!(shown, Some(Tab::CheckLog { .. })) {
                 &[Context::Check, Context::Viewer, Context::Global]
+            } else if matches!(shown, Some(Tab::Board(_))) {
+                &[Context::Board, Context::Global]
             } else {
                 &[Context::Viewer, Context::Global]
             }
@@ -189,6 +192,7 @@ impl Footing<'_> {
             Area::Console if self.answering || matches!(self.shown, Some(Tab::Terminal(_, _))) => {
                 ("PASS", "pass")
             }
+            Area::Console if matches!(self.shown, Some(Tab::Board(_))) => ("BOARD", "normal"),
             Area::Console
                 if matches!(
                     self.shown,
@@ -196,6 +200,7 @@ impl Footing<'_> {
                         Tab::Viewer(_, _)
                             | Tab::GitHub { .. }
                             | Tab::CheckLog { .. }
+                            | Tab::Board(_)
                             | Tab::Diff { .. }
                     )
                 ) =>

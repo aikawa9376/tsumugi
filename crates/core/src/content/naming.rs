@@ -41,6 +41,7 @@ pub fn thing_name(tree: &Tree, terminals: &[TerminalSession], thing: &Tab) -> St
         Tab::Drawn { width, height, .. } => format!("Image {width} × {height}"),
         Tab::GitHub { number, .. } => format!("#{number}"),
         Tab::CheckLog { job, .. } => format!("Log: {}", job.name),
+        Tab::Board(_) => "Agents".into(),
     }
 }
 
