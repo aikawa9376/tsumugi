@@ -6,6 +6,7 @@
 mod appearance;
 mod asks;
 pub mod awake;
+pub mod cleanup;
 pub mod cli;
 mod command;
 mod completion;
@@ -20,8 +21,11 @@ pub mod env;
 pub mod environment;
 pub mod execution;
 mod explain;
+pub mod gate;
+mod gate_cli;
 pub mod gateway;
 mod generate;
+pub mod governor;
 mod held;
 mod issue_cli;
 mod jobs;
@@ -71,6 +75,7 @@ mod worktrees;
 use tsumugi_core::content;
 
 pub use daemon::cli as daemon_cli;
+pub use gate_cli::cli as gate_cli;
 pub use issue_cli::cli as issue_cli;
 pub use kept::{KEEP, keep};
 pub use ports::cli as ports_cli;

@@ -285,6 +285,12 @@ pub struct Settings {
     /// The agents asked for commit messages, pull requests, hook failures and
     /// conflicts from the Changes list, and how.
     pub ai_actions: AiActionsSettings,
+    /// What sessions may use of the work machine: how many run at once, how
+    /// their builds share, how large worktrees may grow.
+    pub governor: GovernorSettings,
+    /// The command that gates each repository, run once at a time on the work
+    /// host for the sessions that ask.
+    pub gate: GateSettings,
 }
 
 impl Serialize for Settings {
@@ -393,6 +399,8 @@ impl Default for Settings {
             panel: crate::details::DetailsLayout::default(),
             worktree_setup: WorktreeSetupSettings::default(),
             ai_actions: AiActionsSettings::default(),
+            governor: GovernorSettings::default(),
+            gate: GateSettings::default(),
         }
     }
 }
@@ -703,7 +711,9 @@ pub fn reread(current: &Settings, text: &str) -> Option<Settings> {
 
 mod ai_actions;
 mod earlier;
+mod governor;
 pub use ai_actions::{AiActionsSettings, Recipe, RepositoryRecipe, Resolved};
+pub use governor::{BuildCache, GateSettings, GovernorSettings, RepositoryGate};
 
 #[cfg(test)]
 pub(crate) mod tests;

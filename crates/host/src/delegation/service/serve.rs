@@ -124,6 +124,10 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
             listed(all, &filter).await
         }
         Command::Ports(asked) => super::commands::ports(&caller, asked).await,
+        Command::RequestGate(asked) => super::commands::request_gate(context, &caller, asked).await,
+        Command::CleanupWorktrees(asked) => {
+            super::commands::cleanup_worktrees(context, &caller, asked).await
+        }
         Command::Models => answer(context.models.lock().expect("the models' lock").view()),
         Command::Next => {
             let id = caller.id;

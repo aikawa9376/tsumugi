@@ -10,10 +10,14 @@ use tsumugi_model::{NewWorktree, StartPoint};
 
 use crate::Backend;
 
+mod gating;
+mod listing;
 mod placing;
 mod removal;
 mod starts;
 
+pub use gating::{head, place_gate};
+pub use listing::{Entry, all};
 pub use placing::{included, place, relative};
 pub use removal::{delete, standing};
 pub use starts::starts;

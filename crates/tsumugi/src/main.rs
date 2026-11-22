@@ -134,6 +134,8 @@ fn main() {
                 Command::Session(_)
                     | Command::Issue(_)
                     | Command::Schedule(_)
+                    | Command::Gate(_)
+                    | Command::Cleanup(_)
                     | Command::Terminal(_)
                     | Command::Ports(_)
                     | Command::Mcp(_)
@@ -238,6 +240,10 @@ fn main() {
         Some(Command::Skills(rest)) => std::process::exit(tsumugi_host::skills::cli(&rest)),
         Some(Command::Issue(rest)) => std::process::exit(tsumugi_host::issue_cli(&rest)),
         Some(Command::Schedule(rest)) => std::process::exit(tsumugi_host::schedule_cli(&rest)),
+        Some(Command::Gate(rest)) => std::process::exit(tsumugi_host::gate_cli("gate", &rest)),
+        Some(Command::Cleanup(rest)) => {
+            std::process::exit(tsumugi_host::gate_cli("cleanup", &rest))
+        }
         Some(Command::Mcp(rest)) => {
             std::process::exit(tsumugi_host::delegation::bridge::cli(&rest))
         }

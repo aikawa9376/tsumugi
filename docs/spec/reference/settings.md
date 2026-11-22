@@ -128,6 +128,36 @@ The shell that floats over the window.
 | --- | --- | --- | --- |
 | `floating_terminal.directory` | string | `"~"` | The folder its shells start in, `~` standing for the home folder of the machine they run on; empty for that home folder. |
 
+## `[gate]`
+
+The command that gates each repository, run once at a time on the work host for the sessions that ask.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+
+### `[[gate.repositories]]`
+
+The repositories with a gate, each `[[gate.repositories]]` table one.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `gate.repositories.command` | string | `""` | The command line that runs the gate, for example `just ci`. |
+| `gate.repositories.known_failures` | array of strings | `[]` | Failures the gate always has on this machine: a failed test whose line holds one of these words does not fail the gate. |
+| `gate.repositories.path` | string | `""` | The repository's primary checkout, the directory holding its `.git`. |
+
+## `[governor]`
+
+What sessions may use of the work machine: how many run at once, how their builds share, how large worktrees may grow.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `governor.build_cache` |  | `"own"` | How the builds of a repository's worktrees share their work: `own`, `shared` or `sccache`. |
+| `governor.build_jobs` | integer | `0` | How many jobs the builds of the sessions Tsumugi starts run at once (`CARGO_BUILD_JOBS`). |
+| `governor.cleanup_branches` | boolean | `false` | Whether cleaning up a worktree also deletes its branch, which it does only for a branch the base already holds. |
+| `governor.max_sessions` | integer | `0` | The most agent sessions that run at once on the work machine. A session another opens waits for room, and is refused, with how many run, once it has waited too long; sessions you open yourself are never held. |
+| `governor.wait_seconds` | integer | `120` | How many seconds a session another opens waits for room under `max_sessions` before it is refused. |
+| `governor.worktree_warn_gib` | integer | `0` | The size, in GiB, of a repository's worktrees above which Tsumugi warns. |
+
 ## `[neovim]`
 
 How a Neovim tab's Neovim starts, as an agent does; an empty command runs `nvim`.
