@@ -605,12 +605,13 @@ pub(crate) fn choose_options(
 }
 
 impl ContentView {
-    /// The browser pages open in any window, as the tree lists them.
+    /// The browser pages open in any window, as the tree lists them: those of
+    /// the layout shown and of every worktree's layout put away, which a page
+    /// stays open in until its window closes.
     pub fn pages(&self) -> Vec<(EnvironmentId, nav::Page)> {
-        let mut out: Vec<_> = self
-            .windows
-            .tabs()
-            .iter()
+        let mut out: Vec<_> = std::iter::once(&self.windows)
+            .chain(self.layouts.each())
+            .flat_map(|content| content.tabs())
             .flat_map(|t| t.windows())
             .filter_map(|w| match &w.shows {
                 Tab::Browser {

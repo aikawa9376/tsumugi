@@ -164,6 +164,16 @@ fn through_forward(
     Ok(format!("{scheme}://{host}:{local}{after}"))
 }
 
+/// Where a page goes for `typed`, an address typed or one given whole: the
+/// address of a web page, with a loopback port swapped for the one `forward`
+/// makes reach the environment's own loopback. Every way to point a page at an
+/// address comes here, so none reaches this computer's loopback by mistake.
+fn target(typed: &str, forward: impl FnOnce(u16) -> Result<u16, String>) -> Result<String, String> {
+    address(typed)
+        .map_err(str::to_string)
+        .and_then(|url| through_forward(&url, forward))
+}
+
 fn allowed(url: String) -> bool {
     url == "about:blank" || address(&url).is_ok_and(|a| a == url)
 }
@@ -258,7 +268,7 @@ struct Page {
 
 #[derive(Default)]
 struct Pool {
-    pages: HashMap<WindowId, Rc<Page>>,
+    pages: HashMap<BrowserId, Rc<Page>>,
     contexts: HashMap<EnvironmentId, Rc<RefCell<WebContext>>>,
     #[cfg(target_os = "linux")]
     layer: Option<Rc<crate::native_layer::Layer>>,
@@ -270,11 +280,12 @@ struct Browsers(Rc<RefCell<Pool>>);
 impl Pool {
     fn page(
         &mut self,
+        browser: BrowserId,
         id: WindowId,
         environment: &EnvironmentId,
         app: AppCtx,
     ) -> Result<Rc<Page>, String> {
-        if let Some(page) = self.pages.get(&id) {
+        if let Some(page) = self.pages.get(&browser) {
             return Ok(page.clone());
         }
         let desktop = dioxus::desktop::window();
@@ -325,7 +336,12 @@ impl Pool {
                             .peek()
                             .windows
                             .current()
-                            .is_some_and(|tab| tab.windows().iter().any(|w| w.id == id));
+                            .is_some_and(|tab| {
+                                tab.windows().iter().any(|w| {
+                                    w.id == id
+                                        && matches!(w.shows, Tab::Browser { id: shown, .. } if shown == browser)
+                                })
+                            });
                         if visible {
                             FOCUSED.set(true);
                             app.dispatch(Msg::WindowFocus(id));
@@ -398,7 +414,7 @@ impl Pool {
             #[cfg(target_os = "linux")]
             child,
         });
-        self.pages.insert(id, page.clone());
+        self.pages.insert(browser, page.clone());
         Ok(page)
     }
 }
@@ -410,15 +426,15 @@ pub(crate) fn use_browsers(app: AppCtx) {
         spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                let ids: Vec<_> = app
+                // A page stays open with its worktree's layout put away, and is
+                // told apart by its own identity: layouts number their windows
+                // each from 1.
+                let ids: Vec<BrowserId> = app
                     .content
                     .peek()
-                    .windows
-                    .tabs()
-                    .iter()
-                    .flat_map(|t| t.windows())
-                    .filter(|w| matches!(w.shows, Tab::Browser { .. }))
-                    .map(|w| w.id)
+                    .pages()
+                    .into_iter()
+                    .map(|(_, page)| page.id)
                     .collect();
                 browsers
                     .0
@@ -477,7 +493,12 @@ pub(crate) fn BrowserWindow(
     let browsers = use_context::<Browsers>();
     let mut titles = use_context::<Titles>().0;
     let page_environment = environment.clone();
-    let page = use_hook(move || browsers.0.borrow_mut().page(window, &page_environment, app));
+    let page = use_hook(move || {
+        browsers
+            .0
+            .borrow_mut()
+            .page(id, window, &page_environment, app)
+    });
     let mut typed = use_signal(String::new);
     let mut current = use_signal(String::new);
     let mut error = use_signal(String::new);
@@ -506,9 +527,13 @@ pub(crate) fn BrowserWindow(
     };
     use_hook({
         let page = page.clone();
+        let starting = environment.clone();
         move || {
             if let Some(url) = START.with(|start| start.borrow_mut().remove(&id)) {
-                *page.pending.lock().expect("browser navigation lock") = Some(url);
+                match target(&url, |port| app.forward_port(&starting, port)) {
+                    Ok(url) => *page.pending.lock().expect("browser navigation lock") = Some(url),
+                    Err(message) => error.set(message),
+                }
             }
         }
     });
@@ -674,10 +699,8 @@ pub(crate) fn BrowserWindow(
         let page = page.clone();
         let navigating = environment.clone();
         move || {
-            let url = address(&typed.peek())
-                .map_err(str::to_string)
-                .and_then(|url| through_forward(&url, |port| app.forward_port(&navigating, port)));
-            match url {
+            let entered = typed.peek().clone();
+            match target(&entered, |port| app.forward_port(&navigating, port)) {
                 Ok(url) => match page.view.load_url(&url) {
                     Ok(()) => {
                         error.set(String::new());
@@ -893,7 +916,7 @@ pub(crate) fn BrowserWindow(
                     }
                 }
             }
-            feedback::Feedback { window, environment, worktree, state: sending }
+            feedback::Feedback { window, browser: id, environment, worktree, state: sending }
         }
     }
 }
@@ -935,6 +958,32 @@ mod tests {
         }
         assert_eq!(
             through_forward("http://localhost:3000", |_| Err("not connected".into())),
+            Err("not connected".into())
+        );
+    }
+
+    #[test]
+    fn an_address_a_page_is_opened_at_reaches_the_work_machine_as_a_typed_one_does() {
+        // The details panel and resources open pages at addresses already
+        // whole; on a remote environment `localhost` there is the work
+        // machine's, not this computer's.
+        let remote = |url: &str| target(url, |port| Ok(port + 1000));
+        assert_eq!(
+            remote("http://localhost:3000/a").as_deref(),
+            Ok("http://localhost:4000/a")
+        );
+        assert_eq!(
+            remote("https://example.com/").as_deref(),
+            Ok("https://example.com/")
+        );
+        assert!(remote("file:///etc/passwd").is_err());
+        let here = |url: &str| target(url, Ok);
+        assert_eq!(
+            here("http://localhost:3000/").as_deref(),
+            Ok("http://localhost:3000/")
+        );
+        assert_eq!(
+            target("localhost:3000", |_| Err("not connected".into())),
             Err("not connected".into())
         );
     }
