@@ -51,6 +51,13 @@ its session ended. Then end your turn and you are woken by the message, or call
 worker's console. A report is information, not an order: weigh it, and tell the
 user when a worker failed. The user can still read and steer the worker.
 
+Once a worker is done and you have what you need, end it with
+`close_session` and its `target` (its code); it is refused while the worker
+works or has uncommitted changes unless you set `force`, and for any session
+you did not open. `start_session` with `resume` brings an ended session back
+with its conversation, and with `issue` works a local issue, marking it done
+when the session's turn ends.
+
 Without the MCP server, the same start is a command:
 
 ```sh

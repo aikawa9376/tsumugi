@@ -67,3 +67,17 @@ Each session's agent can list and read local issues, and close, reopen and
 cancel them, as well as save them. Reopening and cancelling never start work.
 Starting, retrying and deleting are for the user, from the Issues window or
 the command line.
+
+### Working an issue from a session
+
+A session that opens another can name a local issue for it to work
+([sessions that open sessions](opening-sessions.md#working-an-issue)). That is
+the supervisor's own act of starting the issue, so it needs no Start from the
+user. The issue is linked to the session at once and the link outlives
+restarts of the window and the work host; it is shown and followed as an
+issue the queue started. The issue's request is the session's first prompt,
+followed by what the opener adds.
+
+The one request at a time in a directory limits only what the queue starts:
+an issue a session works holds its directory against the queue until its turn
+ends, but is itself never made to wait for a request already at work there.

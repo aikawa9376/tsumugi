@@ -139,6 +139,8 @@ async fn start_as(
             name: asked.name.clone(),
             background: asked.background,
             supervised: asked.supervised,
+            resume: None,
+            issue: None,
         });
     let started: crate::delegation::protocol::Started =
         crate::delegation::protocol::ask_for(root, credential, command, None)

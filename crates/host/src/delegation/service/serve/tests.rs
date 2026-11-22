@@ -6,14 +6,35 @@ use crate::testing::{message, record};
 fn a_message_names_its_sender_by_its_code_and_where_it_works() {
     let sender = record("review").build();
     let message = message(sender.id, SessionId::new()).body("done").build();
-    let read = envelope(&message, Some(&sender));
+    let read = envelope(&message, Some(&sender), None);
     assert!(
         read.starts_with(&format!("[message] from review ({})", sender.code)),
         "{read}"
     );
     assert!(read.ends_with("\ndone"), "{read}");
-    let unknown = envelope(&message, None);
+    let unknown = envelope(&message, None, None);
     assert!(unknown.contains(&sender.id.to_string()), "{unknown}");
+}
+
+#[test]
+fn a_message_from_the_session_that_opened_the_recipient_says_so() {
+    let opener = record("lead").build();
+    let message = message(opener.id, SessionId::new()).body("wrap up").build();
+
+    let from_opener = envelope(&message, Some(&opener), Some(opener.id));
+    let from_peer = envelope(&message, Some(&opener), Some(SessionId::new()));
+    let unopened = envelope(&message, Some(&opener), None);
+
+    assert!(
+        from_opener.starts_with(&format!(
+            "[message] from lead ({}), the session that opened you, working in",
+            opener.code
+        )),
+        "{from_opener}"
+    );
+    assert!(from_opener.ends_with("\nwrap up"), "{from_opener}");
+    assert!(!from_peer.contains("opened you"), "{from_peer}");
+    assert!(!unopened.contains("opened you"), "{unopened}");
 }
 
 #[test]

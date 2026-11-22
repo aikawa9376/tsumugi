@@ -60,12 +60,12 @@ impl Drop for Background {
 
 /// The tools every session has, whoever started it.
 fn tools() -> Vec<Value> {
-    use super::protocol::{Ports, Rename, ReportDone, Send, Sessions, Start, Wait};
+    use super::protocol::{CloseSession, Ports, Rename, ReportDone, Send, Sessions, Start, Wait};
     let tool = |name: &str, description: &str, schema: schemars::Schema| json!({"name": name, "description": description, "inputSchema": schema});
     vec![
         tool(
             "start_session",
-            "Open a session beside you for a line of work the user will want to steer themselves — one that needs their decisions or review, lands as a change of its own, or lives in another repository — even when it came out of your own work, or when the user asks you to. What comes back to you to fold into your answer belongs to your own subagents instead. It stays the user's to read and steer, in a console of its own; give it a first prompt that carries what it needs. Set `supervised` to learn how it ends: it reports to you with `report_done`, and you can `wait` for that instead of polling.",
+            "Open a session beside you for a line of work the user will want to steer themselves — one that needs their decisions or review, lands as a change of its own, or lives in another repository — even when it came out of your own work, or when the user asks you to. What comes back to you to fold into your answer belongs to your own subagents instead. It stays the user's to read and steer, in a console of its own; give it a first prompt that carries what it needs. Set `supervised` to learn how it ends: it reports to you with `report_done`, and you can `wait` for that instead of polling. Set `issue` to work a local issue, which is marked as worked on and finished when the session's turn ends; set `resume` to bring an ended session back with its conversation.",
             schemars::schema_for!(Start),
         ),
         tool(
@@ -143,11 +143,11 @@ fn tools() -> Vec<Value> {
             "Name your own session anew, as the user sees it in Tsumugi: a few words saying what it works on, in the language the user writes in. Call it once you have answered the first prompt, after the conversation is cleared once you have answered the next one, and otherwise only when the work turns to something else entirely, never as it moves from step to step. When it is refused, keep the name.",
             schemars::schema_for!(Rename),
         ),
-        json!({
-            "name": "close_session",
-            "description": "End your own session, as the user can from Tsumugi; its conversation stays and can be resumed. Call it only once the user has agreed to close it, after you showed them a summary of where things stand, and as the last thing you do: the session ends a moment after this answers.",
-            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
-        }),
+        tool(
+            "close_session",
+            "End a session, as the user can from Tsumugi; its conversation stays and can be resumed. Without `target` it ends your own session: call it only once the user has agreed to close it, after you showed them a summary of where things stand, and as the last thing you do; the session ends a moment after this answers. With `target`, the code or id of a session you opened with `start_session`, it ends that session at once, once its work is done and you have what you need of it; it is refused for any session you did not open, and, unless you set `force`, while that session works or its directory holds uncommitted changes, which the refusal names. The user sees that you closed it.",
+            schemars::schema_for!(CloseSession),
+        ),
         json!({
             "name": "timeline_tasks",
             "description": TIMELINE_TASKS,
@@ -235,7 +235,7 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "ports" => Command::Ports(serde_json::from_value(arguments).map_err(parsed)?),
         "models" => Command::Models,
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
-        "close_session" => Command::Close,
+        "close_session" => Command::Close(serde_json::from_value(arguments).map_err(parsed)?),
         "report_done" => Command::ReportDone(serde_json::from_value(arguments).map_err(parsed)?),
         "wait" => Command::Wait(serde_json::from_value(arguments).map_err(parsed)?),
         "timeline_tasks" => {
@@ -717,6 +717,42 @@ mod tests {
         .await;
         assert_eq!(out[1]["result"]["isError"], false);
         assert_eq!(*daemon.asked.lock().unwrap(), ["context", "close"]);
+    }
+
+    #[tokio::test]
+    async fn closing_may_name_a_session_to_end_and_nothing_else() {
+        let daemon = Fake::new();
+        let out = exchange(
+            daemon.clone(),
+            false,
+            &[
+                rpc(1, "initialize", json!({})),
+                rpc(
+                    2,
+                    "tools/call",
+                    json!({"name": "close_session", "arguments": {"target": "k7f3", "force": true}}),
+                ),
+                rpc(
+                    3,
+                    "tools/call",
+                    json!({"name": "close_session", "arguments": {"session": "k7f3"}}),
+                ),
+                rpc(4, "tools/list", json!({})),
+            ],
+            Duration::from_millis(100),
+        )
+        .await;
+        assert_eq!(out[1]["result"]["isError"], false);
+        assert_eq!(out[2]["result"]["isError"], true);
+        assert_eq!(*daemon.asked.lock().unwrap(), ["context", "close"]);
+        let close = out[3]["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "close_session")
+            .unwrap();
+        assert!(close["inputSchema"]["properties"]["target"].is_object());
+        assert!(close["inputSchema"]["properties"]["force"].is_object());
     }
 
     #[tokio::test]
