@@ -71,7 +71,7 @@ fn a_page_stays_listed_under_its_worktree_while_another_worktree_is_shown() {
     let run = two_worktrees()
         .send(show_at(a.clone(), "/r/a"))
         .send(show_at(b.clone(), "/r/b"));
-    assert_eq!(shown(&run), [b.clone()]);
+    assert_eq!(shown(&run), std::slice::from_ref(&b));
     let (Tab::Browser { id: a_id, .. }, Tab::Browser { id: b_id, .. }) = (&a, &b) else {
         unreachable!()
     };
