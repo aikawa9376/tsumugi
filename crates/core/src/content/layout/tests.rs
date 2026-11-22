@@ -951,3 +951,89 @@ fn a_kept_content_out_of_shape_comes_back_in_shape() {
     assert!((sizes(&restored).iter().sum::<f64>() - 1.0).abs() < 0.01);
     assert_eq!(restored.focused(), Some(&"b"));
 }
+
+fn recent(c: &C) -> Vec<&'static str> {
+    c.recent_tabs().iter().map(|t| t.focused().shows).collect()
+}
+
+#[test]
+fn the_recent_tabs_lead_with_the_shown_one_then_the_ones_shown_last() {
+    let mut c = one("a");
+    c.open_tab("b");
+    c.open_tab("c");
+    c.open_tab("d");
+    assert_eq!(recent(&c), ["d", "c", "b", "a"]);
+    c.go_to_tab(0);
+    assert_eq!(recent(&c), ["a", "d", "c", "b"]);
+    c.go_to_tab(2);
+    assert_eq!(recent(&c), ["c", "a", "d", "b"]);
+}
+
+#[test]
+fn a_tab_never_shown_comes_after_the_recent_ones_in_the_order_of_the_tabs() {
+    let mut c = one("a");
+    c.open_tab("b");
+    c.open_behind("c");
+    c.open_behind("d");
+    c.go_to_tab(0);
+    assert_eq!(recent(&c), ["a", "b", "d", "c"]);
+}
+
+#[test]
+fn closing_a_tab_takes_it_out_of_the_recent_tabs() {
+    let mut c = one("a");
+    c.open_tab("b");
+    c.open_tab("c");
+    c.close_tab();
+    assert_eq!(recent(&c), ["b", "a"]);
+}
+
+#[test]
+fn a_tab_moved_keeps_its_place_among_the_recent_tabs() {
+    let mut c = one("a");
+    c.open_tab("b");
+    c.open_tab("c");
+    c.move_tab(0, 2);
+    assert_eq!(recent(&c), ["c", "b", "a"]);
+}
+
+#[test]
+fn a_tab_is_shown_by_its_key() {
+    let mut c = one("a");
+    c.open_tab("b");
+    c.open_tab("c");
+    let a = c.tabs()[0].key();
+    assert!(c.go_to_tab_keyed(a));
+    assert_eq!(c.focused(), Some(&"a"));
+    c.close_tab();
+    assert!(!c.go_to_tab_keyed(a));
+}
+
+#[test]
+fn the_tabs_of_the_kind_shown_are_stepped_through_going_round_and_passing_the_others() {
+    let mut c = one("f1");
+    c.open_tab("t1");
+    c.open_tab("f2");
+    c.open_tab("t2");
+    c.open_tab("f3");
+    let kind = |s: &&str| s.chars().next();
+    c.go_to_tab(0);
+    c.cycle_tab_of(1, kind);
+    assert_eq!(c.focused(), Some(&"f2"));
+    c.cycle_tab_of(1, kind);
+    c.cycle_tab_of(1, kind);
+    assert_eq!(c.focused(), Some(&"f1"));
+    c.cycle_tab_of(-1, kind);
+    assert_eq!(c.focused(), Some(&"f3"));
+    c.go_to_tab(1);
+    c.cycle_tab_of(1, kind);
+    assert_eq!(c.focused(), Some(&"t2"));
+}
+
+#[test]
+fn a_tab_alone_of_its_kind_stays_shown_when_stepping_through_its_kind() {
+    let mut c = one("f1");
+    c.open_tab("t1");
+    c.cycle_tab_of(1, |s: &&str| s.chars().next());
+    assert_eq!(c.focused(), Some(&"t1"));
+}

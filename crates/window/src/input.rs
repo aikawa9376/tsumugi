@@ -296,6 +296,7 @@ async fn listen(
                     pasted: false,
                 });
             }
+            keys::Message::Released => app.dispatch(Msg::SwitcherRelease),
             keys::Message::Key { .. } | keys::Message::Lost | keys::Message::Seen => {}
         }
     }

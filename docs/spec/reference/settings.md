@@ -31,6 +31,7 @@ when the file does not name it, and what it does
 | `rename_sessions` | boolean | `true` | Let a session's agent name its session once it has answered the first prompt, and again when the work turns to something else; a name given by hand, above the prompt or by renaming, is kept all the same. |
 | `restore_sessions` |  | `"ask"` | Whether the sessions and terminals a terminal host took with it, as it restarted, crashed or went with the machine, come back: offered by the window to bring back, at once, or never. |
 | `scratch_dir` | string | `""` | Where scratch sessions run, `~` standing for your home folder; empty for Tsumugi's own folder. |
+| `tab_switch_order` |  | `"mru"` | How the tab switcher, which Ctrl+Tab opens, orders its tabs: `mru`, by when each was shown last, or `sequential`, in the order of the tabs. |
 | `usage_left` | boolean | `true` | Show how much of each usage limit is left; off, how much is used. |
 | `zoom` | number | `1.0` | The user's zoom adjustment, multiplied by the display scale when automatic scaling is enabled. |
 

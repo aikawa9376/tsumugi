@@ -21,6 +21,13 @@ if (window.tsumugiDebugKeys) {
 // tell keys macOS gave it that never came, as WebKit holds them while an
 // input method leaves one unanswered.
 window.addEventListener('keydown', () => current() && dioxus.send({ kind: 'seen' }), true);
+// The modifier keys, but for Shift, let go: the tab switcher shows the tab it
+// moved to.
+window.addEventListener('keyup', (e) => {
+  if (current() && ['Control', 'Meta', 'Alt'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    dioxus.send({ kind: 'released' });
+  }
+}, true);
 // Whether an input method composes in the text area. WebKit ends a
 // composition whose text area turns read-only, is emptied or loses focus, and
 // brings its text back later: none of these is done to it until the

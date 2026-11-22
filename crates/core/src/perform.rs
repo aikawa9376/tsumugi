@@ -220,6 +220,11 @@ pub(crate) fn perform(
         | Action::TabMoveNext
         | Action::TabNext
         | Action::TabPrev
+        | Action::TabRecent
+        | Action::TabRecentPrev
+        | Action::TabNextSame
+        | Action::TabPrevSame
+        | Action::TabCloseFiles
         | Action::TabClose => step(state, Msg::Window(action)),
         // The key pressed is Neovim's while the prompt has no agent to send
         // it to.

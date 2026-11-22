@@ -188,12 +188,12 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             if neovim {
                 vec![Effect::StartDiffEditor { place, spot }]
             } else {
+                state.content.go_to_place(place);
                 state.content.windows.open_tab(content::Tab::Diff {
                     environment,
                     worktree,
                     spot: Box::new(spot),
                 });
-                state.content.place = Some(place);
                 state.content.focus = content::Area::Console;
                 Vec::new()
             }
@@ -469,6 +469,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::LightboxOpen(thing) => overlay::lightbox::open(state, thing),
         Msg::LightboxAction(action) => overlay::lightbox::act(state, action),
         Msg::LightboxPan { dx, dy } => overlay::lightbox::pan(state, dx, dy),
+        Msg::SwitcherRelease => overlay::switcher::commit(state),
         Msg::FloatingFocus => {
             crate::floating::focus(state);
             Vec::new()

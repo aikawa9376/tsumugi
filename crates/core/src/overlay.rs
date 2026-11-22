@@ -26,6 +26,7 @@ pub mod hints;
 pub mod lightbox;
 pub mod naming;
 pub mod rename;
+pub mod switcher;
 #[cfg(test)]
 mod tests;
 
@@ -37,6 +38,7 @@ use naming::Naming;
 pub(crate) use naming::{end_naming, keep_naming, start_naming, type_naming};
 use rename::Rename;
 pub(crate) use rename::{end_rename, keep_rename, start_rename, type_name};
+use switcher::Switcher;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Overlays {
@@ -55,6 +57,8 @@ pub struct Overlays {
     pub resources: Option<ResourceSheet>,
     /// A session's images looked at one at a time.
     pub lightbox: Option<Lightbox>,
+    /// The tabs listed while the keys that opened the switcher are held.
+    pub switcher: Option<Switcher>,
     pub banner: Banner,
 }
 
@@ -143,6 +147,7 @@ pub enum Holder {
     Adding,
     Confirm,
     Lightbox,
+    Switcher,
 }
 
 /// Every overlay open, the one that takes a key first.
@@ -159,6 +164,7 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (overlays.resources.is_some(), Holder::Resources),
         (overlays.confirm.is_some(), Holder::Confirm),
         (overlays.lightbox.is_some(), Holder::Lightbox),
+        (overlays.switcher.is_some(), Holder::Switcher),
     ]
     .into_iter()
     .filter_map(|(open, holder)| open.then_some(holder))
@@ -196,6 +202,7 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
                 | Holder::Resources
                 | Holder::Confirm
                 | Holder::Lightbox
+                | Holder::Switcher
         )
     })
 }
@@ -205,6 +212,7 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
     match holder {
         Holder::Confirm => &[Context::Confirm, Context::Overlay],
         Holder::Lightbox => &[Context::Lightbox],
+        Holder::Switcher => &[Context::Overlay, Context::Global],
         Holder::Rename | Holder::Naming => &[],
         Holder::Menu
         | Holder::KeysHelp
@@ -255,6 +263,13 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
         Holder::Lightbox => match action {
             Some(action) => lightbox::act(state, action),
             None => Vec::new(),
+        },
+        Holder::Switcher => match action {
+            Some(Action::TabRecent | Action::OverlayDown) => switcher::step(state, 1),
+            Some(Action::TabRecentPrev | Action::OverlayUp) => switcher::step(state, -1),
+            Some(Action::OverlayChoose) => switcher::commit(state),
+            Some(Action::OverlayClose) => switcher::cancel(state),
+            _ => Vec::new(),
         },
         // The sheet's options are the window's: it moves among them and
         // chooses one itself.

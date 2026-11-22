@@ -92,6 +92,7 @@ fn App() -> Element {
             ConfirmDialog {}
             super::floating::FloatingTerminal {}
             super::lightbox::Lightbox {}
+            super::switcher::TabSwitcher {}
         }
     }
 }

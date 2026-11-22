@@ -12,6 +12,7 @@ mod moving;
 mod naming;
 mod tab;
 mod windows;
+mod worktrees;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -38,8 +39,11 @@ pub(crate) use windows::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContentView {
-    /// The tabs, each split into windows that each show one thing.
+    /// The tabs, each split into windows that each show one thing: the
+    /// layout of the worktree selected.
     pub windows: Content<Tab>,
+    /// The layouts of the worktrees not selected.
+    layouts: worktrees::Layouts,
     /// The worktree, or the directory outside git, the middle is of.
     pub place: Option<Place>,
     /// The area that has the keys.
@@ -95,6 +99,7 @@ impl Default for ContentView {
     fn default() -> Self {
         Self {
             windows: Content::default(),
+            layouts: worktrees::Layouts::default(),
             place: None,
             focus: Area::Sidebar,
             came_from: None,
@@ -332,8 +337,8 @@ pub(crate) fn show(
     if matches!(thing, Tab::Viewer(..)) && !local {
         return vec![Effect::Notice(REMOTE_PREVIEW.into())];
     }
-    if place.is_some() {
-        view.place = place;
+    if let Some(place) = place {
+        view.go_to_place(place);
     }
     match how {
         Some(how) => {
@@ -371,7 +376,7 @@ pub(crate) fn draft(
     worktree: PathBuf,
     write: bool,
 ) -> Vec<Effect> {
-    view.place = Some(Place::at(&environment, worktree.clone()));
+    view.go_to_place(Place::at(&environment, worktree.clone()));
     let draft = draft_at(view, environment, worktree);
     view.windows.open(draft);
     if write {
@@ -383,7 +388,8 @@ pub(crate) fn draft(
 
 /// `from` shows as `to` in every window, as a draft does once it starts.
 pub(crate) fn replace(view: &mut ContentView, from: &Tab, to: Tab) -> Vec<Effect> {
-    view.windows.replace(from, to);
+    view.windows.replace(from, to.clone());
+    view.layouts.edit(|c| c.replace(from, to.clone()));
     Vec::new()
 }
 
@@ -394,7 +400,7 @@ pub(crate) fn closing(view: &mut ContentView, f: impl FnOnce(&mut Content<Tab>))
     let was = view.active().cloned();
     f(&mut view.windows);
     match was {
-        Some(draft @ Tab::Draft { .. }) if !view.windows.shows_anywhere(&draft) => {
+        Some(draft @ Tab::Draft { .. }) if !view.shows_in_any_layout(&draft) => {
             // A shell has no prompt to take it; it waits with nothing open.
             let to = view.active().cloned().filter(|t| shows_prompt(Some(t)));
             vec![Effect::PromptClose(to)]
@@ -412,7 +418,8 @@ pub(crate) fn close_showing(
     after: Option<Tab>,
 ) -> bool {
     let was = view.active().cloned();
-    view.windows.close_showing(gone);
+    view.windows.close_showing(&gone);
+    view.layouts.edit(|c| c.close_showing(&gone));
     if view.windows.is_empty()
         && let Some(next) = after
     {
@@ -458,7 +465,7 @@ fn terminals_closed(
 ) -> Vec<Effect> {
     let closes =
         |tab: &Tab| matches!(tab, Tab::Terminal(e, id) if e == environment && ids.contains(id));
-    if !view.windows.shown().into_iter().any(closes) {
+    if !view.shown_in_layouts().into_iter().any(closes) {
         return Vec::new();
     }
     let next = view.place.as_ref().and_then(|p| {
@@ -671,7 +678,7 @@ pub(crate) fn remember_shown(view: &mut ContentView, work: Option<&WorkSnapshot>
 /// A draft no window shows any longer is given up, with what was chosen for
 /// it.
 pub(crate) fn forget_drafts(view: &mut ContentView) {
-    let shown = view.windows.shown();
+    let shown = view.shown_in_layouts();
     if view.drafts.options.keys().any(|t| !shown.contains(&t)) {
         let shown: Vec<Tab> = shown.into_iter().cloned().collect();
         view.drafts.options.retain(|t, _| shown.contains(t));

@@ -15,6 +15,7 @@ pub(crate) mod overlays;
 pub(crate) mod panels;
 mod socket;
 pub(crate) mod status_bar;
+mod switcher;
 mod ui;
 
 pub use app::launch;
