@@ -902,7 +902,7 @@ pub(crate) fn BrowserWindow(
                     }
                 }
             }
-            if searching.open.read().clone() {
+            if *searching.open.read() {
                 find::Bar { window, page: find::Searched(page.clone()), find: searching }
             }
             if !error().is_empty() { div { class: "browser-error", "{error}" } }
