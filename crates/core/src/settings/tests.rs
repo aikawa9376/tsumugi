@@ -437,6 +437,8 @@ fn settings_written_read_back_the_same() {
         browser: BrowserSettings {
             open_links_in_app: true,
             modifier_inverts: true,
+            memory_saver: false,
+            memory_saver_hours: 12,
         },
         usage: UsageSettings::default(),
         details: DetailsSettings {
@@ -1351,4 +1353,36 @@ fn links_open_in_the_system_browser_until_the_browser_section_says_otherwise() {
         Settings::parse("[browser]\nopen_links_in_app = true\nmodifier_inverts = true\n").unwrap();
     assert!(chosen.browser.open_links_in_app && chosen.browser.modifier_inverts);
     assert!(Settings::parse("[browser]\nnonsense = true\n").is_err());
+}
+
+#[test]
+fn hidden_pages_are_freed_after_four_hours_unviewed_until_the_browser_section_says_otherwise() {
+    use std::time::Duration;
+    let hours = |h: u64| Some(Duration::from_secs(h * 3600));
+    let none = Settings::default().browser;
+    assert!(none.memory_saver);
+    assert_eq!(none.memory_saver_idle(), hours(4));
+
+    let chosen = Settings::parse("[browser]\nmemory_saver_hours = 12\n").unwrap();
+    assert!(chosen.browser.memory_saver);
+    assert_eq!(chosen.browser.memory_saver_idle(), hours(12));
+
+    let off = Settings::parse("[browser]\nmemory_saver = false\n").unwrap();
+    assert_eq!(off.browser.memory_saver_idle(), None);
+}
+
+#[test]
+fn the_hours_a_page_goes_unviewed_are_kept_between_one_hour_and_a_week() {
+    use std::time::Duration;
+    let idle = |hours: u32| {
+        BrowserSettings {
+            memory_saver_hours: hours,
+            ..BrowserSettings::default()
+        }
+        .memory_saver_idle()
+    };
+    assert_eq!(idle(0), Some(Duration::from_secs(3600)));
+    assert_eq!(idle(1), Some(Duration::from_secs(3600)));
+    assert_eq!(idle(168), Some(Duration::from_secs(168 * 3600)));
+    assert_eq!(idle(100_000), Some(Duration::from_secs(168 * 3600)));
 }

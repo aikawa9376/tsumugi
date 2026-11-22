@@ -29,6 +29,8 @@ the start.
 ## Consequences
 
 - Memory grows with the pages open in all worktrees; only closing a page
-  releases it.
+  releases it, or a page's going unviewed for long enough that its view is
+  freed
+  (`20261123-free-a-browser-page-that-has-gone-unviewed-for-hours-and-load-it-again-where-it-was-when-it-is-shown.md`).
 - A page kept hidden still runs its scripts, so what a page asks of the
   workspace is answered only while its window is the one shown.

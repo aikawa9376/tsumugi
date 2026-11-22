@@ -5,6 +5,19 @@
   window.addEventListener('focus', focus);
   window.addEventListener('blur', () => tell('blur'));
   window.addEventListener('pointerdown', focus, true);
+  // The page tells where it is scrolled to, so that a page freed to save
+  // memory can be scrolled back, and that it was typed into, so that it is
+  // not freed with what was typed lost.
+  if (window.top === window) {
+    let scrolling = 0;
+    window.addEventListener('scroll', () => {
+      clearTimeout(scrolling);
+      scrolling = setTimeout(() => tell(`scroll:${window.scrollX},${window.scrollY}`), 200);
+    }, { passive: true });
+    window.addEventListener('input', (event) => {
+      if (event.isTrusted) tell('edited');
+    }, true);
+  }
   window.addEventListener('keydown', (event) => {
     if (event.isTrusted && event.ctrlKey && event.shiftKey && event.key === 'Escape') {
       event.preventDefault();

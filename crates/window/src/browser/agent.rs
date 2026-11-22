@@ -277,6 +277,18 @@ async fn execute(
         BrowserCommand::TabList => {
             let mut tabs = Vec::new();
             for (index, id) in reach.pages.iter().enumerate() {
+                // A page freed to save memory is listed as it was kept, not
+                // loaded again for the sake of a list.
+                if let Some(kept) = super::retention::saved(*id) {
+                    tabs.push(json!({
+                        "index": index,
+                        "url": kept.address,
+                        "title": name_of(&kept.address),
+                        "active": Some(*id) == now,
+                        "shown": shown(*id),
+                    }));
+                    continue;
+                }
                 let page = page_of(app, browsers, environment, *id)?;
                 let url = page.view.url().unwrap_or_default();
                 tabs.push(json!({

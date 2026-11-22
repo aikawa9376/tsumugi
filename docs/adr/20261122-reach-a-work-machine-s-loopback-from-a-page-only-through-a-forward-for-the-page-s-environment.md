@@ -36,6 +36,5 @@ that no forward can make reach the work machine is refused, not opened here.
   rewritten and reach this computer; only the address the page was pointed at
   is carried to the work machine.
 - A forward ends with the connection to the work machine, so a page loaded
-  through it is left pointing at a closed port after a reconnection until it
-  is pointed at the address again.
+  through it must be loaded again through a new one after a reconnection.
 - Browsing needs no second transport or browser runtime on the work machine.

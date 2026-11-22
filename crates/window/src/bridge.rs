@@ -548,6 +548,11 @@ impl AppCtx {
     ) {
         self.link_of(environment).query_remote(stamp);
     }
+    /// How long a page of the browser may go unviewed before it is freed,
+    /// none when pages are not freed.
+    pub(crate) fn page_idle_limit(&self) -> Option<std::time::Duration> {
+        self.view.peek().config.settings.browser.memory_saver_idle()
+    }
     /// The browser pages of the worktree of `environment` holding `dir`, which
     /// an agent working there may act on.
     pub(crate) fn reach(

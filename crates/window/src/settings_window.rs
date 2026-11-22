@@ -934,6 +934,19 @@ fn WindowPane(now: Settings, change: Callback<Change>) -> Element {
                     onchange: move |on| change(Box::new(move |s: &mut Settings| s.browser.modifier_inverts = on)),
                 }
             }
+            SettingRow { label: "Free pages not viewed for a while", hint: "A page of the browser that is not shown frees its memory after it goes unviewed, and loads again at its address and scroll position when shown. Pages an agent is using, or that have unsent input, stay.",
+                Toggle {
+                    checked: now.browser.memory_saver,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.browser.memory_saver = on)),
+                }
+            }
+            SettingRow { label: "Hours before a page is freed", hint: "How long a page that is not shown goes unviewed before it is freed, from 1 to 168.",
+                NumberField {
+                    min: "1", max: "168",
+                    value: "{now.browser.memory_saver_hours}",
+                    onchange: set_number::<u32>(change, |s, n| s.browser.memory_saver_hours = n),
+                }
+            }
     }
     }
 }
