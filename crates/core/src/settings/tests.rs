@@ -434,6 +434,10 @@ fn settings_written_read_back_the_same() {
             cursor_blink: true,
             renderer: TerminalRenderer::Vte,
         },
+        browser: BrowserSettings {
+            open_links_in_app: true,
+            modifier_inverts: true,
+        },
         usage: UsageSettings::default(),
         details: DetailsSettings {
             log_commits: 10,
@@ -1189,7 +1193,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `hibernate_after`, `tab_switch_order`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `hibernate_after`, `tab_switch_order`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `browser`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),
@@ -1336,4 +1340,15 @@ fn an_agent_of_the_catalog_starts_from_its_id_without_a_profile_and_a_profile_of
             .find_profile(&"no-such-agent".parse().unwrap())
             .is_none()
     );
+}
+
+#[test]
+fn links_open_in_the_system_browser_until_the_browser_section_says_otherwise() {
+    let none = Settings::default().browser;
+    assert!(!none.open_links_in_app && !none.modifier_inverts);
+
+    let chosen =
+        Settings::parse("[browser]\nopen_links_in_app = true\nmodifier_inverts = true\n").unwrap();
+    assert!(chosen.browser.open_links_in_app && chosen.browser.modifier_inverts);
+    assert!(Settings::parse("[browser]\nnonsense = true\n").is_err());
 }

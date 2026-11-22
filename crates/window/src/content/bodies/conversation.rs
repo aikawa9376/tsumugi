@@ -84,6 +84,7 @@ pub(crate) fn ConversationScreen(
     });
     use_hook({
         let media_id = media_id.clone();
+        let environment = tab.environment().clone();
         move || {
             spawn(async move {
                 let mut heard = document::eval(&format!(
@@ -105,7 +106,11 @@ pub(crate) fn ConversationScreen(
                     } else if let Some(url) = m["url"].as_str()
                         && (url.starts_with("https://") || url.starts_with("http://"))
                     {
-                        crate::bridge::open([url.to_string()]);
+                        app.dispatch(Msg::OpenLink {
+                            environment: environment.clone(),
+                            url: url.to_string(),
+                            modifier: m["modifier"] == true,
+                        });
                     }
                 }
             })

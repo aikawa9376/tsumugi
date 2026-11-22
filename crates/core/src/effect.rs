@@ -66,6 +66,14 @@ pub enum Effect {
     /// Take a screenshot of the page of the browser the window by this id
     /// shows, and keep it in the project of the worktree the page hangs under.
     Screenshot(WindowId),
+    /// Open the search bar of the browser page the window by this id shows.
+    FindInPage(WindowId),
+    /// Open again the page of the browser of `environment` closed last
+    /// under `worktree`, or say there is none.
+    ReopenPage {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+    },
     /// Ask the work host of `environment` to keep the resource of `id` no
     /// more.
     DropResource {

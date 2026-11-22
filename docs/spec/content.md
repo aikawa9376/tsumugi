@@ -140,6 +140,31 @@ as any row there is, and is named after the site it shows. Its address field
 opens web pages and local development servers; the toolbar goes back, forward
 and reloads. Links requesting a new window open in the same page.
 
+Find in the page opens a bar under the toolbar that searches the page's text,
+without regard to case, and says how many matches there are and which is
+shown. Enter shows the next match, Shift+Enter the previous, and Escape closes
+the bar and lets go of the match. Reopen the closed page opens again the page
+closed last in the worktree the keys are in, at the address it was closed at;
+it says so when there is none. A page closed before it showed anything is not
+kept, and closed pages are not kept across application runs. With the keys in
+the page, Ctrl+F (Cmd+F) searches it and Ctrl+Shift+T (Cmd+Shift+T) reopens,
+as in a browser.
+
+A page can be shown at the size of a phone, a tablet or a laptop, chosen in
+its toolbar: the page is drawn at that size, in the middle of the room it
+has, or at the room's size where that is smaller, and sees it as its window's
+size and in its media queries. Only the size is emulated, not the device's
+pixel density, touch or user agent. Each page keeps its size while it is
+open.
+
+The web links of a conversation, a pull request or issue and a Markdown
+document open in the system's browser, or in a new page of Tsumugi's browser
+under the worktree the keys are in when the settings say so. Pressing a link
+with Shift and Ctrl (Shift and Cmd on macOS) sends that one link the other
+way; the setting that lets it open Tsumugi's browser from the system's is off
+until it is chosen ([settings](settings.md)). Only web addresses are opened
+from a link.
+
 Switching tabs or worktrees keeps the page and its unfinished input, and the
 tree keeps listing a worktree's pages while another is shown. Closing a page ends
 it; pages are not restored across application runs. Website data belongs to

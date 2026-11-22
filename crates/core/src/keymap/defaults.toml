@@ -90,6 +90,8 @@
 "Mod+p" = "session.pick"
 "Ctrl+q ." = "console.send Ctrl+q"
 "Mod+t" = "session.new"
+"Cmd+T" = "browser.reopen"
+"Mod+Alt+t" = "browser.reopen"
 "Mod+s" = "shell.open"
 "Mod+e" = "neovim.open"
 "Mod+o" = "session.resume"

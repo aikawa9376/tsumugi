@@ -95,6 +95,8 @@ changes them ([keys](../keys.md)).
 | `terminal.stop` | Stop Terminal | end the terminal selected in the tree, or else the one shown |  |
 | `neovim.open` | Open Neovim | open Neovim, with your own configuration, in the worktree as `shell.open` opens a shell ([shells](../content.md#terminals)) | `global`: `Mod+e`<br>`tree`: `e` |
 | `browser.open` | Open Browser | open a new page of the environment's browser, listed under the worktree it is opened in |  |
+| `browser.find` |  | search the browser page shown for text, in a bar under its toolbar: Enter shows the next match, Shift+Enter the previous and Escape closes the bar ([details](../content.md#browsing)) |  |
+| `browser.reopen` |  | open again the browser page closed last in the worktree the keys are in, at the address it was closed at ([details](../content.md#browsing)) | `global`: `Cmd+T`, `Mod+Alt+t` |
 | `tab.close` | Close Tab | close the content's tab shown and every window in it; agents and terminals keep running and remain reachable from the tree | `global`: `Mod+w` |
 | `environment.add` | Add Environment… | add an environment, on this computer or on a work machine paired then, which every window lists at once ([details](../environments.md)) |  |
 | `environment.remove` |  | remove the environment selected in the tree from every window after asking, unless the window was started in it; its sessions keep running on its host ([details](../environments.md)) |  |
@@ -127,7 +129,7 @@ changes them ([keys](../keys.md)).
 | `window.close` | Close Window | close the window; the instance's other windows stay open, and its sessions run on | `global`: `Cmd+W` |
 | `window.open` | New Window | open another window of the instance ([windows](../sessions.md#windows)) | `global`: `Mod+n` |
 | `refresh` | Refresh | read the sessions, and what git says of where they run, again now | `global`: `Mod+r`<br>`tree`: `r`<br>`agents`: `r` |
-| `filter` | Filter… | narrow the tree to the sessions, shells, workspaces and worktrees whose names hold what is typed next; `Enter` keeps it, `Escape` clears it | `global`: `Mod+f`<br>`tree`: `/`<br>`agents`: `/` |
+| `filter` | Filter… | narrow the tree to the sessions, shells, workspaces and worktrees whose names hold what is typed next; `Enter` keeps it, `Escape` clears it; while a browser page has the keys, search the page as `browser.find` does | `global`: `Mod+f`<br>`tree`: `/`<br>`agents`: `/` |
 | `details.tab` |  | show the details panel's tab numbered `n`, from 1 to 9, of those it has for what it describes ([details](../details.md#components)), and the panel when it is hidden | `details`: `1` (`details.tab 1`), `2` (`details.tab 2`), `3` (`details.tab 3`), `4` (`details.tab 4`), `5` (`details.tab 5`), `6` (`details.tab 6`), `7` (`details.tab 7`), `8` (`details.tab 8`), `9` (`details.tab 9`) |
 | `worktrees.toggle` | Toggle All Worktrees | list every worktree git knows, those without sessions too, or only those with sessions again | `tree`: `!` |
 | `scroll.down` |  | scroll the details panel down a step; bound in the console, scroll it: Claude Code and other programs that read the mouse are sent the wheel, others are scrolled back through what scrolled off; bound in a viewer, scroll what it shows | `viewer`: `j`, `ArrowDown` |
@@ -356,6 +358,8 @@ changes them ([keys](../keys.md)).
 "Mod+p" = "session.pick"
 "Ctrl+q ." = "console.send Ctrl+q"
 "Mod+t" = "session.new"
+"Cmd+T" = "browser.reopen"
+"Mod+Alt+t" = "browser.reopen"
 "Mod+s" = "shell.open"
 "Mod+e" = "neovim.open"
 "Mod+o" = "session.resume"

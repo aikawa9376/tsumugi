@@ -3,7 +3,7 @@
 .browser-toolbar input { flex:1; min-width:60px; padding:5px 8px; border:1px solid var(--line); border-radius:5px; background:var(--raised); color:var(--text); font:inherit; }
 .browser-hint { color:var(--text-3); font-size:var(--ui-font-small); white-space:nowrap; }
 @container (max-width:760px) { .browser-hint { display:none; } .browser-tools .tool span { display:none; } }
-.browser-page { position:relative; flex:1; min-height:120px; overflow:hidden; }
+.browser-page { position:relative; background:var(--ground); flex:1; min-height:120px; overflow:hidden; }
 .browser-error { padding:8px; color:var(--fail); }
 
 /* The page tools, one group at the end of the toolbar. */
@@ -11,6 +11,16 @@
 .browser-tools .tool { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 8px; border:0; border-radius:5px; background:transparent; color:var(--text-2); font:inherit; font-size:var(--ui-font-small); cursor:default; white-space:nowrap; }
 .browser-tools .tool:hover { background:var(--line-strong); color:var(--text); }
 .browser-tools .tool.active { background:#3989ff; color:#fff; }
+
+.browser-viewport { flex:none; max-width:11rem; background:var(--raised); color:var(--text); font:inherit; font-size:var(--ui-font-small); border:1px solid var(--line); border-radius:5px; padding:3px 5px; }
+@container (max-width:760px) { .browser-viewport { max-width:6rem; } }
+
+/* The bar that searches the page, under the toolbar. */
+.browser-find { display:flex; align-items:center; gap:6px; padding:4px 8px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--raised); }
+.browser-find .find-field { flex:1; min-width:60px; max-width:24rem; padding:4px 8px; border:1px solid var(--line); border-radius:5px; background:var(--ground); color:var(--text); font:inherit; }
+.browser-find .find-status { min-width:5rem; color:var(--text-3); font-size:var(--ui-font-small); white-space:nowrap; }
+.browser-find .find-step { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border:0; border-radius:5px; background:transparent; color:var(--text-2); cursor:default; }
+.browser-find .find-step:hover { background:var(--line-strong); color:var(--text); }
 
 /* What the picker says while it is on. */
 .browser-banner { display:flex; align-items:center; gap:8px; padding:5px 12px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--raised); color:var(--text-2); font-size:var(--ui-font-small); }

@@ -98,6 +98,8 @@ pub enum Action {
     TerminalStop,
     NeovimOpen,
     BrowserOpen,
+    BrowserFind,
+    BrowserReopen,
     TabClose,
     EnvironmentAdd,
     EnvironmentRemove,
@@ -506,6 +508,10 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::BrowserOpen, "browser.open", "open a new page of the environment's browser, listed under the worktree it is opened in")
         .bar("Open Browser", Icon::World)
         .row("Open Browser here", Start),
+    S::new(A::BrowserFind, "browser.find", "search the browser page shown for text, in a bar under its toolbar: Enter shows the next match, Shift+Enter the previous and Escape closes the bar ([details](content.md#browsing))")
+        .says("Find in the page"),
+    S::new(A::BrowserReopen, "browser.reopen", "open again the browser page closed last in the worktree the keys are in, at the address it was closed at ([details](content.md#browsing))")
+        .says("Reopen the closed page"),
     S::new(A::TabClose, "tab.close", "close the content's tab shown and every window in it; agents and terminals keep running and remain reachable from the tree")
         .bar("Close Tab", Icon::X)
         .row("Close tab", End),
@@ -594,7 +600,7 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WindowClose, "window.close", "close the window; the instance's other windows stay open, and its sessions run on").bar("Close Window", Icon::AppWindow),
     S::new(A::WindowOpen, "window.open", "open another window of the instance ([windows](sessions.md#windows))").bar("New Window", Icon::CopyPlus),
     S::new(A::Refresh, "refresh", "read the sessions, and what git says of where they run, again now").bar("Refresh", Icon::Refresh),
-    S::new(A::Filter, "filter", "narrow the tree to the sessions, shells, workspaces and worktrees whose names hold what is typed next; `Enter` keeps it, `Escape` clears it").bar("Filter…", Icon::Filter),
+    S::new(A::Filter, "filter", "narrow the tree to the sessions, shells, workspaces and worktrees whose names hold what is typed next; `Enter` keeps it, `Escape` clears it; while a browser page has the keys, search the page as `browser.find` does").bar("Filter…", Icon::Filter),
     S::new(A::DetailsTab(1), "details.tab", "show the details panel's tab numbered `n`, from 1 to 9, of those it has for what it describes ([details](details.md#components)), and the panel when it is hidden").says("Show details tab"),
     S::new(A::WorktreesToggle, "worktrees.toggle", "list every worktree git knows, those without sessions too, or only those with sessions again").bar("Toggle All Worktrees", Icon::ListTree),
     S::new(A::ScrollDown, "scroll.down", "scroll the details panel down a step; bound in the console, scroll it: Claude Code and other programs that read the mouse are sent the wheel, others are scrolled back through what scrolled off; bound in a viewer, scroll what it shows").says("Scroll down"),
@@ -964,6 +970,8 @@ mod tests {
             TerminalStop,
             NeovimOpen,
             BrowserOpen,
+            BrowserFind,
+            BrowserReopen,
             TabClose,
             EnvironmentAdd,
             EnvironmentRemove,

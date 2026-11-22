@@ -152,6 +152,22 @@ impl TerminalRenderer {
     }
 }
 
+/// Where the links of a conversation, a pull request, an issue or a document
+/// open.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct BrowserSettings {
+    /// Open the web links of conversations, pull requests, issues and
+    /// documents in a page of Tsumugi's browser rather than in the system's.
+    /// Holding Shift and Ctrl (Shift and Cmd on macOS) while pressing a link
+    /// sends that one link to the system's browser.
+    pub open_links_in_app: bool,
+    /// Let that modifier send a link to the other browser than the one
+    /// `open_links_in_app` chooses: with links opening in the system's browser,
+    /// it opens that one link in Tsumugi's.
+    pub modifier_inverts: bool,
+}
+
 /// How the console is drawn and takes keys.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -294,6 +310,8 @@ pub struct Settings {
     pub floating_terminal: FloatingTerminalSettings,
     /// How the console takes keys and draws its cursor.
     pub console: ConsoleSettings,
+    /// Where web links open: Tsumugi's browser or the system's.
+    pub browser: BrowserSettings,
     /// How much the details panel reads and shows.
     pub details: DetailsSettings,
     /// Machine resources sampled for a window that does not say which it
@@ -428,6 +446,7 @@ impl Default for Settings {
             picker: PickerSettings::default(),
             floating_terminal: FloatingTerminalSettings::default(),
             console: ConsoleSettings::default(),
+            browser: BrowserSettings::default(),
             details: DetailsSettings::default(),
             usage: UsageSettings::default(),
             panel: crate::details::DetailsLayout::default(),

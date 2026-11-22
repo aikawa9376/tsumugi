@@ -6,6 +6,7 @@ pub mod agent_pages;
 pub mod ai;
 pub mod attention;
 pub mod board;
+mod browser;
 pub mod chrome;
 pub mod complete;
 pub mod completion;

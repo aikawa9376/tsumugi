@@ -213,6 +213,14 @@ pub enum Msg {
     RowClicked(Item),
     /// A key or a menu asked the content to do this.
     Window(Action),
+    /// A web link pressed in a conversation, a pull request, an issue or a
+    /// document of `environment`; `modifier` when it was pressed with the
+    /// keys that send one link the other way than the settings do.
+    OpenLink {
+        environment: EnvironmentId,
+        url: String,
+        modifier: bool,
+    },
     /// A window was clicked.
     WindowFocus(WindowId),
     /// A tab was clicked, by its place counted from 0.
