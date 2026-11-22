@@ -14,7 +14,11 @@ use crate::command::Output;
 use crate::delegation::{Code, Error};
 use crate::watch::Watched;
 
-const USAGE: &str = "usage: tsumugi schedule <list | show <schedule> | create --name <name> --prompt <text|-> --trigger <hourly|daily|weekdays|weekly> [--time HH:MM] [--days mon,thu] [--timezone <zone>] [--dir <path>] [--profile <name>] [--missed-run-grace-minutes <n>] [--disabled] | edit <schedule> [--name …] [--prompt …] [--trigger …] [--time …] [--days …] [--timezone …] [--dir …] [--profile <name>|--default-profile] [--missed-run-grace-minutes <n>] [--enabled|--disabled] | run <schedule> | runs <schedule> | remove <schedule>> [--json] [--instance <name>]";
+/// What a tick says when the command names none: the session it wakes is a
+/// supervisor, and its workers' reports reach it as they come.
+const TICK_PROMPT: &str = "Check how the sessions you opened stand. Read what changed since the last time, act only on what needs you, and otherwise end your turn.";
+
+const USAGE: &str = "usage: tsumugi schedule <list | show <schedule> | create --name <name> --prompt <text|-> --trigger <hourly|daily|weekdays|weekly|every> [--time HH:MM] [--days mon,thu] [--every-minutes <n>] [--session <code>] [--timezone <zone>] [--dir <path>] [--profile <name>] [--missed-run-grace-minutes <n>] [--disabled] | edit <schedule> [--name …] [--prompt …] [--trigger …] [--time …] [--days …] [--timezone …] [--dir …] [--profile <name>|--default-profile] [--missed-run-grace-minutes <n>] [--enabled|--disabled] | run <schedule> | runs <schedule> | remove <schedule>> [--json] [--instance <name>]";
 
 /// What `tsumugi schedule` was asked.
 #[derive(Debug, PartialEq, Eq)]
@@ -49,6 +53,10 @@ struct Fields {
     days: Option<Vec<Weekday>>,
     grace: Option<u32>,
     enabled: Option<bool>,
+    /// The minutes between the times of an `every` trigger.
+    every: Option<u32>,
+    /// The session a new schedule wakes instead of queueing requests.
+    session: Option<String>,
 }
 
 /// `09:30` as an hour and a minute.
@@ -104,6 +112,12 @@ fn parse(args: &[String]) -> Option<Asked> {
                         .collect::<Option<Vec<_>>>()?,
                 );
             }
+            "--every-minutes" if writes && fields.every.is_none() => {
+                fields.every = Some(value()?.parse().ok()?);
+            }
+            "--session" if verb == "create" && fields.session.is_none() => {
+                fields.session = Some(value()?.to_ascii_lowercase());
+            }
             "--missed-run-grace-minutes" if writes && fields.grace.is_none() => {
                 fields.grace = Some(value()?.parse().ok()?);
             }
@@ -139,14 +153,20 @@ fn parse(args: &[String]) -> Option<Asked> {
 
 /// The cadence a command asks for, over `kept` when it changes one.
 fn cadence(fields: &Fields, kept: Option<&Cadence>) -> Result<Option<Cadence>, Error> {
-    if fields.trigger.is_none() && fields.time.is_none() && fields.days.is_none() {
+    if fields.trigger.is_none()
+        && fields.time.is_none()
+        && fields.days.is_none()
+        && fields.every.is_none()
+    {
         return Ok(None);
     }
     let trigger = fields
         .trigger
         .as_deref()
         .or(kept.map(Cadence::preset))
-        .ok_or_else(|| refused("Say when it runs: --trigger hourly, daily, weekdays or weekly"))?;
+        .ok_or_else(|| {
+            refused("Say when it runs: --trigger hourly, daily, weekdays, weekly or every")
+        })?;
     let (kept_hour, kept_minute) = match kept {
         Some(
             Cadence::Daily { hour, minute }
@@ -154,10 +174,20 @@ fn cadence(fields: &Fields, kept: Option<&Cadence>) -> Result<Option<Cadence>, E
             | Cadence::Weekly { hour, minute, .. },
         ) => (*hour, *minute),
         Some(Cadence::Hourly { minute }) => (9, *minute),
+        Some(Cadence::Every { .. }) => (9, 0),
         None => (9, 0),
     };
     let (hour, minute) = fields.time.unwrap_or((kept_hour, kept_minute));
     let cadence = match trigger {
+        "every" => Cadence::Every {
+            minutes: fields
+                .every
+                .or(match kept {
+                    Some(Cadence::Every { minutes }) => Some(*minutes),
+                    _ => None,
+                })
+                .ok_or_else(|| refused("Say how often: --every-minutes <n>"))?,
+        },
         "hourly" => Cadence::Hourly { minute },
         "daily" => Cadence::Daily { hour, minute },
         "weekdays" => Cadence::Weekdays { hour, minute },
@@ -175,12 +205,15 @@ fn cadence(fields: &Fields, kept: Option<&Cadence>) -> Result<Option<Cadence>, E
         },
         other => {
             return Err(refused(format!(
-                "`{other}` is not a trigger Tsumugi runs; use hourly, daily, weekdays or weekly. Cron and RRULE are not read"
+                "`{other}` is not a trigger Tsumugi runs; use hourly, daily, weekdays, weekly or every. Cron and RRULE are not read"
             )));
         }
     };
     if fields.days.is_some() && trigger != "weekly" {
         return Err(refused("--days belongs to a weekly trigger"));
+    }
+    if fields.every.is_some() && trigger != "every" {
+        return Err(refused("--every-minutes belongs to the every trigger"));
     }
     Ok(Some(cadence))
 }
@@ -254,6 +287,8 @@ enum Shown {
     One(Schedule),
     Runs(Schedule, Vec<ScheduleRun>),
     Queued(Schedule, ScheduleRun),
+    /// A tick is held for the session of a schedule run by hand.
+    Held(Schedule),
     Removed(Schedule),
 }
 
@@ -282,14 +317,36 @@ async fn carry_out(
         }
         What::Create(fields) => {
             let cadence = cadence(&fields, None)?.ok_or_else(|| {
-                refused("Say when it runs: --trigger hourly, daily, weekdays or weekly")
+                refused("Say when it runs: --trigger hourly, daily, weekdays, weekly or every")
             })?;
+            let target = match &fields.session {
+                Some(code) => {
+                    let kept = code.clone();
+                    let known = with_store(&root(), move |store| {
+                        Ok(kept
+                            .parse::<tsumugi_model::SessionCode>()
+                            .ok()
+                            .map(|code| store.by_code(&code))
+                            .transpose()?
+                            .flatten())
+                    })
+                    .await?;
+                    if !known.is_some_and(|session| !session.ended) {
+                        return Err(refused(format!(
+                            "No session that runs has the code {code}; `tsumugi session list` shows them"
+                        )));
+                    }
+                    ScheduleTarget::Session { code: code.clone() }
+                }
+                None => ScheduleTarget::Queue,
+            };
             let new = NewSchedule {
                 id: tsumugi_model::SessionId::new().to_string(),
                 name: fields
                     .name
                     .ok_or_else(|| refused("A schedule needs a --name"))?,
                 prompt: prompt_of(fields.prompt)
+                    .or_else(|| fields.session.as_ref().map(|_| TICK_PROMPT.to_owned()))
                     .ok_or_else(|| refused("A schedule needs a --prompt"))?,
                 dir: resolved(cwd, &fields.dir.unwrap_or_default()),
                 profile: fields.profile.flatten(),
@@ -297,7 +354,7 @@ async fn carry_out(
                     .timezone
                     .unwrap_or_else(crate::schedule_time::system_zone),
                 cadence,
-                target: ScheduleTarget::Queue,
+                target,
                 grace_minutes: fields.grace.unwrap_or(DEFAULT_GRACE_MINUTES),
             };
             let id = new.id.clone();
@@ -331,7 +388,10 @@ async fn carry_out(
         }
         What::Run(selector) => {
             let (schedule, run) = crate::schedules::run_by_name(watched, &selector).await?;
-            Ok(Shown::Queued(schedule, run))
+            Ok(match run {
+                Some(run) => Shown::Queued(schedule, run),
+                None => Shown::Held(schedule),
+            })
         }
         What::Remove(selector) => {
             let schedule = named(&selector).await?;
@@ -379,6 +439,7 @@ impl Shown {
                 Self::One(schedule) => json!({"schedule": view(schedule)}),
                 Self::Runs(schedule, runs) => json!({"schedule": view(schedule), "runs": runs}),
                 Self::Queued(schedule, run) => json!({"schedule": view(schedule), "run": run}),
+                Self::Held(schedule) => json!({"schedule": view(schedule), "held": true}),
                 Self::Removed(schedule) => json!({"schedule": view(schedule), "removed": true}),
             };
             return json!({"ok": true, "result": result}).to_string();
@@ -397,6 +458,10 @@ impl Shown {
                 "#{} queued issue {}",
                 schedule.number,
                 run.issue.as_deref().unwrap_or("")
+            ),
+            Self::Held(schedule) => format!(
+                "#{} holds a tick; the session gets it once it waits for input",
+                schedule.number
             ),
             Self::Removed(schedule) => format!("#{} removed  {}", schedule.number, schedule.name),
         }
@@ -421,8 +486,17 @@ fn line(schedule: &Schedule) -> String {
         |ms| crate::schedule_time::clock(&schedule.timezone, ms),
     );
     let last = schedule.last.as_ref().map_or("-", outcome_word);
+    let wakes = match &schedule.target {
+        ScheduleTarget::Session { code } => format!("  -> {code}"),
+        ScheduleTarget::Queue => String::new(),
+    };
+    let held = if schedule.held_ms.is_some() {
+        "  held"
+    } else {
+        ""
+    };
     format!(
-        "#{}  {:<7}  {} {}  next {next}  last {last}  {}",
+        "#{}  {:<7}  {} {}  next {next}  last {last}{held}  {}{wakes}",
         schedule.number,
         state_word(schedule),
         schedule.cadence.describe(),
@@ -457,10 +531,13 @@ fn detail(schedule: &Schedule) -> String {
         schedule.dir.display(),
         schedule.id
     );
-    text.push_str(&format!(
-        "\nprofile: {}",
-        schedule.profile.as_deref().unwrap_or("default")
-    ));
+    match &schedule.target {
+        ScheduleTarget::Queue => text.push_str(&format!(
+            "\nprofile: {}",
+            schedule.profile.as_deref().unwrap_or("default")
+        )),
+        ScheduleTarget::Session { code } => text.push_str(&format!("\nwakes: session {code}")),
+    }
     text.push_str(&format!(
         "\nmissed-run grace: {} min",
         schedule.grace_minutes
@@ -469,6 +546,12 @@ fn detail(schedule: &Schedule) -> String {
         text.push_str(&format!(
             "\nnext: {}",
             crate::schedule_time::clock(&schedule.timezone, next)
+        ));
+    }
+    if let Some(held) = schedule.held_ms {
+        text.push_str(&format!(
+            "\nheld: {} (handed over once the session waits for input)",
+            crate::schedule_time::clock(&schedule.timezone, held)
         ));
     }
     if let Some(last) = &schedule.last {
@@ -510,6 +593,7 @@ mod tests {
                 issue: None,
                 note: Some("The previous request of this schedule has not ended".into()),
             }),
+            held_ms: None,
         }
     }
 
@@ -617,6 +701,67 @@ mod tests {
         let error = make(&["--trigger", "0 18 * * 1-5"], None).unwrap_err();
         assert!(error.message.contains("Cron"), "{}", error.message);
         assert!(make(&["--trigger", "daily", "--days", "mon"], None).is_err());
+    }
+
+    #[test]
+    fn a_tick_for_a_supervisor_is_made_with_an_interval_and_the_session_it_wakes() {
+        let Some(What::Create(fields)) = asked(&[
+            "create",
+            "--name",
+            "Supervise",
+            "--trigger",
+            "every",
+            "--every-minutes",
+            "30",
+            "--session",
+            "ab12",
+        ]) else {
+            panic!("create is understood");
+        };
+        assert_eq!(fields.session.as_deref(), Some("ab12"));
+        assert_eq!(
+            cadence(&fields, None).unwrap(),
+            Some(Cadence::Every { minutes: 30 })
+        );
+        // A session is named when the schedule is made, not changed after.
+        assert!(asked(&["edit", "3", "--session", "ab12"]).is_none());
+        // The interval is read with its trigger, and no other.
+        let make = |words: &[&str], kept: Option<&Cadence>| {
+            let mut args = vec!["create"];
+            args.extend(words);
+            let Some(What::Create(fields)) = asked(&args) else {
+                panic!("understood");
+            };
+            cadence(&fields, kept)
+        };
+        assert!(make(&["--trigger", "every"], None).is_err(), "how often?");
+        assert!(make(&["--trigger", "daily", "--every-minutes", "30"], None).is_err());
+        assert_eq!(
+            make(&["--every-minutes", "60"], Some(&Cadence::Every { minutes: 30 })).unwrap(),
+            Some(Cadence::Every { minutes: 60 })
+        );
+        assert!(asked(&["create", "--every-minutes", "soon"]).is_none());
+    }
+
+    #[test]
+    fn a_tick_schedule_says_whom_it_wakes_and_whether_a_tick_is_held() {
+        let mut schedule = kept();
+        schedule.cadence = Cadence::Every { minutes: 30 };
+        schedule.target = ScheduleTarget::Session {
+            code: "ab12".into(),
+        };
+        schedule.held_ms = Some(0);
+        let shown = Shown::One(schedule.clone()).render(false);
+        assert!(shown.contains("wakes: session ab12"), "{shown}");
+        assert!(shown.contains("held: 1970-01-01 09:00"), "{shown}");
+        assert!(shown.contains("when: every 30 min"), "{shown}");
+        assert!(!shown.contains("profile:"), "{shown}");
+        let listed = Shown::Schedules(vec![schedule.clone()]).render(false);
+        assert!(listed.contains("-> ab12") && listed.contains("held"), "{listed}");
+        assert_eq!(
+            Shown::Held(schedule).render(false),
+            "#3 holds a tick; the session gets it once it waits for input"
+        );
     }
 
     #[test]

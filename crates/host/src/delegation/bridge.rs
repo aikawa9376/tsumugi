@@ -391,7 +391,7 @@ async fn notifications<W: AsyncWrite + Unpin>(
             let next: super::protocol::Delivery =
                 serde_json::from_value(next).map_err(Error::storage)?;
             let id = next.id;
-            let meta = json!({"message_id": id.to_string(), "from": next.from.to_string()});
+            let meta = json!({"message_id": id.to_string(), "from": next.from.map(|from| from.to_string())});
             send(
                 &output,
                 json!({"jsonrpc": "2.0", "method": "notifications/claude/channel", "params": {

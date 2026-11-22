@@ -11,6 +11,9 @@ pub const MAX_SCHEDULE_PROMPT: usize = 65536;
 pub const DEFAULT_GRACE_MINUTES: u32 = 720;
 /// The longest a missed time may still run: a week.
 pub const MAX_GRACE_MINUTES: u32 = 7 * 24 * 60;
+/// The shortest and longest interval of an `every` cadence.
+pub const MIN_EVERY_MINUTES: u32 = 5;
+pub const MAX_EVERY_MINUTES: u32 = 24 * 60;
 
 /// A day of the week, Monday first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -81,12 +84,21 @@ pub enum Cadence {
         hour: u8,
         minute: u8,
     },
+    /// Every `minutes` minutes, counted from the Unix epoch, so that the
+    /// times are the same on every host and in every time zone.
+    Every {
+        minutes: u32,
+    },
 }
 
 impl Cadence {
     /// What is wrong with the cadence, if anything.
     pub fn refuse(&self) -> Option<&'static str> {
         let (hour, minute) = match self {
+            Self::Every { minutes } => {
+                return (!(MIN_EVERY_MINUTES..=MAX_EVERY_MINUTES).contains(minutes))
+                    .then_some("An interval is 5 minutes to 24 hours");
+            }
             Self::Hourly { minute } => (0, *minute),
             Self::Daily { hour, minute }
             | Self::Weekdays { hour, minute }
@@ -150,12 +162,14 @@ impl Cadence {
             Self::Daily { .. } => "daily",
             Self::Weekdays { .. } => "weekdays",
             Self::Weekly { .. } => "weekly",
+            Self::Every { .. } => "every",
         }
     }
 
     /// The cadence as a person reads it: `daily 09:00`, `weekly mon,thu 18:30`.
     pub fn describe(&self) -> String {
         match self {
+            Self::Every { minutes } => format!("every {minutes} min"),
             Self::Hourly { minute } => format!("hourly at :{minute:02}"),
             Self::Daily { hour, minute } => format!("daily {hour:02}:{minute:02}"),
             Self::Weekdays { hour, minute } => format!("weekdays {hour:02}:{minute:02}"),
@@ -226,6 +240,8 @@ where
 pub enum RunOutcome {
     /// A local issue was queued.
     Queued,
+    /// A tick was handed to the session the schedule wakes.
+    Delivered,
     /// The previous request of the schedule had not ended, so none was added.
     SkippedBusy,
     /// The time had passed by more than the schedule's grace.
@@ -235,8 +251,9 @@ pub enum RunOutcome {
 }
 
 impl RunOutcome {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::Queued,
+        Self::Delivered,
         Self::SkippedBusy,
         Self::SkippedMissed,
         Self::Failed,
@@ -245,6 +262,7 @@ impl RunOutcome {
     pub fn word(self) -> &'static str {
         match self {
             Self::Queued => "queued",
+            Self::Delivered => "delivered",
             Self::SkippedBusy => "skipped_busy",
             Self::SkippedMissed => "skipped_missed",
             Self::Failed => "failed",
@@ -288,6 +306,10 @@ pub struct Schedule {
     pub next_ms: Option<u64>,
     /// How the time it was last due ended.
     pub last: Option<ScheduleRun>,
+    /// While a tick of a schedule that wakes a session waits for the session
+    /// to wait for input: when the time it stands for was due.
+    #[serde(default)]
+    pub held_ms: Option<u64>,
 }
 
 /// What is wrong with a schedule to keep, if anything. The time zone is the
@@ -410,6 +432,22 @@ mod tests {
                 .unwrap_err()
                 .contains("hourly")
         );
+    }
+
+    #[test]
+    fn an_interval_is_five_minutes_to_a_day_and_is_said_as_such() {
+        assert_eq!(Cadence::Every { minutes: 30 }.refuse(), None);
+        assert_eq!(Cadence::Every { minutes: 5 }.refuse(), None);
+        assert_eq!(Cadence::Every { minutes: 1440 }.refuse(), None);
+        assert!(Cadence::Every { minutes: 4 }.refuse().is_some());
+        assert!(Cadence::Every { minutes: 1441 }.refuse().is_some());
+        assert_eq!(Cadence::Every { minutes: 30 }.preset(), "every");
+        assert_eq!(Cadence::Every { minutes: 30 }.describe(), "every 30 min");
+    }
+
+    #[test]
+    fn a_tick_run_is_read_back_from_its_word() {
+        assert_eq!(RunOutcome::parse("delivered"), Some(RunOutcome::Delivered));
     }
 
     #[test]

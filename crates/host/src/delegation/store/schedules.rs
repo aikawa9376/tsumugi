@@ -1,16 +1,18 @@
 //! The schedules the work host runs on its own, beside the queue they add to.
 //!
 //! A time at which a schedule was due is settled once: its row in
-//! `schedulelet mut also_one = Store::open(&directory.path().join("delegation/state.sqlite3")).unwrap();runs` is the record that it was, and it is written in the same
+//! `schedule_runs` is the record that it was, and it is written in the same
 //! transaction that queues the issue it asks for, so a host that restarts, or
-//! two that look at once, never queue it twice.
+//! two that look at once, never queue it twice. A schedule that wakes a
+//! session queues nothing: it holds at most one tick for the session, and hands
+//! it over once the session waits for input.
 
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 use tsumugi_model::{
     NewSchedule, RunOutcome, Schedule, ScheduleEdit, ScheduleRun, ScheduleTarget, SessionId,
 };
 
-use super::{Code, Error, Result, Store};
+use super::{Code, Error, Result, Store, insert_tick};
 
 /// How many times a schedule was due that it remembers.
 const KEPT_RUNS: i64 = 50;
@@ -20,7 +22,8 @@ const KEPT_RUNS: i64 = 50;
 const UNFINISHED: &str = "('queued', 'starting', 'running', 'waiting')";
 
 const COLUMNS: &str = "s.id, s.seq, s.name, s.prompt, s.dir, s.profile, s.timezone, s.cadence,
-     s.target, s.enabled, s.grace_minutes, s.cursor_ms";
+     s.target, s.enabled, s.grace_minutes, s.cursor_ms,
+     (SELECT t.held_ms FROM schedule_ticks t WHERE t.schedule = s.id)";
 
 impl Store {
     /// Keep `new`, disabled. A schedule kept under its id before, with the
@@ -171,7 +174,8 @@ impl Store {
     /// before it was kept never runs.
     pub fn set_schedule_enabled(&mut self, id: &str, enabled: bool, now_ms: u64) -> Result<()> {
         let changed = self.connection.execute(
-            "UPDATE schedules SET enabled = ?2, cursor_ms = CASE WHEN ?2 = 1 THEN ?3 ELSE cursor_ms END
+            "UPDATE schedules SET enabled = ?2,
+                 cursor_ms = CASE WHEN ?2 = 1 THEN ?3 ELSE cursor_ms END
              WHERE id = ?1 AND enabled != ?2",
             params![id, enabled, now_ms as i64],
         )?;
@@ -185,6 +189,10 @@ impl Store {
                 },
             ));
         }
+        // Enabling or pausing allows the times from now on; a tick held for
+        // an earlier time is not one of them.
+        self.connection
+            .execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?;
         Ok(())
     }
 
@@ -257,6 +265,7 @@ impl Store {
                 "UPDATE schedules SET cursor_ms = MAX(cursor_ms, ?2) WHERE id = ?1",
                 params![id, now_ms as i64],
             )?;
+            transaction.execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?;
         }
         transaction.commit()?;
         Ok(())
@@ -300,7 +309,10 @@ impl Store {
         let Some((schedule, cursor)) = found else {
             return Ok(None);
         };
-        if !schedule.enabled || cursor >= due_ms {
+        if !schedule.enabled
+            || cursor >= due_ms
+            || matches!(schedule.target, ScheduleTarget::Session { .. })
+        {
             return Ok(None);
         }
         let late = now_ms.saturating_sub(due_ms);
@@ -358,6 +370,12 @@ impl Store {
         let Some((schedule, _)) = found else {
             return Err(Error::new(Code::NotFound, "The schedule is gone"));
         };
+        if matches!(schedule.target, ScheduleTarget::Session { .. }) {
+            return Err(Error::new(
+                Code::Invalid,
+                "This schedule ticks a session; it queues no request",
+            ));
+        }
         let (outcome, note) = decide(&transaction, &schedule, ready)?;
         if outcome != RunOutcome::Queued {
             return Err(Error::new(
@@ -380,6 +398,166 @@ impl Store {
         record(&transaction, &schedule.id, &run)?;
         transaction.commit()?;
         Ok(run)
+    }
+
+    /// The schedules that wake a session and have something to look at: the
+    /// enabled ones, and a paused one holding a tick the user asked for. Each
+    /// comes with the latest time it was settled for.
+    pub fn tick_schedules(&self) -> Result<Vec<(Schedule, u64)>> {
+        Ok(self
+            .read_schedules()?
+            .into_iter()
+            .filter(|(schedule, _)| {
+                matches!(schedule.target, ScheduleTarget::Session { .. })
+                    && (schedule.enabled || schedule.held_ms.is_some())
+            })
+            .collect())
+    }
+
+    /// Hold a tick for the session of the schedule `id` now, enabled or not:
+    /// the user asked. It is handed over as any held tick is, once the session
+    /// waits for input.
+    pub fn hold_tick(&mut self, id: &str, now_ms: u64) -> Result<()> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let (schedule, _) = transaction
+            .query_row(
+                &format!("SELECT {COLUMNS} FROM schedules s WHERE s.id = ?1"),
+                [id],
+                schedule_row,
+            )
+            .optional()?
+            .ok_or_else(|| Error::new(Code::NotFound, "The schedule is gone"))?;
+        let ScheduleTarget::Session { code } = &schedule.target else {
+            return Err(Error::new(
+                Code::Invalid,
+                "This schedule queues requests; it has no session to tick",
+            ));
+        };
+        if live_session(&transaction, code)?.is_none() {
+            return Err(Error::new(Code::Invalid, gone(&schedule, code)));
+        }
+        if schedule.held_ms.is_some() {
+            return Err(Error::new(
+                Code::Refused,
+                "A tick of this schedule already waits for the session to wait for input",
+            ));
+        }
+        transaction.execute(
+            "INSERT OR REPLACE INTO schedule_ticks (schedule, held_ms) VALUES (?1, ?2)",
+            params![id, now_ms as i64],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Look at the schedule `id` that wakes a session, at `now_ms`, with the
+    /// time `due_ms` it newly came due, if it did. A time that comes due is
+    /// held as the one tick that waits for the session, in place of any held
+    /// before it; the tick is handed to the session once `waits` says that it
+    /// waits for input, and no tick is added while the last one has not
+    /// reached it. A schedule whose session ended pauses itself. Says how the
+    /// time was settled when it was, and none otherwise.
+    pub fn settle_tick(
+        &mut self,
+        id: &str,
+        due_ms: Option<u64>,
+        now_ms: u64,
+        waits: &dyn Fn(SessionId) -> bool,
+    ) -> Result<Option<ScheduleRun>> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let found = transaction
+            .query_row(
+                &format!("SELECT {COLUMNS} FROM schedules s WHERE s.id = ?1"),
+                [id],
+                schedule_row,
+            )
+            .optional()?;
+        let Some((schedule, cursor)) = found else {
+            return Ok(None);
+        };
+        let ScheduleTarget::Session { code } = &schedule.target else {
+            return Ok(None);
+        };
+        if !schedule.enabled && schedule.held_ms.is_none() {
+            return Ok(None);
+        }
+        let Some(recipient) = live_session(&transaction, code)? else {
+            transaction.execute(
+                "UPDATE schedules SET enabled = 0 WHERE id = ?1",
+                [id],
+            )?;
+            transaction.execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?;
+            let run = ScheduleRun {
+                due_ms: now_ms,
+                at_ms: now_ms,
+                outcome: RunOutcome::Failed,
+                issue: None,
+                note: Some(gone(&schedule, code)),
+            };
+            record(&transaction, id, &run)?;
+            transaction.commit()?;
+            return Ok(Some(run));
+        };
+        let mut held = schedule.held_ms;
+        let mut settled = None;
+        if let Some(due) = due_ms.filter(|due| schedule.enabled && cursor < *due) {
+            transaction.execute(
+                "UPDATE schedules SET cursor_ms = ?2 WHERE id = ?1",
+                params![id, due as i64],
+            )?;
+            let late = now_ms.saturating_sub(due);
+            if late > u64::from(schedule.grace_minutes) * 60_000 {
+                let run = ScheduleRun {
+                    due_ms: due,
+                    at_ms: now_ms,
+                    outcome: RunOutcome::SkippedMissed,
+                    issue: None,
+                    note: Some(format!(
+                        "Due {} min before the host saw it; a schedule runs a missed time only within {} min",
+                        late / 60_000,
+                        schedule.grace_minutes
+                    )),
+                };
+                record(&transaction, id, &run)?;
+                settled = Some(run);
+            } else {
+                held = Some(due);
+            }
+        }
+        if let Some(due) = held
+            && waits(recipient.id)
+            && !tick_waits(&transaction, recipient.id)?
+        {
+            insert_tick(&transaction, recipient.id, &tick_body(&schedule))?;
+            let held_for = now_ms.saturating_sub(due) / 60_000;
+            let run = ScheduleRun {
+                due_ms: due,
+                at_ms: now_ms,
+                outcome: RunOutcome::Delivered,
+                issue: None,
+                note: (held_for > 0)
+                    .then(|| format!("Held {held_for} min until the session waited for input")),
+            };
+            record(&transaction, id, &run)?;
+            settled = Some(run);
+            held = None;
+        }
+        if held != schedule.held_ms {
+            match held {
+                Some(ms) => transaction.execute(
+                    "INSERT OR REPLACE INTO schedule_ticks (schedule, held_ms) VALUES (?1, ?2)",
+                    params![id, ms as i64],
+                )?,
+                None => transaction
+                    .execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?,
+            };
+        }
+        transaction.commit()?;
+        Ok(settled)
     }
 
     /// The profile a queued issue is to be worked with; none for the default.
@@ -416,12 +594,57 @@ fn schedule_row(row: &Row<'_>) -> rusqlite::Result<(Schedule, u64)> {
         grace_minutes: row.get(10)?,
         next_ms: None,
         last: None,
+        held_ms: row.get::<_, Option<i64>>(12)?.map(i64::unsigned_abs),
     };
     Ok((schedule, row.get::<_, i64>(11)?.unsigned_abs()))
 }
 
 fn json<T: serde::Serialize>(value: &T) -> Result<String> {
     serde_json::to_string(value).map_err(|e| Error::new(Code::Invalid, e.to_string()))
+}
+
+/// The session a schedule wakes, if it has not ended.
+fn live_session(
+    connection: &rusqlite::Connection,
+    code: &str,
+) -> Result<Option<super::Session>> {
+    Ok(connection
+        .query_row(
+            &format!(
+                "SELECT {} FROM sessions WHERE code = ?1 ORDER BY rowid DESC LIMIT 1",
+                super::SESSION_COLUMNS
+            ),
+            [code],
+            super::read_session,
+        )
+        .optional()?
+        .transpose()?
+        .filter(|session| !session.ended))
+}
+
+/// What to put right when the session a schedule wakes is gone.
+fn gone(schedule: &Schedule, code: &str) -> String {
+    format!(
+        "The session {code} has ended, so the schedule is paused; once it runs again, enable the schedule with `tsumugi schedule edit {} --enabled`",
+        schedule.number
+    )
+}
+
+/// Whether a tick has not yet reached `recipient`.
+fn tick_waits(connection: &rusqlite::Connection, recipient: SessionId) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM messages WHERE recipient = ?1 AND kind = 'tick' AND delivered = 0)",
+        [recipient.to_string()],
+        |row| row.get(0),
+    )?)
+}
+
+/// What the session is handed when the schedule ticks it.
+fn tick_body(schedule: &Schedule) -> String {
+    format!(
+        "schedule_tick\nschedule: #{} {}\n\n{}",
+        schedule.number, schedule.name, schedule.prompt
+    )
 }
 
 /// Whether the request can be queued now, and if not, why.
@@ -432,12 +655,6 @@ fn decide(
 ) -> Result<(RunOutcome, Option<String>)> {
     if let Err(problem) = ready {
         return Ok((RunOutcome::Failed, Some(problem)));
-    }
-    if matches!(schedule.target, ScheduleTarget::Session { .. }) {
-        return Ok((
-            RunOutcome::Failed,
-            Some("Handing a prompt to a running session is not available yet".into()),
-        ));
     }
     let unfinished: bool = transaction.query_row(
         &format!(
@@ -754,22 +971,291 @@ mod tests {
         assert_eq!(kept.last.unwrap().outcome, RunOutcome::Failed);
     }
 
-    #[test]
-    fn a_schedule_that_wakes_a_session_is_kept_but_is_not_run_yet() {
-        let (_directory, mut store) = store();
+    /// A session, and a schedule enabled at `now` that ticks it every 30 minutes.
+    fn ticking(store: &mut Store, now: u64) -> (String, SessionId) {
+        let session = store
+            .register(crate::delegation::store::NewSession {
+                parent: None,
+                agent: tsumugi_model::Agent::Claude,
+                profile: tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude),
+                home: None,
+                name: "supervisor".into(),
+                cwd: "/repo".into(),
+                launch: crate::settings::Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: false,
+                code: None,
+            })
+            .unwrap();
         let mut schedule = new("Supervise");
-        schedule.target = ScheduleTarget::Session {
-            code: "ab12".into(),
-        };
+        schedule.cadence = Cadence::Every { minutes: 30 };
+        let code = store.session(session.0).unwrap().unwrap().code.as_str().to_owned();
+        schedule.target = ScheduleTarget::Session { code };
         let id = schedule.id.clone();
         store.add_schedule(schedule).unwrap();
-        store.set_schedule_enabled(&id, true, 0).unwrap();
+        store.set_schedule_enabled(&id, true, now).unwrap();
+        (id, session.0)
+    }
+
+    fn waiting(_: SessionId) -> bool {
+        true
+    }
+
+    fn working(_: SessionId) -> bool {
+        false
+    }
+
+    fn pending(store: &mut Store, session: SessionId) -> Vec<String> {
+        let mut bodies = Vec::new();
+        while let Some(message) = store.next_undelivered(session).unwrap() {
+            assert_eq!(message.sender, None, "a tick is from no session");
+            store.delivered(message.id).unwrap();
+            bodies.push(message.body);
+        }
+        bodies
+    }
+
+    #[test]
+    fn a_tick_due_while_the_session_waits_for_input_is_handed_to_it_once() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
         let run = store
-            .settle_schedule(&id, HOUR, HOUR, ready())
+            .settle_tick(&id, Some(30 * MINUTE), 30 * MINUTE, &waiting)
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.outcome, RunOutcome::Delivered);
+        assert_eq!(run.due_ms, 30 * MINUTE);
+        assert!(run.issue.is_none());
+        // Looking again, at the same time or later, adds nothing.
+        assert_eq!(
+            store
+                .settle_tick(&id, None, 31 * MINUTE, &waiting)
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            store
+                .settle_tick(&id, Some(30 * MINUTE), 31 * MINUTE, &waiting)
+                .unwrap(),
+            None
+        );
+        let told = pending(&mut store, session);
+        assert_eq!(told.len(), 1);
+        assert!(told[0].contains("Triage new issues"), "{}", told[0]);
+        assert!(store.local_issues().unwrap().is_empty());
+        let (_, kept) = store.schedule_named(&id).unwrap();
+        assert_eq!(kept.last.unwrap().outcome, RunOutcome::Delivered);
+        assert_eq!(kept.held_ms, None);
+    }
+
+    #[test]
+    fn the_times_due_during_a_long_turn_are_held_as_one_tick_and_delivered_when_it_ends() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        for step in 1..=5 {
+            let at = step * 30 * MINUTE;
+            assert_eq!(
+                store.settle_tick(&id, Some(at), at, &working).unwrap(),
+                None
+            );
+        }
+        assert!(pending(&mut store, session).is_empty());
+        let (_, held) = store.schedule_named(&id).unwrap();
+        assert_eq!(held.held_ms, Some(150 * MINUTE));
+        // The turn ends: one tick comes, for however many were due.
+        let run = store
+            .settle_tick(&id, None, 160 * MINUTE, &waiting)
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.outcome, RunOutcome::Delivered);
+        assert_eq!(run.due_ms, 150 * MINUTE);
+        assert_eq!(pending(&mut store, session).len(), 1);
+        assert_eq!(
+            store
+                .settle_tick(&id, None, 170 * MINUTE, &waiting)
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_tick_is_not_added_while_the_last_one_has_not_reached_the_session() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        store
+            .settle_tick(&id, Some(30 * MINUTE), 30 * MINUTE, &waiting)
+            .unwrap();
+        // Not taken yet: the next time is held, and nothing piles up behind it.
+        assert_eq!(
+            store
+                .settle_tick(&id, Some(60 * MINUTE), 60 * MINUTE, &waiting)
+                .unwrap(),
+            None
+        );
+        let (_, kept) = store.schedule_named(&id).unwrap();
+        assert_eq!(kept.held_ms, Some(60 * MINUTE));
+        assert_eq!(pending(&mut store, session).len(), 1);
+        // Once it was taken, the held one is delivered.
+        assert!(
+            store
+                .settle_tick(&id, None, 61 * MINUTE, &waiting)
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(pending(&mut store, session).len(), 1);
+    }
+
+    #[test]
+    fn a_restarted_host_neither_loses_a_held_tick_nor_delivers_one_twice() {
+        let (directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        store
+            .settle_tick(&id, Some(30 * MINUTE), 30 * MINUTE, &working)
+            .unwrap();
+        drop(store);
+        let mut again = Store::open(&directory.path().join("delegation/state.sqlite3")).unwrap();
+        // The same time seen again by the new host is not held a second time.
+        assert_eq!(
+            again
+                .settle_tick(&id, Some(30 * MINUTE), 31 * MINUTE, &working)
+                .unwrap(),
+            None
+        );
+        assert!(
+            again
+                .settle_tick(&id, None, 32 * MINUTE, &waiting)
+                .unwrap()
+                .is_some()
+        );
+        // Two hosts that look at the same moment deliver it once.
+        let mut other =
+            Store::open(&directory.path().join("delegation/state.sqlite3")).unwrap();
+        assert_eq!(
+            other
+                .settle_tick(&id, None, 32 * MINUTE, &waiting)
+                .unwrap(),
+            None
+        );
+        assert_eq!(pending(&mut again, session).len(), 1);
+    }
+
+    #[test]
+    fn a_time_missed_past_the_grace_is_skipped_and_never_held() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        let run = store
+            .settle_tick(&id, Some(HOUR), 14 * HOUR, &waiting)
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.outcome, RunOutcome::SkippedMissed);
+        assert!(pending(&mut store, session).is_empty());
+        assert_eq!(store.schedule_named(&id).unwrap().1.held_ms, None);
+    }
+
+    #[test]
+    fn a_schedule_whose_session_ended_is_paused_and_says_so() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        store
+            .settle_tick(&id, Some(30 * MINUTE), 30 * MINUTE, &working)
+            .unwrap();
+        store.end(session).unwrap();
+        let run = store
+            .settle_tick(&id, Some(60 * MINUTE), 60 * MINUTE, &waiting)
             .unwrap()
             .unwrap();
         assert_eq!(run.outcome, RunOutcome::Failed);
-        assert!(store.local_issues().unwrap().is_empty());
+        assert!(run.note.unwrap().contains("ended"));
+        let (_, kept) = store.schedule_named(&id).unwrap();
+        assert!(!kept.enabled, "the schedule pauses itself");
+        assert_eq!(kept.held_ms, None);
+        assert!(store.next_undelivered(session).unwrap().is_none());
+    }
+
+    #[test]
+    fn pausing_or_changing_the_timetable_drops_a_held_tick_and_enabling_brings_none_back() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        store
+            .settle_tick(&id, Some(30 * MINUTE), 30 * MINUTE, &working)
+            .unwrap();
+        store.set_schedule_enabled(&id, false, HOUR).unwrap();
+        assert_eq!(store.schedule_named(&id).unwrap().1.held_ms, None);
+        store.set_schedule_enabled(&id, true, 2 * HOUR).unwrap();
+        assert_eq!(
+            store.settle_tick(&id, None, 3 * HOUR, &waiting).unwrap(),
+            None
+        );
+        store
+            .settle_tick(&id, Some(150 * MINUTE), 150 * MINUTE, &working)
+            .unwrap();
+        store
+            .edit_schedule(
+                &id,
+                ScheduleEdit {
+                    cadence: Some(Cadence::Every { minutes: 60 }),
+                    ..Default::default()
+                },
+                3 * HOUR,
+            )
+            .unwrap();
+        assert_eq!(store.schedule_named(&id).unwrap().1.held_ms, None);
+        assert!(pending(&mut store, session).is_empty());
+    }
+
+    #[test]
+    fn running_a_tick_by_hand_holds_it_for_the_session_even_while_paused() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        store.set_schedule_enabled(&id, false, HOUR).unwrap();
+        store.hold_tick(&id, 2 * HOUR).unwrap();
+        assert_eq!(store.schedule_named(&id).unwrap().1.held_ms, Some(2 * HOUR));
+        // Asking again while one is held is refused, as for a queued request.
+        assert!(store.hold_tick(&id, 2 * HOUR).is_err());
+        // It is handed over when the session waits, though the schedule is paused.
+        assert_eq!(store.tick_schedules().unwrap().len(), 1);
+        assert_eq!(
+            store.settle_tick(&id, None, 3 * HOUR, &working).unwrap(),
+            None
+        );
+        let run = store
+            .settle_tick(&id, None, 3 * HOUR, &waiting)
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.outcome, RunOutcome::Delivered);
+        assert_eq!(pending(&mut store, session).len(), 1);
+        assert!(store.tick_schedules().unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_a_tick_schedule_leaves_the_sessions_it_woke_and_their_workers_alone() {
+        let (_directory, mut store) = store();
+        let (id, session) = ticking(&mut store, 0);
+        let worker = store
+            .register(crate::delegation::store::NewSession {
+                parent: Some(session),
+                agent: tsumugi_model::Agent::Claude,
+                profile: tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude),
+                home: None,
+                name: "worker".into(),
+                cwd: "/repo".into(),
+                launch: crate::settings::Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: false,
+                code: None,
+            })
+            .unwrap()
+            .0;
+        store.supervise(worker).unwrap();
+        store.delete_schedule(&id).unwrap();
+        assert!(!store.session(worker).unwrap().unwrap().ended);
+        assert!(!store.session(session).unwrap().unwrap().ended);
+        // The worker is still the supervisor's: its report reaches it.
+        store.report_done(worker, "succeeded", "done", &[]).unwrap();
     }
 
     #[test]

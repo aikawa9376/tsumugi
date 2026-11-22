@@ -73,7 +73,7 @@ impl RecordBuilder {
 pub fn message(sender: SessionId, recipient: SessionId) -> MessageBuilder {
     MessageBuilder(Message {
         id: MessageId::new(),
-        sender,
+        sender: Some(sender),
         recipient,
         body: String::new(),
         sent_ms: 0,

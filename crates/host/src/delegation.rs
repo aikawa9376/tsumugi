@@ -79,7 +79,8 @@ pub struct Session {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub id: MessageId,
-    pub sender: SessionId,
+    /// The session that sent it; none for a tick of a schedule.
+    pub sender: Option<SessionId>,
     pub recipient: SessionId,
     pub body: String,
     pub sent_ms: u64,

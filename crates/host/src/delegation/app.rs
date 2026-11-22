@@ -204,10 +204,12 @@ pub fn peers(
 ) -> Vec<tsumugi_agents::claude::links::Peer> {
     let mut out: Vec<tsumugi_agents::claude::links::Peer> = Vec::new();
     for message in messages {
-        let (other, sent) = if message.sender == record {
+        let (other, sent) = if message.sender == Some(record) {
             (message.recipient, true)
+        } else if let Some(sender) = message.sender {
+            (sender, false)
         } else {
-            (message.sender, false)
+            continue;
         };
         let Some(name) = sessions
             .iter()
@@ -264,14 +266,14 @@ pub fn notes(
     messages
         .iter()
         .map(|message| {
-            let outgoing = message.sender == record;
+            let outgoing = message.sender == Some(record);
             crate::details::Note {
                 id: message.id.to_string(),
                 outgoing,
-                other: if outgoing {
-                    name(message.recipient)
-                } else {
-                    name(message.sender)
+                other: match message.sender {
+                    _ if outgoing => name(message.recipient),
+                    Some(sender) => name(sender),
+                    None => "Schedule".to_owned(),
                 },
                 body: message.body.clone(),
                 sent_ms: message.sent_ms,
