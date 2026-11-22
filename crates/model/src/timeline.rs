@@ -100,6 +100,18 @@ pub enum Op {
     Remove { id: String },
 }
 
+impl Entry {
+    /// The note the last of its changes that sets one writes, empty ones left out.
+    pub fn latest_note(&self) -> Option<&str> {
+        self.ops.iter().rev().find_map(|op| match op {
+            Op::Add { note, .. } | Op::Update { note, .. } => {
+                note.as_deref().filter(|note| !note.trim().is_empty())
+            }
+            Op::Remove { .. } => None,
+        })
+    }
+}
+
 impl Op {
     fn id(&self) -> &str {
         match self {
@@ -551,6 +563,38 @@ fn sane_weight(weight: Option<f64>) -> Result<Option<f64>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_latest_note_of_a_call_is_the_last_one_a_change_sets_that_says_something() {
+        let note = |id: &str, note: Option<&str>| Op::Update {
+            id: id.into(),
+            status: None,
+            title: None,
+            weight: None,
+            description: None,
+            note: note.map(Into::into),
+        };
+        let entry = |ops| Entry { at_ms: 1, ops };
+        assert_eq!(entry(vec![]).latest_note(), None);
+        assert_eq!(
+            entry(vec![
+                note("a", Some("one")),
+                note("b", Some("two")),
+                note("c", None)
+            ])
+            .latest_note(),
+            Some("two")
+        );
+        assert_eq!(
+            entry(vec![
+                note("a", Some("one")),
+                note("b", Some("  ")),
+                Op::Remove { id: "c".into() }
+            ])
+            .latest_note(),
+            Some("one")
+        );
+    }
 
     fn add(id: &str, parent: Option<&str>, weight: f64) -> Op {
         Op::Add {

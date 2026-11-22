@@ -198,6 +198,11 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(super::protocol::MergeWorktree),
         ),
         tool(
+            "set_worktree_checkpoint",
+            "Say how the work in your worktree stands, for the user and other sessions to read beside the worktree's name in Tsumugi: a one-line `comment` (what just happened, where, and the next step) and a `status` (todo, in-progress, in-review or completed). Set it at a checkpoint: a finished slice of work, a confirmed or refuted hypothesis, a blocker, or a change of phase. What you do not name is left as it was, `clear_comment` and `clear_status` empty one, and the answer says what the worktree now says; call it with nothing to change to read that first, so as not to overwrite a goal the user wrote. Without a comment the line shows the latest note you wrote on your timeline. `dir` names another worktree.",
+            schemars::schema_for!(super::protocol::WorktreeCheckpoint),
+        ),
+        tool(
             "rename_session",
             "Name your own session anew, as the user sees it in Tsumugi: a few words saying what it works on, in the language the user writes in. Call it once you have answered the first prompt, after the conversation is cleared once you have answered the next one, and otherwise only when the work turns to something else entirely, never as it moves from step to step. When it is refused, keep the name.",
             schemars::schema_for!(Rename),
@@ -336,6 +341,9 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "browser_tab_switch" => {
             let BrowserTabSwitch { index } = serde_json::from_value(arguments).map_err(parsed)?;
             Command::Browser(BrowserCommand::TabSwitch { index })
+        }
+        "set_worktree_checkpoint" => {
+            Command::WorktreeCheckpoint(serde_json::from_value(arguments).map_err(parsed)?)
         }
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
         "close_session" => Command::Close(serde_json::from_value(arguments).map_err(parsed)?),
@@ -769,6 +777,7 @@ mod tests {
                 "request_gate",
                 "cleanup_worktrees",
                 "merge_worktree",
+                "set_worktree_checkpoint",
                 "rename_session",
                 "close_session",
                 "timeline_tasks",
@@ -1000,6 +1009,23 @@ mod tests {
             out[1]["result"]["content"][0]["text"],
             "(no tasks)\nline two"
         );
+    }
+
+    #[test]
+    fn a_checkpoint_is_asked_with_the_status_words_and_refuses_what_it_does_not_know() {
+        let asked = command(
+            "set_worktree_checkpoint",
+            json!({"comment": "tests are red", "status": "in-review", "clear_status": false}),
+        )
+        .unwrap();
+        let Command::WorktreeCheckpoint(asked) = asked else {
+            panic!("{asked:?}");
+        };
+        assert_eq!(asked.comment.as_deref(), Some("tests are red"));
+        assert_eq!(asked.status.as_deref(), Some("in-review"));
+        assert!(asked.acts_on_a_worktree());
+        let refused = command("set_worktree_checkpoint", json!({"state": "x"})).unwrap_err();
+        assert!(refused.contains("state"), "{refused}");
     }
 
     #[test]

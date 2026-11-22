@@ -8,6 +8,7 @@ mod delete;
 mod merge;
 mod pending;
 mod sleep;
+mod status;
 
 pub use cleanup::{Cleanup, Doomed, Row, size as cleanup_size};
 pub use composer::{Composer, Field, Starts};
@@ -24,6 +25,7 @@ pub(crate) use merge::{
 };
 pub(crate) use pending::{answered, dismiss, made, set_up};
 pub(crate) use sleep::{confirmed as slept_confirmed, sleep, slept, wake};
+pub(crate) use status::{set as set_status, status_of};
 
 /// The choice of the question open flipped, whichever question it is.
 pub(crate) fn toggle(state: &mut crate::state::ViewState) -> Vec<crate::effect::Effect> {

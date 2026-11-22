@@ -13,7 +13,7 @@ use tsumugi_model::{Agent, AgentPermissions, Rest, SessionCode, TerminalSession}
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 18;
+const SCHEMA_VERSION: i64 = 19;
 
 mod checkpoints;
 mod issues;
@@ -205,6 +205,21 @@ const MIGRATIONS: &[&str] = &[
          status TEXT,
          updated_ms INTEGER NOT NULL
      );",
+    // The latest note a session's agent wrote on its timeline, shown as a
+    // worktree's line while it has no comment.
+    // The table is rebuilt, keeping its rows, because a column cannot be
+    // added where it may already be.
+    "CREATE TABLE checkpoints_with_notes (
+         worktree TEXT PRIMARY KEY,
+         comment TEXT NOT NULL,
+         status TEXT,
+         updated_ms INTEGER NOT NULL,
+         noted TEXT NOT NULL DEFAULT ''
+     );
+     INSERT INTO checkpoints_with_notes (worktree, comment, status, updated_ms)
+         SELECT worktree, comment, status, updated_ms FROM checkpoints;
+     DROP TABLE checkpoints;
+     ALTER TABLE checkpoints_with_notes RENAME TO checkpoints;",
 ];
 
 /// What the window or the work host knows of a session before its program starts.

@@ -186,6 +186,11 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
             &[
                 Action::WorkspacePin,
                 Action::WorktreeNew,
+                Action::WorktreeStatusTodo,
+                Action::WorktreeStatusInProgress,
+                Action::WorktreeStatusInReview,
+                Action::WorktreeStatusCompleted,
+                Action::WorktreeStatusClear,
                 Action::WorktreeMerge,
                 Action::WorktreeClose,
                 Action::WorktreeDelete,

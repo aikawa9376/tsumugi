@@ -897,6 +897,28 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::SetCheckpoint {
+                environment,
+                worktree,
+                status,
+            } => {
+                let app = *self;
+                let asked = app.ask_in(
+                    &environment,
+                    Ask::SetCheckpoint {
+                        worktree,
+                        comment: tsumugi_model::Set::Keep,
+                        status,
+                    },
+                );
+                spawn(async move {
+                    match asked.await {
+                        Answer::Done => {}
+                        Answer::Failed { text } | Answer::Unconfirmed { text } => app.notice(text),
+                        answer => app.notice(format!("the work host answered {answer:?}")),
+                    }
+                });
+            }
             Effect::Sleep { environment, ids } => {
                 let asked = self.ask_in(&environment, Ask::Sleep { ids });
                 let app = *self;

@@ -383,6 +383,104 @@ async fn a_timeline_call_is_journaled_and_answered_with_the_trees() {
 }
 
 #[tokio::test]
+async fn the_last_note_of_a_timeline_call_becomes_the_line_of_the_callers_worktree() {
+    let (dir, context, caller, _) = conversation_watch("review");
+
+    record_timeline(
+        &context,
+        &caller,
+        tasks(json!([
+            {"op": "add", "id": "a", "title": "Read", "note": "first"},
+            {"op": "add", "id": "b", "title": "Write", "note": "  tests are red\nmore"},
+            {"op": "add", "id": "c", "title": "Ship"},
+        ])),
+    )
+    .await
+    .unwrap();
+    record_timeline(
+        &context,
+        &caller,
+        tasks(json!([{"op": "update", "id": "c", "status": "in_progress"}])),
+    )
+    .await
+    .unwrap();
+
+    let kept = context.store.lock().unwrap().checkpoints().unwrap();
+    let [said] = &kept[..] else {
+        panic!("one checkpoint: {kept:?}")
+    };
+    assert_eq!(
+        said.worktree,
+        tsumugi_sys::fs::canonicalize(dir.path()).unwrap()
+    );
+    assert_eq!(said.noted, "tests are red");
+    assert_eq!(said.comment, "");
+}
+
+fn checkpoint(words: Value) -> protocol::WorktreeCheckpoint {
+    serde_json::from_value(words).unwrap()
+}
+
+#[tokio::test]
+async fn an_agent_says_how_its_worktree_stands_and_reads_it_back_without_changing_it() {
+    let (dir, context, caller, _) = conversation_watch("review");
+    let worktree = tsumugi_sys::fs::canonicalize(dir.path()).unwrap();
+
+    let said = worktree_checkpoint(
+        &context,
+        &caller,
+        checkpoint(json!({"comment": "tests are red\nmore", "status": "review"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(said["line"], "In review · tests are red");
+
+    let read = worktree_checkpoint(&context, &caller, checkpoint(json!({})))
+        .await
+        .unwrap();
+    assert_eq!(read["line"], "In review · tests are red");
+    let kept = context.store.lock().unwrap().checkpoints().unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].worktree, worktree);
+
+    let cleared = worktree_checkpoint(
+        &context,
+        &caller,
+        checkpoint(json!({"clear_comment": true, "clear_status": true})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(cleared["line"], "");
+}
+
+#[tokio::test]
+async fn a_checkpoint_with_a_status_nobody_knows_or_no_directory_is_refused() {
+    let (dir, context, caller, _) = conversation_watch("review");
+    let refused = worktree_checkpoint(&context, &caller, checkpoint(json!({"status": "blocked"})))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code, Code::Invalid);
+    let gone = dir.path().join("gone");
+    let refused = worktree_checkpoint(
+        &context,
+        &caller,
+        checkpoint(json!({"comment": "x", "dir": gone})),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(refused.code, Code::Invalid);
+    assert!(
+        context
+            .store
+            .lock()
+            .unwrap()
+            .checkpoints()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn a_timeline_call_says_which_changes_it_could_not_make() {
     let (_dir, context, caller, _) = conversation_watch("review");
 

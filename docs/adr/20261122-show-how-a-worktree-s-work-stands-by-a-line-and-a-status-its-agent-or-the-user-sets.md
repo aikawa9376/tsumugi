@@ -13,14 +13,17 @@ sentence and a status.
 
 A worktree keeps one line of text and one status of a fixed few, which the
 agent working in it, the user or a command sets, and which the work host
-keeps with the worktree rather than with a session. Every window shows the
-line beside the worktree's name and can narrow the tree to a status.
+keeps with the worktree rather than with a session. While no line is set, the
+latest note an agent wrote on its timeline in the worktree stands in for it.
+Every window shows the line beside the worktree's name and can narrow the tree
+to a status.
 
 ## Alternatives considered
 
-- Derive the line from the session's timeline. A timeline is the plan of one
-  session; its latest note is a step, not where the work stands, and
-  a worktree outlives its sessions.
+- Derive the line from the session's timeline alone. A timeline is the plan of
+  one session; its latest note is a step, not where the work stands, and a
+  worktree outlives its sessions. It is only what shows while nothing better
+  is set.
 - Keep it with the session. The status would be lost with the session that
   set it, and two sessions in one worktree would disagree.
 - Make the status the list of states of the issue that started the work.

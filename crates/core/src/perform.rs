@@ -816,6 +816,16 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::wake(state, &row),
             None => Vec::new(),
         },
+        Action::WorktreeStatusTodo
+        | Action::WorktreeStatusInProgress
+        | Action::WorktreeStatusInReview
+        | Action::WorktreeStatusCompleted
+        | Action::WorktreeStatusClear => {
+            match (cur.filter(|_| on_list), crate::worktree::status_of(&action)) {
+                (Some(row), Some(status)) => crate::worktree::set_status(state, &row, status),
+                _ => Vec::new(),
+            }
+        }
         Action::WorktreeCleanup => match cur.filter(|_| on_list) {
             Some(row) => crate::worktree::cleanup_open(state, &row),
             None => Vec::new(),

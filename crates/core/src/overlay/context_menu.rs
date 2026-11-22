@@ -140,6 +140,11 @@ pub fn entries(
             .chain([
                 offer(Action::WorkspacePin),
                 offer(Action::WorktreeNew),
+                offer(Action::WorktreeStatusTodo),
+                offer(Action::WorktreeStatusInProgress),
+                offer(Action::WorktreeStatusInReview),
+                offer(Action::WorktreeStatusCompleted),
+                offer(Action::WorktreeStatusClear),
                 offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),

@@ -1171,3 +1171,58 @@ fn what_became_of_resolving_is_said() {
     );
     assert!(said(Err("dirty".into())).contains("cannot resolve a: dirty"));
 }
+
+#[test]
+fn a_worktree_s_status_is_set_from_its_menu_and_asked_of_its_host() {
+    use tsumugi_model::{Set, WorktreeStatus};
+    for (action, status) in [
+        (Action::WorktreeStatusTodo, Set::To(WorktreeStatus::Todo)),
+        (
+            Action::WorktreeStatusInProgress,
+            Set::To(WorktreeStatus::InProgress),
+        ),
+        (
+            Action::WorktreeStatusInReview,
+            Set::To(WorktreeStatus::InReview),
+        ),
+        (
+            Action::WorktreeStatusCompleted,
+            Set::To(WorktreeStatus::Completed),
+        ),
+        (Action::WorktreeStatusClear, Set::Clear),
+    ] {
+        let run = on(Item::Worktree(here(), "/r/a".into()), action.clone())(repository());
+        assert_eq!(
+            run.last_effects(),
+            [Effect::SetCheckpoint {
+                environment: here(),
+                worktree: "/r/a".into(),
+                status,
+            }],
+            "{action:?}"
+        );
+    }
+}
+
+#[test]
+fn the_status_of_a_workspace_is_set_on_its_root_and_no_other_row_has_one() {
+    use tsumugi_model::{Set, WorktreeStatus};
+    let run = on(workspace(), Action::WorktreeStatusCompleted)(repository());
+    assert_eq!(
+        run.last_effects(),
+        [Effect::SetCheckpoint {
+            environment: here(),
+            worktree: "/r".into(),
+            status: Set::To(WorktreeStatus::Completed),
+        }]
+    );
+    let run = on(
+        Item::Session(here(), "a".into()),
+        Action::WorktreeStatusTodo,
+    )(repository());
+    assert!(
+        run.last_effects()
+            .iter()
+            .all(|e| !matches!(e, Effect::SetCheckpoint { .. }))
+    );
+}

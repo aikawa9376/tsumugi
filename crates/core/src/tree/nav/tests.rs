@@ -1618,6 +1618,7 @@ fn said(
         worktree: worktree.into(),
         comment: String::new(),
         status,
+        noted: String::new(),
         updated_ms: 0,
     }
 }
@@ -1663,4 +1664,18 @@ fn the_rest_of_a_filter_with_a_status_narrows_the_names_as_it_does_alone() {
         narrowed(&t, "status:later")
     );
     assert_eq!(narrowed_by(&t, "", &checkpoints), t);
+}
+
+#[test]
+fn a_status_chip_adds_its_word_to_the_filter_and_the_same_chip_takes_it_away() {
+    use tsumugi_model::WorktreeStatus::{InReview, Todo};
+    assert_eq!(status_toggled("", InReview), "status:in-review");
+    assert_eq!(status_toggled("app", InReview), "app status:in-review");
+    assert_eq!(status_toggled("app status:in-review", InReview), "app");
+    assert_eq!(
+        status_toggled("status:todo", InReview),
+        "status:todo status:in-review"
+    );
+    assert_eq!(status_toggled("status:review x", InReview), "x");
+    assert_eq!(status_toggled("status:todo", Todo), "");
 }

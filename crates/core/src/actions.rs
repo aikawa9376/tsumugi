@@ -123,6 +123,11 @@ pub enum Action {
     WorktreeCleanup,
     WorktreeSleep,
     WorktreeWake,
+    WorktreeStatusTodo,
+    WorktreeStatusInProgress,
+    WorktreeStatusInReview,
+    WorktreeStatusCompleted,
+    WorktreeStatusClear,
     WorkspacePin,
     TreeSort,
     TreeHideSleeping,
@@ -579,6 +584,21 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeWake, "worktree.wake", "wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](tree.md#putting-a-worktree-to-sleep))")
         .icon(Icon::SunMoon)
         .row("Wake worktree", End),
+    S::new(A::WorktreeStatusTodo, "worktree.status_todo", "mark the worktree selected in the tree as to do, which its row shows and the tree's filter finds by `status:todo` ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Circle)
+        .row("Status: To do", Start),
+    S::new(A::WorktreeStatusInProgress, "worktree.status_in_progress", "mark the worktree selected in the tree as in progress ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Circle)
+        .row("Status: In progress", Start),
+    S::new(A::WorktreeStatusInReview, "worktree.status_in_review", "mark the worktree selected in the tree as in review ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Eye)
+        .row("Status: In review", Start),
+    S::new(A::WorktreeStatusCompleted, "worktree.status_completed", "mark the worktree selected in the tree as completed ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Check)
+        .row("Status: Completed", Start),
+    S::new(A::WorktreeStatusClear, "worktree.status_clear", "take the status off the worktree selected in the tree, leaving its comment ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::X)
+        .row("Clear status", Start),
     S::new(A::WorkspacePin, "workspace.pin", "pin the workspace or worktree selected in the tree to the top of the tree or of its workspace, or unpin it; what is pinned is never left out by the hide filters and stays pinned across runs ([details](tree.md#arranging-the-tree))")
         .icon(Icon::Highlight)
         .row("Pin or unpin", End),
@@ -995,6 +1015,11 @@ mod tests {
             WorktreeCleanup,
             WorktreeSleep,
             WorktreeWake,
+            WorktreeStatusTodo,
+            WorktreeStatusInProgress,
+            WorktreeStatusInReview,
+            WorktreeStatusCompleted,
+            WorktreeStatusClear,
             WorkspacePin,
             TreeSort,
             TreeHideSleeping,

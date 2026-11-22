@@ -83,6 +83,10 @@ pub struct Checkpoint {
     pub comment: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<WorktreeStatus>,
+    /// The latest note an agent working in the worktree wrote on its timeline,
+    /// cut to a line; shown for as long as the comment is empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub noted: String,
     /// When it was last set, in milliseconds since the Unix epoch.
     #[serde(default)]
     pub updated_ms: u64,
@@ -91,12 +95,22 @@ pub struct Checkpoint {
 impl Checkpoint {
     /// Whether it says nothing, so that it need not be kept.
     pub fn is_empty(&self) -> bool {
-        self.comment.is_empty() && self.status.is_none()
+        self.comment.is_empty() && self.noted.is_empty() && self.status.is_none()
     }
 
-    /// What the worktree's row shows: the status and the comment.
+    /// The line the worktree says: its comment, or the latest timeline note
+    /// while there is no comment.
+    pub fn said(&self) -> &str {
+        if self.comment.is_empty() {
+            &self.noted
+        } else {
+            &self.comment
+        }
+    }
+
+    /// The status and what is said, as one line.
     pub fn line(&self) -> String {
-        match (self.status, self.comment.as_str()) {
+        match (self.status, self.said()) {
             (Some(status), "") => status.label().to_string(),
             (Some(status), comment) => format!("{} · {comment}", status.label()),
             (None, comment) => comment.to_string(),
@@ -142,6 +156,7 @@ mod tests {
             worktree: "/w".into(),
             comment: comment.into(),
             status,
+            noted: String::new(),
             updated_ms: 0,
         };
         assert_eq!(
@@ -151,6 +166,17 @@ mod tests {
         assert_eq!(at("", Some(WorktreeStatus::Todo)).line(), "To do");
         assert_eq!(at("only words", None).line(), "only words");
         assert!(at("", None).is_empty());
+        let noted = Checkpoint {
+            noted: "read the diff".into(),
+            ..at("", Some(WorktreeStatus::InReview))
+        };
+        assert_eq!(noted.line(), "In review · read the diff");
+        assert!(!noted.is_empty());
+        let both = Checkpoint {
+            noted: "read the diff".into(),
+            ..at("mine", None)
+        };
+        assert_eq!(both.line(), "mine");
         assert!(!at("x", None).is_empty());
     }
 
