@@ -175,6 +175,36 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             watched.read_again();
             removed.map(|removed| Answer::WorktreeRemoved { removed })
         }
+        Ask::MergeStanding { path } => crate::integrate::standing(&path)
+            .await
+            .map(|standing| Answer::MergeStanding { standing }),
+        Ask::MergeWorktree {
+            path,
+            changes,
+            message,
+            close_issue,
+        } => {
+            let merged =
+                crate::integrate::merge(&path, changes, message.as_deref(), close_issue).await;
+            if matches!(
+                &merged,
+                Ok(tsumugi_model::Merged::Done {
+                    closed: Some(_),
+                    ..
+                })
+            ) {
+                // The windows show the issue closed without waiting for the next pass.
+                let _ = crate::local_issues::publish(watched).await;
+            }
+            watched.relist();
+            watched.read_again();
+            merged.map(|merged| Answer::Merged { merged })
+        }
+        Ask::ResolveMerge { path } => {
+            let resolved = crate::integrate::resolve(Some(watched), &path).await;
+            watched.read_again();
+            resolved.map(|text| Answer::Told { text })
+        }
         Ask::Git { worktree, op } => {
             let made = git_op(&worktree, op).await;
             // The listing shows what was made without waiting on the disk's watch.
@@ -263,6 +293,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::Run { args, cwd, input } => Ok(match args.split_first() {
             Some((command, rest)) if command == "issue" => {
                 crate::issue_cli::run(watched, rest, &cwd, input)
+                    .await
+                    .answer(crate::remote::active())
+            }
+            Some((command, rest)) if command == "worktree" => {
+                crate::worktree_cli::run(watched, rest, &cwd)
                     .await
                     .answer(crate::remote::active())
             }

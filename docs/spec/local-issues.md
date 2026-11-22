@@ -70,6 +70,13 @@ cancel them, as well as save them. Reopening and cancelling never start work.
 Starting, retrying and deleting are for the user, from the Issues window or
 the command line.
 
+### Closing a merged issue
+
+Merging the branch of the worktree a session works in can close the issue the
+session was started for, whatever state its session left it in, since the work
+is in. Closing it does not end the session, and an issue closed already is left
+alone ([merging a worktree into main](tree.md#merging-a-worktree-into-main)).
+
 ### Working an issue from a session
 
 A session that opens another can name a local issue for it to work

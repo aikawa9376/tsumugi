@@ -180,6 +180,7 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
             &starts,
             &[
                 Action::WorktreeNew,
+                Action::WorktreeMerge,
                 Action::WorktreeClose,
                 Action::WorktreeDelete
             ]

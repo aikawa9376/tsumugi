@@ -268,6 +268,27 @@ pub enum Ask {
         force: bool,
         branch: tsumugi_model::BranchFate,
     },
+    /// How merging the branch of the worktree at `path` into the main
+    /// checkout stands. Reads only.
+    MergeStanding {
+        path: PathBuf,
+    },
+    /// Merge the branch of the worktree at `path` into the main checkout,
+    /// as `changes` says to treat the main checkout's own changes, with
+    /// `message` for the merge commit when given, and, with `close_issue`,
+    /// close the local issue the worktree's session works on.
+    MergeWorktree {
+        path: PathBuf,
+        changes: tsumugi_model::MainChanges,
+        message: Option<String>,
+        close_issue: bool,
+    },
+    /// Bring the main checkout's branch into the branch of the worktree at
+    /// `path` and start a session there to resolve what conflicts, leaving
+    /// the main checkout as it is.
+    ResolveMerge {
+        path: PathBuf,
+    },
     /// Make `op` in the Git worktree at `worktree`.
     Git {
         worktree: PathBuf,
@@ -517,6 +538,14 @@ pub enum Answer {
     /// How a worktree stands.
     WorktreeStanding {
         standing: tsumugi_model::WorktreeStanding,
+    },
+    /// How merging a worktree's branch into the main checkout stands.
+    MergeStanding {
+        standing: tsumugi_model::MergeStanding,
+    },
+    /// What came of merging a worktree's branch into the main checkout.
+    Merged {
+        merged: tsumugi_model::Merged,
     },
     /// The worktree was deleted, with what became of its branch.
     WorktreeRemoved {

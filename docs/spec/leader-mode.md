@@ -42,6 +42,35 @@ Where Orca settles a design question the leader follows it without asking.
 The leader is told its discretion in full, and that whatever is not listed is
 asked too.
 
+## Integrating a finished branch
+
+A leader merges a finished branch with `tsumugi worktree merge`, or the
+`merge_worktree` tool, and does not use `git merge` in the main checkout. It
+makes the merge the window makes ([merging a worktree into
+main](tree.md#merging-a-worktree-into-main)), by the worktree's directory
+(`--dir`) or its branch (`--branch`):
+
+- `--check` only reads how the merge stands, as JSON: the branch and the one it
+  merges into, the commits it brings, the files that would conflict, the
+  uncommitted files in the main checkout and in the worktree, and the issue it
+  would close. Nothing is changed.
+- Without a choice, the merge is refused while the main checkout has
+  uncommitted changes. `--stash` or `--commit` is the choice the window asks the
+  user for; a leader makes it only where its discretion lets it merge over
+  uncommitted changes, and asks the user otherwise.
+- A merge that would conflict touches nothing and exits with 3 naming the files.
+  `--resolve` then brings the main checkout's branch into the worktree's branch
+  and starts a session there to resolve the conflicts.
+- `--close-issue` closes the local issue the worktree's session was started for,
+  and `--remove` deletes the worktree and its merged branch as a
+  [cleanup](resource-limits.md#clearing-away-worktrees) does, which keeps a
+  worktree with changes or a session in it.
+- `--message` sets the merge commit's message.
+
+Merging into the main checkout is the leader's own decision while the main
+checkout is clean, and the user's while it is not
+([discretion](#discretion)).
+
 ## Worker tiers
 
 A leader starts a worker by tier, `light`, `standard` or `heavy`, and the

@@ -979,6 +979,37 @@ pub(super) async fn cleanup_worktrees(
     crate::cleanup::ask(&context.daemon, context.settings()?, &dir, asked.remove).await
 }
 
+/// Merge the branch of a worktree into the main checkout, or read how that
+/// stands, for the caller. What would conflict is answered, never begun.
+pub(super) async fn merge_worktree(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::MergeWorktree,
+) -> Result<Value> {
+    let asked = crate::worktree_cli::Asked {
+        dir: asked.dir,
+        branch: asked.branch,
+        check: asked.check,
+        changes: asked.changes,
+        message: asked.message,
+        close_issue: asked.close_issue,
+        remove: asked.remove,
+        resolve: asked.resolve,
+    };
+    if !asked.consistent() {
+        return Err(Error::new(
+            Code::Invalid,
+            "a check reads only, and a resolve merges into the branch: leave changes, message, close_issue and remove out of both, and check out of a resolve",
+        ));
+    }
+    let cwd = caller.cwd.clone();
+    let (told, _) =
+        crate::worktree_cli::carry_out(&context.root, &context.daemon, None, &asked, &cwd)
+            .await
+            .map_err(|error| Error::new(Code::Refused, error))?;
+    Ok(told)
+}
+
 /// The ports the sessions of a worktree listen on: the caller's own unless
 /// another is named, or every session's.
 pub(super) async fn ports(caller: &Session, asked: protocol::Ports) -> Result<Value> {

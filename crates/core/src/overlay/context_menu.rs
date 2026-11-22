@@ -139,6 +139,7 @@ pub fn entries(
             .chain(here)
             .chain([
                 offer(Action::WorktreeNew),
+                offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),
             ])

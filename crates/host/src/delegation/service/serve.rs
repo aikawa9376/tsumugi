@@ -148,6 +148,9 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::CleanupWorktrees(asked) => {
             super::commands::cleanup_worktrees(context, &caller, asked).await
         }
+        Command::MergeWorktree(asked) => {
+            super::commands::merge_worktree(context, &caller, asked).await
+        }
         Command::Models => answer(context.models.lock().expect("the models' lock").view()),
         Command::Next => {
             let id = caller.id;

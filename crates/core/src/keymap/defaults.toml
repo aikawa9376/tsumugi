@@ -148,6 +148,7 @@
 "!" = "worktrees.toggle"
 "c" = "saved_commands.open"
 "W" = "worktree.new"
+"I" = "worktree.merge"
 "D" = "worktree.delete"
 "N" = "file.new"
 "K" = "directory.new"

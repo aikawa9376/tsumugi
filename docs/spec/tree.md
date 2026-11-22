@@ -304,6 +304,38 @@ all merged or pushed; otherwise it is kept, and the question offers to delete it
 too, saying how many commits that loses. A branch git refuses to delete is left,
 and the status line says so. When deleting fails, nothing is lost.
 
+## Merging a worktree into main
+
+A finished worktree's branch is merged into the branch the main checkout has
+checked out from the worktree's row, which asks first. The merge is a merge
+commit of its own, and the question says how many commits it brings. Nothing
+of the main checkout is ever lost to it:
+
+- A merge that would conflict is never begun in the main checkout, which stays
+  as it was. The question names the files instead and offers to bring the main
+  checkout's branch into the worktree's branch, leaving the conflicts there to
+  resolve, continue or abort like any merge in progress
+  ([branch and conflicts](details.md#branch-and-conflicts)), and to start a
+  session in the worktree that resolves them.
+- Uncommitted changes in the main checkout are never stashed, committed or
+  overwritten unless the question says so. It says how many files they are and
+  by default sets them aside in a stash, which is kept and never popped; its
+  choice commits them on the branch instead. Nothing merges without that
+  answer.
+- A merge Git fails to finish is aborted, so the main checkout is as it was.
+- A detached head, a branch the main checkout already holds and an unfinished
+  merge, rebase, cherry-pick or revert in the main checkout are told, and
+  nothing changes. The worktree's own uncommitted changes are not part of the
+  merge, and the question says so.
+
+The question names the [local issue](local-issues.md) the worktree's session
+was started for, which the merge closes. Once the branch is merged, the
+worktree is offered for deleting as above, with the loss told, its branch going
+with it.
+
+The same merge is made from the command line and by agents; see
+[merging a finished branch](leader-mode.md#integrating-a-finished-branch).
+
 The filter at the top of the tree narrows it as it is typed into, by the
 fuzzy match the pickers use, fzf's syntax included, on the names of
 sessions, terminals, worktrees and workspaces; a worktree or a workspace that

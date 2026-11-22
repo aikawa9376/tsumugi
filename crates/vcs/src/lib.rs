@@ -11,6 +11,7 @@ pub mod generate;
 pub mod ghq;
 pub mod git;
 pub mod github;
+pub mod integrate;
 mod picture;
 mod review;
 mod view;

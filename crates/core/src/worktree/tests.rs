@@ -1,6 +1,7 @@
 use tsumugi_model::{
-    BranchFate, KeptBranch, Key, NewWorktree, SetupChoice, SetupOutcome, StartChoice, StartPoint,
-    WorktreeRemoved, WorktreeSetup, WorktreeStanding,
+    BranchFate, KeptBranch, Key, LinkedIssue, MainChanges, MergeStanding, Merged, NewWorktree,
+    SetupChoice, SetupOutcome, StartChoice, StartPoint, WorktreeRemoved, WorktreeSetup,
+    WorktreeStanding,
 };
 
 use super::*;
@@ -852,4 +853,321 @@ fn what_became_of_the_deletion_is_said_with_the_branch_git_left() {
         "{kept}"
     );
     assert!(said(Err("locked".into())).contains("cannot delete a: locked"));
+}
+
+fn mergeable() -> MergeStanding {
+    MergeStanding {
+        branch: Some("a".into()),
+        base: Some("main".into()),
+        ahead: 2,
+        ..MergeStanding::default()
+    }
+}
+
+fn merging() -> Scenario {
+    on(Item::Worktree(here(), "/r/a".into()), Action::WorktreeMerge)(repository())
+}
+
+fn inspected_for_merge(run: Scenario, standing: MergeStanding) -> Scenario {
+    run.send(Msg::WorktreeMergeInspected {
+        environment: here(),
+        path: "/r/a".into(),
+        result: Ok(standing),
+    })
+}
+
+#[test]
+fn merging_asks_the_host_how_it_stands_and_merges_nothing_yet() {
+    let run = merging();
+
+    assert_eq!(
+        run.last_effects(),
+        [Effect::WorktreeMergeInspect {
+            environment: here(),
+            path: "/r/a".into()
+        }]
+    );
+    assert_eq!(run.state().overlays.confirm, None);
+}
+
+#[test]
+fn the_main_checkout_is_not_offered_for_merging() {
+    let run = on(Item::Worktree(here(), "/r".into()), Action::WorktreeMerge)(repository());
+
+    assert!(
+        run.last_effects()
+            .iter()
+            .all(|e| !matches!(e, Effect::WorktreeMergeInspect { .. }))
+    );
+    assert!(
+        run.state()
+            .chrome
+            .status
+            .line
+            .as_deref()
+            .is_some_and(|l| l.contains("main checkout"))
+    );
+}
+
+#[test]
+fn a_clean_main_checkout_is_asked_plainly_and_nothing_is_set_aside() {
+    let run = inspected_for_merge(merging(), mergeable());
+
+    let ask = run.state().overlays.confirm.clone().expect("asked");
+    let (_, title, body, action) = ask.dialog();
+    assert_eq!(title, "Merge a into main?");
+    assert!(body.contains("2 commits"), "{body}");
+    assert_eq!(action, "Merge");
+    assert_eq!(ask.option(), None);
+
+    let answered = run.send(Msg::ConfirmAnswer(true));
+    assert_eq!(
+        answered.last_effects(),
+        [Effect::WorktreeMerge {
+            environment: here(),
+            path: "/r/a".into(),
+            changes: MainChanges::Refuse,
+            close_issue: false,
+        }]
+    );
+}
+
+#[test]
+fn changes_in_the_main_checkout_are_stashed_unless_the_person_chooses_to_commit_them() {
+    let dirty = || {
+        inspected_for_merge(
+            merging(),
+            MergeStanding {
+                main_changed: 3,
+                ..mergeable()
+            },
+        )
+    };
+    let run = dirty();
+    let ask = run.state().overlays.confirm.clone().expect("asked");
+    let (_, _, body, action) = ask.dialog();
+    assert!(body.contains("3 files with uncommitted changes"), "{body}");
+    assert!(body.contains("stash"), "{body}");
+    assert_eq!(action, "Stash and merge");
+    let (label, chosen) = ask.option().expect("stash or commit is a choice");
+    assert!(label.contains("Commit"), "{label}");
+    assert!(!chosen);
+
+    let stashed = dirty().send(Msg::ConfirmAnswer(true));
+    assert!(matches!(
+        stashed.last_effects(),
+        [Effect::WorktreeMerge {
+            changes: MainChanges::Stash,
+            ..
+        }]
+    ));
+
+    let flipped = run.send(Msg::ConfirmToggle);
+    let ask = flipped.state().overlays.confirm.clone().unwrap();
+    assert_eq!(ask.dialog().3, "Commit and merge");
+    assert!(matches!(
+        flipped.send(Msg::ConfirmAnswer(true)).last_effects(),
+        [Effect::WorktreeMerge {
+            changes: MainChanges::Commit,
+            ..
+        }]
+    ));
+}
+
+#[test]
+fn the_question_names_the_issue_the_merge_closes_and_the_merge_closes_it() {
+    let run = inspected_for_merge(
+        merging(),
+        MergeStanding {
+            issue: Some(LinkedIssue {
+                number: 44,
+                title: "Integrate".into(),
+            }),
+            changed: 2,
+            ..mergeable()
+        },
+    );
+    let (_, _, body, _) = run.state().overlays.confirm.as_ref().unwrap().dialog();
+    assert!(body.contains("#44"), "{body}");
+    assert!(
+        body.contains("2 files with uncommitted changes in the worktree"),
+        "{body}"
+    );
+
+    let answered = run.send(Msg::ConfirmAnswer(true));
+    assert!(matches!(
+        answered.last_effects(),
+        [Effect::WorktreeMerge {
+            close_issue: true,
+            ..
+        }]
+    ));
+}
+
+#[test]
+fn answering_no_merges_nothing() {
+    let run = inspected_for_merge(merging(), mergeable()).send(Msg::ConfirmAnswer(false));
+
+    assert!(run.last_effects().is_empty());
+    assert_eq!(run.state().overlays.confirm, None);
+}
+
+#[test]
+fn what_cannot_be_merged_is_told_instead_of_asked() {
+    let told = |standing: MergeStanding| {
+        let run = inspected_for_merge(merging(), standing);
+        assert_eq!(run.state().overlays.confirm, None);
+        run.state().chrome.status.line.clone().unwrap()
+    };
+    assert!(
+        told(MergeStanding {
+            ahead: 0,
+            ..mergeable()
+        })
+        .contains("lacks")
+    );
+    assert!(
+        told(MergeStanding {
+            main_operation: Some(tsumugi_model::repository::Operation::Merge),
+            ..mergeable()
+        })
+        .contains("merge is in progress")
+    );
+    let failed = merging().send(Msg::WorktreeMergeInspected {
+        environment: here(),
+        path: "/r/a".into(),
+        result: Err("not a repository".into()),
+    });
+    assert!(
+        failed
+            .state()
+            .chrome
+            .status
+            .line
+            .as_deref()
+            .unwrap()
+            .contains("not a repository")
+    );
+}
+
+#[test]
+fn a_merge_that_would_conflict_offers_to_resolve_it_in_the_branch_and_touches_nothing() {
+    let run = inspected_for_merge(
+        merging(),
+        MergeStanding {
+            conflicts: vec!["src/a.rs".into(), "b.toml".into()],
+            ..mergeable()
+        },
+    );
+
+    let ask = run.state().overlays.confirm.clone().expect("asked");
+    let (_, title, body, action) = ask.dialog();
+    assert!(title.contains("conflict"), "{title}");
+    assert!(
+        body.contains("src/a.rs") && body.contains("b.toml"),
+        "{body}"
+    );
+    assert!(body.contains("main checkout is not touched"), "{body}");
+    assert_eq!(action, "Resolve in the branch");
+    assert_eq!(
+        run.send(Msg::ConfirmAnswer(true)).last_effects(),
+        [Effect::WorktreeResolve {
+            environment: here(),
+            path: "/r/a".into(),
+        }]
+    );
+}
+
+#[test]
+fn a_merged_branch_is_said_and_its_worktree_is_offered_for_deleting() {
+    let run = merging().send(Msg::WorktreeMerged {
+        environment: here(),
+        path: "/r/a".into(),
+        result: Ok(Merged::Done {
+            branch: "a".into(),
+            base: "main".into(),
+            commit: "abc1234".into(),
+            stash: Some("tsumugi: before merging a".into()),
+            closed: Some(LinkedIssue {
+                number: 44,
+                title: "Integrate".into(),
+            }),
+        }),
+    });
+
+    let said = run.state().chrome.status.line.clone().unwrap();
+    assert!(said.contains("Merged a into main at abc1234"), "{said}");
+    assert!(said.contains("closed #44"), "{said}");
+    assert!(said.contains("stash"), "{said}");
+    assert!(run.last_effects().contains(&Effect::WorktreeInspect {
+        environment: here(),
+        path: "/r/a".into()
+    }));
+}
+
+fn only_a_notice(effects: &[Effect]) -> bool {
+    effects
+        .iter()
+        .all(|e| matches!(e, Effect::LapseNotice { .. }))
+}
+
+#[test]
+fn a_merge_that_turned_out_to_conflict_or_failed_is_said_and_deletes_nothing() {
+    let conflicted = merging().send(Msg::WorktreeMerged {
+        environment: here(),
+        path: "/r/a".into(),
+        result: Ok(Merged::Conflicts {
+            files: vec!["a.rs".into()],
+        }),
+    });
+    assert!(only_a_notice(conflicted.last_effects()));
+    assert!(
+        conflicted
+            .state()
+            .chrome
+            .status
+            .line
+            .as_deref()
+            .unwrap()
+            .contains("conflict in a.rs")
+    );
+
+    let failed = merging().send(Msg::WorktreeMerged {
+        environment: here(),
+        path: "/r/a".into(),
+        result: Err("the merge failed".into()),
+    });
+    assert!(only_a_notice(failed.last_effects()));
+    assert!(
+        failed
+            .state()
+            .chrome
+            .status
+            .line
+            .as_deref()
+            .unwrap()
+            .contains("cannot merge a: the merge failed")
+    );
+}
+
+#[test]
+fn what_became_of_resolving_is_said() {
+    let said = |result| {
+        merging()
+            .send(Msg::WorktreeResolved {
+                path: "/r/a".into(),
+                result,
+            })
+            .state()
+            .chrome
+            .status
+            .line
+            .clone()
+            .unwrap()
+    };
+    assert_eq!(
+        said(Ok("a session resolves them".into())),
+        "a session resolves them"
+    );
+    assert!(said(Err("dirty".into())).contains("cannot resolve a: dirty"));
 }

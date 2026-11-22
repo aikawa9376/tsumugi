@@ -13,7 +13,7 @@ use crate::state::ViewState;
 use crate::tree::{self, nav::Item};
 
 /// What a worktree is called to the person: its branch, else its directory.
-fn called(branch: Option<&str>, path: &Path) -> String {
+pub(super) fn called(branch: Option<&str>, path: &Path) -> String {
     branch.map(str::to_string).unwrap_or_else(|| {
         path.file_name().map_or_else(
             || path.display().to_string(),

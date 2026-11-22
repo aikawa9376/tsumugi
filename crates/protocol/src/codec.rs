@@ -488,6 +488,33 @@ mod tests {
             }),
         });
         round_trips(Request::Ask {
+            asked: 19,
+            ask: Box::new(crate::Ask::MergeStanding {
+                path: "/w-wt/fix-login".into(),
+            }),
+        });
+        for changes in [
+            tsumugi_model::MainChanges::Refuse,
+            tsumugi_model::MainChanges::Stash,
+            tsumugi_model::MainChanges::Commit,
+        ] {
+            round_trips(Request::Ask {
+                asked: 20,
+                ask: Box::new(crate::Ask::MergeWorktree {
+                    path: "/w-wt/fix-login".into(),
+                    changes,
+                    message: Some("treewide: merge 日本語".into()),
+                    close_issue: true,
+                }),
+            });
+        }
+        round_trips(Request::Ask {
+            asked: 21,
+            ask: Box::new(crate::Ask::ResolveMerge {
+                path: "/w-wt/fix-login".into(),
+            }),
+        });
+        round_trips(Request::Ask {
             asked: 13,
             ask: Box::new(crate::Ask::GitHubThread {
                 repository: "/w".into(),

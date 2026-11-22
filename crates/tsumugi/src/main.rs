@@ -244,6 +244,7 @@ fn main() {
         Some(Command::Cleanup(rest)) => {
             std::process::exit(tsumugi_host::gate_cli("cleanup", &rest))
         }
+        Some(Command::Worktree(rest)) => std::process::exit(tsumugi_host::worktree_cli(&rest)),
         Some(Command::Mcp(rest)) => {
             std::process::exit(tsumugi_host::delegation::bridge::cli(&rest))
         }

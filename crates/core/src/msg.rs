@@ -636,6 +636,25 @@ pub enum Msg {
         path: PathBuf,
         result: Result<tsumugi_model::WorktreeRemoved, String>,
     },
+    /// The work host said how merging the branch of the worktree at `path`
+    /// into the main checkout stands.
+    WorktreeMergeInspected {
+        environment: EnvironmentId,
+        path: PathBuf,
+        result: Result<tsumugi_model::MergeStanding, String>,
+    },
+    /// The work host answered merging the branch of the worktree at `path`.
+    WorktreeMerged {
+        environment: EnvironmentId,
+        path: PathBuf,
+        result: Result<tsumugi_model::Merged, String>,
+    },
+    /// The work host answered resolving the conflicts of the branch of the
+    /// worktree at `path` in the branch.
+    WorktreeResolved {
+        path: PathBuf,
+        result: Result<String, String>,
+    },
     /// Start typing a new name for the session `id` of `environment` where
     /// `place` shows it.
     RenameStart {

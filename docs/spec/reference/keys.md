@@ -113,6 +113,7 @@ changes them ([keys](../keys.md)).
 | `workspace.remove` |  | take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `worktree.close` |  | end, after asking, every session and terminal running in the worktree selected in the tree, which takes its row out of it; the workspace stays listed ([details](../tree.md#workspaces-and-worktrees)) |  |
 | `worktree.new` |  | open the dialog asking for a new worktree of the repository of the workspace or worktree selected in the tree: its name, where it starts, listed from the repository's branches or given as a commit, and optionally the branch it works on; it is made in the background, a row in the tree showing how far it has come, and a new session's draft opens in it once it is made ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `W` |
+| `worktree.merge` |  | merge the branch of the worktree selected in the tree into the main checkout with a merge commit, after asking and saying what it brings; a merge that would conflict is never begun there, and uncommitted changes in the main checkout are stashed or committed only as the question says; afterwards the local issue its session was started for is closed and the worktree is offered for deleting ([details](../tree.md#merging-a-worktree-into-main)) | `tree`: `I` |
 | `worktree.delete` |  | delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `D` |
 | `window.close` | Close Window | close the window; the instance's other windows stay open, and its sessions run on | `global`: `Cmd+W` |
 | `window.open` | New Window | open another window of the instance ([windows](../sessions.md#windows)) | `global`: `Mod+n` |
@@ -404,6 +405,7 @@ changes them ([keys](../keys.md)).
 "!" = "worktrees.toggle"
 "c" = "saved_commands.open"
 "W" = "worktree.new"
+"I" = "worktree.merge"
 "D" = "worktree.delete"
 "N" = "file.new"
 "K" = "directory.new"

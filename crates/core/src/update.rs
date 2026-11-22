@@ -519,6 +519,17 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             result,
         } => crate::worktree::inspected(state, environment, path, result),
         Msg::WorktreeDeleted { path, result } => crate::worktree::removed(state, &path, result),
+        Msg::WorktreeMergeInspected {
+            environment,
+            path,
+            result,
+        } => crate::worktree::merge_inspected(state, environment, path, result),
+        Msg::WorktreeMerged {
+            environment,
+            path,
+            result,
+        } => crate::worktree::merged(state, environment, &path, result),
+        Msg::WorktreeResolved { path, result } => crate::worktree::resolved(state, &path, result),
         Msg::RenameStart {
             environment,
             id,
