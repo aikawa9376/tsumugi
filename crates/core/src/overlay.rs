@@ -62,6 +62,8 @@ pub struct Overlays {
 pub struct LocalIssues {
     pub place: crate::tree::Place,
     pub selected: Option<String>,
+    /// The sheet is open to hand issues to a leader, rather than to list them.
+    pub leader: bool,
 }
 
 /// The sheet of the resources a project keeps, opened on the place whose

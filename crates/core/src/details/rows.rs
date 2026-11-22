@@ -127,6 +127,8 @@ pub fn link_sections(
                 if r.id.is_none() {
                     tag.push("not running");
                 }
+                tag.extend(r.state.as_deref());
+                tag.extend(r.message.as_deref());
                 Some(LinkRow::plain(
                     at,
                     icon,
@@ -273,6 +275,7 @@ mod tests {
             name: name.into(),
             id: id.map(str::to_string),
             ties: ties.to_vec(),
+            ..Default::default()
         }
     }
 
@@ -445,6 +448,34 @@ mod tests {
                 (Icon::MessagePlus, "tests", "opened · heard from"),
                 (Icon::Message, "gone", "messaged · not running"),
             ]
+        );
+    }
+
+    #[test]
+    fn a_worker_is_drawn_with_how_it_stands_and_what_it_last_said() {
+        let mut asking = related_to("web", Some("3"), &[Tie::Opened]);
+        asking.state = Some("waiting".into());
+        asking.message = Some("which of the two?".into());
+        let mut building = related_to("api", Some("2"), &[Tie::Opened]);
+        building.state = Some("working".into());
+        let rows = [asking, building];
+        let drawn = link_sections(
+            &agents(
+                &rows,
+                &[],
+                &[],
+                &HashSet::new(),
+                &HashSet::new(),
+                usize::MAX,
+            ),
+            Path::new("/w"),
+            Path::new("/h"),
+            0,
+        );
+        let tags: Vec<_> = drawn[0].rows.iter().map(|r| r.tag.as_str()).collect();
+        assert_eq!(
+            tags,
+            ["opened · waiting · which of the two?", "opened · working"]
         );
     }
 

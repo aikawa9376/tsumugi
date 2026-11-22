@@ -42,6 +42,31 @@ fn local_issues_open_in_the_selected_environment_and_keep_that_place() {
 }
 
 #[test]
+fn letting_the_leader_handle_it_opens_the_issues_sheet_on_the_leader_hand_over() {
+    let run = crate::testing::shows_there(window(), [session("other")])
+        .send(Msg::TreeSelect(Some(Item::Worktree(
+            there(),
+            "/r/other".into(),
+        ))))
+        .send(Msg::Focus(Area::Sidebar))
+        .send(Msg::Perform {
+            action: Action::LocalIssuesLeader,
+            key: None,
+            probe: Box::default(),
+        });
+    let sheet = run.state().overlays.local_issues.as_ref().unwrap();
+    assert!(sheet.leader);
+    assert_eq!(sheet.selected, None);
+    assert_eq!(sheet.place.environment, there());
+    let plain = window().send(Msg::Perform {
+        action: Action::LocalIssues,
+        key: None,
+        probe: Box::default(),
+    });
+    assert!(!plain.state().overlays.local_issues.as_ref().unwrap().leader);
+}
+
+#[test]
 fn opening_a_local_issue_shows_that_issue_without_starting_a_session() {
     let run = window().send(Msg::OpenRow {
         item: Item::LocalIssue(here(), "/r/a".into(), "research".into()),

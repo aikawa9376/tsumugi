@@ -614,6 +614,7 @@ pub(crate) fn perform(
         Action::SessionPick => step(state, Msg::PickerOpen),
         Action::WorkspaceAdd => step(state, Msg::PickerAddOpen),
         Action::LocalIssues => crate::local_issues::open(state),
+        Action::LocalIssuesLeader => crate::local_issues::open_for_leader(state),
         Action::SavedCommands => step(state, Msg::CommandsOpen),
         Action::ResourceAdd => crate::resources::add(state),
         Action::ResourceEdit => crate::resources::edit(state),

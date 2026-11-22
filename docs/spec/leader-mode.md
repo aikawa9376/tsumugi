@@ -50,3 +50,24 @@ a profile that does not exist or a model its profile does not list fails the
 start, naming what is wrong; no other model is started instead. A tier replaces
 the agent, profile and model of a start, so naming both is refused. The leader's
 own session starts from `[leader]`'s profile and model.
+
+## Handing issues over
+
+Let the leader handle it… is an action of the Actions picker. It opens the
+Issues sheet on the open issues of the environment and asks to confirm before
+anything starts: the issues to hand over, how many workers the leader keeps at
+work, what each tier runs, the leader's own profile and model, and the actions
+it decides and those it asks about first. The settings window's Leader page
+changes all of them. Nothing starts before the confirmation.
+
+A start is refused, saying why, when no issue is chosen, an issue is not open,
+sessions opening sessions is switched off, or no worker tier is defined. The
+leader opens in a tab like any session and is told its issues, tiers, count,
+discretion and language in its first prompt.
+
+## Watching the workers
+
+The Agents panel groups the sessions a leader opened under it, each with its
+state ([the agents panel](agents-panel.md)). The leader's details list its
+workers with how each stands and what it last said, those waiting on the user
+first, so a question is seen before work in hand.

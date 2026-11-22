@@ -17,6 +17,13 @@ pub enum Ask {
         id: String,
     },
     QueueLocalIssue(tsumugi_model::NewLocalIssue),
+    /// Hand the open issues of `issues`, by id, to a leader session, which
+    /// carries them through itself; `max_workers` limits its workers for this
+    /// run in place of the setting.
+    StartLeader {
+        issues: Vec<String>,
+        max_workers: Option<u32>,
+    },
     CancelLocalIssue {
         id: String,
     },

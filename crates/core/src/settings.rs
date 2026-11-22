@@ -742,7 +742,7 @@ mod leader;
 pub use ai_actions::{AiActionsSettings, Recipe, RepositoryRecipe, Resolved};
 pub use governor::{BuildCache, GateSettings, GovernorSettings, RepositoryGate};
 pub use leader::{
-    Discretion, DiscretionSettings, LeaderSettings, Tier, WorkerTier, WorkerTiers, language,
+    Act, Discretion, DiscretionSettings, LeaderSettings, Tier, WorkerTier, WorkerTiers, language,
     language_instructions,
 };
 

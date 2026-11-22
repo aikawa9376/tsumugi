@@ -148,55 +148,125 @@ impl Default for DiscretionSettings {
     }
 }
 
+/// One kind of action a leader may take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Act {
+    ManageSessions,
+    MergeToMain,
+    MergeOverChanges,
+    RemoveWorktrees,
+    CloseIssues,
+    Push,
+    Force,
+    DeleteUnmergedBranches,
+    ResearchIssues,
+    DesignChoices,
+}
+
+impl Act {
+    pub const ALL: [Act; 10] = [
+        Act::ManageSessions,
+        Act::MergeToMain,
+        Act::MergeOverChanges,
+        Act::RemoveWorktrees,
+        Act::CloseIssues,
+        Act::Push,
+        Act::Force,
+        Act::DeleteUnmergedBranches,
+        Act::ResearchIssues,
+        Act::DesignChoices,
+    ];
+
+    /// What it is, as a leader is told it.
+    pub fn what(self) -> &'static str {
+        match self {
+            Act::ManageSessions => {
+                "start, resume and, once their work is done, close the worker sessions you supervise"
+            }
+            Act::MergeToMain => {
+                "merge a finished branch into main while the main checkout is clean"
+            }
+            Act::MergeOverChanges => "merge into main while its checkout has uncommitted changes",
+            Act::RemoveWorktrees => "delete the worktree of a finished branch",
+            Act::CloseIssues => "close an issue whose work is merged",
+            Act::Push => "push to a remote",
+            Act::Force => {
+                "force anything: a forced push, a hard reset, discarding changes, ending a session by force"
+            }
+            Act::DeleteUnmergedBranches => "delete a branch that is not merged",
+            Act::ResearchIssues => "start an issue that is only to be researched",
+            Act::DesignChoices => {
+                "settle a design question that Orca does not settle (where Orca settles it, follow Orca without asking)"
+            }
+        }
+    }
+
+    /// What it is called where the user sets it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Act::ManageSessions => "Run worker sessions",
+            Act::MergeToMain => "Merge into main",
+            Act::MergeOverChanges => "Merge over uncommitted changes in main",
+            Act::RemoveWorktrees => "Delete finished worktrees",
+            Act::CloseIssues => "Close finished issues",
+            Act::Push => "Push",
+            Act::Force => "Force operations",
+            Act::DeleteUnmergedBranches => "Delete unmerged branches",
+            Act::ResearchIssues => "Start research-only issues",
+            Act::DesignChoices => "Settle design questions Orca does not",
+        }
+    }
+}
+
 impl DiscretionSettings {
-    /// Each kind of action with how it is held and what it is.
-    fn rows(&self) -> [(Discretion, &'static str); 10] {
-        [
-            (
-                self.manage_sessions,
-                "start, resume and, once their work is done, close the worker sessions you supervise",
-            ),
-            (
-                self.merge_to_main,
-                "merge a finished branch into main while the main checkout is clean",
-            ),
-            (
-                self.merge_over_changes,
-                "merge into main while its checkout has uncommitted changes",
-            ),
-            (
-                self.remove_worktrees,
-                "delete the worktree of a finished branch",
-            ),
-            (self.close_issues, "close an issue whose work is merged"),
-            (self.push, "push to a remote"),
-            (
-                self.force,
-                "force anything: a forced push, a hard reset, discarding changes, ending a session by force",
-            ),
-            (
-                self.delete_unmerged_branches,
-                "delete a branch that is not merged",
-            ),
-            (
-                self.research_issues,
-                "start an issue that is only to be researched",
-            ),
-            (
-                self.design_choices,
-                "settle a design question that Orca does not settle (where Orca settles it, follow Orca without asking)",
-            ),
-        ]
+    /// How `act` is held.
+    pub fn of(&self, act: Act) -> Discretion {
+        match act {
+            Act::ManageSessions => self.manage_sessions,
+            Act::MergeToMain => self.merge_to_main,
+            Act::MergeOverChanges => self.merge_over_changes,
+            Act::RemoveWorktrees => self.remove_worktrees,
+            Act::CloseIssues => self.close_issues,
+            Act::Push => self.push,
+            Act::Force => self.force,
+            Act::DeleteUnmergedBranches => self.delete_unmerged_branches,
+            Act::ResearchIssues => self.research_issues,
+            Act::DesignChoices => self.design_choices,
+        }
+    }
+
+    /// Hold `act` as `how`.
+    pub fn set(&mut self, act: Act, how: Discretion) {
+        let held = match act {
+            Act::ManageSessions => &mut self.manage_sessions,
+            Act::MergeToMain => &mut self.merge_to_main,
+            Act::MergeOverChanges => &mut self.merge_over_changes,
+            Act::RemoveWorktrees => &mut self.remove_worktrees,
+            Act::CloseIssues => &mut self.close_issues,
+            Act::Push => &mut self.push,
+            Act::Force => &mut self.force,
+            Act::DeleteUnmergedBranches => &mut self.delete_unmerged_branches,
+            Act::ResearchIssues => &mut self.research_issues,
+            Act::DesignChoices => &mut self.design_choices,
+        };
+        *held = how;
+    }
+
+    /// The actions held as `how`.
+    pub fn listed(&self, how: Discretion) -> Vec<Act> {
+        Act::ALL
+            .into_iter()
+            .filter(|act| self.of(*act) == how)
+            .collect()
     }
 
     /// What a leader is told of its discretion: what it decides, what it asks
     /// the user before doing, and that what is not listed is asked too.
     pub fn instructions(&self) -> String {
         let listed = |held| {
-            self.rows()
+            self.listed(held)
                 .into_iter()
-                .filter(|(how, _)| *how == held)
-                .map(|(_, what)| format!("- {what}\n"))
+                .map(|act| format!("- {}\n", act.what()))
                 .collect::<String>()
         };
         let mut told = String::from("Your discretion, as the user set it.\n");
@@ -404,6 +474,24 @@ mod tests {
         assert!(decided.contains("push to a remote"), "{told}");
         assert!(asked.contains("close an issue"), "{told}");
         assert!(!asked.contains("push to a remote"), "{told}");
+    }
+
+    #[test]
+    fn every_kind_of_action_is_held_one_way_and_set_back_the_same() {
+        let mut discretion = DiscretionSettings::default();
+        for act in Act::ALL {
+            let before = discretion.of(act);
+            let other = match before {
+                Discretion::Decide => Discretion::Ask,
+                Discretion::Ask => Discretion::Decide,
+            };
+            discretion.set(act, other);
+            assert_eq!(discretion.of(act), other, "{act:?}");
+            assert!(discretion.listed(other).contains(&act), "{act:?}");
+            assert!(!discretion.listed(before).contains(&act), "{act:?}");
+        }
+        let labels: std::collections::HashSet<_> = Act::ALL.iter().map(|a| a.label()).collect();
+        assert_eq!(labels.len(), Act::ALL.len(), "each is labelled apart");
     }
 
     #[test]

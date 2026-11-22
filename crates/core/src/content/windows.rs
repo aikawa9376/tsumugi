@@ -519,6 +519,7 @@ pub(crate) fn open_row(
             state.overlays.local_issues = Some(crate::overlay::LocalIssues {
                 place,
                 selected: Some(id),
+                leader: false,
             });
             return Vec::new();
         }
