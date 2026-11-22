@@ -166,7 +166,7 @@ pub fn environment(primary: &Path, worktree: &Path) -> Vec<(String, String)> {
 }
 
 /// Whether the shell is one that reads `set -e`.
-fn posix(shell: &str) -> bool {
+pub(crate) fn posix(shell: &str) -> bool {
     let name = shell.rsplit(['/', '\\']).next().unwrap_or_default();
     matches!(name, "sh" | "bash" | "zsh" | "dash" | "ksh")
 }

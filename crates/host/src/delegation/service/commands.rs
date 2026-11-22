@@ -700,6 +700,26 @@ pub(super) async fn start(
             "a base revision needs a new worktree (worktree: true)",
         ));
     }
+    // A session opened by a session waits for room, so the machine is not
+    // loaded past what the user allows; the user's own starts are never held.
+    let daemon = context.daemon.clone();
+    crate::governor::wait_for_room(
+        &limits_of(&settings),
+        limits_of(&settings).patience,
+        crate::governor::LOOK_EVERY,
+        move || {
+            let daemon = daemon.clone();
+            async move {
+                daemon
+                    .sessions()
+                    .await
+                    .map(|listed| crate::governor::running(&listed))
+                    .map_err(|error| error.to_string())
+            }
+        },
+    )
+    .await
+    .map_err(|text| Error::new(Code::Refused, text))?;
     // Taken up before anything runs, so the issue holds its directory against
     // the queue from now on; a start that then fails marks it failed, as a
     // queued one does.
@@ -796,6 +816,11 @@ async fn launch(
         }
     };
     request.env = crate::daemon::agent_env();
+    if let Ok(primary) = tsumugi_vcs::worktree::primary(&dir).await {
+        request
+            .env
+            .extend(limits_of(settings).environment(&primary, &crate::governor::shared_root()));
+    }
     request.started_ms = crate::delegation::now_ms();
     request.show = !start.background;
     request.local_issue = taken.map(|(_, issue)| issue.id.clone());
@@ -818,6 +843,53 @@ async fn launch(
             };
             Error::new(code, failure.message)
         })
+}
+
+/// The limits the user's settings set.
+fn limits_of(settings: &crate::settings::Settings) -> crate::governor::Limits {
+    crate::governor::Limits::from(&settings.governor)
+}
+
+/// A directory the caller names, or its own, as an existing one on this work
+/// machine.
+fn directory(caller: &Session, named: Option<std::path::PathBuf>) -> Result<std::path::PathBuf> {
+    let dir = match named {
+        Some(dir) if dir.is_absolute() => dir,
+        Some(dir) => caller.cwd.join(dir),
+        None => caller.cwd.clone(),
+    };
+    tsumugi_sys::fs::canonicalize(&dir)
+        .ok()
+        .filter(|dir| dir.is_dir())
+        .ok_or_else(|| Error::new(Code::Invalid, format!("{} is no directory", dir.display())))
+}
+
+/// Have the gate of the caller's repository run on its latest commit, and
+/// answer once it ends or the patience asked for is up.
+pub(super) async fn request_gate(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::RequestGate,
+) -> Result<Value> {
+    let dir = directory(caller, asked.dir)?;
+    crate::gate::ask(
+        &context.daemon,
+        context.settings()?,
+        &dir,
+        asked.wait_seconds,
+    )
+    .await
+}
+
+/// List the worktrees of the caller's repository that are done with, and
+/// remove them when asked. Only a worktree with nothing to lose goes.
+pub(super) async fn cleanup_worktrees(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::CleanupWorktrees,
+) -> Result<Value> {
+    let dir = directory(caller, asked.dir)?;
+    crate::cleanup::ask(&context.daemon, context.settings()?, &dir, asked.remove).await
 }
 
 /// The ports the sessions of a worktree listen on: the caller's own unless

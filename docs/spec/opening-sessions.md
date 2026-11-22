@@ -41,7 +41,9 @@ cannot act as another.
   else from the default profile ([settings](settings.md#profiles)).
   It never starts from the caller's profile unless it names it. A profile that
   is not defined or starts another agent is refused, and a
-  refused start leaves no record and runs nothing.
+  refused start leaves no record and runs nothing. Where you set a most for
+  running sessions, a start waits for room and is then refused
+  ([limits](resource-limits.md#sessions)).
   A new worktree is a Git worktree, made where the tree makes its own
   ([worktrees](tree.md#making-and-deleting-worktrees)), in a directory and on a
   branch no other has; it starts from the given revision, or from
@@ -73,6 +75,11 @@ cannot act as another.
 - **`wait`** takes the oldest message waiting for the caller, waiting up to a
   time it is given for one to arrive, and answers with none when the time is
   up. A message it takes is not handed to the agent again between turns.
+- **`request_gate`** has the work host run the repository's gate on the
+  caller's latest commit and answers how the commit stands
+  ([the central gate](gate.md)); **`cleanup_worktrees`** lists the worktrees
+  that are done with, and with `remove` deletes only those
+  ([clearing worktrees](resource-limits.md#clearing-away-worktrees)).
 - **`rename_session`** names the caller's own session anew
   ([renaming](sessions.md#renaming-a-session)), and returns the name it
   took, numbered when another session has it. It is refused for a name you

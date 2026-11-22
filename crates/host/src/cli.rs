@@ -37,6 +37,10 @@ pub enum Command {
     Issue(Vec<String>),
     /// Keep, read and change schedules.
     Schedule(Vec<String>),
+    /// Have the work host check the latest commit with the repository's gate.
+    Gate(Vec<String>),
+    /// List, and clear away, the worktrees that are done with.
+    Cleanup(Vec<String>),
     /// Start an agent's program in a login of its own, as the last step
     /// of its launch; never typed by hand, so left out of the usage.
     InOwnLogin(Vec<String>),
@@ -276,6 +280,8 @@ impl Command {
             Command::Session(_)
                 | Command::Issue(_)
                 | Command::Schedule(_)
+                | Command::Gate(_)
+                | Command::Cleanup(_)
                 | Command::Terminal(_)
                 | Command::Ports(_)
                 | Command::Mcp(_)
@@ -285,7 +291,7 @@ impl Command {
     }
 }
 
-pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
+pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | gate [--dir <path>] [--wait <seconds>] | cleanup [--dir <path>] [--remove] | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
 
 /// The command `args` ask for; `None` for one tsumugi does not know, which
 /// must not open a window: a program that ran an older tsumugi's subcommand
@@ -329,6 +335,8 @@ pub fn command(args: &[String]) -> Option<Command> {
         Some("skills") => Some(Command::Skills(rest())),
         Some("issue") => Some(Command::Issue(rest())),
         Some("schedule") => Some(Command::Schedule(rest())),
+        Some("gate") => Some(Command::Gate(rest())),
+        Some("cleanup") => Some(Command::Cleanup(rest())),
         Some("remote") => remote(&args[1..]),
         Some(tsumugi_agents::own_login::SUBCOMMAND) => Some(Command::InOwnLogin(rest())),
         Some("daemon") => match &args[1..] {
@@ -502,6 +510,11 @@ mod tests {
             asked(&["issue", "close", "3"]),
             Some(Command::Issue(vec!["close".into(), "3".into()]))
         );
+        assert_eq!(
+            asked(&["gate", "--wait", "30"]),
+            Some(Command::Gate(vec!["--wait".into(), "30".into()]))
+        );
+        assert!(asked(&["cleanup", "--remove"]).unwrap().routed());
         assert_eq!(
             asked(&["daemon"]),
             Some(Command::Daemon(DaemonCommand::Serve))

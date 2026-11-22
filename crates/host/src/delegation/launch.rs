@@ -219,6 +219,8 @@ The user keeps links to material about the project — configuration files, docu
 When they point at such material loosely, as in \"check the conf link\" or \"see the docs I linked\", call `resources` with their words as `query` and read what it names with your own tools, before you guess where it is. \
 Keep a reference there with `add_resource` only when the user asks you to. \
 \n\n\
+Where the user set a gate command for the repository, do not run the full check yourself: commit, then call `request_gate`, which runs it once at a time on the work host and answers with whether your commit passes. \
+\n\n\
 When the task you were given is done, or you have handed what is left of it to another session, do not just stop and wait: give the user a summary of where things stand — what was done, what is left and where it went — then ask the user whether to close this session, with your own tool for asking the user a question if you have one, otherwise in plain words at the end of your answer. \
 Call `close_session` only once the user agrees, and as the last thing you do. \
 When the user instead asks what was done, wants the work done again or gives you more, carry on in this session.\
@@ -397,6 +399,16 @@ mod tests {
         assert!(told.contains("`report_done`"), "{told}");
         assert!(told.contains("`wait`"), "{told}");
         assert!(told.contains("never poll"), "{told}");
+    }
+
+    #[test]
+    fn a_session_is_told_to_ask_for_the_gate_and_not_to_run_the_full_check_itself() {
+        let told = instructions(Path::new("/bin/tsumugi"), false);
+        assert!(told.contains("`request_gate`"), "{told}");
+        assert!(
+            told.contains("do not run the full check yourself"),
+            "{told}"
+        );
     }
 
     #[test]

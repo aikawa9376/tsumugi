@@ -467,6 +467,21 @@ fn settings_written_read_back_the_same() {
             }],
             ..Default::default()
         },
+        governor: GovernorSettings {
+            max_sessions: 3,
+            wait_seconds: 30,
+            build_jobs: 4,
+            build_cache: BuildCache::Shared,
+            worktree_warn_gib: 50,
+            cleanup_branches: true,
+        },
+        gate: GateSettings {
+            repositories: vec![RepositoryGate {
+                path: "/r/api".into(),
+                command: "just ci".into(),
+                known_failures: vec!["flaky".into()],
+            }],
+        },
     };
     assert_eq!(written_and_read(&s), s);
 }
@@ -1140,7 +1155,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),

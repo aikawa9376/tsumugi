@@ -139,6 +139,16 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(Ports),
         ),
         tool(
+            "request_gate",
+            "Have the work host run this repository's gate command on your latest commit instead of running the full check yourself: it runs one check at a time in a worktree of its own, so a second ask waits its turn and an ask for a commit already being checked joins that run. Commit first; what you have not committed is not checked. It answers with whether the commit passes, the failed tests that count, the ones the user lists as known failures, the end of the output and the terminal that keeps all of it. When it says the run is still queued or running, ask again to wait for the same run.",
+            schemars::schema_for!(super::protocol::RequestGate),
+        ),
+        tool(
+            "cleanup_worktrees",
+            "List the worktrees of this repository that are done with: clean, with every commit already in the main checkout and on a remote, and no session or terminal in them; and what keeps each of the others, with how much disk each takes. With `remove` it deletes those that are done with and no others; one with changes, commits no one else has or a session in it is never removed. Do it when the work of worktrees is merged, or when the user asks you to free the disk.",
+            schemars::schema_for!(super::protocol::CleanupWorktrees),
+        ),
+        tool(
             "rename_session",
             "Name your own session anew, as the user sees it in Tsumugi: a few words saying what it works on, in the language the user writes in. Call it once you have answered the first prompt, after the conversation is cleared once you have answered the next one, and otherwise only when the work turns to something else entirely, never as it moves from step to step. When it is refused, keep the name.",
             schemars::schema_for!(Rename),
@@ -233,6 +243,10 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         }
         "sessions" => Command::Sessions(serde_json::from_value(arguments).map_err(parsed)?),
         "ports" => Command::Ports(serde_json::from_value(arguments).map_err(parsed)?),
+        "request_gate" => Command::RequestGate(serde_json::from_value(arguments).map_err(parsed)?),
+        "cleanup_worktrees" => {
+            Command::CleanupWorktrees(serde_json::from_value(arguments).map_err(parsed)?)
+        }
         "models" => Command::Models,
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
         "close_session" => Command::Close(serde_json::from_value(arguments).map_err(parsed)?),
@@ -655,6 +669,8 @@ mod tests {
                 "wait",
                 "sessions",
                 "ports",
+                "request_gate",
+                "cleanup_worktrees",
                 "rename_session",
                 "close_session",
                 "timeline_tasks",

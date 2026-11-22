@@ -1185,6 +1185,7 @@ fn an_issue_is_worked_from_its_own_text_followed_by_what_the_opener_adds() {
         record: None,
         session: None,
         error: None,
+        schedule: None,
     };
 
     let alone = issue_prompt(41, &issue, "");
@@ -1216,4 +1217,151 @@ async fn an_issue_that_does_not_exist_or_cannot_be_worked_on_refuses_the_start_a
     assert_eq!(missing.code, Code::NotFound);
     assert_eq!(closed.code, Code::Refused);
     assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+}
+
+/// A terminal host with one agent session of Claude Code running in `dir`,
+/// and the private folder its socket is in.
+async fn serving_an_agent(dir: &Path) -> (Daemon, tempfile::TempDir) {
+    let sockets = tempfile::Builder::new()
+        .prefix("tsumugi-")
+        .tempdir_in(tsumugi_sys::local::temp_dir())
+        .unwrap();
+    tsumugi_sys::fs::set_mode(sockets.path(), 0o700).unwrap();
+    let socket = sockets.path().join("agents.sock");
+    let serving = socket.clone();
+    crate::environment::spawn(async move {
+        Daemon::serve(&serving, Duration::from_millis(20), |_| {})
+            .await
+            .unwrap()
+    });
+    let daemon = Daemon::new(socket);
+    for _ in 0..100 {
+        if daemon.sessions().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    daemon
+        .spawn(tsumugi_term::Spawn {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "read answer".into()],
+            cwd: dir.into(),
+            env: Vec::new(),
+            tags: crate::sessions::agent_tags(
+                tsumugi_model::Agent::Claude,
+                "busy",
+                dir,
+                "",
+                &tsumugi_model::AgentPermissions::Default,
+                1,
+            ),
+            cols: 80,
+            rows: 24,
+        })
+        .await
+        .unwrap();
+    (daemon, sockets)
+}
+
+fn plain_start(dir: &Path) -> protocol::Start {
+    serde_json::from_value(serde_json::json!({
+        "prompt": "review the change",
+        "dir": dir,
+    }))
+    .unwrap()
+}
+
+#[tokio::test]
+#[cfg_attr(windows, ignore = "runs its terminal's program with /bin/sh")]
+async fn a_start_beyond_the_most_sessions_is_refused_with_how_many_run_and_leaves_nothing() {
+    let (dir, mut context, caller, _) = conversation_watch("review");
+    let (daemon, _sockets) = serving_an_agent(dir.path()).await;
+    context.daemon = daemon;
+    context.settings = Arc::new(|| {
+        Ok(Settings::parse("[governor]\nmax_sessions = 1\nwait_seconds = 0\n").unwrap())
+    });
+    let work = dir.path().join("repo");
+    std::fs::create_dir(&work).unwrap();
+
+    let refused = start(&context, &caller, plain_start(&work))
+        .await
+        .unwrap_err();
+
+    assert_eq!(refused.code, Code::Refused);
+    assert!(refused.message.contains("1 of 1"), "{}", refused.message);
+    let sessions = context.call(|store| store.sessions()).await.unwrap();
+    assert_eq!(sessions.len(), 1);
+}
+
+#[tokio::test]
+#[cfg_attr(windows, ignore = "runs its terminal's program with /bin/sh")]
+async fn with_no_limit_set_the_same_start_is_not_held_by_the_running_session() {
+    let (dir, mut context, caller, _) = conversation_watch("review");
+    let (daemon, _sockets) = serving_an_agent(dir.path()).await;
+    context.daemon = daemon;
+    context.settings = Arc::new(|| Ok(Settings::parse("[governor]\nwait_seconds = 0\n").unwrap()));
+    let work = dir.path().join("repo");
+    std::fs::create_dir(&work).unwrap();
+
+    let result = start(&context, &caller, plain_start(&work)).await;
+
+    // It goes on to start its agent, which this test has no program for; what
+    // matters is that no limit refused it.
+    if let Err(error) = result {
+        assert!(!error.message.contains("of 0"), "{}", error.message);
+        assert!(!error.message.contains("agent sessions run"));
+    }
+}
+
+#[tokio::test]
+async fn a_gate_is_asked_only_where_the_user_set_a_command_for_the_repository() {
+    let (dir, context, caller, _) = conversation_watch("review");
+
+    let refused = request_gate(&context, &caller, protocol::RequestGate::default())
+        .await
+        .unwrap_err();
+
+    // The directory is no repository, or has no gate command: either way no
+    // command of the repository's own is run.
+    assert!(matches!(refused.code, Code::Invalid | Code::Refused));
+    assert!(dir.path().exists());
+}
+
+#[tokio::test]
+async fn a_gate_for_a_repository_without_a_command_says_where_the_user_sets_one() {
+    let (dir, context, caller, _) = conversation_watch("review");
+    let primary = dir.path().join("api");
+    std::fs::create_dir(&primary).unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "-q", "-b", "main"])
+            .current_dir(&primary)
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let refused = request_gate(
+        &context,
+        &caller,
+        protocol::RequestGate {
+            dir: Some(primary),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(refused.code, Code::Refused);
+    assert!(
+        refused.message.contains("[[gate.repositories]]"),
+        "{}",
+        refused.message
+    );
+}
+
+#[test]
+fn asking_for_the_gate_and_for_a_cleanup_act_for_the_session() {
+    assert!(Command::RequestGate(Default::default()).acts());
+    assert!(Command::CleanupWorktrees(Default::default()).acts());
 }

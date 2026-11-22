@@ -8,14 +8,14 @@ use tsumugi_model::{BranchFate, KeptBranch, WorktreeRemoved, WorktreeStanding};
 use super::{Result, canonical, command, output};
 
 /// One worktree of `git worktree list --porcelain`.
-struct Listed {
-    path: PathBuf,
-    branch: Option<String>,
-    locked: bool,
+pub(super) struct Listed {
+    pub(super) path: PathBuf,
+    pub(super) branch: Option<String>,
+    pub(super) locked: bool,
 }
 
 /// Every worktree of the repository `at` belongs to, the main checkout first.
-async fn listed(at: &Path) -> Result<Vec<Listed>> {
+pub(super) async fn listed(at: &Path) -> Result<Vec<Listed>> {
     let out = command(
         at,
         "git",

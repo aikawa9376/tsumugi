@@ -361,6 +361,9 @@ async fn run(args: &[String], cwd: &std::path::Path, input: Option<String>) -> A
         Some((command, rest)) if command == "session" => crate::start::run(rest, cwd, input).await,
         Some((command, rest)) if command == "ports" => crate::ports::run(rest, cwd).await,
         Some((command, rest)) if command == "terminal" => crate::terminals::run(rest, cwd).await,
+        Some((command, rest)) if command == "gate" || command == "cleanup" => {
+            crate::gate_cli::run(command, rest, cwd).await
+        }
         _ => crate::command::Output {
             wrote: Err(format!("the work host runs no command {args:?}")),
             code: 2,

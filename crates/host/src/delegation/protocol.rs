@@ -70,6 +70,10 @@ pub enum Command {
     Sessions(Sessions),
     /// The TCP ports the processes of sessions listen on.
     Ports(Ports),
+    /// Ask the work host to run the repository's gate on the caller's commit.
+    RequestGate(RequestGate),
+    /// List, and clear away, the worktrees that are done with.
+    CleanupWorktrees(CleanupWorktrees),
     Models,
     /// Name the caller's own session anew.
     Rename(Rename),
@@ -114,6 +118,8 @@ impl Command {
                 | Self::Rename(_)
                 | Self::Close(_)
                 | Self::ReportDone(_)
+                | Self::RequestGate(_)
+                | Self::CleanupWorktrees(_)
                 | Self::Wait(_)
         )
     }
@@ -329,6 +335,30 @@ pub struct Ports {
     /// Every session's ports on this work machine, whatever worktree it works in.
     #[serde(default)]
     pub all: bool,
+}
+
+/// Have the work host run the repository's gate on your commit.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RequestGate {
+    /// A directory of the repository to check, in your worktree; your own directory when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+    /// How long to wait for the answer at most; 600 when omitted, and no more than 3600. Asking again joins the run that goes on.
+    #[serde(default)]
+    pub wait_seconds: Option<u64>,
+}
+
+/// List the worktrees of a repository that are done with, and optionally remove them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CleanupWorktrees {
+    /// A directory of the repository; your own directory when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+    /// Remove the worktrees that have nothing to lose and no session in them; only list them when false or omitted.
+    #[serde(default)]
+    pub remove: bool,
 }
 
 /// A session that opened another, as the one it opened is told of it.
