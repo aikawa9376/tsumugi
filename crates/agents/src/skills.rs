@@ -86,6 +86,7 @@ pub struct Outcome {
 }
 
 const START_SESSION: &str = include_str!("../plugin/skills/start-session/SKILL.md");
+const ISSUE_SUPERVISOR: &str = include_str!("../plugin/skills/issue-supervisor/SKILL.md");
 
 /// sha256 of every stub an earlier or this build wrote, by skill. A copy on
 /// disk is tsumugi's untouched one when it is only a `SKILL.md` whose digest
@@ -98,6 +99,10 @@ const RELEASED: &[(&str, &str)] = &[
     (
         "start-session",
         "264764778c3a6e1142c046ef2f543c3491638f12d479e5d92e71ff93320b676f",
+    ),
+    (
+        "issue-supervisor",
+        "8904bfed0b31b23b3a036f544d3dc5d76436b1ebb42f6713aa524f795936fbb1",
     ),
 ];
 
@@ -134,14 +139,17 @@ fn body(markdown: &str) -> &str {
 
 /// The skills this build ships, each as a stub.
 pub fn shipped() -> Vec<Shipped> {
-    [("start-session", START_SESSION)]
-        .into_iter()
-        .map(|(name, text)| {
-            let description = front_matter(text, "description")
-                .expect("a skill describes itself")
-                .to_string();
-            let stub = format!(
-                "---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n\n\
+    [
+        ("start-session", START_SESSION),
+        ("issue-supervisor", ISSUE_SUPERVISOR),
+    ]
+    .into_iter()
+    .map(|(name, text)| {
+        let description = front_matter(text, "description")
+            .expect("a skill describes itself")
+            .to_string();
+        let stub = format!(
+            "---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n\n\
                  This discovery stub loads the version-matched guide from the tsumugi \
                  executable used for this session.\n\n\
                  ## Load the guide before running tsumugi commands\n\n\
@@ -149,20 +157,20 @@ pub fn shipped() -> Vec<Shipped> {
                  Follow what it prints, not commands remembered from elsewhere: the \
                  guide is written by the tsumugi that runs. When `tsumugi` is not on \
                  `PATH`, run the executable that started this session.\n"
-            );
-            Shipped {
-                name: name.to_string(),
-                description,
-                released: RELEASED
-                    .iter()
-                    .filter(|(skill, _)| *skill == name)
-                    .map(|(_, digest)| digest.to_string())
-                    .collect(),
-                stub,
-                guide: body(text).to_string(),
-            }
-        })
-        .collect()
+        );
+        Shipped {
+            name: name.to_string(),
+            description,
+            released: RELEASED
+                .iter()
+                .filter(|(skill, _)| *skill == name)
+                .map(|(_, digest)| digest.to_string())
+                .collect(),
+            stub,
+            guide: body(text).to_string(),
+        }
+    })
+    .collect()
 }
 
 /// The guide of `skill`, naming `program` as the tsumugi to run.
@@ -395,6 +403,76 @@ mod tests {
             skill.stub.len()
         );
         assert!(!skill.stub.contains("@TSUMUGI@"));
+    }
+
+    /// `text` with its lines joined, so a phrase is found wherever it wraps.
+    fn flat(text: &str) -> String {
+        text.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    fn issue_supervisor() -> Shipped {
+        shipped()
+            .into_iter()
+            .find(|s| s.name == "issue-supervisor")
+            .unwrap()
+    }
+
+    #[test]
+    fn the_issue_supervisor_is_shipped_as_a_stub_like_every_skill() {
+        let skill = issue_supervisor();
+        assert!(skill.stub.contains("tsumugi skills get issue-supervisor"));
+        assert!(skill.stub.contains(&skill.description));
+        assert!(skill.stub.len() < 1500, "{}", skill.stub.len());
+    }
+
+    #[test]
+    fn the_leader_is_told_to_speak_to_the_user_in_their_language_and_to_write_the_rest_in_english()
+    {
+        let text = flat(&guide(&issue_supervisor(), Path::new("/bin/tsumugi")));
+        assert!(
+            text.contains("in the language your first prompt names"),
+            "{text}"
+        );
+        assert!(text.contains("English whatever that is"), "{text}");
+        assert!(text.contains("prompts and messages to sessions"), "{text}");
+        assert!(text.contains("commit messages"), "{text}");
+    }
+
+    #[test]
+    fn the_leader_asks_before_anything_outside_its_discretion_and_does_nothing_meanwhile() {
+        let text = flat(&guide(&issue_supervisor(), Path::new("/bin/tsumugi")));
+        assert!(text.contains("Do nothing on the ask list"), "{text}");
+        assert!(text.contains("anything that is on neither"), "{text}");
+        assert!(
+            text.contains("never push or merge past your discretion"),
+            "{text}"
+        );
+        assert!(
+            text.contains("only while the main checkout is clean"),
+            "{text}"
+        );
+        assert!(text.contains("Never push, force anything"), "{text}");
+    }
+
+    #[test]
+    fn the_leader_starts_workers_by_tier_and_stops_when_a_tier_is_not_defined() {
+        let text = flat(&guide(&issue_supervisor(), Path::new("/bin/tsumugi")));
+        for word in [
+            "`tier`",
+            "`light`",
+            "`standard`",
+            "`heavy`",
+            "`supervised: true`",
+            "`report_done`",
+            "`request_gate`",
+            "`wait`",
+        ] {
+            assert!(text.contains(word), "{word}: {text}");
+        }
+        assert!(
+            text.contains("never name another agent or model instead"),
+            "{text}"
+        );
     }
 
     #[test]

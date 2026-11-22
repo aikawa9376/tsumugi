@@ -9,6 +9,17 @@ language; everything else is English.
 The settings that shape it are in the [reference](reference/settings.md):
 `language`, `[leader]`, `[leader.discretion]` and `[worker_tiers]`.
 
+## The skill
+
+A leader works from the `issue-supervisor` skill Tsumugi ships, installed like
+the others by `tsumugi skills install` ([skills](skills.md)). It tells the
+leader how to find the work, start workers by tier and supervised, wait for
+their reports instead of polling, have the central gate run
+([the gate](gate.md)), merge finished branches while `main` is clean, remove
+finished worktrees and close the issues, and when to ask the user instead.
+Everything the user does not read is written in English in it, and it asks
+the leader to speak to the user in the language it is given.
+
 ## Language
 
 What the leader says to the user (reports, questions and confirmations) is in

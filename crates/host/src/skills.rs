@@ -517,7 +517,8 @@ mod tests {
         assert_eq!(plan["digest"].as_str().unwrap().len(), 64);
         assert!(plan.get("results").is_none());
         let steps = plan["plan"].as_array().unwrap();
-        assert_eq!(steps.len(), 2, "{plan}");
+        // Each skill, in each place that is not shared.
+        assert_eq!(steps.len(), 4, "{plan}");
         assert_eq!(steps[0]["profiles"], serde_json::json!(["work"]));
         assert_eq!(steps[0]["action"], "write");
         assert!(!dir.path().join("work/skills").exists());
@@ -573,8 +574,11 @@ mod tests {
         ));
         let (_, out, _) = ask(&env, "install --all --profile work,twin --dry-run --json");
         let steps = json(&out)["plan"].as_array().unwrap().clone();
-        assert_eq!(steps.len(), 1);
-        assert_eq!(steps[0]["profiles"], serde_json::json!(["work", "twin"]));
+        // One place a skill, however many profiles share it.
+        assert_eq!(steps.len(), 2);
+        for step in &steps {
+            assert_eq!(step["profiles"], serde_json::json!(["work", "twin"]));
+        }
     }
 
     #[test]
