@@ -63,6 +63,10 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         }
     }
     let answered = match ask {
+        Ask::BrowserResult { call, result } => {
+            watched.browsed(call, result);
+            Ok(Answer::Done)
+        }
         Ask::QueueLocalIssue(issue) => crate::local_issues::queue(watched, issue).await,
         Ask::CreateLocalIssue(issue) => crate::local_issues::create(watched, issue).await,
         Ask::StartLeader {

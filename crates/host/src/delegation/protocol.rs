@@ -77,6 +77,8 @@ pub enum Command {
     /// Merge a finished worktree's branch into the main checkout, or read how that stands.
     MergeWorktree(MergeWorktree),
     Models,
+    /// Drive a page of the browser of the caller's worktree.
+    Browser(tsumugi_protocol::BrowserCommand),
     /// Name the caller's own session anew.
     Rename(Rename),
     /// End the caller's own session, once its user agreed, or a session the
@@ -124,8 +126,76 @@ impl Command {
                 | Self::CleanupWorktrees(_)
                 | Self::MergeWorktree(_)
                 | Self::Wait(_)
+                | Self::Browser(
+                    tsumugi_protocol::BrowserCommand::Goto { .. }
+                        | tsumugi_protocol::BrowserCommand::Click { .. }
+                        | tsumugi_protocol::BrowserCommand::Fill { .. }
+                        | tsumugi_protocol::BrowserCommand::TabCreate { .. }
+                        | tsumugi_protocol::BrowserCommand::TabSwitch { .. },
+                )
         )
     }
+}
+
+/// Point the page of your worktree's browser at an address.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserGoto {
+    /// The address to open: a web page or a development server, such as `http://localhost:3000`; `localhost` is the machine your worktree is on.
+    pub url: String,
+}
+
+/// Read the page as a tree of what is on it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserSnapshot {
+    /// Only the controls and links.
+    #[serde(default)]
+    pub interactive: bool,
+    /// Only what changed since the last snapshot taken with `delta`.
+    #[serde(default)]
+    pub delta: bool,
+    /// Only the part of the page below the first element this CSS selector matches.
+    #[serde(default)]
+    pub selector: Option<String>,
+    /// Only this many levels of the tree.
+    #[serde(default)]
+    pub depth: Option<u32>,
+}
+
+/// Click an element of the page.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserClick {
+    /// The reference the last snapshot gave the element, such as `@e3`.
+    pub element: String,
+}
+
+/// Replace what a field of the page holds.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserFill {
+    /// The reference the last snapshot gave the field, such as `@e1`.
+    pub element: String,
+    /// What the field is to hold.
+    pub value: String,
+}
+
+/// Open a page in your worktree's browser.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserTabCreate {
+    /// The address to open it at; a blank page when omitted.
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// Make another page of your worktree's browser the one commands act on.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserTabSwitch {
+    /// The page's place in the list `browser_tab_list` gives, counted from 0.
+    pub index: usize,
 }
 
 /// Save work or research findings for the user to start later.

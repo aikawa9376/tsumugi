@@ -6,6 +6,8 @@
 mod appearance;
 mod asks;
 pub mod awake;
+mod browser;
+mod browser_cli;
 mod checkpoints;
 pub mod cleanup;
 pub mod cli;
@@ -79,6 +81,7 @@ mod worktrees;
 
 use tsumugi_core::content;
 
+pub use browser_cli::cli as browser_cli;
 pub use daemon::cli as daemon_cli;
 pub use gate_cli::cli as gate_cli;
 pub use issue_cli::cli as issue_cli;

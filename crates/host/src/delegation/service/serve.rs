@@ -151,6 +151,7 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::MergeWorktree(asked) => {
             super::commands::merge_worktree(context, &caller, asked).await
         }
+        Command::Browser(asked) => super::browsing::browser(context, &caller, asked).await,
         Command::Models => answer(context.models.lock().expect("the models' lock").view()),
         Command::Next => {
             let id = caller.id;

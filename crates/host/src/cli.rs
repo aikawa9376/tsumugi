@@ -38,6 +38,8 @@ pub enum Command {
     Terminal(Vec<String>),
     /// List the TCP ports the sessions of a worktree listen on.
     Ports(Vec<String>),
+    /// Drive the browser pages of the session's worktree.
+    Browser(Vec<String>),
     /// Serve a session's `tsumugi` MCP server on standard input and output.
     Mcp(Vec<String>),
     Editor(Vec<String>),
@@ -332,6 +334,7 @@ impl Command {
                 | Command::Worktree(_)
                 | Command::Terminal(_)
                 | Command::Ports(_)
+                | Command::Browser(_)
                 | Command::Mcp(_)
                 | Command::Editor(_)
                 | Command::Connect
@@ -339,7 +342,7 @@ impl Command {
     }
 }
 
-pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>] | ssh <host> [--port <port>] [--remote-port <port>] [--start] [--name <name>]]| discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | gate [--dir <path>] [--wait <seconds>] | cleanup [--dir <path>] [--remove] | worktree merge [--dir <path> | --branch <name>] [--check] [--stash | --commit] [--message <text>] [--close-issue] [--remove] [--resolve] | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
+pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>] | ssh <host> [--port <port>] [--remote-port <port>] [--start] [--name <name>]]| discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | browser … | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | gate [--dir <path>] [--wait <seconds>] | cleanup [--dir <path>] [--remove] | worktree merge [--dir <path> | --branch <name>] [--check] [--stash | --commit] [--message <text>] [--close-issue] [--remove] [--resolve] | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
 
 /// The command `args` ask for; `None` for one tsumugi does not know, which
 /// must not open a window: a program that ran an older tsumugi's subcommand
@@ -379,6 +382,7 @@ pub fn command(args: &[String]) -> Option<Command> {
         Some("mcp") => Some(Command::Mcp(rest())),
         Some("terminal") => Some(Command::Terminal(rest())),
         Some("ports") => Some(Command::Ports(rest())),
+        Some("browser") => Some(Command::Browser(rest())),
         Some("editor") => Some(Command::Editor(rest())),
         Some("session") => Some(Command::Session(rest())),
         Some("skills") => Some(Command::Skills(rest())),
@@ -548,6 +552,11 @@ mod tests {
             Some(Command::Ports(vec!["--all".into()]))
         );
         assert!(asked(&["ports"]).unwrap().routed());
+        assert_eq!(
+            asked(&["browser", "tab", "list"]),
+            Some(Command::Browser(vec!["tab".into(), "list".into()]))
+        );
+        assert!(asked(&["browser", "screenshot"]).unwrap().routed());
         assert_eq!(
             asked(&["editor", "/tmp/p.md"]),
             Some(Command::Editor(vec!["/tmp/p.md".into()]))

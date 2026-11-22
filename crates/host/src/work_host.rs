@@ -394,7 +394,7 @@ const CLAIM_AGAIN: Duration = Duration::from_secs(2);
 /// Serve delegation and judge sessions, for as long as the future is polled;
 /// until the state can be claimed, try again now and then, as a terminal
 /// host of a build from before the work host still holds it.
-async fn delegation() {
+async fn delegation(watched: crate::watch::Watched) {
     let mut told = false;
     let _service = loop {
         match crate::delegation::service::Service::start(
@@ -402,6 +402,7 @@ async fn delegation() {
             crate::daemon::daemon(),
             tsumugi_program(),
             crate::settings::try_load,
+            watched.clone(),
         )
         .await
         {
@@ -428,13 +429,14 @@ async fn serve(socket: &Path) -> Result<()> {
     let served = Served::new(host, |watched| crate::asks::asks(watched, judged.clone()));
     let watched = served.watched();
     crate::watch::start_config(watched.clone());
+    let started = watched.clone();
     crate::environment::spawn(async move {
         crate::terminal_host::start(&judged).await;
-        crate::watch::start(watched);
+        crate::watch::start(started);
     });
     tokio::select! {
         () = server.serve(hello_of_ours(), served) => {}
-        () = delegation() => {}
+        () = delegation(watched) => {}
     }
     Ok(())
 }
@@ -447,8 +449,8 @@ pub(crate) fn environment_served() -> Served {
     crate::watch::start_config(watched.clone());
     crate::environment::spawn(async move {
         crate::terminal_host::start(&judged).await;
-        crate::watch::start(watched);
-        delegation().await;
+        crate::watch::start(watched.clone());
+        delegation(watched).await;
     });
     served
 }

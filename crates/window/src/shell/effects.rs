@@ -54,6 +54,7 @@ impl Ui {
             } => self.clone_repository(environment, target, then),
             Effect::StartDraft(start) => self.start_draft(*start),
             Effect::TypeInto { tab, typing } => self.type_into_tab(tab, typing),
+            Effect::Browser { environment, call } => crate::browser::enqueue(environment, call),
             Effect::Palette(colours) => self.repaint(&colours),
             // A session no longer listed has nothing to show; its pane is
             // closed, and the images its console drew are not kept.

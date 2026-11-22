@@ -98,6 +98,34 @@ impl Watched {
         lock(&self.host)
     }
 
+    /// Hand `command` for the session working in `dir` to a window, which
+    /// renders the browser pages, and wait for what it makes of it.
+    pub(crate) async fn browse(
+        &self,
+        dir: std::path::PathBuf,
+        command: tsumugi_protocol::BrowserCommand,
+    ) -> Result<tsumugi_protocol::BrowserResult, String> {
+        let (relay, windows) = {
+            let host = self.host();
+            (host.browser(), host.windows())
+        };
+        relay
+            .call(
+                &windows,
+                |window, event| self.tell(window, event),
+                dir,
+                command,
+                crate::browser::WAIT,
+            )
+            .await
+    }
+
+    /// A window answered the browser command numbered `call`.
+    pub(crate) fn browsed(&self, call: u64, result: tsumugi_protocol::BrowserResult) {
+        let relay = self.host().browser();
+        relay.answered(call, result);
+    }
+
     /// Tell `window` `event`, which is not a change of the work.
     pub(crate) fn tell(&self, window: WindowId, event: Event) {
         (self.events)(window, event);

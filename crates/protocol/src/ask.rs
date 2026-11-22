@@ -12,6 +12,12 @@ use crate::{DraftChanges, Drafts, HostPath};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Ask {
+    /// What came of the browser command numbered `call`, which the work host
+    /// handed this window for a session's agent.
+    BrowserResult {
+        call: u64,
+        result: crate::BrowserResult,
+    },
     CreateLocalIssue(tsumugi_model::NewLocalIssue),
     StartLocalIssue {
         id: String,

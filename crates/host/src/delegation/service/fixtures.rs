@@ -50,6 +50,10 @@ pub(super) fn watching(
         program: "/tsumugi".into(),
         root: dir.path().into(),
         settings: Arc::new(|| Ok(Settings::default())),
+        watched: crate::watch::Watched::new(
+            Arc::new(Mutex::new(crate::work::Host::default())),
+            Arc::new(|_, _| {}),
+        ),
     };
     let native = tsumugi_term::Session {
         id: 1,

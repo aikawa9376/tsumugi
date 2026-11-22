@@ -4,6 +4,7 @@
 
 mod agents;
 mod ask;
+mod browser;
 #[cfg(feature = "client")]
 pub mod client;
 mod codec;
@@ -27,6 +28,7 @@ mod work;
 
 pub use agents::*;
 pub use ask::*;
+pub use browser::*;
 pub use codec::*;
 pub use config::*;
 pub use console::*;
