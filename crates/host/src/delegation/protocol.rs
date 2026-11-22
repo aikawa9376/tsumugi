@@ -431,7 +431,8 @@ pub struct Sent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Delivery {
     pub id: MessageId,
-    pub from: SessionId,
+    /// The session that sent it; none for a tick of a schedule.
+    pub from: Option<SessionId>,
     /// The message as its recipient's agent reads it.
     pub content: String,
 }
@@ -638,7 +639,7 @@ mod tests {
         assert_eq!(
             wire(Delivery {
                 id: message,
-                from: id,
+                from: Some(id),
                 content: "hi".into()
             }),
             json!({"id": message, "from": id, "content": "hi"})

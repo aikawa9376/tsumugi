@@ -761,7 +761,7 @@ async fn a_worker_reports_done_to_the_session_that_opened_it() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(heard.sender, worker.id);
+    assert_eq!(heard.sender, Some(worker.id));
     assert!(heard.body.contains("outcome: succeeded"), "{}", heard.body);
 }
 
@@ -971,7 +971,7 @@ async fn a_session_ends_a_session_it_opened_and_leaves_a_note_the_user_reads_in_
     assert!(
         notes
             .iter()
-            .any(|m| m.sender == caller.id && m.delivered && m.body.contains("closed")),
+            .any(|m| m.sender == Some(caller.id) && m.delivered && m.body.contains("closed")),
         "{notes:?}"
     );
     assert!(

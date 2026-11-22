@@ -182,6 +182,11 @@ has reported is not reported on again. The message reaches the supervisor
 through its agent's way of hearing from outside, so a supervisor can end its
 turn and be woken by its workers, or `wait` for them within a turn.
 
+A supervisor can also be woken at an interval by a
+[schedule](schedules.md#waking-a-session), as a safeguard that is kept by the
+work host and hands over at most one tick, and only while the supervisor waits
+for input.
+
 `tsumugi session start --supervised` does the same from a terminal inside a
 session; it is refused anywhere else.
 

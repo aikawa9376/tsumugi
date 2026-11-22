@@ -187,6 +187,7 @@ mod tests {
                     issue: None,
                     note: Some("The directory is gone".into()),
                 }),
+                held_ms: Some(2),
             }],
         });
     }

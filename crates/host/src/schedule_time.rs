@@ -32,6 +32,10 @@ pub fn system_zone() -> String {
 /// The latest time the cadence is due after `after_ms` and by `now_ms`, both
 /// in milliseconds since the Unix epoch.
 pub fn latest_in(timezone: &str, cadence: &Cadence, after_ms: u64, now_ms: u64) -> Option<u64> {
+    if let Cadence::Every { minutes } = cadence {
+        let latest = now_ms - now_ms % every_ms(*minutes);
+        return (latest > after_ms).then_some(latest);
+    }
     let zone = zone(timezone).ok()?;
     let today = local_date(&zone, now_ms)?;
     for back in 0..=REACH_DAYS {
@@ -49,6 +53,10 @@ pub fn latest_in(timezone: &str, cadence: &Cadence, after_ms: u64, now_ms: u64) 
 
 /// The first time the cadence is due after `now_ms`.
 pub fn next_after(timezone: &str, cadence: &Cadence, now_ms: u64) -> Option<u64> {
+    if let Cadence::Every { minutes } = cadence {
+        let step = every_ms(*minutes);
+        return Some(now_ms - now_ms % step + step);
+    }
     let zone = zone(timezone).ok()?;
     let today = local_date(&zone, now_ms)?;
     (0..=REACH_DAYS)
@@ -56,6 +64,11 @@ pub fn next_after(timezone: &str, cadence: &Cadence, now_ms: u64) -> Option<u64>
         .flat_map(|date| on(&zone, cadence, date))
         .filter(|at| *at > now_ms)
         .min()
+}
+
+/// The length of an interval, never zero.
+fn every_ms(minutes: u32) -> u64 {
+    u64::from(minutes.max(1)) * 60_000
 }
 
 /// A time as the clock of `timezone` reads it: `2026-11-23 09:00`.
@@ -88,6 +101,7 @@ fn on(zone: &TimeZone, cadence: &Cadence, date: Date) -> Vec<u64> {
     let clocks: Vec<(i8, i8)> = match cadence {
         Cadence::Hourly { minute } => (0..24).map(|hour| (hour, *minute as i8)).collect(),
         Cadence::Daily { hour, minute } => vec![(*hour as i8, *minute as i8)],
+        Cadence::Every { .. } => Vec::new(),
         Cadence::Weekdays { hour, minute } if weekday < Weekday::Sat => {
             vec![(*hour as i8, *minute as i8)]
         }
@@ -145,6 +159,29 @@ mod tests {
         assert_eq!(
             latest_in("UTC", &daily(9, 0), 0, now),
             Some(at("UTC", "2026-03-09T09:00:00"))
+        );
+    }
+
+    #[test]
+    fn an_interval_is_due_on_a_grid_from_the_epoch_whatever_the_zone() {
+        let every = Cadence::Every { minutes: 30 };
+        let now = at("UTC", "2026-03-10T10:20:00");
+        let expected = at("UTC", "2026-03-10T10:00:00");
+        assert_eq!(latest_in("UTC", &every, 0, now), Some(expected));
+        assert_eq!(latest_in("Asia/Tokyo", &every, 0, now), Some(expected));
+        assert_eq!(next_after("UTC", &every, now), Some(expected + 30 * 60_000));
+        // A time taken is not due again, and one just before it is.
+        assert_eq!(latest_in("UTC", &every, expected, now), None);
+        assert_eq!(latest_in("UTC", &every, expected - 1, now), Some(expected));
+        // A stretch missed is due once, as its latest time.
+        assert_eq!(
+            latest_in("UTC", &every, expected - 600 * 60_000, now),
+            Some(expected)
+        );
+        // On a time itself, the next one is a whole interval on.
+        assert_eq!(
+            next_after("UTC", &every, expected),
+            Some(expected + 30 * 60_000)
         );
     }
 

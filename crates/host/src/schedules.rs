@@ -1,7 +1,7 @@
 //! The schedules the work host runs by itself: each time one is due it queues
 //! an ordinary local issue, whether or not any window is open, and the
 //! windows are told how the schedules stand.
-use tsumugi_model::{NewSchedule, Schedule, ScheduleEdit, ScheduleRun};
+use tsumugi_model::{NewSchedule, Schedule, ScheduleEdit, ScheduleRun, ScheduleTarget, State};
 use tsumugi_protocol::{Answer, TreeChange};
 
 use crate::delegation::Error;
@@ -47,6 +47,9 @@ pub(crate) fn fire_due(
 ) -> crate::delegation::Result<Vec<(Schedule, ScheduleRun)>> {
     let mut settled = Vec::new();
     for (schedule, cursor) in store.due_schedules()? {
+        if matches!(schedule.target, ScheduleTarget::Session { .. }) {
+            continue;
+        }
         let Some(due) =
             crate::schedule_time::latest_in(&schedule.timezone, &schedule.cadence, cursor, now_ms)
         else {
@@ -59,8 +62,58 @@ pub(crate) fn fire_due(
     Ok(settled)
 }
 
+/// Look at every schedule that wakes a session at `now_ms`: a time that came
+/// due is held as one tick, and a held tick is handed to its session once
+/// the tree shows the session waiting for input.
+pub(crate) fn wake_due(
+    store: &mut Store,
+    now_ms: u64,
+    shown: &[tsumugi_model::Session],
+) -> crate::delegation::Result<Vec<(Schedule, ScheduleRun)>> {
+    let waits = |id: tsumugi_model::SessionId| {
+        shown
+            .iter()
+            .find(|shown| shown.delegation == Some(id))
+            .is_some_and(|shown| matches!(shown.state, State::Idle | State::Done))
+    };
+    let mut settled = Vec::new();
+    for (schedule, cursor) in store.tick_schedules()? {
+        let due =
+            crate::schedule_time::latest_in(&schedule.timezone, &schedule.cadence, cursor, now_ms);
+        if let Some(run) = store.settle_tick(&schedule.id, due, now_ms, &waits)? {
+            settled.push((schedule, run));
+        }
+    }
+    Ok(settled)
+}
+
+/// Wake the sessions whose schedules are due. What it settles is shown to the
+/// windows with the schedules the watch publishes next.
+pub(crate) async fn wake(
+    shown: &[tsumugi_model::Session],
+) -> Result<(), String> {
+    let shown = shown.to_vec();
+    let now_ms = tsumugi_model::time::now_ms();
+    let settled = with_store(&root(), move |store| wake_due(store, now_ms, &shown))
+        .await
+        .map_err(|e| e.to_string())?;
+    for (schedule, run) in &settled {
+        tracing::info!(
+            schedule = %schedule.name,
+            outcome = run.outcome.word(),
+            note = run.note.as_deref().unwrap_or(""),
+            "a schedule woke a session"
+        );
+    }
+    Ok(())
+}
+
 /// Whether `schedule` can queue a request on this machine now.
 pub(crate) fn ready(schedule: &Schedule) -> Result<(), String> {
+    // A schedule that wakes a session needs neither a directory nor a profile.
+    if matches!(schedule.target, ScheduleTarget::Session { .. }) {
+        return Ok(());
+    }
     if !schedule.dir.is_dir() {
         return Err(format!(
             "The directory {} is not available on this machine; choose another with `tsumugi schedule edit {} --dir <path>`",
@@ -148,7 +201,8 @@ pub(crate) async fn delete(watched: &Watched, id: String) -> Result<Answer, Stri
     changed(watched, move |store, _| store.delete_schedule(&id)).await
 }
 
-/// Queue the schedule's request now, enabled or not.
+/// Queue the schedule's request now, enabled or not; for a schedule that wakes
+/// a session, hold a tick for it.
 pub(crate) async fn run_now(watched: &Watched, id: String) -> Result<Answer, String> {
     run_by_name(watched, &id)
         .await
@@ -156,19 +210,22 @@ pub(crate) async fn run_now(watched: &Watched, id: String) -> Result<Answer, Str
         .map_err(|e| e.message)
 }
 
-/// The schedule `selector` names, and the run that queued its request.
+/// The schedule `selector` names, and the run that queued its request; none
+/// for a schedule that wakes a session, which holds a tick instead.
 pub(crate) async fn run_by_name(
     watched: &Watched,
     selector: &str,
-) -> crate::delegation::Result<(Schedule, ScheduleRun)> {
+) -> crate::delegation::Result<(Schedule, Option<ScheduleRun>)> {
     let selector = selector.to_owned();
     let done = with_store(&root(), move |store| {
         let (_, schedule) = store.schedule_named(&selector)?;
-        let run = store.run_schedule_now(
-            &schedule.id,
-            tsumugi_model::time::now_ms(),
-            ready(&schedule),
-        )?;
+        let now = tsumugi_model::time::now_ms();
+        let run = if matches!(schedule.target, ScheduleTarget::Session { .. }) {
+            store.hold_tick(&schedule.id, now)?;
+            None
+        } else {
+            Some(store.run_schedule_now(&schedule.id, now, ready(&schedule))?)
+        };
         Ok((schedule, run))
     })
     .await?;
@@ -211,6 +268,7 @@ pub(crate) fn view(schedule: &Schedule) -> serde_json::Value {
         "enabled": schedule.enabled,
         "grace_minutes": schedule.grace_minutes,
         "next_ms": schedule.next_ms,
+        "held_ms": schedule.held_ms,
         "last": schedule.last,
     })
 }
@@ -344,6 +402,124 @@ mod tests {
         assert_eq!(listed(&store, start).unwrap()[0].next_ms, None);
     }
 
+    /// A supervisor session the tree shows as `state`, and a schedule that
+    /// ticks it every 30 minutes, enabled at `now`.
+    fn supervised_by_a_tick(
+        store: &mut Store,
+        state: State,
+        now: u64,
+    ) -> (String, tsumugi_model::SessionId, Vec<tsumugi_model::Session>) {
+        let (session, _) = store
+            .register(crate::delegation::store::NewSession {
+                parent: None,
+                agent: tsumugi_model::Agent::Claude,
+                profile: tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude),
+                home: None,
+                name: "supervisor".into(),
+                cwd: "/repo".into(),
+                launch: crate::settings::Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: false,
+                code: None,
+            })
+            .unwrap();
+        let code = store.session(session).unwrap().unwrap().code.as_str().to_owned();
+        let new = NewSchedule {
+            id: SessionId::new().to_string(),
+            name: "Supervise".into(),
+            prompt: "Check on your workers".into(),
+            dir: std::env::temp_dir(),
+            profile: None,
+            timezone: "UTC".into(),
+            cadence: Cadence::Every { minutes: 30 },
+            target: ScheduleTarget::Session { code },
+            grace_minutes: DEFAULT_GRACE_MINUTES,
+        };
+        let id = new.id.clone();
+        store.add_schedule(new).unwrap();
+        store.set_schedule_enabled(&id, true, now).unwrap();
+        (id, session, shown_as(session, state))
+    }
+
+    fn shown_as(
+        session: tsumugi_model::SessionId,
+        state: State,
+    ) -> Vec<tsumugi_model::Session> {
+        let mut shown = tsumugi_model::testing::session("supervisor").build();
+        shown.delegation = Some(session);
+        shown.state = state;
+        vec![shown]
+    }
+
+    fn heard(store: &mut Store, session: tsumugi_model::SessionId) -> usize {
+        let mut count = 0;
+        while let Some(message) = store.next_undelivered(session).unwrap() {
+            store.delivered(message.id).unwrap();
+            count += 1;
+        }
+        count
+    }
+
+    #[test]
+    fn a_supervisor_in_a_long_turn_is_ticked_once_when_it_waits_however_often_the_clock_is_read() {
+        let (_dir, mut store) = store();
+        let start = 24 * HOUR;
+        let (_, session, working) = supervised_by_a_tick(&mut store, State::Working, start);
+        let idle = shown_as(session, State::Idle);
+        let mut ticks = 0;
+        // Four hours of work, the clock read every ten minutes: no tick.
+        let mut now = start;
+        while now <= start + 4 * HOUR {
+            wake_due(&mut store, now, &working).unwrap();
+            ticks += heard(&mut store, session);
+            now += HOUR / 6;
+        }
+        assert_eq!(ticks, 0);
+        // The turn ends; however often it is read, one tick comes.
+        for step in 0..6 {
+            wake_due(&mut store, now + step * (HOUR / 60), &idle).unwrap();
+            ticks += heard(&mut store, session);
+        }
+        assert_eq!(ticks, 1);
+        // And the next time due, a half hour on, brings the next.
+        wake_due(&mut store, now + HOUR, &idle).unwrap();
+        assert_eq!(heard(&mut store, session), 1);
+    }
+
+    #[test]
+    fn a_session_the_tree_does_not_show_is_not_ticked() {
+        let (_dir, mut store) = store();
+        let start = 24 * HOUR;
+        let (_, session, _) = supervised_by_a_tick(&mut store, State::Idle, start);
+        wake_due(&mut store, start + HOUR, &[]).unwrap();
+        assert_eq!(heard(&mut store, session), 0);
+    }
+
+    #[test]
+    fn a_schedule_that_ticks_a_session_needs_no_directory_or_profile() {
+        let mut schedule = Schedule {
+            id: "x".into(),
+            number: 3,
+            name: "n".into(),
+            prompt: "p".into(),
+            dir: "/no/such/directory/at/all".into(),
+            profile: Some("no-such-profile".into()),
+            timezone: "UTC".into(),
+            cadence: Cadence::Every { minutes: 30 },
+            target: ScheduleTarget::Session { code: "ab12".into() },
+            enabled: true,
+            grace_minutes: 10,
+            next_ms: None,
+            last: None,
+            held_ms: None,
+        };
+        assert_eq!(ready(&schedule), Ok(()));
+        schedule.target = ScheduleTarget::Queue;
+        assert!(ready(&schedule).is_err());
+    }
+
     #[test]
     fn a_schedule_that_is_missing_its_directory_is_not_ready() {
         let schedule = |dir: &str, profile: Option<&str>| Schedule {
@@ -360,6 +536,7 @@ mod tests {
             grace_minutes: 10,
             next_ms: None,
             last: None,
+            held_ms: None,
         };
         let error = ready(&schedule("/no/such/directory/at/all", None)).unwrap_err();
         assert!(

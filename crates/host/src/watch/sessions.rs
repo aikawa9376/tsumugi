@@ -42,6 +42,9 @@ pub(super) async fn watch(mut watched: Watched) {
                 if let Err(error) = crate::delegation::app::follow_workers(&sessions).await {
                     tracing::warn!(%error, "cannot tell supervisors how their workers stand");
                 }
+                if let Err(error) = crate::schedules::wake(&sessions).await {
+                    tracing::warn!(%error, "cannot wake the sessions schedules tick");
+                }
                 if let Err(error) = crate::resources::publish(&watched).await {
                     tracing::warn!(%error, "cannot read the resources projects keep");
                 }

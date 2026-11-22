@@ -248,7 +248,10 @@ impl Store {
             "UPDATE messages SET delivered = 1 WHERE id = ?1",
             [message.id.to_string()],
         )?;
-        let sender = session(&transaction, message.sender)?;
+        let sender = match message.sender {
+            Some(sender) => session(&transaction, sender)?,
+            None => None,
+        };
         transaction.commit()?;
         Ok(Some((message, sender)))
     }

@@ -210,7 +210,10 @@ pub fn envelope(message: &Message, sender: Option<&Session>, opener: Option<Sess
             sender.cwd.display(),
             message.body
         ),
-        None => format!("[message] from {}:\n{}", message.sender, message.body),
+        None => match message.sender {
+            Some(sender) => format!("[message] from {sender}:\n{}", message.body),
+            None => format!("[schedule]\n{}", message.body),
+        },
     }
 }
 
@@ -227,7 +230,10 @@ pub(super) fn next_message(
     let Some(message) = store.next_undelivered(id)? else {
         return Ok(None);
     };
-    let sender = store.session(message.sender)?;
+    let sender = match message.sender {
+        Some(sender) => store.session(sender)?,
+        None => None,
+    };
     Ok(Some((message, sender)))
 }
 

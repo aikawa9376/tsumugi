@@ -13,7 +13,7 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 mod issues;
 mod resources;
@@ -185,6 +185,12 @@ const MIGRATIONS: &[&str] = &[
          profile TEXT
      );
      CREATE INDEX IF NOT EXISTS schedule_issues_by_schedule ON schedule_issues(schedule);",
+    // The tick of a schedule that wakes a session, held until the session
+    // waits for input: the time it stands for.
+    "CREATE TABLE IF NOT EXISTS schedule_ticks (
+         schedule TEXT PRIMARY KEY REFERENCES schedules(id) ON DELETE CASCADE,
+         held_ms INTEGER NOT NULL
+     );",
 ];
 
 /// What the window or the work host knows of a session before its program starts.
@@ -802,7 +808,7 @@ const MESSAGE_COLUMNS: &str = "id, sender, recipient, body, sent_ms, delivered";
 
 fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Message>> {
     let id: String = row.get("id")?;
-    let sender: String = row.get("sender")?;
+    let sender: Option<String> = row.get("sender")?;
     let recipient: String = row.get("recipient")?;
     let sent_ms: i64 = row.get("sent_ms")?;
     let body = row.get("body")?;
@@ -810,7 +816,9 @@ fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Message>> {
     Ok((|| {
         Ok(Message {
             id: id.parse().map_err(Error::storage)?,
-            sender: sender.parse().map_err(Error::storage)?,
+            sender: sender
+                .map(|sender| sender.parse().map_err(Error::storage))
+                .transpose()?,
             recipient: recipient.parse().map_err(Error::storage)?,
             body,
             sent_ms: sent_ms as u64,
@@ -826,6 +834,16 @@ fn insert(
     body: &str,
 ) -> Result<MessageId> {
     insert_kind(connection, sender, recipient, "message", body)
+}
+
+/// A tick of a schedule, sent by no session.
+fn insert_tick(connection: &Connection, recipient: SessionId, body: &str) -> Result<MessageId> {
+    let id = MessageId::new();
+    connection.execute(
+        "INSERT INTO messages (id, sender, recipient, kind, body, sent_ms) VALUES (?1, NULL, ?2, 'tick', ?3, ?4)",
+        params![id.to_string(), recipient.to_string(), body, super::now_ms() as i64],
+    )?;
+    Ok(id)
 }
 
 fn insert_kind(
@@ -1406,7 +1424,10 @@ PRAGMA user_version = 1;
         store.ensure_current_schema().unwrap();
         let kept = store.messages_of(opener).unwrap();
         assert_eq!(kept.len(), 1);
-        assert_eq!((kept[0].sender, kept[0].body.as_str()), (opened, "done"));
+        assert_eq!(
+            (kept[0].sender, kept[0].body.as_str()),
+            (Some(opened), "done")
+        );
         assert_eq!(store.session(opened).unwrap().unwrap().parent, Some(opener));
     }
     #[test]

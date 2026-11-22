@@ -54,7 +54,7 @@ pub(crate) fn Schedules(
         div { class: "schedules",
             h3 { class: "schedules-title", "Schedules" }
             p { class: "adding-note",
-                "A schedule queues its prompt as a local issue each time it is due. It is saved paused; enable it to allow the times from then on. Only one request of a schedule is queued or working at a time."
+                "A schedule queues its prompt as a local issue each time it is due, or, made with `tsumugi schedule create --session`, hands it to a running session that waits for input. It is saved paused; enable it to allow the times from then on. Only one request of a schedule is queued or working at a time."
             }
             div { class: "local-issues-list",
                 if schedules.is_empty() { p { class: "adding-note", "No schedules yet." } }
@@ -144,6 +144,13 @@ fn ScheduleRow(
         schedule.id.clone(),
         schedule.id.clone(),
     );
+    let place = match &schedule.target {
+        ScheduleTarget::Queue => schedule.dir.display().to_string(),
+        ScheduleTarget::Session { code } => format!("wakes session {code}"),
+    };
+    let held = schedule
+        .held_ms
+        .map(|ms| time::ago(now.saturating_sub(ms)));
     let enable = !schedule.enabled;
     rsx! {
         div { class: "local-issue schedule",
@@ -152,10 +159,11 @@ fn ScheduleRow(
                 span { class: "local-issue-state {state}", "{state}" }
             }
             div { class: "local-issue-directory",
-                "{schedule.cadence.describe()} · {schedule.timezone} · {schedule.dir.display()}"
+                "{schedule.cadence.describe()} · {schedule.timezone} · {place}"
             }
             if let Some(next) = next { div { class: "schedule-next", "Next {next}" } }
             if let Some(last) = last { div { class: "schedule-last", "Last {last}" } }
+            if let Some(held) = held { div { class: "schedule-last", "A tick waits for the session since {held}" } }
             div { class: "local-issue-actions",
                 Button { disabled: busy,
                     title: if enable { "Allow the times from now on" } else { "Pause; times that pass are not run" },
