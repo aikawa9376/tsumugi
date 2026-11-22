@@ -329,24 +329,15 @@ impl Pool {
             })
             .with_ipc_handler(move |request| {
                 let _guard = RuntimeGuard::new(runtime.clone());
+                // A page kept hidden runs its scripts too, so it is the page shown
+                // that the keys and focus answer to.
+                let shown = app.content.peek().shows_page(id, browser);
                 match request.body().as_str() {
+                    "focus" | "workspace" | "address" if !shown => {}
                     "focus" => {
-                        let visible = app
-                            .content
-                            .peek()
-                            .windows
-                            .current()
-                            .is_some_and(|tab| {
-                                tab.windows().iter().any(|w| {
-                                    w.id == id
-                                        && matches!(w.shows, Tab::Browser { id: shown, .. } if shown == browser)
-                                })
-                            });
-                        if visible {
-                            FOCUSED.set(true);
-                            app.dispatch(Msg::WindowFocus(id));
-                            app.dispatch(Msg::Focus(tsumugi_core::content::Area::Console));
-                        }
+                        FOCUSED.set(true);
+                        app.dispatch(Msg::WindowFocus(id));
+                        app.dispatch(Msg::Focus(tsumugi_core::content::Area::Console));
                     }
                     "blur" => FOCUSED.set(false),
                     "workspace" => {

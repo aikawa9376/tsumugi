@@ -605,6 +605,16 @@ pub(crate) fn choose_options(
 }
 
 impl ContentView {
+    /// Whether `window` of the tab shown shows the page `page`: a page kept
+    /// hidden may speak to the workspace, which answers it only then.
+    pub fn shows_page(&self, window: WindowId, page: tab::BrowserId) -> bool {
+        self.windows.current().is_some_and(|tab| {
+            tab.windows()
+                .iter()
+                .any(|w| w.id == window && matches!(w.shows, Tab::Browser { id, .. } if id == page))
+        })
+    }
+
     /// The browser pages open in any window, as the tree lists them: those of
     /// the layout shown and of every worktree's layout put away, which a page
     /// stays open in until its window closes.
