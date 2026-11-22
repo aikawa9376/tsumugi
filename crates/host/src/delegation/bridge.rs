@@ -149,6 +149,11 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(super::protocol::CleanupWorktrees),
         ),
         tool(
+            "merge_worktree",
+            "Merge the branch of a finished worktree into the main checkout with a merge commit of its own, safely: with `check` it only reads how the merge stands (what it brings, the files that would conflict, uncommitted changes in the main checkout, the issue it closes) and changes nothing. A merge that would conflict is never begun in the main checkout: it answers with the files and touches nothing, and `resolve` then brings the main checkout's branch into the worktree's branch and starts a session there to resolve them. Uncommitted changes in the main checkout stop the merge unless `changes` says to stash or commit them, which you do only where your discretion lets you; they are never overwritten. `close_issue` closes the local issue the worktree's session was started for, and `remove` deletes the worktree and its merged branch when nothing is in it or running in it.",
+            schemars::schema_for!(super::protocol::MergeWorktree),
+        ),
+        tool(
             "rename_session",
             "Name your own session anew, as the user sees it in Tsumugi: a few words saying what it works on, in the language the user writes in. Call it once you have answered the first prompt, after the conversation is cleared once you have answered the next one, and otherwise only when the work turns to something else entirely, never as it moves from step to step. When it is refused, keep the name.",
             schemars::schema_for!(Rename),
@@ -246,6 +251,9 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "request_gate" => Command::RequestGate(serde_json::from_value(arguments).map_err(parsed)?),
         "cleanup_worktrees" => {
             Command::CleanupWorktrees(serde_json::from_value(arguments).map_err(parsed)?)
+        }
+        "merge_worktree" => {
+            Command::MergeWorktree(serde_json::from_value(arguments).map_err(parsed)?)
         }
         "models" => Command::Models,
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
@@ -671,6 +679,7 @@ mod tests {
                 "ports",
                 "request_gate",
                 "cleanup_worktrees",
+                "merge_worktree",
                 "rename_session",
                 "close_session",
                 "timeline_tasks",

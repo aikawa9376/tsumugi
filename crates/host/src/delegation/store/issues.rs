@@ -1,5 +1,7 @@
 //! The environment's durable queue, beside the sessions it starts.
 
+use std::path::Path;
+
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use tsumugi_model::{
     LocalIssue, LocalIssueAction, LocalIssueState, NewLocalIssue, Session, SessionId, State,
@@ -258,6 +260,37 @@ impl Store {
             ));
         }
         Ok(())
+    }
+
+    /// Close the issue whose work was merged into the main checkout, from
+    /// whatever state it is in: its session is done with once its branch is
+    /// in, even if it still waits or has not yet been seen to end.
+    pub fn close_merged_local_issue(&mut self, id: &str) -> Result<()> {
+        let changed = self.connection.execute(
+            "UPDATE local_issues SET state = 'closed', error = NULL WHERE id = ?1 AND state != 'closed'",
+            [id],
+        )?;
+        if changed != 1 {
+            return Err(Error::new(Code::Refused, "The issue is closed already"));
+        }
+        Ok(())
+    }
+
+    /// The issue, not closed yet, that a session working in `dir` or below
+    /// it was started for.
+    pub fn local_issue_worked_in(&self, dir: &Path) -> Result<Option<(u64, LocalIssue)>> {
+        let sessions = self.sessions()?;
+        Ok(self
+            .numbered_local_issues()?
+            .into_iter()
+            .find(|(_, issue)| {
+                issue.state != LocalIssueState::Closed
+                    && issue.record.is_some_and(|record| {
+                        sessions
+                            .iter()
+                            .any(|s| s.id == record && s.cwd.starts_with(dir))
+                    })
+            }))
     }
 
     pub fn reopen_local_issue(&mut self, id: &str) -> Result<()> {
@@ -862,6 +895,102 @@ mod tests {
             kept.session.as_deref(),
             Some("0000000000000000000000000000000f")
         );
+    }
+
+    fn worked_in(store: &mut Store, title: &str, dir: &str) -> (String, SessionId) {
+        let new = issue(dir, title);
+        let id = new.id.clone();
+        store.add_local_issue(new).unwrap();
+        let (_, begun) = store.begin_local_issue(&id).unwrap();
+        let record = store
+            .register(NewSession {
+                parent: None,
+                agent: Agent::Claude,
+                profile: ProfileId::builtin(Agent::Claude),
+                home: None,
+                name: title.into(),
+                cwd: dir.into(),
+                launch: Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: true,
+                code: None,
+            })
+            .unwrap()
+            .0;
+        store.attach_local_issue(&begun.id, record).unwrap();
+        (id, record)
+    }
+
+    #[test]
+    fn the_issue_a_session_in_a_worktree_works_on_is_found_by_the_worktree() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        worked_in(&mut store, "elsewhere", "/project-wt/other");
+        worked_in(&mut store, "here", "/project-wt/here");
+
+        let (number, found) = store
+            .local_issue_worked_in(Path::new("/project-wt/here"))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!((number, found.title.as_str()), (2, "here"));
+        assert!(
+            store
+                .local_issue_worked_in(Path::new("/project-wt/none"))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn an_issue_closed_already_is_not_the_one_a_worktree_works_on() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let (id, _) = worked_in(&mut store, "done", "/project-wt/here");
+        store.close_merged_local_issue(&id).unwrap();
+
+        assert!(
+            store
+                .local_issue_worked_in(Path::new("/project-wt/here"))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            store.close_merged_local_issue(&id).unwrap_err().code,
+            Code::Refused
+        );
+    }
+
+    #[test]
+    fn a_merged_issue_is_closed_whatever_state_its_session_left_it_in() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        for state in [
+            "open",
+            "queued",
+            "starting",
+            "running",
+            "waiting",
+            "done",
+            "failed",
+            "cancelled",
+        ] {
+            let (id, _) = worked_in(&mut store, state, "/project-wt/here");
+            store
+                .connection
+                .execute(
+                    "UPDATE local_issues SET state = ?2 WHERE id = ?1",
+                    params![id, state],
+                )
+                .unwrap();
+
+            store.close_merged_local_issue(&id).unwrap();
+
+            let closed = store.local_issue_named(&id).unwrap().1;
+            assert_eq!(closed.state, State::Closed, "{state}");
+        }
     }
 
     #[test]

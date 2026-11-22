@@ -74,6 +74,8 @@ pub enum Command {
     RequestGate(RequestGate),
     /// List, and clear away, the worktrees that are done with.
     CleanupWorktrees(CleanupWorktrees),
+    /// Merge a finished worktree's branch into the main checkout, or read how that stands.
+    MergeWorktree(MergeWorktree),
     Models,
     /// Name the caller's own session anew.
     Rename(Rename),
@@ -120,6 +122,7 @@ impl Command {
                 | Self::ReportDone(_)
                 | Self::RequestGate(_)
                 | Self::CleanupWorktrees(_)
+                | Self::MergeWorktree(_)
                 | Self::Wait(_)
         )
     }
@@ -362,6 +365,36 @@ pub struct CleanupWorktrees {
     /// Remove the worktrees that have nothing to lose and no session in them; only list them when false or omitted.
     #[serde(default)]
     pub remove: bool,
+}
+
+/// Merge the branch of a finished worktree into the main checkout, or read how that merge stands.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MergeWorktree {
+    /// A directory of the worktree whose branch is merged; your own directory when omitted. Not with `branch`.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+    /// The branch to merge, found among the repository's worktrees. Not with `dir`.
+    #[serde(default)]
+    pub branch: Option<String>,
+    /// Only read how the merge stands: the branch and the one it merges into, the commits it brings, the files that would conflict, the uncommitted changes in the main checkout, and the local issue it would close. Nothing is changed.
+    #[serde(default)]
+    pub check: bool,
+    /// What to do with uncommitted changes in the main checkout: `refuse` (the default) merges nothing while there are some, `stash` sets them aside in a stash that is kept, `commit` commits them first. Choose `stash` or `commit` only where your discretion lets you merge over uncommitted changes; otherwise ask the user.
+    #[serde(default)]
+    pub changes: tsumugi_model::MainChanges,
+    /// The merge commit's message; Git's own when omitted.
+    #[serde(default)]
+    pub message: Option<String>,
+    /// Close the local issue the worktree's session was started for once the merge is made.
+    #[serde(default)]
+    pub close_issue: bool,
+    /// Delete the worktree and its merged branch afterwards, as a cleanup does: never one with changes, and never one a session or terminal still works in.
+    #[serde(default)]
+    pub remove: bool,
+    /// Instead of merging into the main checkout, bring the main checkout's branch into the branch in its own worktree and start a session there to resolve what conflicts; the main checkout is not touched. For a merge that answered with conflicts.
+    #[serde(default)]
+    pub resolve: bool,
 }
 
 /// A session that opened another, as the one it opened is told of it.

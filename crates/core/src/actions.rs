@@ -116,6 +116,7 @@ pub enum Action {
     WorkspaceRemove,
     WorktreeClose,
     WorktreeNew,
+    WorktreeMerge,
     WorktreeDelete,
     WindowClose,
     WindowOpen,
@@ -548,6 +549,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeNew, "worktree.new", "open the dialog asking for a new worktree of the repository of the workspace or worktree selected in the tree: its name, where it starts, listed from the repository's branches or given as a commit, and optionally the branch it works on; it is made in the background, a row in the tree showing how far it has come, and a new session's draft opens in it once it is made ([details](tree.md#making-and-deleting-worktrees))")
         .icon(Icon::GitBranch)
         .row("New worktree…", Start),
+    S::new(A::WorktreeMerge, "worktree.merge", "merge the branch of the worktree selected in the tree into the main checkout with a merge commit, after asking and saying what it brings; a merge that would conflict is never begun there, and uncommitted changes in the main checkout are stashed or committed only as the question says; afterwards the local issue its session was started for is closed and the worktree is offered for deleting ([details](tree.md#merging-a-worktree-into-main))")
+        .icon(Icon::GitBranch)
+        .row("Merge into main…", Start),
     S::new(A::WorktreeDelete, "worktree.delete", "delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](tree.md#making-and-deleting-worktrees))")
         .icon(Icon::Trash)
         .row("Delete worktree…", End),
@@ -942,6 +946,7 @@ mod tests {
             WorkspaceRemove,
             WorktreeClose,
             WorktreeNew,
+            WorktreeMerge,
             WorktreeDelete,
             WindowClose,
             WindowOpen,

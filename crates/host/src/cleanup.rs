@@ -176,7 +176,9 @@ pub fn told(candidates: &[Candidate], swept: Option<&[Removed]>) -> serde_json::
 }
 
 /// The directories that sessions and terminals of this work host work in.
-async fn busy_directories(daemon: &tsumugi_term::Daemon) -> Result<Vec<PathBuf>, String> {
+pub(crate) async fn busy_directories(
+    daemon: &tsumugi_term::Daemon,
+) -> Result<Vec<PathBuf>, String> {
     let listed = daemon.sessions().await.map_err(|error| error.to_string())?;
     Ok(listed
         .iter()

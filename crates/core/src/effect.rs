@@ -129,6 +129,30 @@ pub enum Effect {
         environment: EnvironmentId,
         path: PathBuf,
     },
+    /// Ask the work host of `environment` how merging the branch of the
+    /// worktree at `path` into the main checkout stands, before the person
+    /// is asked to merge it.
+    WorktreeMergeInspect {
+        environment: EnvironmentId,
+        path: PathBuf,
+    },
+    /// Ask the work host of `environment` to merge the branch of the
+    /// worktree at `path` into the main checkout, treating that checkout's
+    /// changes as `changes` says, and closing the issue its session works on
+    /// with `close_issue`.
+    WorktreeMerge {
+        environment: EnvironmentId,
+        path: PathBuf,
+        changes: tsumugi_model::MainChanges,
+        close_issue: bool,
+    },
+    /// Ask the work host of `environment` to bring the main checkout's branch
+    /// into the branch of the worktree at `path` and start a session there
+    /// to resolve what conflicts.
+    WorktreeResolve {
+        environment: EnvironmentId,
+        path: PathBuf,
+    },
     /// Ask the work host of `environment` to delete the worktree at `path`,
     /// with its changes only when `force`, and its branch as `branch` says.
     WorktreeDelete {

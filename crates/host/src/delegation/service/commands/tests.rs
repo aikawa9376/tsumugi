@@ -1387,6 +1387,7 @@ async fn a_gate_for_a_repository_without_a_command_says_where_the_user_sets_one(
 fn asking_for_the_gate_and_for_a_cleanup_act_for_the_session() {
     assert!(Command::RequestGate(Default::default()).acts());
     assert!(Command::CleanupWorktrees(Default::default()).acts());
+    assert!(Command::MergeWorktree(Default::default()).acts());
 }
 
 fn tiered(tier: &str) -> protocol::Start {

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use tsumugi_model::{EnvironmentId, Process, Session, WorktreeStanding};
+use tsumugi_model::{EnvironmentId, MergeStanding, Process, Session, WorktreeStanding};
 
 use crate::details::Entry;
 use crate::icons::Icon;
@@ -45,6 +45,27 @@ pub enum Ask {
         sessions: Vec<Session>,
         terminals: Vec<u128>,
         delete_branch: bool,
+    },
+    /// Merge the branch of the worktree at `path` by this name into the
+    /// branch the main checkout has checked out, as it stands; with changes
+    /// in the main checkout, they are stashed first, or committed when
+    /// `commit_main`.
+    MergeWorktree {
+        environment: EnvironmentId,
+        path: PathBuf,
+        name: String,
+        standing: MergeStanding,
+        commit_main: bool,
+    },
+    /// Resolve in the branch of the worktree at `path`, by this name, what
+    /// would conflict in `files` when it is merged into `base`, which the
+    /// main checkout has checked out.
+    ResolveMerge {
+        environment: EnvironmentId,
+        path: PathBuf,
+        name: String,
+        base: String,
+        files: Vec<String>,
     },
     /// Run the setup script of the pending worktree `id`, made at `worktree`
     /// of `repository` and called `name`, which the repository lists and the
@@ -199,6 +220,65 @@ impl Ask {
                     if standing.dirty() { "Delete and discard changes" } else { "Delete" },
                 )
             }
+            Self::MergeWorktree {
+                name,
+                standing,
+                commit_main,
+                ..
+            } => {
+                let base = standing.base.as_deref().unwrap_or_default();
+                let mut lines = vec![format!(
+                    "{} of {name} are merged into {base} with a merge commit of its own.",
+                    counted(standing.ahead, "commit").unwrap_or_default()
+                )];
+                if standing.main_dirty() {
+                    let changed = counted(standing.main_changed, "file").unwrap_or_default();
+                    lines.push(if *commit_main {
+                        format!("{changed} with uncommitted changes in the main checkout are committed on {base} first.")
+                    } else {
+                        format!("{changed} with uncommitted changes in the main checkout are set aside in a stash first, and kept there.")
+                    });
+                }
+                if standing.changed > 0 {
+                    lines.push(format!(
+                        "{} with uncommitted changes in the worktree are not part of the merge.",
+                        counted(standing.changed, "file").unwrap_or_default()
+                    ));
+                }
+                if let Some(issue) = &standing.issue {
+                    lines.push(format!(
+                        "Issue #{} ({}) is closed.",
+                        issue.number, issue.title
+                    ));
+                }
+                lines.push("Afterwards the worktree is offered for deleting.".into());
+                (
+                    Icon::GitBranch,
+                    format!("Merge {name} into {base}?"),
+                    lines.join("
+"),
+                    match (standing.main_dirty(), commit_main) {
+                        (false, _) => "Merge",
+                        (true, false) => "Stash and merge",
+                        (true, true) => "Commit and merge",
+                    },
+                )
+            }
+            Self::ResolveMerge {
+                name, base, files, ..
+            } => (
+                Icon::GitBranch,
+                format!("Merging {name} into {base} would conflict"),
+                format!(
+                    "The conflict is in {}:
+{}
+The main checkout is not touched. {base} is merged into {name} in its worktree instead, leaving the conflicts there, and a session starts in it to resolve them.",
+                    counted(files.len(), "file").unwrap_or_default(),
+                    files.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("
+")
+                ),
+                "Resolve in the branch",
+            ),
             Self::SetupWorktree { name, script, .. } => (
                 Icon::Terminal2,
                 format!("Run the setup of {name}?"),
@@ -286,6 +366,17 @@ impl Ask {
                     *delete_branch,
                 ))
             }
+            Self::MergeWorktree {
+                standing,
+                commit_main,
+                ..
+            } if standing.main_dirty() => Some((
+                format!(
+                    "Commit them on {} instead of stashing them",
+                    standing.base.as_deref().unwrap_or_default()
+                ),
+                *commit_main,
+            )),
             _ => None,
         }
     }
@@ -316,6 +407,8 @@ impl Ask {
             Self::Stop(..)
             | Self::RemoveEnvironment(..)
             | Self::SetupWorktree { .. }
+            | Self::MergeWorktree { .. }
+            | Self::ResolveMerge { .. }
             | Self::CherryPick { .. }
             | Self::RevertCommit { .. } => false,
         }

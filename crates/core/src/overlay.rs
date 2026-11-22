@@ -600,7 +600,10 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
                 .chain([dropped])
                 .collect()
         }
-        ask @ Ask::DeleteWorktree { .. } => crate::worktree::confirmed(ask),
+        ask @ Ask::DeleteWorktree { .. } => crate::worktree::delete_confirmed(ask),
+        ask @ (Ask::MergeWorktree { .. } | Ask::ResolveMerge { .. }) => {
+            crate::worktree::merge_confirmed(ask)
+        }
         Ask::SetupWorktree { .. } => Vec::new(),
         Ask::CloseWorktree {
             environment,

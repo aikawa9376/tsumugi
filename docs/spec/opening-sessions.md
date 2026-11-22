@@ -85,7 +85,10 @@ cannot act as another.
   caller's latest commit and answers how the commit stands
   ([the central gate](gate.md)); **`cleanup_worktrees`** lists the worktrees
   that are done with, and with `remove` deletes only those
-  ([clearing worktrees](resource-limits.md#clearing-away-worktrees)).
+  ([clearing worktrees](resource-limits.md#clearing-away-worktrees));
+  **`merge_worktree`** merges a finished worktree's branch into the main
+  checkout, or with `check` reads how that stands
+  ([integrating a finished branch](leader-mode.md#integrating-a-finished-branch)).
 - **`rename_session`** names the caller's own session anew
   ([renaming](sessions.md#renaming-a-session)), and returns the name it
   took, numbered when another session has it. It is refused for a name you

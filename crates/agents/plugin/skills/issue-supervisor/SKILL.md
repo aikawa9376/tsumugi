@@ -101,17 +101,27 @@ Tell the user which sessions you opened and why, in one short report.
 - A worker's branch is done when it has commits that `request_gate` passed.
   Check with `git log --oneline main..<branch>` and `git status --short` in
   its worktree.
-- Merge into `main` only while the main checkout is clean (`git status
-  --short` shows nothing) and your discretion lets you; with uncommitted
-  changes there, ask the user and do not stash or overwrite them. Merge each
-  finished branch with `git merge --no-ff`, with the message
-  `treewide: merge <branch>`. Where the branches clashed in a generated file,
-  generate it again instead of merging it by hand.
-- After the merge, remove the finished worktree, close the worker with
-  `close_session` and its `target` (it refuses while the worker works or
-  holds uncommitted changes; do not use `force` unless your discretion lets
-  you), and close the issue with `close_local_issue` once its work is merged.
-  Bring a worker back with `start_session` and `resume` when it has more to do.
+- Merge with `merge_worktree` (or `tsumugi worktree merge`), never with
+  `git merge` in the main checkout. First read how it stands with `check`:
+  it lists the commits, the files that would conflict, and uncommitted
+  changes in the main checkout and in the worktree. Merge only while the main
+  checkout is clean (nothing uncommitted) and your discretion lets you. With
+  uncommitted changes there, ask the user; choose `changes: stash` or
+  `commit` only where your discretion lets you merge over uncommitted
+  changes, and never overwrite them. The merge is a merge commit; set
+  `message` to `treewide: merge <branch>` where the repository uses that.
+- A merge that would conflict touches nothing and names the files. Where the
+  branches clashed in a generated file, generate it again instead of merging it
+  by hand; otherwise call `merge_worktree` with `resolve`, which brings the
+  main branch into the worker's branch and starts a session there to resolve
+  the conflicts, and merge again once that session reports.
+- Pass `close_issue` to close the issue the worker was started for once its
+  work is merged, and `remove` to delete its worktree and merged branch; the
+  worktree stays while the worker or a terminal still works in it, so close
+  the worker first with `close_session` and its `target` (it refuses while
+  the worker works or holds uncommitted changes; do not use `force` unless
+  your discretion lets you), then clean up with `cleanup_worktrees`. Bring a
+  worker back with `start_session` and `resume` when it has more to do.
 - Never push, force anything, or delete an unmerged branch unless your
   discretion lets you; otherwise ask first.
 

@@ -953,6 +953,63 @@ impl AppCtx {
                     });
                 });
             }
+            Effect::WorktreeMergeInspect { environment, path } => {
+                let asked = self.ask_in(&environment, Ask::MergeStanding { path: path.clone() });
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::MergeStanding { standing } => Ok(standing),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeMergeInspected {
+                        environment,
+                        path,
+                        result,
+                    });
+                });
+            }
+            Effect::WorktreeMerge {
+                environment,
+                path,
+                changes,
+                close_issue,
+            } => {
+                let asked = self.ask_in(
+                    &environment,
+                    Ask::MergeWorktree {
+                        path: path.clone(),
+                        changes,
+                        message: None,
+                        close_issue,
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::Merged { merged } => Ok(merged),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeMerged {
+                        environment,
+                        path,
+                        result,
+                    });
+                });
+            }
+            Effect::WorktreeResolve { environment, path } => {
+                let asked = self.ask_in(&environment, Ask::ResolveMerge { path: path.clone() });
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::Told { text } => Ok(text),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::WorktreeResolved { path, result });
+                });
+            }
             Effect::WorktreeDelete {
                 environment,
                 path,

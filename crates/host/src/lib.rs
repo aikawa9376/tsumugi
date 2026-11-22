@@ -28,6 +28,7 @@ mod generate;
 pub mod governor;
 mod held;
 mod hibernation;
+mod integrate;
 mod issue_cli;
 mod jobs;
 pub mod kept;
@@ -71,6 +72,7 @@ pub mod watch;
 pub mod work;
 pub mod work_host;
 pub mod workspaces;
+mod worktree_cli;
 pub mod worktree_setup;
 mod worktrees;
 
@@ -88,6 +90,7 @@ pub use tsumugi_term::gate::run as startup_lease;
 #[cfg(windows)]
 pub use tsumugi_term::{HOLD, hold};
 pub use work_host::cli as host_cli;
+pub use worktree_cli::cli as worktree_cli;
 
 #[cfg(test)]
 mod review_tests;
