@@ -284,6 +284,7 @@ mod tests {
             record: None,
             session: Some("0f".into()),
             error: Some("It failed".into()),
+            schedule: None,
         }
     }
 

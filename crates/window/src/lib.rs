@@ -46,6 +46,7 @@ pub mod menu_bar;
 mod native_layer;
 mod native_terminal;
 mod resources;
+mod schedules;
 #[cfg(target_os = "linux")]
 pub fn kitty_display(args: &[String]) -> i32 {
     native_terminal::kitty_display(args)

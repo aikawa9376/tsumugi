@@ -21,6 +21,8 @@ An agent finishing its turn marks its issue done; this records the agent's
 completion, not a human review. A failed issue retains its request and error
 and can be retried explicitly. Queued issues can be cancelled.
 
+A schedule can queue issues on a timetable ([schedules](schedules.md)); an issue it queued is an ordinary issue that says which schedule made it.
+
 Closing an issue preserves its request so it can be reopened later.
 Completed or closed issues can be reopened for another round of work; reopening
 leaves them saved until Start is pressed. The details offer these actions and

@@ -23,6 +23,20 @@ pub fn ago(ms: u64) -> String {
     }
 }
 
+/// `ms` milliseconds ahead, in the largest whole unit.
+pub fn until(ms: u64) -> String {
+    let min = ms / 60_000;
+    match min {
+        0 => "in under a minute".into(),
+        1..60 => format!("in {min} min"),
+        60..1440 => format!("in {} h", min / 60),
+        _ => match min / 1440 {
+            1 => "in 1 day".into(),
+            d => format!("in {d} days"),
+        },
+    }
+}
+
 /// A time written as GitHub and RFC 3339 write it in UTC,
 /// `2026-11-13T16:00:21Z`, in milliseconds since the Unix epoch.
 pub fn parse_utc(text: &str) -> Option<u64> {
@@ -55,6 +69,15 @@ pub fn parse_utc(text: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_time_ahead_is_told_in_its_largest_whole_unit() {
+        assert_eq!(until(30_000), "in under a minute");
+        assert_eq!(until(5 * 60_000), "in 5 min");
+        assert_eq!(until(3 * 3_600_000 + 59 * 60_000), "in 3 h");
+        assert_eq!(until(24 * 3_600_000), "in 1 day");
+        assert_eq!(until(3 * 24 * 3_600_000), "in 3 days");
+    }
 
     #[test]
     fn a_utc_time_reads_as_milliseconds_since_the_epoch() {

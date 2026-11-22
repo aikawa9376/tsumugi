@@ -314,3 +314,71 @@ fn the_issue_command_changes_the_queue_the_running_work_host_owns() {
     let usage = isolated(root).args(["issue", "close"]).output().unwrap();
     assert_eq!(usage.status.code(), Some(2));
 }
+
+#[test]
+fn the_schedule_command_keeps_a_timetable_that_queues_issues_on_the_running_work_host() {
+    let hosts = Hosts::new();
+    let root = hosts.0.path();
+    hosts.run(&["terminal", "list", "--json"]);
+    let mut window = link(root);
+    let dir = root.to_str().unwrap();
+    let created = hosts.run(&[
+        "schedule",
+        "create",
+        "--name",
+        "Weekday triage",
+        "--prompt",
+        "Triage new issues",
+        "--trigger",
+        "weekdays",
+        "--time",
+        "09:00",
+        "--timezone",
+        "Asia/Tokyo",
+        "--dir",
+        dir,
+        "--disabled",
+        "--json",
+    ]);
+    assert_eq!(created["ok"], true, "{created}");
+    let schedule = &created["result"]["schedule"];
+    assert_eq!(schedule["number"], 1);
+    assert_eq!(schedule["enabled"], false, "a schedule is made paused");
+    assert_eq!(schedule["cadence"]["kind"], "weekdays");
+    assert!(
+        schedule["next_ms"].is_null(),
+        "a paused schedule is never due"
+    );
+
+    // Nothing is queued by a paused schedule, and an unknown zone is refused.
+    let bad = isolated(root)
+        .args(["schedule", "edit", "1", "--timezone", "Mars/Base", "--json"])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(1));
+    let none = hosts.run(&["issue", "list", "--json"]);
+    assert!(none["result"]["issues"].as_array().unwrap().is_empty());
+
+    let enabled = hosts.run(&["schedule", "edit", "1", "--enabled", "--json"]);
+    assert_eq!(enabled["result"]["schedule"]["enabled"], true);
+    assert!(enabled["result"]["schedule"]["next_ms"].is_number());
+
+    let run = hosts.run(&["schedule", "run", "1", "--json"]);
+    assert_eq!(run["result"]["run"]["outcome"], "queued", "{run}");
+    let issues = hosts.run(&["issue", "list", "--json"]);
+    let issue = &issues["result"]["issues"][0];
+    assert_eq!(issue["title"], "Weekday triage");
+    assert_eq!(issue["body"], "Triage new issues");
+    assert_eq!(issue["schedule"], created["result"]["schedule"]["id"]);
+
+    // Deleting the schedule leaves the issue it queued.
+    let removed = hosts.run(&["schedule", "remove", "1", "--json"]);
+    assert_eq!(removed["result"]["removed"], true);
+    let listed = hosts.run(&["schedule", "list", "--json"]);
+    assert!(listed["result"]["schedules"].as_array().unwrap().is_empty());
+    waiting_for(&mut window, |issues| {
+        issues.len() == 1 && issues[0].schedule.is_some()
+    });
+    let usage = isolated(root).args(["schedule", "edit"]).output().unwrap();
+    assert_eq!(usage.status.code(), Some(2));
+}

@@ -38,6 +38,9 @@ pub struct TreeWork {
     /// What each project keeps as its saved commands.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub saved_commands: Vec<tsumugi_model::SavedCommand>,
+    /// The schedules the host runs, with when each is next due.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub schedules: Vec<tsumugi_model::Schedule>,
     /// What needed the user, as the host keeps it, the oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<tsumugi_model::Notice>,
@@ -114,6 +117,9 @@ pub enum TreeChange {
     SavedCommands {
         commands: Vec<tsumugi_model::SavedCommand>,
     },
+    Schedules {
+        schedules: Vec<tsumugi_model::Schedule>,
+    },
     /// What needed the user, as the host keeps it, the oldest first.
     Notices {
         notices: Vec<tsumugi_model::Notice>,
@@ -157,6 +163,7 @@ impl TreeWork {
             TreeChange::LocalIssues { issues } => set(&mut self.local_issues, issues),
             TreeChange::Resources { resources } => set(&mut self.resources, resources),
             TreeChange::SavedCommands { commands } => set(&mut self.saved_commands, commands),
+            TreeChange::Schedules { schedules } => set(&mut self.schedules, schedules),
             TreeChange::Notices { notices } => set(&mut self.notices, notices),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),
             TreeChange::Failing { error } => set(&mut self.failing, error),

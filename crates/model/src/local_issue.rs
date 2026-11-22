@@ -24,6 +24,8 @@ pub struct LocalIssue {
     /// The terminal of its session, once one has been attached.
     pub session: Option<String>,
     pub error: Option<String>,
+    /// The schedule that queued it, by id, when one did.
+    pub schedule: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

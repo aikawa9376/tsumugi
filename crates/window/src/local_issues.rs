@@ -92,6 +92,12 @@ fn IssueSheet(place: Place, selected: Option<String>) -> Element {
         .work(&environment)
         .map(|work| work.tree.local_issues.clone())
         .unwrap_or_default();
+    let schedules = app
+        .hosts
+        .read()
+        .work(&environment)
+        .map(|work| work.tree.schedules.clone())
+        .unwrap_or_default();
     let name = app.environment_name(&environment);
     let selected_id = selected.clone();
     let mutate = EventHandler::new(move |ask: Ask| {
@@ -144,6 +150,9 @@ fn IssueSheet(place: Place, selected: Option<String>) -> Element {
                             IssueRow { key: "{issue.id}", environment: place.environment.clone(), issue, busy: busy(), mutate }
                         }
                     }
+                }
+                if selected.is_none() {
+                    crate::schedules::Schedules { environment: place.environment.clone(), schedules, dir: dir() }
                 }
                 if selected.is_none() {
                   div { class: "local-issue-form",
@@ -201,7 +210,10 @@ fn IssueRow(
                 }
                 p { class: "local-issue-request", "{issue.body}" }
             }
-            div { class: "local-issue-directory", "{issue.dir.display()}" }
+            div { class: "local-issue-directory",
+                "{issue.dir.display()}"
+                if issue.schedule.is_some() { " · from a schedule" }
+            }
             if let Some(text) = &issue.error { p { class: "adding-error", "{text}" } }
             div { class: "local-issue-actions",
                 if let Some(session) = issue.session {

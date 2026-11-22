@@ -13,11 +13,12 @@ use tsumugi_model::{Agent, AgentPermissions, SessionCode, TerminalSession};
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 14;
+const SCHEMA_VERSION: i64 = 15;
 
 mod issues;
 mod resources;
 mod saved_commands;
+mod schedules;
 mod workers;
 
 /// The tables as the first schema made them; a new database is made by it
@@ -152,6 +153,38 @@ const MIGRATIONS: &[&str] = &[
          session TEXT PRIMARY KEY REFERENCES sessions(id),
          event TEXT NOT NULL DEFAULT ''
      );",
+    // The timetables the work host runs on its own, each time one was due and
+    // what came of it, and the schedule and profile a queued issue came from.
+    "CREATE TABLE IF NOT EXISTS schedules (
+         seq INTEGER PRIMARY KEY AUTOINCREMENT,
+         id TEXT NOT NULL UNIQUE,
+         name TEXT NOT NULL,
+         prompt TEXT NOT NULL,
+         dir TEXT NOT NULL,
+         profile TEXT,
+         timezone TEXT NOT NULL,
+         cadence TEXT NOT NULL,
+         target TEXT NOT NULL,
+         enabled INTEGER NOT NULL DEFAULT 0,
+         grace_minutes INTEGER NOT NULL,
+         cursor_ms INTEGER NOT NULL DEFAULT 0
+     );
+     CREATE TABLE IF NOT EXISTS schedule_runs (
+         seq INTEGER PRIMARY KEY AUTOINCREMENT,
+         schedule TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+         due_ms INTEGER NOT NULL,
+         at_ms INTEGER NOT NULL,
+         outcome TEXT NOT NULL,
+         issue TEXT,
+         note TEXT,
+         UNIQUE (schedule, due_ms)
+     );
+     CREATE TABLE IF NOT EXISTS schedule_issues (
+         issue TEXT PRIMARY KEY REFERENCES local_issues(id) ON DELETE CASCADE,
+         schedule TEXT NOT NULL,
+         profile TEXT
+     );
+     CREATE INDEX IF NOT EXISTS schedule_issues_by_schedule ON schedule_issues(schedule);",
 ];
 
 /// What the window or the work host knows of a session before its program starts.

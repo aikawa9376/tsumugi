@@ -72,6 +72,13 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::DeleteLocalIssue { id } => crate::local_issues::delete(watched, id).await,
         Ask::SaveCommand(new) => crate::saved_commands::save(watched, new).await,
         Ask::DeleteSavedCommand { id } => crate::saved_commands::delete(watched, id).await,
+        Ask::SaveSchedule(new) => crate::schedules::save(watched, new).await,
+        Ask::EditSchedule { id, edit } => crate::schedules::edit(watched, id, edit).await,
+        Ask::SetScheduleEnabled { id, enabled } => {
+            crate::schedules::enable(watched, id, enabled).await
+        }
+        Ask::RunSchedule { id } => crate::schedules::run_now(watched, id).await,
+        Ask::DeleteSchedule { id } => crate::schedules::delete(watched, id).await,
         Ask::KeepResource {
             dir,
             target,
@@ -243,6 +250,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::Run { args, cwd, input } => Ok(match args.split_first() {
             Some((command, rest)) if command == "issue" => {
                 crate::issue_cli::run(watched, rest, &cwd, input)
+                    .await
+                    .answer(crate::remote::active())
+            }
+            Some((command, rest)) if command == "schedule" => {
+                crate::schedule_cli::run(watched, rest, &cwd, input)
                     .await
                     .answer(crate::remote::active())
             }
