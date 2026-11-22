@@ -88,6 +88,7 @@ fn App() -> Element {
             crate::adding::AddingSheet {}
             crate::local_issues::LocalIssues {}
             super::composer::ComposerDialog {}
+            super::cleanup::CleanupDialog {}
             crate::resources::ResourceSheet {}
             ConfirmDialog {}
             super::floating::FloatingTerminal {}

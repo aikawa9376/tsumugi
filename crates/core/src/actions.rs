@@ -118,6 +118,15 @@ pub enum Action {
     WorktreeNew,
     WorktreeMerge,
     WorktreeDelete,
+    WorktreeCleanup,
+    WorktreeSleep,
+    WorktreeWake,
+    WorkspacePin,
+    TreeSort,
+    TreeHideSleeping,
+    TreeHideIdle,
+    TreeHideMain,
+    TreeRevealCurrent,
     WindowClose,
     WindowOpen,
     Refresh,
@@ -555,6 +564,33 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeDelete, "worktree.delete", "delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](tree.md#making-and-deleting-worktrees))")
         .icon(Icon::Trash)
         .row("Delete worktree…", End),
+    S::new(A::WorktreeCleanup, "worktree.cleanup", "list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](tree.md#cleaning-up-worktrees))")
+        .icon(Icon::Trash)
+        .row("Clean Up Worktrees…", End),
+    S::new(A::WorktreeSleep, "worktree.sleep", "put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](tree.md#putting-a-worktree-to-sleep))")
+        .icon(Icon::SunMoon)
+        .row("Sleep worktree…", End),
+    S::new(A::WorktreeWake, "worktree.wake", "wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](tree.md#putting-a-worktree-to-sleep))")
+        .icon(Icon::SunMoon)
+        .row("Wake worktree", End),
+    S::new(A::WorkspacePin, "workspace.pin", "pin the workspace or worktree selected in the tree to the top of the tree or of its workspace, or unpin it; what is pinned is never left out by the hide filters and stays pinned across runs ([details](tree.md#arranging-the-tree))")
+        .icon(Icon::Highlight)
+        .row("Pin or unpin", End),
+    S::new(A::TreeSort, "tree.sort", "step the order of a workspace's worktrees below the pinned ones: as the work host lists them, by activity, the worktree a session was written to or started in last first, and by name ([details](tree.md#arranging-the-tree))")
+        .icon(Icon::ArrowsExchange)
+        .row("Sort worktrees", End),
+    S::new(A::TreeHideSleeping, "tree.hide_sleeping", "leave the worktrees whose sessions all sleep out of the tree, or show them again; their sessions stay listed under their workspace ([details](tree.md#arranging-the-tree))")
+        .icon(Icon::Eye)
+        .row("Hide sleeping worktrees", End),
+    S::new(A::TreeHideIdle, "tree.hide_idle", "leave the worktrees where no session works, waits or starts and no terminal runs out of the tree, or show them again; their sessions stay listed under their workspace ([details](tree.md#arranging-the-tree))")
+        .icon(Icon::Eye)
+        .row("Hide idle worktrees", End),
+    S::new(A::TreeHideMain, "tree.hide_main", "leave the main checkout out of a workspace that lists other worktrees, or show it again ([details](tree.md#arranging-the-tree))")
+        .icon(Icon::Eye)
+        .row("Hide main checkouts", End),
+    S::new(A::TreeRevealCurrent, "tree.reveal_current", "select in the tree the row of the session or terminal the focused window shows, unfolding the way to it and showing its worktree again where a hide filter left it out ([details](tree.md#arranging-the-tree))")
+        .icon(Icon::Crosshair)
+        .row("Reveal current in tree", Go),
     S::new(A::WindowClose, "window.close", "close the window; the instance's other windows stay open, and its sessions run on").bar("Close Window", Icon::AppWindow),
     S::new(A::WindowOpen, "window.open", "open another window of the instance ([windows](sessions.md#windows))").bar("New Window", Icon::CopyPlus),
     S::new(A::Refresh, "refresh", "read the sessions, and what git says of where they run, again now").bar("Refresh", Icon::Refresh),
@@ -948,6 +984,15 @@ mod tests {
             WorktreeNew,
             WorktreeMerge,
             WorktreeDelete,
+            WorktreeCleanup,
+            WorktreeSleep,
+            WorktreeWake,
+            WorkspacePin,
+            TreeSort,
+            TreeHideSleeping,
+            TreeHideIdle,
+            TreeHideMain,
+            TreeRevealCurrent,
             WindowClose,
             WindowOpen,
             Refresh,

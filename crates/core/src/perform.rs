@@ -797,6 +797,29 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::merge(state, &row),
             None => Vec::new(),
         },
+        Action::WorkspacePin => match cur.filter(|_| on_list) {
+            Some(row) => crate::tree::pin(state, &row),
+            None => Vec::new(),
+        },
+        Action::TreeSort => crate::tree::sort_worktrees(state),
+        Action::TreeHideSleeping => {
+            crate::tree::hide_worktrees(state, crate::tree::Filter::Sleeping)
+        }
+        Action::TreeHideIdle => crate::tree::hide_worktrees(state, crate::tree::Filter::Idle),
+        Action::TreeHideMain => crate::tree::hide_worktrees(state, crate::tree::Filter::Main),
+        Action::TreeRevealCurrent => crate::tree::reveal_current(state),
+        Action::WorktreeSleep => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::sleep(state, &row),
+            None => Vec::new(),
+        },
+        Action::WorktreeWake => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::wake(state, &row),
+            None => Vec::new(),
+        },
+        Action::WorktreeCleanup => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::cleanup_open(state, &row),
+            None => Vec::new(),
+        },
         Action::TreeToggle => step(state, Msg::PanelToggle(Side::Sidebar)),
         Action::TreeFocus => crate::sidebar::switch(state, crate::sidebar::Panel::Tree),
         Action::DetailsToggle => step(state, Msg::PanelToggle(Side::Details)),

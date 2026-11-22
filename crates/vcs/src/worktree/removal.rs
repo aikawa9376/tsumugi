@@ -131,6 +131,61 @@ pub async fn standing(path: &Path) -> Result<WorktreeStanding> {
     Ok(standing)
 }
 
+/// What a cleanup weighs of a worktree besides how it stands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Facts {
+    /// Whether the branch holds nothing the base branch lacks.
+    pub merged: bool,
+    /// When the last commit was made, in seconds since the epoch.
+    pub last_commit: Option<u64>,
+    /// The commit checked out.
+    pub head: Option<String>,
+}
+
+/// The facts of the worktree at `path`. The base branch is the remote's
+/// default branch where the repository has one, else what the main checkout
+/// is at.
+pub async fn facts(path: &Path) -> Result<Facts> {
+    let (found, main) = find(path).await?;
+    let head = command(&found.path, "git", &["rev-parse".as_ref(), "HEAD".as_ref()])
+        .await
+        .ok()
+        .map(|out| out.trim().to_string())
+        .filter(|h| !h.is_empty());
+    let last_commit = command(
+        &found.path,
+        "git",
+        &["log".as_ref(), "-1".as_ref(), "--format=%ct".as_ref()],
+    )
+    .await
+    .ok()
+    .and_then(|out| out.trim().parse().ok());
+    let base = command(
+        &main,
+        "git",
+        &[
+            "rev-parse".as_ref(),
+            "--verify".as_ref(),
+            "--quiet".as_ref(),
+            "refs/remotes/origin/HEAD".as_ref(),
+        ],
+    )
+    .await
+    .map_or_else(
+        |_| "HEAD".to_string(),
+        |_| "refs/remotes/origin/HEAD".into(),
+    );
+    let merged = match &found.branch {
+        Some(branch) => count(&main, &["rev-list", "--count", branch, "--not", &base]).await == 0,
+        None => false,
+    };
+    Ok(Facts {
+        merged,
+        last_commit,
+        head,
+    })
+}
+
 /// Deletes the worktree at `path`: its directory, and its branch as `fate`
 /// says. A worktree with changes is deleted only when `force` is set, which
 /// the caller sets once the person has been told what it loses; the main

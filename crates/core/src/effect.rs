@@ -123,6 +123,18 @@ pub enum Effect {
         id: u64,
         choice: tsumugi_model::SetupChoice,
     },
+    /// Ask the work host of `environment` to put the sessions with these ids
+    /// to sleep.
+    Sleep {
+        environment: EnvironmentId,
+        ids: Vec<String>,
+    },
+    /// Ask the work host of `environment` to list the worktrees of the
+    /// repository at `repository` for a cleanup.
+    CleanupScan {
+        environment: EnvironmentId,
+        repository: PathBuf,
+    },
     /// Ask the work host of `environment` how the worktree at `path` stands,
     /// before the person is asked to delete it.
     WorktreeInspect {
@@ -311,6 +323,8 @@ pub enum Effect {
     /// Keep which workspaces and worktrees the window silenced, for when it
     /// opens again.
     KeepMutes(crate::notices::Mutes),
+    /// Keep how the tree is arranged, for when the window opens again.
+    KeepOrganize(crate::tree::Organize),
 
     // The tree.
     /// Give the filter's field the keys, or take them from it.

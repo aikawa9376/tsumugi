@@ -49,6 +49,8 @@ pub struct Overlays {
     pub naming: Option<Naming>,
     /// A new worktree being asked for.
     pub composer: Option<crate::worktree::Composer>,
+    /// The worktrees of a repository listed to be cleaned up.
+    pub cleanup: Option<crate::worktree::Cleanup>,
     /// The sheet adding an environment is open.
     pub adding: bool,
     /// Local issues are opened on this environment and directory.
@@ -144,6 +146,7 @@ pub enum Holder {
     Rename,
     Naming,
     Composer,
+    Cleanup,
     Adding,
     Confirm,
     Lightbox,
@@ -159,6 +162,7 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (overlays.rename.is_some(), Holder::Rename),
         (overlays.naming.is_some(), Holder::Naming),
         (overlays.composer.is_some(), Holder::Composer),
+        (overlays.cleanup.is_some(), Holder::Cleanup),
         (overlays.adding, Holder::Adding),
         (overlays.local_issues.is_some(), Holder::LocalIssues),
         (overlays.resources.is_some(), Holder::Resources),
@@ -197,6 +201,7 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
                 | Holder::Rename
                 | Holder::Naming
                 | Holder::Composer
+                | Holder::Cleanup
                 | Holder::Adding
                 | Holder::LocalIssues
                 | Holder::Resources
@@ -218,6 +223,7 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
         | Holder::KeysHelp
         | Holder::Picker
         | Holder::Composer
+        | Holder::Cleanup
         | Holder::Adding
         | Holder::LocalIssues
         | Holder::Resources => &[Context::Overlay],
@@ -242,6 +248,7 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
         Holder::Menu => menu_key(state, action),
         Holder::Picker => picker::press(state, &key),
         Holder::Composer => crate::worktree::composer_key(state, &key),
+        Holder::Cleanup => crate::worktree::cleanup_key(state, &key),
         Holder::Confirm => match action {
             Some(Action::OverlayChoose) => answer(state, true),
             Some(Action::OverlayClose) => answer(state, false),
@@ -604,6 +611,11 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
         ask @ (Ask::MergeWorktree { .. } | Ask::ResolveMerge { .. }) => {
             crate::worktree::merge_confirmed(ask)
         }
+        ask @ Ask::SleepWorktree { .. } => crate::worktree::slept_confirmed(ask),
+        Ask::CleanUpWorktrees {
+            environment,
+            doomed,
+        } => crate::worktree::deletions(&environment, doomed),
         Ask::SetupWorktree { .. } => Vec::new(),
         Ask::CloseWorktree {
             environment,

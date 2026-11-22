@@ -165,6 +165,17 @@ impl Rest {
 }
 
 impl Session {
+    /// Whether it can be put to sleep and woken into its conversation again:
+    /// the host keeps a record of it, it told its conversation, it is not
+    /// Cursor's, which cannot be resumed from Tsumugi, and it does not rest
+    /// already.
+    pub fn wakeable(&self) -> bool {
+        self.rest.is_none()
+            && self.delegation.is_some()
+            && !self.session_id.is_empty()
+            && self.agent != Agent::Cursor
+    }
+
     /// Whether the session was started to read only.
     pub fn reads_only(&self) -> bool {
         self.permissions == AgentPermissions::ReadOnly
@@ -296,6 +307,22 @@ mod tests {
             serde_json::to_value(Agent::OpenCode).unwrap(),
             Agent::OpenCode.key()
         );
+    }
+
+    #[test]
+    fn a_session_can_be_put_to_sleep_only_when_it_can_be_woken_into_its_conversation() {
+        let mut s = crate::testing::session("a").session_id("c1").build();
+        assert!(!s.wakeable(), "no record of it kept by the host");
+        s.delegation = Some(SessionId::new());
+        assert!(s.wakeable());
+        s.session_id.clear();
+        assert!(!s.wakeable(), "no conversation told");
+        s.session_id = "c1".into();
+        s.agent = Agent::Cursor;
+        assert!(!s.wakeable(), "Cursor cannot be resumed");
+        s.agent = Agent::Claude;
+        s.rest = Some(Rest::Hibernated);
+        assert!(!s.wakeable(), "already asleep");
     }
 
     fn one(json: &str) -> Running {

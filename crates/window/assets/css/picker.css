@@ -29,3 +29,6 @@
 .resume-preview { flex: 0 0 auto; max-height: 40%; overflow: auto; padding: 0 8px; border-top: 1px solid var(--line); }
 .resume-preview .command-text { max-height: 140px; }
 .resume-turn { padding: 2px 0; font-size: var(--ui-font-small); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialog.cleanup-dialog { width: 860px; }
+.cleanup-box { font-family: var(--mono-font, monospace); color: var(--text-3); margin-right: 8px; }
+.dialog.cleanup-dialog .list-row-meta { white-space: normal; text-align: right; max-width: 55%; }

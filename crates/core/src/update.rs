@@ -386,6 +386,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::NoticesOpen => crate::notices::open(state),
         Msg::ReadsRestored(reads) => crate::notices::restore(state, reads),
         Msg::MutesRestored(mutes) => crate::notices::mute::restore(state, mutes),
+        Msg::OrganizeRestored(organize) => tree::restore_organize(&mut state.tree, organize),
         Msg::SessionMarkUnread { environment: _, id } => crate::unread::mark(state, &id),
         Msg::NotificationsMute { environment, path } => {
             crate::notices::mute::toggle(state, &environment, &path)
@@ -505,6 +506,14 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::ComposerFocus(field) => crate::worktree::focus(state, field),
         Msg::ComposerKey(key) => crate::worktree::composer_key(state, &key),
         Msg::ComposerCursor(at) => crate::worktree::cursor_at(state, at),
+        Msg::Slept { result } => crate::worktree::slept(state, result),
+        Msg::CleanupKey(key) => crate::worktree::cleanup_key(state, &key),
+        Msg::CleanupToggle(at) => crate::worktree::cleanup_toggle(state, at),
+        Msg::CleanupRead {
+            environment,
+            repository,
+            result,
+        } => crate::worktree::cleanup_read(state, &environment, &repository, result),
         Msg::WorktreeStarts {
             environment,
             repository,

@@ -115,6 +115,15 @@ changes them ([keys](../keys.md)).
 | `worktree.new` |  | open the dialog asking for a new worktree of the repository of the workspace or worktree selected in the tree: its name, where it starts, listed from the repository's branches or given as a commit, and optionally the branch it works on; it is made in the background, a row in the tree showing how far it has come, and a new session's draft opens in it once it is made ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `W` |
 | `worktree.merge` |  | merge the branch of the worktree selected in the tree into the main checkout with a merge commit, after asking and saying what it brings; a merge that would conflict is never begun there, and uncommitted changes in the main checkout are stashed or committed only as the question says; afterwards the local issue its session was started for is closed and the worktree is offered for deleting ([details](../tree.md#merging-a-worktree-into-main)) | `tree`: `I` |
 | `worktree.delete` |  | delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `D` |
+| `worktree.cleanup` |  | list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](../tree.md#cleaning-up-worktrees)) | `tree`: `C` |
+| `worktree.sleep` |  | put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](../tree.md#putting-a-worktree-to-sleep)) | `tree`: `Z` |
+| `worktree.wake` |  | wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](../tree.md#putting-a-worktree-to-sleep)) |  |
+| `workspace.pin` |  | pin the workspace or worktree selected in the tree to the top of the tree or of its workspace, or unpin it; what is pinned is never left out by the hide filters and stays pinned across runs ([details](../tree.md#arranging-the-tree)) | `tree`: `p` |
+| `tree.sort` |  | step the order of a workspace's worktrees below the pinned ones: as the work host lists them, by activity, the worktree a session was written to or started in last first, and by name ([details](../tree.md#arranging-the-tree)) | `tree`: `S` |
+| `tree.hide_sleeping` |  | leave the worktrees whose sessions all sleep out of the tree, or show them again; their sessions stay listed under their workspace ([details](../tree.md#arranging-the-tree)) | `tree`: `g h s` |
+| `tree.hide_idle` |  | leave the worktrees where no session works, waits or starts and no terminal runs out of the tree, or show them again; their sessions stay listed under their workspace ([details](../tree.md#arranging-the-tree)) | `tree`: `g h i` |
+| `tree.hide_main` |  | leave the main checkout out of a workspace that lists other worktrees, or show it again ([details](../tree.md#arranging-the-tree)) | `tree`: `g h m` |
+| `tree.reveal_current` |  | select in the tree the row of the session or terminal the focused window shows, unfolding the way to it and showing its worktree again where a hide filter left it out ([details](../tree.md#arranging-the-tree)) | `tree`: `g c` |
 | `window.close` | Close Window | close the window; the instance's other windows stay open, and its sessions run on | `global`: `Cmd+W` |
 | `window.open` | New Window | open another window of the instance ([windows](../sessions.md#windows)) | `global`: `Mod+n` |
 | `refresh` | Refresh | read the sessions, and what git says of where they run, again now | `global`: `Mod+r`<br>`tree`: `r`<br>`agents`: `r` |
@@ -407,6 +416,14 @@ changes them ([keys](../keys.md)).
 "W" = "worktree.new"
 "I" = "worktree.merge"
 "D" = "worktree.delete"
+"C" = "worktree.cleanup"
+"p" = "workspace.pin"
+"S" = "tree.sort"
+"g h s" = "tree.hide_sleeping"
+"g h i" = "tree.hide_idle"
+"g h m" = "tree.hide_main"
+"g c" = "tree.reveal_current"
+"Z" = "worktree.sleep"
 "N" = "file.new"
 "K" = "directory.new"
 "}" = "workspace.next"

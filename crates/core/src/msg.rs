@@ -345,6 +345,8 @@ pub enum Msg {
     ReadsRestored(crate::notices::Reads),
     /// What the window silenced when it last closed.
     MutesRestored(crate::notices::Mutes),
+    /// What the window arranged of the tree when it last closed.
+    OrganizeRestored(crate::tree::Organize),
     /// Mark a session unread, as if it had finished out of view.
     SessionMarkUnread {
         environment: EnvironmentId,
@@ -604,6 +606,22 @@ pub enum Msg {
     ComposerKey(Key),
     /// The place to start from in row `n` of the dialog's list chosen.
     ComposerCursor(usize),
+    /// The work host put sessions to sleep: how many, and the names of those
+    /// that run on; or why it could not.
+    Slept {
+        result: Result<(usize, Vec<String>), String>,
+    },
+    /// A key while the list of worktrees to clean up holds the keys.
+    CleanupKey(Key),
+    /// The worktree in this row of the list is chosen, or unchosen.
+    CleanupToggle(usize),
+    /// The work host listed the worktrees of `repository` to clean up, or
+    /// said why it could not.
+    CleanupRead {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        result: Result<Vec<tsumugi_model::CleanupEntry>, String>,
+    },
     /// The work host listed where a worktree of `repository` may start, or
     /// why it could not.
     WorktreeStarts {

@@ -187,6 +187,21 @@ pub fn composer(keymap: &Keymap) -> Vec<Hint> {
     .collect()
 }
 
+/// What the list of worktrees to clean up names along its foot.
+pub fn cleanup(keymap: &Keymap) -> Vec<Hint> {
+    let over = [Context::Overlay];
+    [
+        moving(keymap, "move"),
+        Some(Hint::new("Space", "choose")),
+        Some(Hint::new("a", "all that lose nothing")),
+        bound(keymap, &over, &Action::OverlayChoose, "delete the chosen"),
+        bound(keymap, &over, &Action::OverlayClose, "cancel"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
 /// What the keys help names along its foot.
 pub fn keys_help(keymap: &Keymap) -> Vec<Hint> {
     [

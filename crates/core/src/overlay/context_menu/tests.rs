@@ -168,7 +168,12 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
                 Action::NotificationsMute
             ][..],
             &starts,
-            &[Action::WorktreeNew, Action::WorkspaceRemove]
+            &[
+                Action::WorkspacePin,
+                Action::WorktreeNew,
+                Action::WorktreeCleanup,
+                Action::WorkspaceRemove
+            ]
         ]
         .concat()
     );
@@ -179,10 +184,14 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
             &[Action::CursorCopy, Action::NotificationsMute],
             &starts,
             &[
+                Action::WorkspacePin,
                 Action::WorktreeNew,
                 Action::WorktreeMerge,
                 Action::WorktreeClose,
-                Action::WorktreeDelete
+                Action::WorktreeDelete,
+                Action::WorktreeCleanup,
+                Action::WorktreeSleep,
+                Action::WorktreeWake
             ]
         ]
         .concat()

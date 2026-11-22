@@ -19,7 +19,7 @@ mod starts;
 pub use gating::{head, place_gate};
 pub use listing::{Entry, all};
 pub use placing::{included, place, relative};
-pub use removal::{delete, standing};
+pub use removal::{Facts, delete, facts, standing};
 pub use starts::starts;
 
 type Result<T> = std::result::Result<T, String>;
@@ -626,6 +626,54 @@ mod tests {
             name: name.into(),
             ..NewWorktree::default()
         }
+    }
+
+    #[tokio::test]
+    async fn a_branch_is_merged_when_the_base_holds_all_its_commits() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = git_repository(dir.path());
+        let done = create_new(&source, &new("done")).await.unwrap();
+        commit_file(&done.path, "d.txt");
+        run(
+            &source,
+            "git",
+            &["merge", "-q", "--no-ff", "-m", "m", "done"],
+        );
+        let open = create_new(&source, &new("open")).await.unwrap();
+        commit_file(&open.path, "o.txt");
+
+        let merged = facts(&done.path).await.unwrap();
+        let unmerged = facts(&open.path).await.unwrap();
+
+        assert!(merged.merged);
+        assert!(!unmerged.merged);
+        assert_eq!(
+            unmerged.head.as_deref(),
+            Some(run(&open.path, "git", &["rev-parse", "HEAD"]).trim())
+        );
+        assert!(unmerged.last_commit.is_some_and(|t| t > 1_000_000_000));
+    }
+
+    #[tokio::test]
+    async fn a_branch_is_weighed_against_the_remotes_default_branch_when_it_has_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, clone) = cloned_with_newer_remote_branch(dir.path());
+        let made = create_new(&clone, &new("topic-work")).await.unwrap();
+        commit_file(&made.path, "t.txt");
+        // The checkout's own branch moves on, which says nothing of the
+        // remote's default branch.
+        run(&clone, "git", &["merge", "-q", "--ff-only", "topic-work"]);
+
+        assert!(!facts(&made.path).await.unwrap().merged);
+    }
+
+    #[tokio::test]
+    async fn a_branch_with_no_commit_of_its_own_is_merged() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = git_repository(dir.path());
+        let made = create_new(&source, &new("fresh")).await.unwrap();
+
+        assert!(facts(&made.path).await.unwrap().merged);
     }
 
     #[tokio::test]

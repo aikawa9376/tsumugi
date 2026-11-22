@@ -1,6 +1,6 @@
 //! Building the rows the tree shows, and where each sits among them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use tsumugi_model::files::Entry;
@@ -43,6 +43,31 @@ pub fn items_with_issues(
     issues: &[tsumugi_model::LocalIssue],
     pages: &[Page],
 ) -> Vec<Item> {
+    items_organized(
+        environment,
+        tree,
+        folds,
+        read,
+        github,
+        issues,
+        pages,
+        &BTreeSet::new(),
+    )
+}
+
+/// The same tree without the rows of the worktrees `hidden` names: what runs
+/// in them is still listed under their workspace's headings.
+#[allow(clippy::too_many_arguments)]
+pub fn items_organized(
+    environment: &EnvironmentId,
+    tree: &Tree,
+    folds: &Folds,
+    read: &dyn Fn(&Path) -> Vec<Entry>,
+    github: &BTreeMap<PathBuf, Repository>,
+    issues: &[tsumugi_model::LocalIssue],
+    pages: &[Page],
+    hidden: &BTreeSet<PathBuf>,
+) -> Vec<Item> {
     let mut out = Vec::new();
     for ws in &tree.workspaces {
         let local = issues_in(tree, &ws.root, issues);
@@ -80,7 +105,11 @@ pub fn items_with_issues(
             }
         }
         out.extend(on_github(environment, &ws.root, github, folds, &local));
-        for w in &ws.worktrees {
+        for w in ws
+            .worktrees
+            .iter()
+            .filter(|w| !hidden.contains(&w.worktree.path))
+        {
             let ti = Item::Worktree(environment.clone(), w.worktree.path.clone());
             let t_open = folds.is_open(&ti);
             out.push(ti);

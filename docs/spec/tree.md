@@ -336,6 +336,58 @@ with it.
 The same merge is made from the command line and by agents; see
 [merging a finished branch](leader-mode.md#integrating-a-finished-branch).
 
+## Cleaning up worktrees
+
+Clean Up Worktrees ([keys](reference/keys.md#actions)), from a workspace's or a
+worktree's row or its menu, lists the repository's worktrees, the main checkout
+left out, each with what to weigh before deleting it: its branch, the files
+changed and commits not pushed, whether the branch is merged into the base
+branch, the state of its pull request, the disk it takes and the age of its
+last commit. Worktrees whose pull request GitHub says is merged or closed are
+chosen beforehand, when `gh` can say; one with changes or commits not pushed,
+and a locked one, never is. A locked worktree cannot be chosen at all.
+
+The chosen worktrees are deleted together. A worktree that loses nothing, with
+nothing running in it, is deleted without a question; as soon as one of them
+would lose changes, commits not pushed, a detached head's commits or running
+sessions and terminals, one question names each of them and what it loses, and
+nothing is deleted until it is answered yes. A branch whose commits nothing
+else has is kept, as deleting a worktree keeps it. What the list says of
+GitHub is left out where it cannot be asked, and nothing is chosen beforehand.
+
+## Putting a worktree to sleep
+
+Sleep, from a worktree's row or its menu ([keys](reference/keys.md#actions)),
+puts the worktree to sleep: the programs of its sessions are stopped and its
+terminals end, while its files, its branch and its sessions' rows and tabs stay.
+The row is marked as asleep while every session in it sleeps. Wake brings its
+sleeping sessions back with their conversations, as focusing one does
+([hibernation](sessions.md#hibernation)); a session that sleeps wakes the same
+way whichever way it was put to sleep.
+
+Nothing is asked where the sessions are done and no terminal runs. A session
+in the middle of a turn, or a terminal, is stopped only after a question that
+says so. A session that cannot be woken into its conversation again is not put
+to sleep, and the status line names it.
+
+## Arranging the tree
+
+A workspace or a worktree is pinned from its row or its menu
+([keys](reference/keys.md#actions)): a pinned workspace stands above the
+others, scratch excepted, and a pinned worktree above the others of its
+workspace. The rest of a workspace's worktrees keep the order the work host
+lists them in, or are put in the order of their last activity, which is when a
+session in them was last written to or started, or of their names. Hide
+filters leave worktrees out of the tree: those that sleep, those where nothing
+works, waits or starts, and the main checkout of a workspace that lists other
+worktrees. A worktree left out still has its sessions and terminals listed
+under its workspace, and a pinned one is never left out. The pins, the order
+and the filters are kept for the next run of the window.
+
+Reveal Current selects the row of the session or terminal the focused window
+shows, unfolding the way to it, and shows its worktree again where a filter
+left it out.
+
 The filter at the top of the tree narrows it as it is typed into, by the
 fuzzy match the pickers use, fzf's syntax included, on the names of
 sessions, terminals, worktrees and workspaces; a worktree or a workspace that

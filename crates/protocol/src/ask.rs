@@ -263,9 +263,19 @@ pub enum Ask {
         worktree: PathBuf,
         choice: tsumugi_model::SetupChoice,
     },
+    /// Put to sleep the sessions with these ids: their programs stop and
+    /// their rows and tabs stay, as when they are left alone.
+    Sleep {
+        ids: Vec<String>,
+    },
     /// How the worktree at `path` stands, as far as deleting it loses work.
     WorktreeStanding {
         path: PathBuf,
+    },
+    /// The worktrees of the repository at `repository` that a cleanup lists,
+    /// the main checkout left out, with what is weighed before deleting each.
+    CleanupEntries {
+        repository: PathBuf,
     },
     /// Delete the worktree at `path`; one with changes only when `force`,
     /// and its branch as `branch` says.
@@ -560,6 +570,16 @@ pub enum Answer {
     /// What came of merging a worktree's branch into the main checkout.
     Merged {
         merged: tsumugi_model::Merged,
+    },
+    /// How many sessions slept, and the names of those that could not be woken
+    /// again and so run on.
+    Slept {
+        count: usize,
+        left: Vec<String>,
+    },
+    /// The worktrees a cleanup lists.
+    CleanupEntries {
+        entries: Vec<tsumugi_model::CleanupEntry>,
     },
     /// The worktree was deleted, with what became of its branch.
     WorktreeRemoved {

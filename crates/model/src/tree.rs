@@ -56,6 +56,19 @@ pub struct WorktreeNode {
     pub terminals: Vec<TerminalSession>,
 }
 
+impl WorktreeNode {
+    /// Whether it sleeps: sessions are listed in it and every one of them is
+    /// hibernated, with no terminal running.
+    pub fn sleeping(&self) -> bool {
+        !self.sessions.is_empty()
+            && self.terminals.is_empty()
+            && self
+                .sessions
+                .iter()
+                .all(|s| s.rest == Some(crate::Rest::Hibernated))
+    }
+}
+
 impl WorkspaceNode {
     /// Whether the sessions sit straight under the workspace, with no
     /// worktree row: outside git, or when only the main checkout is listed.

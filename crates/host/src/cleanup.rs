@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tsumugi_model::{BranchFate, WorktreeStanding};
+use tsumugi_model::{BranchFate, CleanupEntry, CleanupPull, WorktreeStanding};
 
 /// Why a worktree is left where it is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -107,6 +107,64 @@ pub async fn scan(at: &Path, busy: &[PathBuf], skip: &Path) -> Result<Vec<Candid
             path: entry.path,
             branch: entry.branch,
             bytes,
+        });
+    }
+    Ok(found)
+}
+
+/// Commits GitHub holds as a pull request's head are pushed, whatever the
+/// remotes still hold of the branch, as after the remote's branch was deleted
+/// once the pull request was merged. A commit made since is not.
+pub fn settle(
+    standing: &mut WorktreeStanding,
+    head: Option<&str>,
+    pull: Option<&tsumugi_vcs::github::PullRef>,
+) {
+    if let (Some(head), Some(pull)) = (head, pull)
+        && pull.head == head
+    {
+        standing.unpushed = 0;
+    }
+}
+
+/// The worktrees of the repository holding `at` that a cleanup lists, the
+/// main checkout left out, each with what is weighed before deleting it.
+/// `pulls` are the repository's pull requests, as far as GitHub could be
+/// asked, and `skip` the worktrees that are not the user's to list.
+pub async fn entries(
+    at: &Path,
+    skip: &Path,
+    pulls: &[tsumugi_vcs::github::PullRef],
+) -> Result<Vec<CleanupEntry>, String> {
+    let mut found = Vec::new();
+    for entry in tsumugi_vcs::worktree::all(at).await? {
+        if entry.path.starts_with(skip) {
+            continue;
+        }
+        let mut standing = tsumugi_vcs::worktree::standing(&entry.path).await?;
+        if standing.main {
+            continue;
+        }
+        let facts = tsumugi_vcs::worktree::facts(&entry.path).await?;
+        let pull = entry
+            .branch
+            .as_deref()
+            .and_then(|branch| tsumugi_vcs::github::pull_of(pulls, branch));
+        settle(&mut standing, facts.head.as_deref(), pull);
+        let path = entry.path.clone();
+        let bytes = crate::environment::spawn_blocking(move || crate::governor::size_of(&path))
+            .await
+            .unwrap_or(0);
+        found.push(CleanupEntry {
+            path: entry.path,
+            standing,
+            bytes,
+            merged: facts.merged,
+            last_commit: facts.last_commit,
+            pull: pull.map(|p| CleanupPull {
+                number: p.number,
+                state: p.state,
+            }),
         });
     }
     Ok(found)
