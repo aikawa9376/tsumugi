@@ -1176,6 +1176,25 @@ mod tests {
             BrowserCommand::TabList,
             BrowserCommand::TabCreate { url: None },
             BrowserCommand::TabSwitch { index: 2 },
+            BrowserCommand::Wait {
+                selector: Some("#done".into()),
+                state: Some(crate::ElementState::Visible),
+                text: Some("Welcome".into()),
+                url: Some("**/dashboard".into()),
+                load: Some(crate::LoadState::NetworkIdle),
+                timeout: Some(1500),
+            },
+            BrowserCommand::Console { limit: Some(50) },
+            BrowserCommand::Network { limit: None },
+            BrowserCommand::CaptureStart,
+            BrowserCommand::CaptureStop,
+            BrowserCommand::SetDevice {
+                name: "Mobile M".into(),
+            },
+            BrowserCommand::FullScreenshot {
+                format: Some(crate::ImageFormat::Jpeg),
+            },
+            BrowserCommand::Pdf,
         ] {
             round_trips(Event::Browser(BrowserCall {
                 call: 9,
@@ -1189,6 +1208,10 @@ mod tests {
             },
             BrowserResult::Image {
                 data: "iVBORw0KGgo=".into(),
+                mime: "image/jpeg".into(),
+            },
+            BrowserResult::Pdf {
+                data: "JVBERi0=".into(),
             },
             BrowserResult::Failed {
                 text: "stale ref".into(),

@@ -65,6 +65,15 @@ pub fn save(dir: &Path, mime: &str, base64: &str, now: SystemTime) -> Result<Pat
     write(dir, ext, &bytes, now)
 }
 
+/// Write the PDF given in base64 as a new file in `dir`, as [`save`] writes
+/// an image, and return its path.
+pub fn save_pdf(dir: &Path, base64: &str, now: SystemTime) -> Result<PathBuf, Error> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.trim())
+        .map_err(|_| Error::Undecodable)?;
+    write(dir, "pdf", &bytes, now)
+}
+
 /// Copy the image file at `from`, of a kind its extension names, into `dir`
 /// as [`save`] writes a pasted one, so the attachment stays what it was
 /// though the file be changed or removed.
@@ -154,6 +163,21 @@ mod tests {
         assert_eq!(path.parent(), Some(dir.path()));
         assert_eq!(path.extension().unwrap(), "png");
         assert_eq!(std::fs::read(&path).unwrap(), b"\x89PNG\r\n\x1a\n");
+    }
+
+    #[test]
+    fn an_exported_pdf_is_saved_as_a_pdf_and_is_no_pasted_image() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let path = save_pdf(dir.path(), "JVBERi0=", at(1_000)).unwrap();
+
+        assert_eq!(path.extension().unwrap(), "pdf");
+        assert_eq!(std::fs::read(&path).unwrap(), b"%PDF-");
+        assert!(save_pdf(dir.path(), "not base64!", at(1_000)).is_err());
+        assert!(matches!(
+            save(dir.path(), "application/pdf", "JVBERi0=", at(1)),
+            Err(Error::Unsupported(_))
+        ));
     }
 
     #[test]

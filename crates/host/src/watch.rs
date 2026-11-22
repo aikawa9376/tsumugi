@@ -109,13 +109,14 @@ impl Watched {
             let host = self.host();
             (host.browser(), host.windows())
         };
+        let wait = command.allowance(crate::browser::WAIT);
         relay
             .call(
                 &windows,
                 |window, event| self.tell(window, event),
                 dir,
                 command,
-                crate::browser::WAIT,
+                wait,
             )
             .await
     }

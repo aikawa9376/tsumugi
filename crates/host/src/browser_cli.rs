@@ -3,12 +3,20 @@
 //! session's worktree.
 
 use serde_json::Value;
-use tsumugi_protocol::BrowserCommand;
+use tsumugi_protocol::{BrowserCommand, ElementState, ImageFormat, LoadState};
 
 use crate::delegation::launch::{ROOT_ENV, TOKEN_ENV};
 use crate::delegation::protocol::{Command, ask};
 
-pub const USAGE: &str = "usage: tsumugi browser <goto --url <url> | snapshot [--interactive] [--delta] [--selector <css>] [--depth <n>] | click --element <@ref> | fill --element <@ref> --value <text> | screenshot | tab list | tab create [--url <url>] | tab switch --index <n>> [--json]";
+pub const USAGE: &str = "usage: tsumugi browser <goto --url <url> | snapshot [--interactive] [--delta] [--selector <css>] [--depth <n>] | click --element <@ref> | fill --element <@ref> --value <text> | wait [--selector <css>] [--state <hidden|visible>] [--text <text>] [--url <pattern>] [--load <load|domcontentloaded|networkidle>] [--timeout <ms>] | screenshot | full-screenshot [--format <png|jpeg>] | pdf | console [--limit <n>] | network [--limit <n>] | capture <start|stop> | set device --name <device> | tab list | tab create [--url <url>] | tab switch --index <n>> [--json]";
+
+/// A positive whole number a flag holds.
+fn positive(flag: &str, text: &str) -> Result<usize, String> {
+    text.parse::<usize>()
+        .ok()
+        .filter(|n| *n > 0)
+        .ok_or_else(|| format!("{flag} takes a number above 0"))
+}
 
 /// A command read from `args`, and whether it asked for JSON.
 #[derive(Debug, PartialEq)]
@@ -27,7 +35,11 @@ fn parse(args: &[String]) -> Result<Asked, String> {
         match word {
             "--json" => json = true,
             "--interactive" | "--delta" => flags.push((word, None)),
-            "--url" | "--element" | "--value" | "--selector" | "--depth" | "--index" => {
+            "--fn" => {
+                return Err("--fn is not taken: a page's password fields are never read to an agent, and a script of your own could read them; wait on --selector, --text, --url or --load".into());
+            }
+            "--url" | "--element" | "--value" | "--selector" | "--depth" | "--index" | "--text"
+            | "--load" | "--state" | "--timeout" | "--limit" | "--name" | "--format" => {
                 let value = words
                     .next()
                     .ok_or_else(|| format!("{word} needs a value"))?;
@@ -79,6 +91,66 @@ fn parse(args: &[String]) -> Result<Asked, String> {
             value: flag("--value").ok_or("--value is needed")?,
         },
         ("screenshot", _) => BrowserCommand::Screenshot,
+        ("wait", _) => BrowserCommand::Wait {
+            selector: flag("--selector"),
+            state: flag("--state")
+                .map(|state| match state.as_str() {
+                    "visible" => Ok(ElementState::Visible),
+                    "hidden" => Ok(ElementState::Hidden),
+                    _ => Err("--state is visible or hidden".to_string()),
+                })
+                .transpose()?,
+            text: flag("--text"),
+            url: flag("--url"),
+            load: flag("--load")
+                .map(|load| match load.as_str() {
+                    "load" => Ok(LoadState::Load),
+                    "domcontentloaded" => Ok(LoadState::DomContentLoaded),
+                    "networkidle" => Ok(LoadState::NetworkIdle),
+                    _ => Err("--load is load, domcontentloaded or networkidle".to_string()),
+                })
+                .transpose()?,
+            timeout: flag("--timeout")
+                .map(|timeout| {
+                    timeout
+                        .parse::<u64>()
+                        .map_err(|_| "--timeout takes milliseconds".to_string())
+                })
+                .transpose()?,
+        },
+        ("console", _) => BrowserCommand::Console {
+            limit: flag("--limit")
+                .map(|limit| positive("--limit", &limit))
+                .transpose()?,
+        },
+        ("network", _) => BrowserCommand::Network {
+            limit: flag("--limit")
+                .map(|limit| positive("--limit", &limit))
+                .transpose()?,
+        },
+        ("capture", [action, ..]) => match *action {
+            "start" => BrowserCommand::CaptureStart,
+            "stop" => BrowserCommand::CaptureStop,
+            other => return Err(format!("no capture command {other}")),
+        },
+        ("capture", []) => return Err("say capture start or stop".into()),
+        ("set", [action, ..]) => match *action {
+            "device" => BrowserCommand::SetDevice {
+                name: flag("--name").ok_or("--name is needed")?,
+            },
+            other => return Err(format!("no set command {other}")),
+        },
+        ("set", []) => return Err("say set device".into()),
+        ("full-screenshot", _) => BrowserCommand::FullScreenshot {
+            format: flag("--format")
+                .map(|format| match format.as_str() {
+                    "png" => Ok(ImageFormat::Png),
+                    "jpeg" => Ok(ImageFormat::Jpeg),
+                    _ => Err("--format is png or jpeg".to_string()),
+                })
+                .transpose()?,
+        },
+        ("pdf", _) => BrowserCommand::Pdf,
         ("tab", [action, ..]) => match *action {
             "list" => BrowserCommand::TabList,
             "create" => BrowserCommand::TabCreate { url: flag("--url") },
@@ -94,6 +166,7 @@ fn parse(args: &[String]) -> Result<Asked, String> {
         ("tab", []) => return Err("say tab list, create or switch".into()),
         (other, _) => return Err(format!("no browser command {other}")),
     };
+    command.check()?;
     Ok(Asked { command, json })
 }
 
@@ -199,6 +272,103 @@ mod tests {
             BrowserCommand::TabSwitch { index: 1 }
         );
         assert!(parsed(&["tab", "list", "--json"]).unwrap().json);
+    }
+
+    #[test]
+    fn the_second_phase_commands_are_read_by_the_flags_orca_gives_them() {
+        let command = |words: &[&str]| parsed(words).unwrap().command;
+        assert_eq!(
+            command(&[
+                "wait",
+                "--selector",
+                "#done",
+                "--state",
+                "hidden",
+                "--text",
+                "Welcome",
+                "--url",
+                "**/dashboard",
+                "--load",
+                "networkidle",
+                "--timeout",
+                "5000"
+            ]),
+            BrowserCommand::Wait {
+                selector: Some("#done".into()),
+                state: Some(ElementState::Hidden),
+                text: Some("Welcome".into()),
+                url: Some("**/dashboard".into()),
+                load: Some(LoadState::NetworkIdle),
+                timeout: Some(5000),
+            }
+        );
+        // With no condition, a wait is a pause.
+        assert_eq!(
+            command(&["wait", "--timeout", "250"]),
+            BrowserCommand::Wait {
+                selector: None,
+                state: None,
+                text: None,
+                url: None,
+                load: None,
+                timeout: Some(250),
+            }
+        );
+        assert_eq!(
+            command(&["console", "--limit", "20"]),
+            BrowserCommand::Console { limit: Some(20) }
+        );
+        assert_eq!(
+            command(&["network"]),
+            BrowserCommand::Network { limit: None }
+        );
+        assert_eq!(command(&["capture", "start"]), BrowserCommand::CaptureStart);
+        assert_eq!(command(&["capture", "stop"]), BrowserCommand::CaptureStop);
+        assert_eq!(
+            command(&["set", "device", "--name", "Mobile M"]),
+            BrowserCommand::SetDevice {
+                name: "Mobile M".into()
+            }
+        );
+        assert_eq!(
+            command(&["full-screenshot", "--format", "jpeg"]),
+            BrowserCommand::FullScreenshot {
+                format: Some(ImageFormat::Jpeg)
+            }
+        );
+        assert_eq!(
+            command(&["full-screenshot"]),
+            BrowserCommand::FullScreenshot { format: None }
+        );
+        assert_eq!(command(&["pdf"]), BrowserCommand::Pdf);
+    }
+
+    #[test]
+    fn a_wait_cannot_run_the_agents_own_script_in_the_page() {
+        let failed = parsed(&["wait", "--fn", "document.title == 'x'"]).unwrap_err();
+        assert!(failed.contains("--fn"), "{failed}");
+        assert!(failed.contains("password"), "{failed}");
+    }
+
+    #[test]
+    fn the_new_commands_refuse_what_they_cannot_read() {
+        for words in [
+            &["wait", "--load", "idle"][..],
+            &["wait", "--state", "gone"],
+            &["wait", "--timeout", "soon"],
+            &["wait", "--timeout", "999999999"],
+            &["console", "--limit", "0"],
+            &["console", "--limit", "many"],
+            &["network", "--limit", "-1"],
+            &["capture"],
+            &["capture", "pause"],
+            &["set"],
+            &["set", "device"],
+            &["set", "offline"],
+            &["full-screenshot", "--format", "gif"],
+        ] {
+            assert!(parsed(words).is_err(), "{words:?}");
+        }
     }
 
     #[test]

@@ -44,7 +44,97 @@ pub enum BrowserCommand {
     },
     /// Make the page counted `index` in the list the one commands act on.
     TabSwitch { index: usize },
+    /// Wait until every condition given holds on the page; with none, only
+    /// pause for `timeout`.
+    Wait {
+        /// An element this CSS selector matches.
+        #[serde(default)]
+        selector: Option<String>,
+        /// Whether the selector's element is to be `visible` (the default) or
+        /// `hidden`.
+        #[serde(default)]
+        state: Option<ElementState>,
+        /// Text the page shows.
+        #[serde(default)]
+        text: Option<String>,
+        /// A pattern of the page's address, `*` standing for anything but a
+        /// slash and `**` for anything.
+        #[serde(default)]
+        url: Option<String>,
+        /// How far the page has loaded.
+        #[serde(default)]
+        load: Option<LoadState>,
+        /// How long to wait, in milliseconds.
+        #[serde(default)]
+        timeout: Option<u64>,
+    },
+    /// What the page wrote to its console, the latest entries.
+    Console {
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    /// The requests the page made, the latest entries.
+    Network {
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    /// Start recording the page's console and requests afresh.
+    CaptureStart,
+    /// Stop recording them, keeping what was recorded.
+    CaptureStop,
+    /// Show the page as a device does, by the name of a size the browser
+    /// offers, or as it fills its room again.
+    SetDevice { name: String },
+    /// Take a picture of the whole page, beyond what is visible.
+    FullScreenshot {
+        #[serde(default)]
+        format: Option<ImageFormat>,
+    },
+    /// Export the page as a PDF.
+    Pdf,
 }
+
+/// Whether an element waited for is to be seen or not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ElementState {
+    Visible,
+    Hidden,
+}
+
+/// How far a page has loaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LoadState {
+    /// The document and what it holds have loaded.
+    Load,
+    /// The document has been read.
+    DomContentLoaded,
+    /// The page has loaded and has made no request for a moment.
+    NetworkIdle,
+}
+
+/// What a picture is encoded as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageFormat {
+    Png,
+    Jpeg,
+}
+
+impl ImageFormat {
+    pub fn mime(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+        }
+    }
+}
+
+/// How long a wait for a condition lasts when the command gives no time.
+pub const WAIT_DEFAULT_MS: u64 = 25_000;
+/// The longest a command may be told to wait.
+pub const WAIT_LONGEST_MS: u64 = 300_000;
 
 impl BrowserCommand {
     /// The command's name as the agent knows it.
@@ -58,6 +148,47 @@ impl BrowserCommand {
             Self::TabList => "tab list",
             Self::TabCreate { .. } => "tab create",
             Self::TabSwitch { .. } => "tab switch",
+            Self::Wait { .. } => "wait",
+            Self::Console { .. } => "console",
+            Self::Network { .. } => "network",
+            Self::CaptureStart => "capture start",
+            Self::CaptureStop => "capture stop",
+            Self::SetDevice { .. } => "set device",
+            Self::FullScreenshot { .. } => "full-screenshot",
+            Self::Pdf => "pdf",
+        }
+    }
+
+    /// Whether the command asks for something that can be done: a wait is
+    /// not longer than the longest, and a list is not of nothing.
+    pub fn check(&self) -> Result<(), String> {
+        match self {
+            Self::Wait {
+                timeout: Some(timeout),
+                ..
+            } if *timeout > WAIT_LONGEST_MS => Err(format!(
+                "timeout takes milliseconds, up to {WAIT_LONGEST_MS}"
+            )),
+            Self::Console { limit: Some(0) } | Self::Network { limit: Some(0) } => {
+                Err("limit takes a number above 0".into())
+            }
+            Self::SetDevice { name } if name.trim().is_empty() => Err("name the device".into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// How long the window may take over the command before the host stops
+    /// waiting for it: a wait outlives its own timeout, so that the window
+    /// reports the timeout rather than the host.
+    pub fn allowance(&self, base: std::time::Duration) -> std::time::Duration {
+        match self {
+            Self::Wait { timeout, .. } => {
+                let timeout = timeout.unwrap_or(WAIT_DEFAULT_MS).min(WAIT_LONGEST_MS);
+                base.max(
+                    std::time::Duration::from_millis(timeout) + std::time::Duration::from_secs(30),
+                )
+            }
+            _ => base,
         }
     }
 }
@@ -68,10 +199,20 @@ impl BrowserCommand {
 pub enum BrowserResult {
     /// What it read or did, as the agent is told it.
     Done { value: serde_json::Value },
-    /// The picture asked for: a PNG, in base64.
-    Image { data: String },
+    /// The picture asked for, in base64: a PNG unless `mime` says otherwise.
+    Image {
+        data: String,
+        #[serde(default = "png")]
+        mime: String,
+    },
+    /// The PDF asked for, in base64.
+    Pdf { data: String },
     /// It could not be done, for this reason, which the agent is told.
     Failed { text: String },
+}
+
+fn png() -> String {
+    "image/png".into()
 }
 
 /// A command the work host hands a window: `call` numbers it for the answer,
@@ -109,5 +250,100 @@ mod tests {
     fn every_command_has_a_name() {
         assert_eq!(BrowserCommand::Screenshot.name(), "screenshot");
         assert_eq!(BrowserCommand::TabSwitch { index: 1 }.name(), "tab switch");
+        assert_eq!(BrowserCommand::CaptureStart.name(), "capture start");
+        assert_eq!(BrowserCommand::Pdf.name(), "pdf");
+    }
+
+    #[test]
+    fn a_wait_names_its_conditions_the_way_orca_does_and_leaves_the_rest_out() {
+        let wait: BrowserCommand = serde_json::from_str(
+            r#"{"action":"wait","text":"Welcome","load":"networkidle","state":"hidden","timeout":500}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            wait,
+            BrowserCommand::Wait {
+                selector: None,
+                state: Some(ElementState::Hidden),
+                text: Some("Welcome".into()),
+                url: None,
+                load: Some(LoadState::NetworkIdle),
+                timeout: Some(500),
+            }
+        );
+        let load: BrowserCommand =
+            serde_json::from_str(r#"{"action":"wait","load":"domcontentloaded"}"#).unwrap();
+        assert!(matches!(
+            load,
+            BrowserCommand::Wait {
+                load: Some(LoadState::DomContentLoaded),
+                ..
+            }
+        ));
+        assert!(
+            serde_json::from_str::<BrowserCommand>(r#"{"action":"wait","load":"idle"}"#).is_err()
+        );
+    }
+
+    #[test]
+    fn a_command_that_asks_for_nothing_doable_is_refused() {
+        assert!(BrowserCommand::Console { limit: Some(0) }.check().is_err());
+        assert!(BrowserCommand::Network { limit: Some(0) }.check().is_err());
+        assert!(BrowserCommand::Console { limit: Some(1) }.check().is_ok());
+        assert!(
+            BrowserCommand::SetDevice { name: " ".into() }
+                .check()
+                .is_err()
+        );
+        let wait = |timeout| BrowserCommand::Wait {
+            selector: None,
+            state: None,
+            text: None,
+            url: None,
+            load: None,
+            timeout,
+        };
+        assert!(wait(Some(WAIT_LONGEST_MS)).check().is_ok());
+        assert!(wait(Some(WAIT_LONGEST_MS + 1)).check().is_err());
+        assert!(wait(None).check().is_ok());
+    }
+
+    #[test]
+    fn a_picture_without_a_kind_is_a_png() {
+        let image: BrowserResult =
+            serde_json::from_str(r#"{"type":"image","data":"AAAA"}"#).unwrap();
+        assert_eq!(
+            image,
+            BrowserResult::Image {
+                data: "AAAA".into(),
+                mime: "image/png".into()
+            }
+        );
+        assert_eq!(ImageFormat::Jpeg.mime(), "image/jpeg");
+    }
+
+    #[test]
+    fn a_wait_outlives_its_own_timeout_by_half_a_minute_and_nothing_else_is_given_more() {
+        use std::time::Duration;
+        let base = Duration::from_secs(60);
+        let wait = |timeout| BrowserCommand::Wait {
+            selector: None,
+            state: None,
+            text: None,
+            url: None,
+            load: None,
+            timeout,
+        };
+        assert_eq!(wait(None).allowance(base), base);
+        assert_eq!(
+            wait(Some(120_000)).allowance(base),
+            Duration::from_secs(150)
+        );
+        // A wait is never held longer than the longest it may be told to.
+        assert_eq!(
+            wait(Some(u64::MAX)).allowance(base),
+            Duration::from_millis(WAIT_LONGEST_MS) + Duration::from_secs(30)
+        );
+        assert_eq!(BrowserCommand::Pdf.allowance(base), base);
     }
 }

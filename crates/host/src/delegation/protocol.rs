@@ -134,7 +134,10 @@ impl Command {
                         | tsumugi_protocol::BrowserCommand::Click { .. }
                         | tsumugi_protocol::BrowserCommand::Fill { .. }
                         | tsumugi_protocol::BrowserCommand::TabCreate { .. }
-                        | tsumugi_protocol::BrowserCommand::TabSwitch { .. },
+                        | tsumugi_protocol::BrowserCommand::TabSwitch { .. }
+                        | tsumugi_protocol::BrowserCommand::SetDevice { .. }
+                        | tsumugi_protocol::BrowserCommand::CaptureStart
+                        | tsumugi_protocol::BrowserCommand::CaptureStop,
                 )
         )
     }
@@ -182,6 +185,109 @@ pub struct BrowserFill {
     pub element: String,
     /// What the field is to hold.
     pub value: String,
+}
+
+/// Wait until the page is as given.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserWait {
+    /// Wait for an element this CSS selector matches.
+    #[serde(default)]
+    pub selector: Option<String>,
+    /// Whether the element of `selector` is to be `visible` (the default) or `hidden`.
+    #[serde(default)]
+    pub state: Option<WaitState>,
+    /// Wait for this text to show on the page.
+    #[serde(default)]
+    pub text: Option<String>,
+    /// Wait for the page's address to match this pattern, `*` standing for anything but a slash and `**` for anything, such as `**/dashboard`.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Wait for the page to have loaded this far: `load`, `domcontentloaded`, or `networkidle` (loaded, and no request for half a second).
+    #[serde(default)]
+    pub load: Option<WaitLoad>,
+    /// How long to wait for the conditions, in milliseconds, 25000 when omitted; with no condition given, how long to pause. At most 300000.
+    #[serde(default)]
+    pub timeout: Option<u64>,
+}
+
+/// Whether the element waited for is to be seen.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitState {
+    Visible,
+    Hidden,
+}
+
+/// How far the page is to have loaded.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WaitLoad {
+    Load,
+    DomContentLoaded,
+    NetworkIdle,
+}
+
+/// What a picture is encoded as.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PictureFormat {
+    Png,
+    Jpeg,
+}
+
+impl From<WaitState> for tsumugi_protocol::ElementState {
+    fn from(state: WaitState) -> Self {
+        match state {
+            WaitState::Visible => Self::Visible,
+            WaitState::Hidden => Self::Hidden,
+        }
+    }
+}
+
+impl From<WaitLoad> for tsumugi_protocol::LoadState {
+    fn from(load: WaitLoad) -> Self {
+        match load {
+            WaitLoad::Load => Self::Load,
+            WaitLoad::DomContentLoaded => Self::DomContentLoaded,
+            WaitLoad::NetworkIdle => Self::NetworkIdle,
+        }
+    }
+}
+
+impl From<PictureFormat> for tsumugi_protocol::ImageFormat {
+    fn from(format: PictureFormat) -> Self {
+        match format {
+            PictureFormat::Png => Self::Png,
+            PictureFormat::Jpeg => Self::Jpeg,
+        }
+    }
+}
+
+/// The latest entries of what the page wrote or asked for.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserLimit {
+    /// How many of the latest entries to give: 100 when omitted, at most 500.
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// Show the page as a device does.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserSetDevice {
+    /// The name of a size the browser offers, such as `Mobile M`, `Tablet` or `Laptop L`; `Responsive` shows the page at the size of its room again. An unknown name is refused with the names there are.
+    pub name: String,
+}
+
+/// Take a picture of the whole page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserFullScreenshot {
+    /// `png` (the default) or `jpeg`.
+    #[serde(default)]
+    pub format: Option<PictureFormat>,
 }
 
 /// Open a page in your worktree's browser.

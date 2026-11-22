@@ -17,10 +17,12 @@ use serde_json::{Value, json};
 use tsumugi_core::content::{BrowserId, Tab};
 use tsumugi_core::msg::Msg;
 use tsumugi_model::EnvironmentId;
-use tsumugi_protocol::{BrowserCall, BrowserCommand, BrowserResult};
+use tsumugi_protocol::{BrowserCall, BrowserCommand, BrowserResult, ImageFormat};
 
-use super::{Browsers, Page, capture, name_of, shown_address, target};
+use super::{Browsers, Page, capture, name_of, shown_address, target, viewport};
 use crate::bridge::AppCtx;
+
+mod wait;
 
 /// How long a script that reads or acts on a page may take.
 const SCRIPT: Duration = Duration::from_secs(10);
@@ -58,6 +60,33 @@ fn current(
         .or_else(|| pages.first().copied())
 }
 
+/// What a page that is blank or still loading is told.
+const NOT_READY: &str =
+    "This page cannot be read yet: it is blank or still loading. Use goto, then try again";
+
+/// Whether `failure` is a page that is not ready yet, which a wait goes on
+/// through.
+fn not_ready(failure: &str) -> bool {
+    failure == NOT_READY
+}
+
+/// The width and height, in CSS pixels, a page gave for its document, when
+/// they are a size that can be pictured.
+fn document_size(said: &Value) -> Result<[f64; 2], String> {
+    const MOST: f64 = 16_384.0;
+    let side = |key: &str| {
+        said[key]
+            .as_f64()
+            .filter(|side| side.is_finite() && *side >= 1.0 && *side <= MOST)
+    };
+    match (side("width"), side("height")) {
+        (Some(width), Some(height)) => Ok([width, height]),
+        _ => Err(format!(
+            "The page's size cannot be pictured: it must be at most {MOST} pixels each way"
+        )),
+    }
+}
+
 /// What a script that answered `raw`, the JSON of its result, says: its
 /// answer, or why it could not give one.
 fn answer_of(raw: &str) -> Result<Value, String> {
@@ -72,10 +101,7 @@ fn answer_of(raw: &str) -> Result<Value, String> {
         other => other.clone(),
     };
     match value {
-        Value::Null => Err(
-            "This page cannot be read yet: it is blank or still loading. Use goto, then try again"
-                .into(),
-        ),
+        Value::Null => Err(NOT_READY.into()),
         Value::Object(map) if map.contains_key("error") => Err(map["error"]
             .as_str()
             .unwrap_or("the page refused")
@@ -119,6 +145,10 @@ fn script(command: &BrowserCommand) -> Result<Option<String>, String> {
                 json!({"interactive": interactive, "delta": delta, "selector": selector, "depth": depth}),
             ],
         ),
+        BrowserCommand::Console { limit } => call("console", vec![json!(limit)]),
+        BrowserCommand::Network { limit } => call("network", vec![json!(limit)]),
+        BrowserCommand::CaptureStart => call("capture", vec![json!(true)]),
+        BrowserCommand::CaptureStop => call("capture", vec![json!(false)]),
         BrowserCommand::Click { element } => call("click", vec![json!(reference(element)?)]),
         BrowserCommand::Fill { element, value } => {
             call("fill", vec![json!(reference(element)?), json!(value)])
@@ -192,12 +222,32 @@ fn page_of(
     browsers.0.borrow_mut().page(id, environment, app)
 }
 
+/// The address `page` shows, when it shows a page that can be photographed
+/// or exported.
+fn page_address(page: &Page) -> Result<String, String> {
+    let url = page.view.url().unwrap_or_default();
+    if url.is_empty() || url == "about:blank" {
+        return Err("The page is blank; use goto first".into());
+    }
+    Ok(url)
+}
+
+/// A picture of the page, as the host is handed it.
+fn picture(bytes: Vec<u8>, format: ImageFormat) -> BrowserResult {
+    use base64::Engine;
+    BrowserResult::Image {
+        data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        mime: format.mime().into(),
+    }
+}
+
 async fn execute(
     app: AppCtx,
     browsers: &Browsers,
     environment: &EnvironmentId,
     call: BrowserCall,
 ) -> Result<BrowserResult, String> {
+    call.command.check()?;
     // Only the pages of the worktree the session works in are reached: no
     // command names a page by anything that could lead elsewhere.
     let reach = app.reach(environment, &call.dir)?;
@@ -291,20 +341,83 @@ async fn execute(
         }
         BrowserCommand::Screenshot => {
             let id = now.ok_or("This worktree has no browser page open; use goto first")?;
-            if !shown(id) {
-                return Err("The page is not shown in the window, so it cannot be photographed: tab switch shows it while its worktree is the one shown in Tsumugi".into());
-            }
             let page = page_of(app, browsers, environment, id)?;
-            let url = page.view.url().unwrap_or_default();
-            if url.is_empty() || url == "about:blank" {
-                return Err("The page is blank; use goto first".into());
-            }
+            let url = page_address(&page)?;
             let (_, png) = capture::page(&page.view, &url).await?;
+            Ok(picture(png, ImageFormat::Png))
+        }
+        BrowserCommand::FullScreenshot { format } => {
+            let id = now.ok_or("This worktree has no browser page open; use goto first")?;
+            let page = page_of(app, browsers, environment, id)?;
+            let url = page_address(&page)?;
+            let size = document_size(&evaluate(&page.view, "window.tsumugiAgent?.size()").await?)?;
+            let format = format.unwrap_or(ImageFormat::Png);
+            let image = capture::whole(&page.view, &url, size).await?;
+            Ok(picture(capture::encode_as(&image, format)?, format))
+        }
+        BrowserCommand::Pdf => {
+            let id = now.ok_or("This worktree has no browser page open; use goto first")?;
+            let page = page_of(app, browsers, environment, id)?;
+            page_address(&page)?;
             use base64::Engine;
-            Ok(BrowserResult::Image {
-                data: base64::engine::general_purpose::STANDARD.encode(png),
+            Ok(BrowserResult::Pdf {
+                data: base64::engine::general_purpose::STANDARD
+                    .encode(capture::pdf(&page.view).await?),
             })
         }
+        BrowserCommand::SetDevice { name } => {
+            let id = now.ok_or("This worktree has no browser page open; use goto first")?;
+            let device = viewport::device(&name)?;
+            viewport::choose(id, device.id());
+            Ok(BrowserResult::Done {
+                value: match device {
+                    viewport::Device::Preset(preset) => json!({
+                        "device": preset.label.split(" — ").next().unwrap_or(preset.id),
+                        "width": preset.width,
+                        "height": preset.height,
+                        "shown": shown(id),
+                    }),
+                    viewport::Device::Responsive => {
+                        json!({"device": "Responsive", "shown": shown(id)})
+                    }
+                },
+            })
+        }
+        command @ BrowserCommand::Wait { .. } => match wait::plan(&command) {
+            Some(wait::Plan::Pause(pause)) => {
+                tokio::time::sleep(pause).await;
+                done(json!({"paused": pause.as_millis() as u64}))
+            }
+            Some(wait::Plan::Until {
+                conditions,
+                timeout,
+            }) => {
+                let id = now.ok_or("This worktree has no browser page open; use goto first")?;
+                let page = page_of(app, browsers, environment, id)?;
+                let script = conditions.script();
+                let address = || {
+                    shown_address(&page.view.url().unwrap_or_default(), |local| {
+                        app.work_port(environment, local)
+                    })
+                };
+                wait::until(&conditions, timeout, || async {
+                    if !conditions.address_holds(&address()) {
+                        return Ok(false);
+                    }
+                    if !conditions.asks_page() {
+                        return Ok(true);
+                    }
+                    match evaluate(&page.view, &script).await {
+                        Ok(said) => Ok(wait::held(&said)),
+                        Err(failure) if not_ready(&failure) => Ok(false),
+                        Err(failure) => Err(failure),
+                    }
+                })
+                .await?;
+                done(json!({"waited": true, "url": address()}))
+            }
+            None => unreachable!("a wait is planned"),
+        },
         command => {
             let id = now.ok_or("This worktree has no browser page open; use goto first")?;
             let page = page_of(app, browsers, environment, id)?;
@@ -351,6 +464,61 @@ mod tests {
                 .contains("blank or still loading")
         );
         assert!(answer_of("not json").is_err());
+    }
+
+    #[test]
+    fn the_logs_and_the_capture_are_asked_of_the_page_by_scripts_with_json_arguments() {
+        let ask = |command| script(&command).unwrap().unwrap();
+        assert_eq!(
+            ask(BrowserCommand::Console { limit: Some(20) }),
+            "window.tsumugiAgent?.console(20)"
+        );
+        assert_eq!(
+            ask(BrowserCommand::Network { limit: None }),
+            "window.tsumugiAgent?.network(null)"
+        );
+        assert_eq!(
+            ask(BrowserCommand::CaptureStart),
+            "window.tsumugiAgent?.capture(true)"
+        );
+        assert_eq!(
+            ask(BrowserCommand::CaptureStop),
+            "window.tsumugiAgent?.capture(false)"
+        );
+        // A picture, a pause and a device are not read off the page by a script.
+        for command in [
+            BrowserCommand::Pdf,
+            BrowserCommand::SetDevice { name: "x".into() },
+            BrowserCommand::FullScreenshot { format: None },
+        ] {
+            assert_eq!(script(&command), Ok(None));
+        }
+    }
+
+    #[test]
+    fn the_size_a_page_gives_for_its_document_is_taken_only_within_what_can_be_pictured() {
+        assert_eq!(
+            document_size(&json!({"width": 800, "height": 2400.5})),
+            Ok([800.0, 2400.5])
+        );
+        for bad in [
+            json!({}),
+            json!({"width": 0, "height": 100}),
+            json!({"width": -5, "height": 100}),
+            json!({"width": "wide", "height": 100}),
+            json!({"width": 100, "height": 1e12}),
+            json!({"width": 40000, "height": 100}),
+        ] {
+            assert!(document_size(&bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_page_that_is_still_loading_is_not_yet_as_a_wait_asks_and_other_failures_end_it() {
+        assert!(not_ready(
+            "This page cannot be read yet: it is blank or still loading. Use goto, then try again"
+        ));
+        assert!(!not_ready("The page went away"));
     }
 
     #[test]
