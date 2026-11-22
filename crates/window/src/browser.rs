@@ -5,6 +5,7 @@ mod annotations;
 mod capture;
 mod card;
 mod closed;
+mod downloads;
 mod feedback;
 mod find;
 mod markup;
@@ -334,6 +335,8 @@ struct Page {
     pending: Arc<Mutex<Option<String>>>,
     selection: Rc<RefCell<annotations::Selection>>,
     notes: Rc<RefCell<Vec<annotations::Note>>>,
+    /// What the page was asked to download, which the shelf lists.
+    downloads: Rc<RefCell<downloads::Shelf>>,
     next_note: Cell<u64>,
     // WebKit's context must outlive every view built with it.
     _context: Rc<RefCell<WebContext>>,
@@ -341,10 +344,19 @@ struct Page {
     child: crate::native_layer::Child,
 }
 
+/// What the pages of one environment share: the engine's context, which
+/// keeps their website data, and the downloads they were asked for.
+struct Site {
+    context: Rc<RefCell<WebContext>>,
+    downloads: Rc<RefCell<downloads::Shelf>>,
+    /// Whether a page of the context records its downloads already.
+    recording: Cell<bool>,
+}
+
 #[derive(Default)]
 struct Pool {
     pages: HashMap<BrowserId, Rc<Page>>,
-    contexts: HashMap<EnvironmentId, Rc<RefCell<WebContext>>>,
+    contexts: HashMap<EnvironmentId, Site>,
     #[cfg(target_os = "linux")]
     layer: Option<Rc<crate::native_layer::Layer>>,
 }
@@ -368,11 +380,20 @@ impl Pool {
             environment,
         );
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-        let context = self
+        let site = self
             .contexts
             .entry(environment.clone())
-            .or_insert_with(|| Rc::new(RefCell::new(WebContext::new(Some(directory)))))
-            .clone();
+            .or_insert_with(|| Site {
+                context: Rc::new(RefCell::new(WebContext::new(Some(directory)))),
+                downloads: Default::default(),
+                recording: Cell::new(false),
+            });
+        let context = site.context.clone();
+        let downloads = site.downloads.clone();
+        // WebKitGTK takes download handlers on the context the pages share,
+        // so one page of a context records for all of them; the other
+        // engines take them on the page.
+        let records = !cfg!(target_os = "linux") || !site.recording.replace(true);
         let mut context_ref = context.borrow_mut();
         let return_to = desktop.clone();
         // Native WebView callbacks run outside Dioxus's event dispatch.
@@ -398,6 +419,8 @@ impl Pool {
                 target(&saved.address, |port| app.forward_port(environment, port)).ok()
             })
             .unwrap_or_else(|| "about:blank".into());
+        let download_started = downloads.clone();
+        let download_finished = downloads.clone();
         let builder = WebViewBuilder::new_with_web_context(&mut context_ref)
             .with_url(start)
             .with_visible(false)
@@ -471,6 +494,20 @@ impl Pool {
                     }
                 }
             });
+        let builder = if records {
+            builder
+                .with_download_started_handler(move |url, path| {
+                    download_started
+                        .borrow_mut()
+                        .started(url, path, |path| path.exists());
+                    true
+                })
+                .with_download_completed_handler(move |url, path, ok| {
+                    download_finished.borrow_mut().finished(&url, path, ok);
+                })
+        } else {
+            builder
+        };
         #[cfg(target_os = "macos")]
         let builder = {
             use dioxus::desktop::wry::WebViewBuilderExtDarwin;
@@ -521,6 +558,7 @@ impl Pool {
             pending,
             selection,
             notes: Default::default(),
+            downloads,
             next_note: Cell::new(1),
             _context: context,
             #[cfg(target_os = "linux")]
@@ -646,6 +684,7 @@ pub(crate) fn BrowserWindow(
     let mut current = use_signal(String::new);
     let mut error = use_signal(String::new);
     let mut route = use_signal(|| reach::Route::Here);
+    let mut shelf = use_signal(Vec::<downloads::Row>::new);
     let mut inspecting = use_signal(|| false);
     let mut grabbing = use_signal(|| false);
     // The element picked and waiting for its instruction, and the page
@@ -712,6 +751,7 @@ pub(crate) fn BrowserWindow(
                 let mut bounds = None;
                 let mut ticks = 0u32;
                 let mut keeps_typed = retention::typed(id).is_some();
+                let mut downloads_seen = 0;
                 loop {
                     tokio::time::sleep(Duration::from_millis(50)).await;
                     ticks = ticks.wrapping_add(1);
@@ -797,6 +837,9 @@ pub(crate) fn BrowserWindow(
                     let chosen = viewport::chosen(id).unwrap_or("responsive");
                     if *size.peek() != chosen {
                         size.set(chosen);
+                    }
+                    if let Some(rows) = page.downloads.borrow().since(&mut downloads_seen) {
+                        shelf.set(rows);
                     }
                     if find::take(window) {
                         searching.open.set(true);
@@ -932,6 +975,7 @@ pub(crate) fn BrowserWindow(
             }
         }
     };
+    let shelves = page.clone();
     let back = page.clone();
     let forward = page.clone();
     let reload = page.clone();
@@ -1104,6 +1148,31 @@ pub(crate) fn BrowserWindow(
                 find::Bar { window, page: find::Searched(page.clone()), find: searching }
             }
             if !error().is_empty() { div { class: "browser-error", "{error}" } }
+            if !shelf.read().is_empty() {
+                downloads::Rows {
+                    rows: shelf(),
+                    on_open: {
+                        let page = shelves.clone();
+                        move |id| {
+                            if let Some(row) = page.downloads.borrow().row(id) {
+                                crate::bridge::open([row.path.to_string_lossy().into_owned()]);
+                            }
+                        }
+                    },
+                    on_show: {
+                        let page = shelves.clone();
+                        move |id| {
+                            if let Some(row) = page.downloads.borrow().row(id) {
+                                crate::bridge::open(["-R".into(), row.path.to_string_lossy().into_owned()]);
+                            }
+                        }
+                    },
+                    on_dismiss: {
+                        let page = shelves.clone();
+                        move |id| page.downloads.borrow_mut().dismiss(id)
+                    },
+                }
+            }
             if !sending.error.read().is_empty() && drawing().is_some() { div { class: "browser-error", "{sending.error}" } }
             if restoring() {
                 div { class: "browser-notice",

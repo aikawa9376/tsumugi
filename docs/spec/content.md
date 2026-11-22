@@ -168,6 +168,12 @@ way; the setting that lets it open Tsumugi's browser from the system's is off
 until it is chosen ([settings](settings.md)). Only web addresses are opened
 from a link.
 
+A file a page downloads is kept in this computer's downloads folder, never over
+a file already there. A shelf under the toolbar lists the downloads, running and
+ended, of the pages that share website data; a finished one can be opened or
+shown in its folder, and a row that is no longer running can be dismissed. The
+shelf does not follow a download's progress and cannot cancel it.
+
 Switching tabs or worktrees keeps the page and its unfinished input, and the
 tree keeps listing a worktree's pages while another is shown. A page that is
 not shown and goes unviewed for hours frees its memory, unless the settings

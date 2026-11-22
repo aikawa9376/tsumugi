@@ -22,6 +22,15 @@
 .browser-find .find-step { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border:0; border-radius:5px; background:transparent; color:var(--text-2); cursor:default; }
 .browser-find .find-step:hover { background:var(--line-strong); color:var(--text); }
 
+/* The downloads of the page, under the toolbar. */
+.browser-downloads { display:flex; flex-direction:column; max-height:9rem; overflow-y:auto; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--raised); }
+.browser-download { display:flex; align-items:center; gap:8px; padding:4px 10px; color:var(--text-2); font-size:var(--ui-font-small); }
+.browser-download .download-text { display:flex; flex-direction:column; flex:1; min-width:0; }
+.browser-download .download-name { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.browser-download .download-status { color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.browser-download .download-action { display:inline-flex; align-items:center; border:0; border-radius:4px; background:transparent; color:var(--text-2); font:inherit; padding:2px 8px; cursor:default; }
+.browser-download .download-action:hover { background:var(--line-strong); color:var(--text); }
+
 /* What the picker says while it is on. */
 .browser-banner { display:flex; align-items:center; gap:8px; padding:5px 12px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--raised); color:var(--text-2); font-size:var(--ui-font-small); }
 .browser-banner .banner-text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
