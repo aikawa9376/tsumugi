@@ -140,7 +140,8 @@ as any row there is, and is named after the site it shows. Its address field
 opens web pages and local development servers; the toolbar goes back, forward
 and reloads. Links requesting a new window open in the same page.
 
-Switching tabs keeps the page and its unfinished input. Closing a page ends
+Switching tabs or worktrees keeps the page and its unfinished input, and the
+tree keeps listing a worktree's pages while another is shown. Closing a page ends
 it; pages are not restored across application runs. Website data belongs to
 the environment, shared by its pages, and stays separate from that of other
 environments. On macOS before 14, website data is temporary.
@@ -151,8 +152,9 @@ a remote environment: localhost reaches this computer, not its work host.
 A development server the work machine runs is listed in the details panel's
 ports ([details](details.md#components)). In a page of a remote environment,
 an address on `localhost`, `127.0.0.1` or `[::1]` with a port reaches that
-port of the work machine through a forward, and the address field then shows
-the forwarded address; links inside the page are not rewritten.
+port of the work machine through a forward, however the page is opened, and
+the address field shows the address as the work machine writes it; links
+inside the page are not rewritten.
 
 Annotate lets the user select page elements, one after another until they
 turn it off or press Escape. Selecting an element shows a card by it, over a
