@@ -1,6 +1,7 @@
 //! The environment's issue queue and the request to put on it.
 use dioxus::prelude::*;
 use tsumugi_core::msg::Msg;
+use tsumugi_core::settings::{Discretion, Settings, Tier};
 use tsumugi_core::tree::Place;
 use tsumugi_model::{LocalIssue, LocalIssueState, NewLocalIssue, SessionId};
 use tsumugi_protocol::{Answer, Ask};
@@ -71,13 +72,13 @@ pub(crate) fn LocalIssues() -> Element {
     let sheet = app.overlays.read().local_issues.clone();
     rsx! {
         if let Some(sheet) = sheet {
-            IssueSheet { key: "{sheet.place.environment}:{sheet.place.worktree.display()}:{sheet.selected:?}", place: sheet.place, selected: sheet.selected }
+            IssueSheet { key: "{sheet.place.environment}:{sheet.place.worktree.display()}:{sheet.selected:?}:{sheet.leader}", place: sheet.place, selected: sheet.selected, leader: sheet.leader }
         }
     }
 }
 
 #[component]
-fn IssueSheet(place: Place, selected: Option<String>) -> Element {
+fn IssueSheet(place: Place, selected: Option<String>, leader: bool) -> Element {
     let app = use_context::<AppCtx>();
     let mut id = use_signal(|| SessionId::new().to_string());
     let mut dir = use_signal(|| place.worktree.to_string_lossy().into_owned());
@@ -131,6 +132,13 @@ fn IssueSheet(place: Place, selected: Option<String>) -> Element {
         });
     });
     let close = move || app.dispatch(Msg::LocalIssuesClose);
+    if leader {
+        return rsx! {
+            Dialog { kind: "local-issues-dialog", title: "Let the leader handle it · {name}", escapes: true, onclose: move |_| close(),
+                LeaderHandOver { environment: place.environment.clone(), issues }
+            }
+        };
+    }
     let field_key = move |event: Event<KeyboardData>| {
         event.stop_propagation();
         if crate::keys::of_field(&event).is_some_and(|key| key.key == "Escape") {
@@ -243,5 +251,136 @@ fn IssueRow(
                 }
             }
         }
+    }
+}
+
+/// What a tier starts, as the confirmation says it.
+fn tier_line(tier: Tier, settings: &Settings) -> String {
+    match settings.worker_tiers.resolve(tier) {
+        Ok(found) => {
+            let profile = found
+                .profile
+                .as_ref()
+                .map_or("default profile".to_string(), |p| p.to_string());
+            match found.model.as_str() {
+                "" => format!("{profile}, its default model"),
+                model => format!("{profile}, {model}"),
+            }
+        }
+        Err(_) => "not defined".to_string(),
+    }
+}
+
+/// The confirmation before issues go to a leader: which issues, how many
+/// workers at once, what each tier runs and what the leader may decide.
+#[component]
+fn LeaderHandOver(environment: tsumugi_model::EnvironmentId, issues: Vec<LocalIssue>) -> Element {
+    let app = use_context::<AppCtx>();
+    let settings = app.config.read().settings.clone();
+    let open: Vec<LocalIssue> = issues
+        .into_iter()
+        .filter(|issue| issue.state == LocalIssueState::Open)
+        .collect();
+    let mut chosen = use_signal({
+        let ids: Vec<String> = open.iter().map(|issue| issue.id.clone()).collect();
+        move || ids
+    });
+    let mut workers = use_signal(|| settings.leader.max_workers.to_string());
+    let mut busy = use_signal(|| false);
+    let mut error = use_signal(|| None::<String>);
+    let discretion = &settings.leader.discretion;
+    let decides = discretion.listed(Discretion::Decide);
+    let asks = discretion.listed(Discretion::Ask);
+    let ready = !busy() && !chosen().is_empty() && workers().parse::<u32>().is_ok_and(|n| n > 0);
+    let hand_over = move |_| {
+        if busy() {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        let ask = Ask::StartLeader {
+            issues: chosen(),
+            max_workers: workers().parse().ok(),
+        };
+        let answer = app.ask_in(&environment, ask);
+        spawn(async move {
+            match answer.await {
+                Answer::Done => app.dispatch(Msg::LocalIssuesClose),
+                Answer::Failed { text } | Answer::Unconfirmed { text } => error.set(Some(text)),
+                _ => error.set(Some("The work host did not confirm the leader".into())),
+            }
+            busy.set(false);
+        });
+    };
+    rsx! {
+        div { class: "local-issues-body leader-hand-over",
+            p { class: "adding-note", "The leader carries these issues through itself and asks you only for what is outside its discretion." }
+            h3 { "Issues" }
+            if open.is_empty() { p { class: "adding-note", "No open issues to hand over." } }
+            for issue in open {
+                label { key: "{issue.id}", class: "leader-issue",
+                    input {
+                        r#type: "checkbox",
+                        checked: chosen().contains(&issue.id),
+                        disabled: busy(),
+                        onchange: {
+                            let id = issue.id.clone();
+                            move |event| {
+                                let mut now = chosen();
+                                now.retain(|held| *held != id);
+                                if event.checked() { now.push(id.clone()); }
+                                chosen.set(now);
+                            }
+                        },
+                    }
+                    " {issue.title} "
+                    span { class: "local-issue-directory", "{issue.dir.display()}" }
+                }
+            }
+            h3 { "Workers" }
+            label { r#for: "leader-workers", "At most at once " }
+            input { id: "leader-workers", class: "adding-input", r#type: "number", min: "1", max: "32",
+                value: "{workers}", disabled: busy(), oninput: move |e| workers.set(e.value()) }
+            ul { class: "leader-tiers",
+                for tier in Tier::ALL {
+                    li { key: "{tier.name()}", "{tier.name()}: {tier_line(tier, &settings)}" }
+                }
+            }
+            p { class: "adding-note",
+                "Leader: {settings.leader.profile.as_ref().map_or(\"default profile\".to_string(), |p| p.to_string())}"
+                if !settings.leader.model.is_empty() { ", {settings.leader.model}" }
+            }
+            h3 { "It decides" }
+            ul { for act in decides { li { key: "{act.label()}", "{act.label()}" } } }
+            h3 { "It asks you first" }
+            ul { for act in asks { li { key: "{act.label()}", "{act.label()}" } } }
+            p { class: "adding-note", "Change these under Settings → Leader." }
+            if let Some(text) = error() { p { class: "adding-error", role: "alert", "{text}" } }
+            div { class: "local-issue-actions",
+                Button { onclick: move |_| app.dispatch(Msg::LocalIssuesClose), "Cancel" }
+                Button { kind: "primary", disabled: !ready, onclick: hand_over,
+                    if busy() { "Starting…" } else { "Start the leader" }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_confirmation_says_what_each_tier_runs_and_which_are_not_defined() {
+        let settings = Settings::parse(
+            "[worker_tiers.light]\nprofile = 'codex'\nmodel = 'gpt-5'\n[worker_tiers.standard]\nmodel = 'sonnet'\n",
+        )
+        .unwrap();
+        assert_eq!(tier_line(Tier::Light, &settings), "codex, gpt-5");
+        assert_eq!(
+            tier_line(Tier::Standard, &settings),
+            "default profile, sonnet"
+        );
+        assert_eq!(tier_line(Tier::Heavy, &settings), "not defined");
     }
 }

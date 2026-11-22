@@ -33,6 +33,7 @@ mod about;
 mod agents;
 mod details;
 mod environment;
+mod leader;
 mod neovim;
 mod profiles;
 mod specimen;
@@ -123,6 +124,7 @@ enum Pane {
     Console,
     Agents,
     Programs,
+    Leader,
     Keys,
     Serving,
     Removed,
@@ -132,11 +134,12 @@ enum Pane {
 impl Pane {
     /// The panes of the environment edited, in the order the sidebar lists
     /// them under its name.
-    const ENVIRONMENT: [Pane; 4] = [
+    const ENVIRONMENT: [Pane; 5] = [
         Pane::Environment,
         Pane::General,
         Pane::Agents,
         Pane::Programs,
+        Pane::Leader,
     ];
 
     /// The panes of this computer, for every environment, in the order the
@@ -155,7 +158,10 @@ impl Pane {
     /// Whether it changes nothing of the environment's work settings, so
     /// stays editable while the environment cannot be reached.
     fn available_offline(self) -> bool {
-        !matches!(self, Pane::General | Pane::Agents | Pane::Programs)
+        !matches!(
+            self,
+            Pane::General | Pane::Agents | Pane::Programs | Pane::Leader
+        )
     }
 
     /// Where what a pane available offline changes is kept, and for what.
@@ -183,6 +189,7 @@ impl Pane {
             Pane::Console => "Console panel",
             Pane::Agents => "Agents",
             Pane::Programs => "Programs",
+            Pane::Leader => "Leader",
             Pane::Keys => "Keys",
             Pane::About => "About",
         }
@@ -206,6 +213,7 @@ impl Pane {
             Pane::Console => Icon::Terminal,
             Pane::Agents => Icon::Message,
             Pane::Programs => Icon::Terminal2,
+            Pane::Leader => Icon::UsersGroup,
             Pane::Keys => Icon::Keyboard,
             Pane::About => Icon::InfoCircle,
         }
@@ -398,6 +406,7 @@ fn SettingsWindow(agents: AgentsWork) -> Element {
                             }
                         },
                         Pane::Programs => rsx! { ProgramsPane { now: now(), change } },
+                        Pane::Leader => rsx! { leader::LeaderPane { now: now(), change } },
                         Pane::Keys => rsx! { KeysPane {} },
                         Pane::Environment => rsx! { environment::EnvironmentPane {} },
                         Pane::Serving => rsx! { crate::serving_pane::ServingPane {} },

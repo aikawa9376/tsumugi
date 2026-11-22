@@ -100,6 +100,7 @@ pub enum Action {
     EnvironmentPair,
     WorkspaceAdd,
     LocalIssues,
+    LocalIssuesLeader,
     SavedCommands,
     ResourceAdd,
     ResourceEdit,
@@ -503,6 +504,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::LocalIssues, "local_issues.open", "open local issues for this environment and working directory, to queue work for its default agent ([details](local-issues.md))")
         .bar("Local Issues…", Icon::Bug)
         .row("Local issues…", Start),
+    S::new(A::LocalIssuesLeader, "local_issues.leader", "hand the open local issues of this environment to a leader session that carries them through itself within the discretion you set, after confirming the issues, its workers, their models and what it may decide ([details](leader-mode.md))")
+        .icon(Icon::UsersGroup)
+        .row("Let the leader handle it…", Start),
     S::new(A::SavedCommands, "saved_commands.open", "open the commands the project keeps, to search them, run one in the selected worktree after confirming it, and add, edit or delete one ([details](saved-commands.md))")
         .bar("Saved Commands…", Icon::Terminal)
         .row("Saved commands…", Start),
@@ -908,6 +912,7 @@ mod tests {
             EnvironmentPair,
             WorkspaceAdd,
             LocalIssues,
+            LocalIssuesLeader,
             SavedCommands,
             ResourceAdd,
             ResourceEdit,

@@ -207,6 +207,10 @@ mod tests {
         round_trips(ask);
         round_trips(Ask::CreateLocalIssue(new.clone()));
         round_trips(Ask::StartLocalIssue { id: new.id.clone() });
+        round_trips(Ask::StartLeader {
+            issues: vec![new.id.clone()],
+            max_workers: Some(3),
+        });
         round_trips(Ask::CancelLocalIssue { id: new.id.clone() });
         round_trips(Ask::RetryLocalIssue { id: new.id.clone() });
         round_trips(Ask::CloseLocalIssue { id: new.id.clone() });

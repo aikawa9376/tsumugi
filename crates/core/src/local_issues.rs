@@ -5,11 +5,21 @@ use crate::state::ViewState;
 use crate::tree::{self, Place, nav};
 
 pub(crate) fn open(state: &mut ViewState) -> Vec<Effect> {
+    show(state, false)
+}
+
+/// The sheet on its hand-over to a leader.
+pub(crate) fn open_for_leader(state: &mut ViewState) -> Vec<Effect> {
+    show(state, true)
+}
+
+fn show(state: &mut ViewState, leader: bool) -> Vec<Effect> {
     let place = chosen_place(state);
     state.overlays.menu = None;
     state.overlays.local_issues = Some(crate::overlay::LocalIssues {
         place,
         selected: None,
+        leader,
     });
     Vec::new()
 }

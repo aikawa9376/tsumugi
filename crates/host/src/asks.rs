@@ -41,6 +41,7 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
     if matches!(
         &ask,
         Ask::StartSession(_)
+            | Ask::StartLeader { .. }
             | Ask::StartTerminal(_)
             | Ask::OpenLogin { .. }
             | Ask::Clone { .. }
@@ -64,6 +65,10 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
     let answered = match ask {
         Ask::QueueLocalIssue(issue) => crate::local_issues::queue(watched, issue).await,
         Ask::CreateLocalIssue(issue) => crate::local_issues::create(watched, issue).await,
+        Ask::StartLeader {
+            issues,
+            max_workers,
+        } => crate::leader::start(watched, issues, max_workers).await,
         Ask::StartLocalIssue { id } => crate::local_issues::start_saved(watched, id).await,
         Ask::CancelLocalIssue { id } => crate::local_issues::change(watched, id, false).await,
         Ask::RetryLocalIssue { id } => crate::local_issues::change(watched, id, true).await,

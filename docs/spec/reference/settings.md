@@ -18,6 +18,7 @@ when the file does not name it, and what it does
 | `font_size` | number | `15.0` | The font's size, in points, from 8 to 32. |
 | `font_weight` | integer | `400` | The font's weight, from 100 to 900; Tsumugi's own comes in regular and bold, and draws other weights in the nearer of them. |
 | `keep_awake` | boolean | `true` | Keep the Mac from idle sleep while a session or a shell runs, the window open or not; the display still sleeps. |
+| `language` | string | `""` | The language a leader speaks to the user in, as a tag such as `ja` or `en`; empty for the language of the environment's locale. What the user does not read — prompts to sessions, commit messages, code — stays English whatever this says. |
 | `light_theme` | string | `"Solarized Light"` | The theme drawn while the appearance is light, by name: one tsumugi comes with, or one in `themes/` beside `settings.toml`. |
 | `notify_done` | boolean | `true` | Show a notification when a session finishes its turn while the window is not in front, as `notify_waiting` does. |
 | `notify_failed` | boolean | `true` | Show a notification when a session fails while the window is not in front, as `notify_waiting` does. |
@@ -157,6 +158,33 @@ What sessions may use of the work machine: how many run at once, how their build
 | `governor.max_sessions` | integer | `0` | The most agent sessions that run at once on the work machine. A session another opens waits for room, and is refused, with how many run, once it has waited too long; sessions you open yourself are never held. |
 | `governor.wait_seconds` | integer | `120` | How many seconds a session another opens waits for room under `max_sessions` before it is refused. |
 | `governor.worktree_warn_gib` | integer | `0` | The size, in GiB, of a repository's worktrees above which Tsumugi warns. |
+
+## `[leader]`
+
+Leader mode: the session that supervises the others, how many workers it keeps at work and how far its discretion goes.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `leader.max_workers` | integer | `2` | The most workers a leader keeps at work at once. |
+| `leader.model` | string | `""` | The model the leader's own session starts, one its profile lists; the agent's own default when empty. |
+| `leader.profile` | string |  | The profile the leader's own session starts from, by id; the profile new sessions start from when left out. |
+
+### `[leader.discretion]`
+
+What the leader decides itself and what it asks the user first.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `leader.discretion.close_issues` |  | `"decide"` | Closing an issue whose work is merged. |
+| `leader.discretion.delete_unmerged_branches` |  | `"ask"` | Deleting a branch that is not merged. |
+| `leader.discretion.design_choices` |  | `"ask"` | Settling a design question Orca does not settle. Where Orca does, the leader follows it without asking either way. |
+| `leader.discretion.force` |  | `"ask"` | Operations that discard work or rewrite history: forced pushes, hard resets, discarded changes, ending a session by force. |
+| `leader.discretion.manage_sessions` |  | `"decide"` | Starting, resuming and, once their work is done, closing the worker sessions it supervises. |
+| `leader.discretion.merge_over_changes` |  | `"ask"` | Merging into `main` while its checkout has uncommitted changes. |
+| `leader.discretion.merge_to_main` |  | `"decide"` | Merging a finished branch into `main` while the main checkout is clean. |
+| `leader.discretion.push` |  | `"ask"` | Pushing to a remote. |
+| `leader.discretion.remove_worktrees` |  | `"decide"` | Deleting the worktree of a finished branch. |
+| `leader.discretion.research_issues` |  | `"ask"` | Starting an issue that is only to be researched. |
 
 ## `[neovim]`
 
@@ -438,6 +466,40 @@ Machine resources sampled for a window that does not say which it shows; the Set
 | `usage.gpu` | boolean | `true` | Show the GPU's use, when the system reports it. |
 | `usage.memory` | boolean | `true` | Show the physical memory used, as a share of all of it. |
 | `usage.storage` | boolean | `true` | Show the capacity used on the startup volume. |
+
+## `[worker_tiers]`
+
+The tiers a leader starts its workers by, each one a profile and a model.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+
+### `[worker_tiers.heavy]`
+
+For large or hard tasks.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worker_tiers.heavy.model` | string | `""` | The model it starts, one its profile lists; the agent's own default when empty. |
+| `worker_tiers.heavy.profile` | string |  | The profile it starts from, by id; the profile new sessions start from when left out. |
+
+### `[worker_tiers.light]`
+
+For small tasks.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worker_tiers.light.model` | string | `""` | The model it starts, one its profile lists; the agent's own default when empty. |
+| `worker_tiers.light.profile` | string |  | The profile it starts from, by id; the profile new sessions start from when left out. |
+
+### `[worker_tiers.standard]`
+
+For tasks of ordinary size.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worker_tiers.standard.model` | string | `""` | The model it starts, one its profile lists; the agent's own default when empty. |
+| `worker_tiers.standard.profile` | string |  | The profile it starts from, by id; the profile new sessions start from when left out. |
 
 ## `[worktree_setup]`
 

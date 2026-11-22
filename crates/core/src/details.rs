@@ -870,12 +870,16 @@ impl Tie {
 }
 
 /// Another session the one shown worked with.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Related {
     pub name: String,
     /// Which session it is, while one runs under its name.
     pub id: Option<String>,
     pub ties: Vec<Tie>,
+    /// How a session the one shown opened stands, in one word.
+    pub state: Option<String>,
+    /// What that session last said of its work.
+    pub message: Option<String>,
 }
 
 /// The sessions `shown` worked with, among `sessions`: the one that opened
@@ -894,6 +898,7 @@ pub fn related(shown: &Session, sessions: &[&Session], peers: &[Peer]) -> Vec<Re
                 name: name.to_string(),
                 id: id.map(str::to_string),
                 ties: vec![tie],
+                ..Default::default()
             }),
         }
     };
@@ -904,7 +909,14 @@ pub fn related(shown: &Session, sessions: &[&Session], peers: &[Peer]) -> Vec<Re
         tie(&s.name, Some(&s.id), Tie::OpenedBy);
     }
     if let Some(own) = shown.delegation {
-        for s in others().filter(|s| s.parent == Some(own)) {
+        // The ones waiting on the user first: a leader's questions come
+        // before the work in hand.
+        let mut opened: Vec<&Session> = others()
+            .filter(|s| s.parent == Some(own))
+            .copied()
+            .collect();
+        opened.sort_by_key(|s| !matches!(s.state, tsumugi_model::State::Waiting(_)));
+        for s in opened {
             tie(&s.name, Some(&s.id), Tie::Opened);
         }
     }
@@ -915,6 +927,12 @@ pub fn related(shown: &Session, sessions: &[&Session], peers: &[Peer]) -> Vec<Re
         }
         if p.received {
             tie(&p.name, id, Tie::Received);
+        }
+    }
+    for related in out.iter_mut().filter(|r| r.ties.contains(&Tie::Opened)) {
+        if let Some(worker) = others().find(|s| Some(&s.id) == related.id.as_ref()) {
+            related.state = Some(worker.state.word().to_string());
+            related.message = worker.status_message.clone().filter(|m| !m.is_empty());
         }
     }
     out
@@ -2437,7 +2455,57 @@ mod tests {
             name: name.into(),
             id: id.map(str::to_string),
             ties: ties.to_vec(),
+            ..Default::default()
         }
+    }
+
+    fn standing(mut related: Related, state: &str, message: Option<&str>) -> Related {
+        related.state = Some(state.into());
+        related.message = message.map(str::to_string);
+        related
+    }
+
+    #[test]
+    fn the_sessions_a_leader_opened_show_how_each_stands_and_what_it_last_said() {
+        let lead = live("1", "lead", "c-lead", "");
+        let building = tsumugi_model::testing::session("2")
+            .name("api")
+            .delegation(record("c-api").unwrap())
+            .parent(record("c-lead").unwrap())
+            .working()
+            .says("running the tests")
+            .build();
+        let all = [&lead, &building];
+        assert_eq!(
+            related(&lead, &all, &[]),
+            [standing(
+                tied("api", Some("2"), &[Tie::Opened]),
+                "working",
+                Some("running the tests")
+            )]
+        );
+    }
+
+    #[test]
+    fn a_worker_waiting_on_the_user_is_listed_before_the_workers_that_are_not() {
+        let lead = live("1", "lead", "c-lead", "");
+        let make = |id: &str, name: &str, own: &str| {
+            tsumugi_model::testing::session(id)
+                .name(name)
+                .delegation(record(own).unwrap())
+                .parent(record("c-lead").unwrap())
+        };
+        let building = make("2", "api", "c-api").working().build();
+        let asking = make("3", "web", "c-web")
+            .waiting(tsumugi_model::Wait::Input)
+            .says("which of the two?")
+            .build();
+        let all = [&lead, &building, &asking];
+        let listed: Vec<_> = related(&lead, &all, &[])
+            .into_iter()
+            .map(|r| r.name)
+            .collect();
+        assert_eq!(listed, ["web", "api"]);
     }
 
     #[test]
@@ -2451,7 +2519,7 @@ mod tests {
             related(&shown, &all, &[]),
             [
                 tied("lead", Some("1"), &[Tie::OpenedBy]),
-                tied("tests", Some("3"), &[Tie::Opened]),
+                standing(tied("tests", Some("3"), &[Tie::Opened]), "idle", None),
             ]
         );
     }
@@ -2481,7 +2549,11 @@ mod tests {
         let all = [&shown, &child];
         assert_eq!(
             related(&shown, &all, &[peer("tests", false, true)]),
-            [tied("tests", Some("3"), &[Tie::Opened, Tie::Received])]
+            [standing(
+                tied("tests", Some("3"), &[Tie::Opened, Tie::Received]),
+                "idle",
+                None
+            )]
         );
     }
 

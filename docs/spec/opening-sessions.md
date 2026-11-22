@@ -54,6 +54,9 @@ cannot act as another.
   run on the work machine, or the worktree's setup failed, which keeps it
   ([worktree setup](worktree-setup.md)). A model must be one its profile lists
   (see `models`); any other is refused, naming the listed ones.
+  A start may name a **tier** instead of an agent, profile and model; the
+  settings say what each tier starts, and one they do not define is refused
+  ([worker tiers](leader-mode.md#worker-tiers)).
   A start that names a session to **resume**, by its code, its id or its
   conversation, brings an ended session's conversation back as
   [Resume Conversation](sessions.md#resuming-a-past-conversation) does: in
