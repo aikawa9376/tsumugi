@@ -2,8 +2,8 @@
 
 use dioxus::prelude::*;
 use tsumugi_model::config::{
-    CodexOptions, CursorOptions, OpenCodeOptions, PiOptions, SessionOptions, format_list,
-    format_rules, parse_list, parse_rules,
+    CodexOptions, CursorOptions, GenericOptions, OpenCodeOptions, PiOptions, PromptDelivery,
+    SessionOptions, format_list, format_rules, parse_list, parse_rules,
 };
 
 use super::Edits;
@@ -156,6 +156,50 @@ pub(super) fn CursorGroup(
                 datalist { id: "cursor-sandbox",
                     for value in ["enabled", "disabled"] {
                         option { key: "{value}", value: value }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// How a command agent's first prompt reaches its program; the program
+/// itself is the launch command below.
+#[component]
+pub(super) fn GenericGroup(
+    title: String,
+    options: GenericOptions,
+    set: Callback<GenericOptions>,
+) -> Element {
+    let edits = Edits::new(&options, set);
+    let delivery = match options.prompt {
+        PromptDelivery::Argv => "argv",
+        PromptDelivery::Separated => "separated",
+        PromptDelivery::Flag => "flag",
+        PromptDelivery::Typed => "typed",
+    };
+    rsx! {
+        SettingGroup { title: "{title}",
+            SettingRow { label: "First prompt", hint: "How the first prompt reaches the program: as its last argument, after `--`, after a flag, or not at all.",
+                Select { label: "First prompt", value: delivery,
+                    choices: choices_of([("argv", "Last argument"), ("separated", "After --"), ("flag", "After a flag"), ("typed", "Not sent")]),
+                    onchange: edits.of(|o, value: String| {
+                        o.prompt = match value.as_str() {
+                            "separated" => PromptDelivery::Separated,
+                            "flag" => PromptDelivery::Flag,
+                            "typed" => PromptDelivery::Typed,
+                            _ => PromptDelivery::Argv,
+                        }
+                    }),
+                }
+            }
+            if options.prompt == PromptDelivery::Flag {
+                SettingRow { label: "Prompt flag", hint: "The flag that takes the prompt.",
+                    TextField {
+                        value: options.prompt_flag,
+                        aria_label: "Prompt flag",
+                        placeholder: "-i",
+                        onchange: edits.of(|o, value: String| o.prompt_flag = value.trim().into()),
                     }
                 }
             }

@@ -185,6 +185,40 @@ pub struct CursorOptions {
     pub sandbox: String,
 }
 
+/// How a command-line agent without an adapter of its own is handed the first
+/// prompt of a session.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PromptDelivery {
+    #[default]
+    Argv,
+    Separated,
+    Flag,
+    Typed,
+}
+
+/// How sessions of any other command-line agent start: the program and the
+/// arguments it always gets are the profile's `launch.command`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GenericOptions {
+    /// How the first prompt reaches the program: `argv`, as the last
+    /// argument; `separated`, as the last argument after `--`, for a program
+    /// whose own words it could be taken for; `flag`, after the flag
+    /// `prompt_flag` names; or `typed`, not at all, the program starting bare
+    /// with the prompt left to be typed into it.
+    pub prompt: PromptDelivery,
+    /// The flag that takes the prompt, for `prompt = "flag"`.
+    pub prompt_flag: String,
+    /// A command agent is asked for no model, and the draft's model choice has
+    /// nowhere to go: this stays empty and is never written.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub model: String,
+}
+
 /// One of OpenCode's permission rules.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]

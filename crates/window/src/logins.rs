@@ -96,7 +96,7 @@ pub(crate) fn login_terminal(remote: bool) -> Result<(), &'static str> {
 pub(crate) fn without_login(agent: Agent) -> Option<&'static str> {
     match agent {
         Agent::OpenCode => Some("Free and local models need no login."),
-        Agent::Claude | Agent::Codex | Agent::Pi | Agent::Cursor => None,
+        Agent::Claude | Agent::Codex | Agent::Pi | Agent::Cursor | Agent::Generic => None,
     }
 }
 

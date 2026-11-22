@@ -394,7 +394,7 @@ mod tests {
         assert!(s.contains("| `profile` | string | `\"claude\"` |"), "{s}");
         assert!(
             s.contains(
-                "| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode`, `cursor` |  |"
+                "| `profiles.agent` | one of `claude`, `codex`, `pi`, `opencode`, `cursor`, `generic` |  |"
             ),
             "{s}"
         );

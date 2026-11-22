@@ -262,6 +262,26 @@ mod tests {
         let ask = Ask::DeleteSavedCommand { id: new.id.clone() };
         assert!(ask.mutates());
         round_trips(ask);
+        let ask = Ask::SetCheckpoint {
+            worktree: "/work trees/日本語".into(),
+            comment: tsumugi_model::Set::To("waiting on CI".into()),
+            status: tsumugi_model::Set::Clear,
+        };
+        assert!(ask.mutates());
+        round_trips(ask);
+        round_trips(Ask::SetCheckpoint {
+            worktree: "/w".into(),
+            comment: tsumugi_model::Set::Keep,
+            status: tsumugi_model::Set::To(tsumugi_model::WorktreeStatus::InReview),
+        });
+        round_trips(TreeChange::Checkpoints {
+            checkpoints: vec![tsumugi_model::Checkpoint {
+                worktree: "/w".into(),
+                comment: "waiting on CI".into(),
+                status: Some(tsumugi_model::WorktreeStatus::InReview),
+                updated_ms: 7,
+            }],
+        });
         round_trips(TreeChange::SavedCommands {
             commands: vec![tsumugi_model::SavedCommand {
                 id: command.id,

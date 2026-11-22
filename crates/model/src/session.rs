@@ -27,15 +27,30 @@ pub enum Agent {
     Pi,
     OpenCode,
     Cursor,
+    // Any other command-line agent, started as its profile names it. Not a
+    // doc comment: that would turn the schema's list of agents into a list of
+    // described cases.
+    Generic,
 }
 
 impl Agent {
-    pub const ALL: [Self; 5] = [
+    /// The agents Tsumugi comes with a profile for: every one but the command
+    /// agent, which has no program of its own to start.
+    pub const BUILTIN: [Self; 5] = [
         Self::Claude,
         Self::Codex,
         Self::Pi,
         Self::OpenCode,
         Self::Cursor,
+    ];
+
+    pub const ALL: [Self; 6] = [
+        Self::Claude,
+        Self::Codex,
+        Self::Pi,
+        Self::OpenCode,
+        Self::Cursor,
+        Self::Generic,
     ];
     pub const fn key(self) -> &'static str {
         match self {
@@ -44,6 +59,7 @@ impl Agent {
             Self::Pi => "pi",
             Self::OpenCode => "opencode",
             Self::Cursor => "cursor",
+            Self::Generic => "generic",
         }
     }
 
@@ -55,6 +71,7 @@ impl Agent {
             Self::Pi => "Pi",
             Self::OpenCode => "OpenCode",
             Self::Cursor => "Cursor CLI",
+            Self::Generic => "Command",
         }
     }
 
@@ -77,6 +94,7 @@ impl Agent {
             "pi" => Some(Self::Pi),
             "opencode" => Some(Self::OpenCode),
             "cursor" => Some(Self::Cursor),
+            "generic" => Some(Self::Generic),
             _ => None,
         }
     }
@@ -167,13 +185,13 @@ impl Rest {
 impl Session {
     /// Whether it can be put to sleep and woken into its conversation again:
     /// the host keeps a record of it, it told its conversation, it is not
-    /// Cursor's, which cannot be resumed from Tsumugi, and it does not rest
-    /// already.
+    /// Cursor's or a command agent's, which cannot be resumed from Tsumugi,
+    /// and it does not rest already.
     pub fn wakeable(&self) -> bool {
         self.rest.is_none()
             && self.delegation.is_some()
             && !self.session_id.is_empty()
-            && self.agent != Agent::Cursor
+            && !matches!(self.agent, Agent::Cursor | Agent::Generic)
     }
 
     /// Whether the session was started to read only.
@@ -320,6 +338,8 @@ mod tests {
         s.session_id = "c1".into();
         s.agent = Agent::Cursor;
         assert!(!s.wakeable(), "Cursor cannot be resumed");
+        s.agent = Agent::Generic;
+        assert!(!s.wakeable(), "nor can a command agent");
         s.agent = Agent::Claude;
         s.rest = Some(Rest::Hibernated);
         assert!(!s.wakeable(), "already asleep");

@@ -20,6 +20,11 @@ pub fn login(context: &AgentContext) -> Started {
 
 /// Whether the CLI says `context`'s login is logged in, asked in `dir`.
 pub async fn standing(context: &AgentContext, dir: &Path) -> LoginStanding {
+    // A command agent has no login to ask about; whether it is installed is
+    // all there is to tell.
+    if context.agent() == tsumugi_model::Agent::Generic {
+        return crate::generic::standing(context, std::env::var_os("PATH").as_deref());
+    }
     let adapter = adapter(context.agent());
     let started = adapter.launch(context, adapter.status_args(context), Vec::new());
     match crate::output(started, dir, ASKED_FOR).await {
@@ -147,7 +152,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_cli_that_is_not_installed_is_told_apart() {
-        for agent in Agent::ALL {
+        // A command agent is looked for on the path instead, see `generic`.
+        for agent in Agent::ALL.into_iter().filter(|a| *a != Agent::Generic) {
             let mut context = AgentContext::builtin(agent);
             context.launch.command = vec!["/nonexistent/tsumugi-test-cli".into()];
             assert_eq!(

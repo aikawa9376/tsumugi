@@ -6,6 +6,7 @@
 mod appearance;
 mod asks;
 pub mod awake;
+mod checkpoints;
 pub mod cleanup;
 pub mod cli;
 mod command;

@@ -38,6 +38,9 @@ pub struct TreeWork {
     /// What each project keeps as its saved commands.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub saved_commands: Vec<tsumugi_model::SavedCommand>,
+    /// What each worktree says of how its work stands, by its path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checkpoints: Vec<tsumugi_model::Checkpoint>,
     /// The schedules the host runs, with when each is next due.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub schedules: Vec<tsumugi_model::Schedule>,
@@ -117,6 +120,10 @@ pub enum TreeChange {
     SavedCommands {
         commands: Vec<tsumugi_model::SavedCommand>,
     },
+    /// What each worktree says of how its work stands.
+    Checkpoints {
+        checkpoints: Vec<tsumugi_model::Checkpoint>,
+    },
     Schedules {
         schedules: Vec<tsumugi_model::Schedule>,
     },
@@ -163,6 +170,7 @@ impl TreeWork {
             TreeChange::LocalIssues { issues } => set(&mut self.local_issues, issues),
             TreeChange::Resources { resources } => set(&mut self.resources, resources),
             TreeChange::SavedCommands { commands } => set(&mut self.saved_commands, commands),
+            TreeChange::Checkpoints { checkpoints } => set(&mut self.checkpoints, checkpoints),
             TreeChange::Schedules { schedules } => set(&mut self.schedules, schedules),
             TreeChange::Notices { notices } => set(&mut self.notices, notices),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),

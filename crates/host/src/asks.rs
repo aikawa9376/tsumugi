@@ -77,6 +77,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::DeleteLocalIssue { id } => crate::local_issues::delete(watched, id).await,
         Ask::SaveCommand(new) => crate::saved_commands::save(watched, new).await,
         Ask::DeleteSavedCommand { id } => crate::saved_commands::delete(watched, id).await,
+        Ask::SetCheckpoint {
+            worktree,
+            comment,
+            status,
+        } => crate::checkpoints::set(watched, worktree, comment, status).await,
         Ask::SaveSchedule(new) => crate::schedules::save(watched, new).await,
         Ask::EditSchedule { id, edit } => crate::schedules::edit(watched, id, edit).await,
         Ask::SetScheduleEnabled { id, enabled } => {
@@ -320,9 +325,15 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                     .answer(crate::remote::active())
             }
             Some((command, rest)) if command == "worktree" => {
-                crate::worktree_cli::run(watched, rest, &cwd)
-                    .await
-                    .answer(crate::remote::active())
+                if matches!(rest.first().map(String::as_str), Some("set" | "show")) {
+                    crate::checkpoints::run(watched, rest, &cwd)
+                        .await
+                        .answer(crate::remote::active())
+                } else {
+                    crate::worktree_cli::run(watched, rest, &cwd)
+                        .await
+                        .answer(crate::remote::active())
+                }
             }
             Some((command, rest)) if command == "schedule" => {
                 crate::schedule_cli::run(watched, rest, &cwd, input)

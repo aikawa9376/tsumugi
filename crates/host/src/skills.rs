@@ -244,7 +244,9 @@ fn targets(env: &Env, named: &[String]) -> Result<Vec<(Vec<String>, PathBuf)>, S
     let mut grouped: Vec<(Vec<String>, PathBuf)> = Vec::new();
     for profile in chosen {
         let context = tsumugi_agents::AgentContext::new(profile, "");
-        let folder = tsumugi_agents::skills::skills_folder(&context, &env.home);
+        let Some(folder) = tsumugi_agents::skills::skills_folder(&context, &env.home) else {
+            continue;
+        };
         if named.is_empty() && !folder.parent().is_some_and(|state| state.is_dir()) {
             continue;
         }

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Agent;
 use crate::config::{
-    CodexOptions, CursorOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
+    CodexOptions, CursorOptions, GenericOptions, Launch, OpenCodeOptions, PiOptions, SessionOptions,
 };
 
 /// Why a string cannot be an id.
@@ -118,6 +118,7 @@ pub enum AgentOptions {
     Pi(PiOptions),
     OpenCode(OpenCodeOptions),
     Cursor(CursorOptions),
+    Generic(GenericOptions),
 }
 
 impl AgentOptions {
@@ -129,6 +130,7 @@ impl AgentOptions {
             Agent::Pi => Self::Pi(PiOptions::default()),
             Agent::OpenCode => Self::OpenCode(OpenCodeOptions::default()),
             Agent::Cursor => Self::Cursor(CursorOptions::default()),
+            Agent::Generic => Self::Generic(GenericOptions::default()),
         }
     }
 
@@ -139,6 +141,7 @@ impl AgentOptions {
             Self::Pi(_) => Agent::Pi,
             Self::OpenCode(_) => Agent::OpenCode,
             Self::Cursor(_) => Agent::Cursor,
+            Self::Generic(_) => Agent::Generic,
         }
     }
 
@@ -151,6 +154,7 @@ impl AgentOptions {
             Self::Pi(options) => &options.model,
             Self::OpenCode(options) => &options.model,
             Self::Cursor(options) => &options.model,
+            Self::Generic(options) => &options.model,
         }
     }
 
@@ -161,6 +165,7 @@ impl AgentOptions {
             Self::Pi(options) => &mut options.model,
             Self::OpenCode(options) => &mut options.model,
             Self::Cursor(options) => &mut options.model,
+            Self::Generic(options) => &mut options.model,
         }
     }
 
@@ -235,6 +240,21 @@ impl AgentOptions {
     pub fn cursor_mut(&mut self) -> Option<&mut CursorOptions> {
         match self {
             Self::Cursor(options) => Some(options),
+            _ => None,
+        }
+    }
+
+    /// A command agent's options; none for another agent's.
+    pub fn generic(&self) -> Option<&GenericOptions> {
+        match self {
+            Self::Generic(options) => Some(options),
+            _ => None,
+        }
+    }
+
+    pub fn generic_mut(&mut self) -> Option<&mut GenericOptions> {
+        match self {
+            Self::Generic(options) => Some(options),
             _ => None,
         }
     }
@@ -331,7 +351,8 @@ struct ProfileEntry {
     /// What the profile is called; empty for its id.
     #[serde(default)]
     name: String,
-    /// The agent it starts, `claude`, `codex`, `pi`, `opencode` or `cursor`.
+    /// The agent it starts, `claude`, `codex`, `pi`, `opencode`, `cursor` or
+    /// `generic`, any other command-line agent, whose program is `launch.command`.
     agent: Agent,
     /// The folder of its own its agent keeps its login, history and settings
     /// in, as an absolute path without `~`, `.` or `..` and with no `/`
@@ -374,6 +395,10 @@ struct ProfileEntry {
     /// values leave Cursor's own settings in effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cursor: Option<CursorOptions>,
+    /// How the first prompt reaches a command agent, for a `generic`
+    /// profile, which names its program in `launch.command`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    generic: Option<GenericOptions>,
     /// Whether files written while profiles were archived rather than
     /// deleted kept it for the sessions that ran from it alone; read by
     /// [`earlier`] alone.
@@ -408,12 +433,19 @@ impl ProfileEntry {
     /// The profile as written, whatever connection it names.
     fn profile(self) -> Result<AgentProfile, String> {
         let agent = self.agent;
+        if agent == Agent::Generic && self.home.is_some() {
+            return Err(format!(
+                "profile `{}` starts a command agent, which keeps no login of its own: leave `home` out",
+                self.id
+            ));
+        }
         let held = [
             (Agent::Claude, self.claude.is_some()),
             (Agent::Codex, self.codex.is_some()),
             (Agent::Pi, self.pi.is_some()),
             (Agent::OpenCode, self.opencode.is_some()),
             (Agent::Cursor, self.cursor.is_some()),
+            (Agent::Generic, self.generic.is_some()),
         ];
         if let Some((other, _)) = held.iter().find(|(a, held)| *held && *a != agent) {
             return Err(format!(
@@ -429,6 +461,7 @@ impl ProfileEntry {
             Agent::Pi => AgentOptions::Pi(self.pi.unwrap_or_default()),
             Agent::OpenCode => AgentOptions::OpenCode(self.opencode.unwrap_or_default()),
             Agent::Cursor => AgentOptions::Cursor(self.cursor.unwrap_or_default()),
+            Agent::Generic => AgentOptions::Generic(self.generic.unwrap_or_default()),
         };
         Ok(AgentProfile {
             home: self.home,
@@ -444,14 +477,15 @@ impl ProfileEntry {
 impl From<AgentProfile> for ProfileEntry {
     fn from(profile: AgentProfile) -> Self {
         let agent = profile.agent();
-        let (mut claude, mut codex, mut pi, mut opencode, mut cursor) =
-            (None, None, None, None, None);
+        let (mut claude, mut codex, mut pi, mut opencode, mut cursor, mut generic) =
+            (None, None, None, None, None, None);
         match profile.options {
             AgentOptions::Claude(options) => claude = Some(options),
             AgentOptions::Codex(options) => codex = Some(options),
             AgentOptions::Pi(options) => pi = Some(options),
             AgentOptions::OpenCode(options) => opencode = Some(options),
             AgentOptions::Cursor(options) => cursor = Some(options),
+            AgentOptions::Generic(options) => generic = Some(options),
         }
         Self {
             id: profile.id,
@@ -466,6 +500,7 @@ impl From<AgentProfile> for ProfileEntry {
             pi,
             opencode,
             cursor,
+            generic,
             archived: false,
         }
     }
@@ -585,6 +620,7 @@ mod tests {
                 options.pi().is_some(),
                 options.opencode().is_some(),
                 options.cursor().is_some(),
+                options.generic().is_some(),
             ];
             assert_eq!(held.iter().filter(|h| **h).count(), 1, "{agent:?}");
         }

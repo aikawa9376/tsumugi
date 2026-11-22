@@ -412,17 +412,19 @@ impl Settings {
 
     /// The profile whose id is `id`: one of the profiles, or the one tsumugi
     /// comes with for an agent that has none, as [`Settings::profile_of`]
-    /// starts it.
+    /// starts it, or a command-line agent of the catalog.
     pub fn find_profile(&self, id: &ProfileId) -> Option<Cow<'_, AgentProfile>> {
         if let Some(profile) = self.profiles.iter().find(|p| &p.id == id) {
             return Some(Cow::Borrowed(profile));
         }
-        Agent::ALL
+        Agent::BUILTIN
             .into_iter()
             .filter(|a| self.position_of(*a).is_none())
             .map(|a| self.own(a))
             .find(|p| &p.id == id)
             .map(Cow::Owned)
+            // A command-line agent of the catalog, when no profile takes its id.
+            .or_else(|| tsumugi_model::catalog::find(id).map(|entry| Cow::Owned(entry.profile())))
     }
 
     /// The profile [`Settings::profile_of`] names, added to the profiles when
@@ -512,7 +514,7 @@ fn with_login(label: String, home: Option<&Path>) -> String {
 /// Every profile a new session can start from, in the order Settings lists
 /// them: the profiles, and tsumugi's own for an agent that has none.
 pub fn startable(settings: &Settings) -> Vec<AgentProfile> {
-    let own = Agent::ALL
+    let own = Agent::BUILTIN
         .into_iter()
         .filter(|a| !settings.profiles.iter().any(|p| p.agent() == *a))
         .map(|a| settings.profile_of(a).into_owned());

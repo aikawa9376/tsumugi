@@ -182,6 +182,16 @@ fn took(asked: &Result<Vec<u8>, tsumugi_net::Error>) -> Result<(), String> {
 
 /// Pairs as `pair_with` does and adds an environment for the work machine.
 pub fn pair_cli(address: &str, name: Option<&str>, show: impl Fn(&str)) -> Result<String, String> {
+    pair_cli_as(address, name, &format!("Work machine at {address}"), show)
+}
+
+/// [`pair_cli`], naming the environment it adds `environment_name`.
+pub fn pair_cli_as(
+    address: &str,
+    name: Option<&str>,
+    environment_name: &str,
+    show: impl Fn(&str),
+) -> Result<String, String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -207,11 +217,10 @@ pub fn pair_cli(address: &str, name: Option<&str>, show: impl Fn(&str)) -> Resul
         ));
     }
     let expected = catalog.revision;
-    let environment_name = format!("Work machine at {address}");
     catalog
         .environments
         .push(crate::environments::Environment::new(
-            &environment_name,
+            environment_name,
             target,
         ));
     catalog.save(&path, expected)?;

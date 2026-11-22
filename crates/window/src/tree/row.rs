@@ -28,6 +28,16 @@ use crate::nav::{self, Item};
 use crate::rename::{Place as RenamePlace, SessionName};
 use crate::shell::overlays::menu_opener;
 
+/// What the worktree at `path` says of how its work stands, for its row.
+fn checkpoint_line(
+    work: Option<&tsumugi_protocol::WorkSnapshot>,
+    path: &std::path::Path,
+) -> String {
+    work.and_then(|work| work.tree.checkpoints.iter().find(|c| c.worktree == path))
+        .map(|c| c.line())
+        .unwrap_or_default()
+}
+
 /// What a sidebar row is, told when the pointer rests on it.
 pub(crate) fn row_tip(item: &Item) -> &'static str {
     match item {
@@ -326,7 +336,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 .workspace_of(root)
                 .map(|w| w.name.clone())
                 .unwrap_or_else(|| short(root));
-            ("head", name, String::new(), None)
+            ("head", name, checkpoint_line(work, root), None)
         }
         Item::Worktree(_, path) => {
             let node = t.worktrees().find(|w| &w.worktree.path == path);
@@ -338,7 +348,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             (
                 if empty { "dim mono vacant" } else { "dim mono" },
                 label,
-                String::new(),
+                checkpoint_line(work, path),
                 None,
             )
         }
@@ -736,6 +746,23 @@ mod tests {
 
     use super::*;
     use crate::shell::status_bar::mode_tip;
+
+    #[test]
+    fn a_worktree_row_shows_the_line_its_checkpoint_says_and_none_when_it_says_nothing() {
+        let mut work = tsumugi_protocol::WorkSnapshot::default();
+        work.tree.checkpoints = vec![tsumugi_model::Checkpoint {
+            worktree: "/w".into(),
+            comment: "tests are red".into(),
+            status: Some(tsumugi_model::WorktreeStatus::InProgress),
+            updated_ms: 1,
+        }];
+        assert_eq!(
+            checkpoint_line(Some(&work), "/w".as_ref()),
+            "In progress · tests are red"
+        );
+        assert_eq!(checkpoint_line(Some(&work), "/other".as_ref()), "");
+        assert_eq!(checkpoint_line(None, "/w".as_ref()), "");
+    }
 
     #[test]
     fn a_file_is_shown_by_its_viewer_or_by_the_neovim_started_on_it() {

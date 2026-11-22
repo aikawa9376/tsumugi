@@ -886,7 +886,7 @@ fn a_file_without_profiles_reads_as_the_profiles_tsumugi_comes_with() {
     let s = Settings::parse("").unwrap();
     assert_eq!(s, Settings::default());
     assert_eq!(s.profile, ProfileId::builtin(Agent::Claude));
-    assert_eq!(s.profiles, Agent::ALL.map(AgentProfile::builtin));
+    assert_eq!(s.profiles, Agent::BUILTIN.map(AgentProfile::builtin));
     assert!(s.unshared.is_empty());
 }
 
@@ -1139,7 +1139,7 @@ fn a_file_that_cannot_be_read_says_which_setting_and_why() {
         ),
         (
             "[[profiles]]\nid = \"a\"\nagent = \"claude\"\nnonsense = 1\n",
-            "unknown field `nonsense`, expected one of `id`, `name`, `agent`, `home`, `connection`, `launch`, `poll_usage`, `claude`, `codex`, `pi`, `opencode`, `cursor`, `archived`\nin `profiles`\n",
+            "unknown field `nonsense`, expected one of `id`, `name`, `agent`, `home`, `connection`, `launch`, `poll_usage`, `claude`, `codex`, `pi`, `opencode`, `cursor`, `generic`, `archived`\nin `profiles`\n",
         ),
         (
             "profile = \"gone\"\n[[profiles]]\nid = \"a\"\nagent = \"claude\"\n",
@@ -1156,7 +1156,7 @@ fn a_file_that_cannot_be_read_says_which_setting_and_why() {
         ),
         (
             "agent = \"nope\"\n",
-            "unknown variant `nope`, expected one of `claude`, `codex`, `pi`, `opencode`, `cursor`\nin `agent`\n",
+            "unknown variant `nope`, expected one of `claude`, `codex`, `pi`, `opencode`, `cursor`, `generic`\nin `agent`\n",
         ),
         (
             "[sessions]\nmodel = 3\n",
@@ -1259,4 +1259,81 @@ fn sessions_are_never_hibernated_unless_the_settings_name_the_minutes() {
     );
     assert!(Settings::parse("hibernate_after = -1\n").is_err());
     assert!(Settings::parse("hibernate_after = \"soon\"\n").is_err());
+}
+
+const COMMAND_AGENT: &str = r#"
+[[profiles]]
+id = "claude"
+agent = "claude"
+
+[[profiles]]
+id = "mine"
+name = "My agent"
+agent = "generic"
+
+[profiles.launch]
+command = ["my-agent", "--tui"]
+env = { MY_AGENT_KEY = "x" }
+
+[profiles.generic]
+prompt = "flag"
+prompt_flag = "-i"
+"#;
+
+#[test]
+fn a_profile_can_start_any_command_agent_by_its_command_and_how_it_takes_the_first_prompt() {
+    let settings = Settings::parse(COMMAND_AGENT).unwrap();
+    let mine = settings.find_profile(&"mine".parse().unwrap()).unwrap();
+    assert_eq!(mine.agent(), Agent::Generic);
+    assert_eq!(mine.launch.command, ["my-agent", "--tui"]);
+    assert_eq!(mine.launch.env["MY_AGENT_KEY"], "x");
+    let options = mine.options.generic().unwrap();
+    assert_eq!(
+        (options.prompt, options.prompt_flag.as_str()),
+        (tsumugi_model::config::PromptDelivery::Flag, "-i")
+    );
+    assert_eq!(written_and_read(&settings), settings);
+}
+
+#[test]
+fn a_command_agent_keeps_no_login_of_its_own_and_holds_no_other_agent_s_options() {
+    let error = Settings::parse("[[profiles]]\nid = \"a\"\nagent = \"generic\"\nhome = \"/h/a\"\n")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("keeps no login of its own"), "{error}");
+    let error = Settings::parse(
+        "[[profiles]]\nid = \"a\"\nagent = \"generic\"\n[profiles.cursor]\nmodel = \"x\"\n",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("cannot hold options for"), "{error}");
+}
+
+#[test]
+fn an_agent_of_the_catalog_starts_from_its_id_without_a_profile_and_a_profile_of_that_id_replaces_it()
+ {
+    let settings = Settings::default();
+    let gemini = settings.find_profile(&"gemini".parse().unwrap()).unwrap();
+    assert_eq!(gemini.agent(), Agent::Generic);
+    assert_eq!(gemini.launch.command, ["gemini"]);
+    assert!(
+        !settings.profiles.iter().any(|p| p.id.as_str() == "gemini"),
+        "it is found, not added"
+    );
+    let mut own = Settings::default();
+    own.profiles.push(AgentProfile {
+        launch: tsumugi_model::config::Launch {
+            command: vec!["/opt/gemini".into()],
+            ..Default::default()
+        },
+        ..AgentProfile::builtin(Agent::Generic)
+    });
+    own.profiles.last_mut().unwrap().id = "gemini".parse().unwrap();
+    let found = own.find_profile(&"gemini".parse().unwrap()).unwrap();
+    assert_eq!(found.launch.command, ["/opt/gemini"]);
+    assert!(
+        Settings::default()
+            .find_profile(&"no-such-agent".parse().unwrap())
+            .is_none()
+    );
 }

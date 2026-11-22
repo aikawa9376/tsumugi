@@ -3,6 +3,8 @@
 //! about the directories they run in.
 
 mod ai_action;
+pub mod catalog;
+mod checkpoint;
 mod clone;
 mod code;
 mod command;
@@ -45,6 +47,7 @@ pub mod usage;
 mod worktree;
 
 pub use ai_action::*;
+pub use checkpoint::*;
 pub use clone::*;
 pub use code::*;
 pub use command::*;

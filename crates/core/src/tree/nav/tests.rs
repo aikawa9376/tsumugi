@@ -1609,3 +1609,58 @@ fn a_filter_matches_a_name_whose_letters_come_in_its_order_as_the_pickers_do() {
     // A lowercase filter ignores case; one with an uppercase letter keeps it.
     assert_eq!(rows(&narrowed(&t, "LOGS"), &Folds::default()), []);
 }
+
+fn said(
+    worktree: &str,
+    status: Option<tsumugi_model::WorktreeStatus>,
+) -> tsumugi_model::Checkpoint {
+    tsumugi_model::Checkpoint {
+        worktree: worktree.into(),
+        comment: String::new(),
+        status,
+        updated_ms: 0,
+    }
+}
+
+#[test]
+fn a_filter_naming_a_status_keeps_the_worktrees_in_it_with_all_they_hold() {
+    use tsumugi_model::WorktreeStatus::{Completed, InReview};
+    let t = tree();
+    let checkpoints = [said(OAUTH, Some(InReview)), said("/web", Some(Completed))];
+    let review = narrowed_by(&t, "status:in-review", &checkpoints);
+    assert_eq!(
+        rows(&review, &Folds::default()),
+        [
+            vec![ws("/api")],
+            gathered("/api", &["o"], &[]),
+            vec![worktree(OAUTH)],
+        ]
+        .concat()
+    );
+    // Either of two statuses, by the short forms too.
+    let either = narrowed_by(&t, "status:review status:done", &checkpoints);
+    assert_eq!(either.worktrees().count(), 2);
+    // Nothing says it is in progress, and a worktree that says nothing is in none.
+    assert_eq!(
+        narrowed_by(&t, "status:in-progress", &checkpoints)
+            .worktrees()
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn the_rest_of_a_filter_with_a_status_narrows_the_names_as_it_does_alone() {
+    use tsumugi_model::WorktreeStatus::InReview;
+    let t = tree();
+    let checkpoints = [said(OAUTH, Some(InReview)), said("/web", Some(InReview))];
+    let both = narrowed_by(&t, "status:in-review web", &checkpoints);
+    assert_eq!(both.worktrees().count(), 1);
+    assert!(both.workspace_of("/web".as_ref()).is_some());
+    // A status that is no status is words to match, as any others.
+    assert_eq!(
+        narrowed_by(&t, "status:later", &checkpoints),
+        narrowed(&t, "status:later")
+    );
+    assert_eq!(narrowed_by(&t, "", &checkpoints), t);
+}

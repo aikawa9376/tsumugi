@@ -20,6 +20,18 @@ pub enum Command {
         address: String,
         name: Option<String>,
     },
+    /// Reach the work machine at `host` through `ssh -L` and pair with its
+    /// gateway there.
+    Ssh {
+        host: String,
+        /// The port on this computer the tunnel ends in.
+        port: Option<u16>,
+        /// The port the gateway listens on, on the work machine.
+        remote_port: Option<u16>,
+        /// Have the work machine serve its gateway on its loopback first.
+        start: bool,
+        name: Option<String>,
+    },
     /// List the work machines announcing themselves on the local network.
     Discover,
     /// A subcommand, and the arguments that follow it.
@@ -76,6 +88,39 @@ pub enum RemoteCommand {
         advertise: bool,
     },
     Disable,
+}
+
+/// `connect ssh <host>` and its options.
+fn ssh(host: &str, mut rest: &[String]) -> Option<Command> {
+    let (mut port, mut remote_port, mut start, mut name) = (None, None, false, None);
+    while let [option, after @ ..] = rest {
+        rest = after;
+        match option.as_str() {
+            "--start" if !start => start = true,
+            "--port" | "--remote-port" | "--name" => {
+                let (value, after) = rest.split_first()?;
+                rest = after;
+                match option.as_str() {
+                    "--port" if port.is_none() => {
+                        port = Some(value.parse::<u16>().ok().filter(|p| *p > 0)?)
+                    }
+                    "--remote-port" if remote_port.is_none() => {
+                        remote_port = Some(value.parse::<u16>().ok().filter(|p| *p > 0)?)
+                    }
+                    "--name" if name.is_none() => name = Some(value.clone()),
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some(Command::Ssh {
+        host: host.to_string(),
+        port,
+        remote_port,
+        start,
+        name,
+    })
 }
 
 fn remote(args: &[String]) -> Option<Command> {
@@ -294,7 +339,7 @@ impl Command {
     }
 }
 
-pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | gate [--dir <path>] [--wait <seconds>] | cleanup [--dir <path>] [--remove] | worktree merge [--dir <path> | --branch <name>] [--check] [--stash | --commit] [--message <text>] [--close-issue] [--remove] [--resolve] | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
+pub const USAGE: &str = "usage: tsumugi [[--instance <name>] [--new-window] | --version | connect [--check | discover | pair <address> [--name <name>] | ssh <host> [--port <port>] [--remote-port <port>] [--start] [--name <name>]]| discover | pair <address> [--name <name>]] | terminal … | ports [--worktree <dir> | --all] | mcp … | editor … | session … | issue <list|show|create|start|cancel|retry|close|reopen|delete> … | gate [--dir <path>] [--wait <seconds>] | cleanup [--dir <path>] [--remove] | worktree merge [--dir <path> | --branch <name>] [--check] [--stash | --commit] [--message <text>] [--close-issue] [--remove] [--resolve] | skills <list|get|install|update> … | daemon [stop | restart] [--force] | host [stop | restart] [--force] | remote <daemon|host|info|gateway [--listen <address>] [--no-advertise]|pair|devices|revoke <fingerprint>|enable [--listen <address>] [--no-advertise]|disable> [--instance <name>]]";
 
 /// The command `args` ask for; `None` for one tsumugi does not know, which
 /// must not open a window: a program that ran an older tsumugi's subcommand
@@ -318,6 +363,7 @@ pub fn command(args: &[String]) -> Option<Command> {
         }
         Some("connect") => match &args[1..] {
             [verb] if verb == "discover" => Some(Command::Discover),
+            [verb, host, options @ ..] if verb == "ssh" => ssh(host, options),
             [verb, address] if verb == "pair" => Some(Command::Pair {
                 address: address.clone(),
                 name: None,
@@ -836,5 +882,49 @@ mod tests {
         assert_eq!(asked(&["connect"]), Some(Command::Connect));
         assert_eq!(asked(&["connect", "discover"]), Some(Command::Discover));
         assert_eq!(asked(&["connect", "discover", "x"]), None);
+    }
+
+    #[test]
+    fn connecting_over_ssh_takes_a_destination_and_each_option_once() {
+        let ssh = |host: &str, port, remote_port, start, name: Option<&str>| {
+            Some(Command::Ssh {
+                host: host.into(),
+                port,
+                remote_port,
+                start,
+                name: name.map(String::from),
+            })
+        };
+        assert_eq!(
+            asked(&["connect", "ssh", "ai-box"]),
+            ssh("ai-box", None, None, false, None)
+        );
+        assert_eq!(
+            asked(&[
+                "connect",
+                "ssh",
+                "me@ai-box",
+                "--port",
+                "47300",
+                "--remote-port",
+                "47131",
+                "--start",
+                "--name",
+                "desk"
+            ]),
+            ssh("me@ai-box", Some(47300), Some(47131), true, Some("desk"))
+        );
+        for refused in [
+            &["connect", "ssh"][..],
+            &["connect", "ssh", "a", "--port"],
+            &["connect", "ssh", "a", "--port", "0"],
+            &["connect", "ssh", "a", "--port", "70000"],
+            &["connect", "ssh", "a", "--port", "1", "--port", "2"],
+            &["connect", "ssh", "a", "--start", "--start"],
+            &["connect", "ssh", "a", "--listen", "x"],
+            &["connect", "ssh", "a", "b"],
+        ] {
+            assert_eq!(asked(refused), None, "{refused:?}");
+        }
     }
 }

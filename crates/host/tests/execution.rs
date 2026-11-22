@@ -16,6 +16,13 @@ fn request(agent: Agent, model: Option<&str>) -> StartRequest {
     }
 }
 
+/// `settings` with the command agent's profile naming a program every machine
+/// has, which it needs to start at all.
+fn with_a_command(mut settings: Settings) -> Settings {
+    settings.profile_of_mut(Agent::Generic).launch.command = vec!["sh".into()];
+    settings
+}
+
 #[test]
 fn automatic_agent_launches_record_the_current_time_and_preserve_explicit_start_times() {
     let now = || {
@@ -291,7 +298,7 @@ fn a_recorded_session_carries_its_credential_in_the_environment_alone() {
         request
             .env
             .push(("TSUMUGI_DELEGATION_TOKEN".into(), "outer-token".into()));
-        let mut settings = Settings::default();
+        let mut settings = with_a_command(Settings::default());
         for launch in settings.profiles.iter_mut().map(|p| &mut p.launch) {
             launch
                 .env
@@ -383,7 +390,7 @@ fn codex_reaches_tsumugi_through_its_mcp_server_and_keeps_its_own_instructions()
 fn a_launch_tsumugi_keeps_no_record_of_carries_no_mcp_server() {
     for agent in Agent::ALL {
         let launch = resolve(
-            &Settings::default(),
+            &with_a_command(Settings::default()),
             request(agent, None),
             Path::new("/bin/tsumugi"),
         )
@@ -683,4 +690,76 @@ fn a_session_is_told_to_name_itself_unless_a_person_named_it_or_the_user_said_no
     assert!(told(false, ""));
     assert!(!told(true, ""));
     assert!(!told(false, "rename_sessions = false\n"));
+}
+
+fn command_agent(command: &[&str], id: &str) -> Settings {
+    let mut settings = Settings::default();
+    let mut profile = tsumugi_model::profile::AgentProfile::builtin(Agent::Generic);
+    profile.id = id.parse().unwrap();
+    profile.launch.command = command.iter().map(|word| word.to_string()).collect();
+    settings.profiles = vec![profile];
+    settings
+}
+
+fn asking(id: &str) -> StartRequest {
+    StartRequest {
+        profile: Some(id.parse().unwrap()),
+        ..request(Agent::Generic, None)
+    }
+}
+
+#[test]
+fn a_command_agent_starts_the_profile_s_command_with_the_first_prompt_after_its_arguments() {
+    let settings = command_agent(&["sh", "-e"], "mine");
+    let launch = resolve(&settings, asking("mine"), Path::new("/tsumugi")).unwrap();
+    assert_eq!(launch.spawn.program, "sh");
+    assert_eq!(launch.spawn.args, ["-e", "Review the changes"]);
+    assert_eq!(launch.agent, Agent::Generic);
+}
+
+#[test]
+fn a_command_agent_that_names_no_command_is_refused_saying_where_to_name_one() {
+    let error = resolve(
+        &command_agent(&[], "mine"),
+        asking("mine"),
+        Path::new("/tsumugi"),
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("`mine`") && error.contains("launch.command"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_command_agent_whose_program_is_not_installed_is_refused_naming_the_program_and_where_to_read_how_to_install_it()
+ {
+    let settings = command_agent(&["tsumugi-test-no-such-gemini"], "gemini");
+    let error = resolve(&settings, asking("gemini"), Path::new("/tsumugi")).unwrap_err();
+    assert!(error.contains("`tsumugi-test-no-such-gemini`"), "{error}");
+    assert!(error.contains("not found"), "{error}");
+    assert!(
+        error.contains("https://github.com/google-gemini/gemini-cli"),
+        "{error}"
+    );
+    let error = resolve(
+        &command_agent(&["tsumugi-test-no-such-cli"], "mine"),
+        asking("mine"),
+        Path::new("/tsumugi"),
+    )
+    .unwrap_err();
+    assert!(!error.contains("see https://"), "{error}");
+}
+
+#[test]
+fn a_command_agent_cannot_be_kept_read_only() {
+    let mut request = asking("mine");
+    request.permissions = AgentPermissions::ReadOnly;
+    let error = resolve(
+        &command_agent(&["sh"], "mine"),
+        request,
+        Path::new("/tsumugi"),
+    )
+    .unwrap_err();
+    assert!(error.contains("read-only"), "{error}");
 }

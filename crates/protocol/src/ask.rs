@@ -46,6 +46,12 @@ pub enum Ask {
     DeleteSavedCommand {
         id: String,
     },
+    /// Change what the worktree at `worktree` says of how its work stands.
+    SetCheckpoint {
+        worktree: std::path::PathBuf,
+        comment: tsumugi_model::Set<String>,
+        status: tsumugi_model::Set<tsumugi_model::WorktreeStatus>,
+    },
     /// Keep a schedule, disabled.
     SaveSchedule(tsumugi_model::NewSchedule),
     /// Change what the schedule of `id` says.

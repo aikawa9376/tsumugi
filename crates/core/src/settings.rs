@@ -397,7 +397,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             profile: ProfileId::builtin(Agent::Claude),
-            profiles: Agent::ALL.map(AgentProfile::builtin).to_vec(),
+            profiles: Agent::BUILTIN.map(AgentProfile::builtin).to_vec(),
             unshared: Vec::new(),
             delegation: DelegationSettings::default(),
             zoom: 1.0,

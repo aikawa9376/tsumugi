@@ -17,6 +17,7 @@ pub(crate) const BUNDLED: &[(Agent, &str)] = &[
     (Agent::Pi, include_str!("../../rules/pi.toml")),
     (Agent::OpenCode, include_str!("../../rules/opencode.toml")),
     (Agent::Cursor, include_str!("../../rules/cursor.toml")),
+    (Agent::Generic, include_str!("../../rules/generic.toml")),
 ];
 
 impl Rules {

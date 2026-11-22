@@ -28,6 +28,8 @@ pub fn print_args(agent: Agent, extra: &[String], prompt: &str) -> Vec<String> {
         Agent::Pi => (&["-p"], false),
         Agent::OpenCode => (&["run"], false),
         Agent::Cursor => (&["-p"], false),
+        // A command agent takes its prompt as it is.
+        Agent::Generic => (&[], false),
     };
     let mut args: Vec<String> = lead.iter().map(|a| a.to_string()).collect();
     args.extend(extra.iter().cloned());

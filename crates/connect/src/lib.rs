@@ -4,6 +4,7 @@ pub mod environments;
 pub mod journal;
 mod remote;
 pub mod serving;
+pub mod ssh;
 pub mod work;
 pub use remote::*;
 
