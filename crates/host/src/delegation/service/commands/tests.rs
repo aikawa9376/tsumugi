@@ -1185,6 +1185,7 @@ fn an_issue_is_worked_from_its_own_text_followed_by_what_the_opener_adds() {
         record: None,
         session: None,
         error: None,
+        schedule: None,
     };
 
     let alone = issue_prompt(41, &issue, "");
