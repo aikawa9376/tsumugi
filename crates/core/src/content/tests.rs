@@ -66,6 +66,57 @@ fn opening_a_browser_again_opens_another_page_listed_under_the_worktree_it_was_o
 }
 
 #[test]
+fn a_page_stays_listed_under_its_worktree_while_another_worktree_is_shown() {
+    let (a, b) = (Tab::browser(here(), "/r/a"), Tab::browser(here(), "/r/b"));
+    let run = two_worktrees()
+        .send(show_at(a.clone(), "/r/a"))
+        .send(show_at(b.clone(), "/r/b"));
+    assert_eq!(shown(&run), [b.clone()]);
+    let (Tab::Browser { id: a_id, .. }, Tab::Browser { id: b_id, .. }) = (&a, &b) else {
+        unreachable!()
+    };
+    let listed: Vec<_> = run
+        .state()
+        .content
+        .pages()
+        .into_iter()
+        .map(|(environment, page)| (environment, page.worktree, page.id))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            (here(), "/r/a".into(), *a_id),
+            (here(), "/r/b".into(), *b_id)
+        ]
+    );
+    // Coming back shows the page the worktree left.
+    let run = run.send(show_at(session_tab("a"), "/r/a"));
+    assert_eq!(shown(&run), [a, session_tab("a")]);
+}
+
+#[test]
+fn a_page_put_away_with_its_worktree_is_not_the_one_shown_in_a_window_of_the_same_number() {
+    // Each worktree's layout numbers its windows from 1, so the number alone
+    // would let a page kept hidden speak for the page shown.
+    let (a, b) = (Tab::browser(here(), "/r/a"), Tab::browser(here(), "/r/b"));
+    let (Tab::Browser { id: a_id, .. }, Tab::Browser { id: b_id, .. }) = (&a, &b) else {
+        unreachable!()
+    };
+    let (a_id, b_id) = (*a_id, *b_id);
+    let run = two_worktrees()
+        .send(show_at(a.clone(), "/r/a"))
+        .send(show_at(b, "/r/b"));
+    let content = &run.state().content;
+    let window = content.windows.focused_window().unwrap();
+    assert!(content.shows_page(window, b_id));
+    assert!(!content.shows_page(window, a_id));
+    let run = run.send(show_at(a.clone(), "/r/a"));
+    let content = &run.state().content;
+    assert!(content.shows_page(content.windows.focused_window().unwrap(), a_id));
+    assert!(!content.shows_page(window, b_id));
+}
+
+#[test]
 fn browser_pages_close_independently() {
     let first = Tab::browser(here(), "/r");
     let second = Tab::browser(here(), "/r");

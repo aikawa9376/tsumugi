@@ -7,7 +7,7 @@ use base64::Engine;
 use dioxus::prelude::*;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use tsumugi_core::content::{Area, Tab, WindowId};
+use tsumugi_core::content::{Area, BrowserId, Tab, WindowId};
 use tsumugi_core::msg::Msg;
 use tsumugi_model::EnvironmentId;
 use tsumugi_protocol::{Answer, Ask};
@@ -175,6 +175,7 @@ pub(super) fn deliver(
 #[component]
 pub(super) fn Feedback(
     window: WindowId,
+    browser: BrowserId,
     environment: EnvironmentId,
     worktree: PathBuf,
     state: Sending,
@@ -182,7 +183,7 @@ pub(super) fn Feedback(
     let app = use_context::<AppCtx>();
     let prompts = use_context::<crate::shell::Ui>().consoles.prompts;
     let browsers = use_context::<Browsers>();
-    let page = use_hook(move || browsers.0.borrow().pages[&window].clone());
+    let page = use_hook(move || browsers.0.borrow().pages[&browser].clone());
     let Sending {
         busy,
         error,
