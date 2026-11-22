@@ -676,7 +676,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             }
             if let Some(status) = status {
                 span {
-                    class: "standing-pill status-{status.word()}",
+                    class: "{status_class(status)}",
                     title: "{status.label()}: click to show only the worktrees in this status, again to show all",
                     onclick: move |e| {
                         e.stop_propagation();
@@ -767,6 +767,18 @@ pub(crate) fn WaitingRow(environment: EnvironmentId, waiting: InboxItem, on: Row
                 AgentBadge { label }
             }
         }
+    }
+}
+
+/// The classes of a status chip, each spelled out so the stylesheet test can
+/// see that a source writes them.
+fn status_class(status: tsumugi_model::WorktreeStatus) -> &'static str {
+    use tsumugi_model::WorktreeStatus::*;
+    match status {
+        Todo => "standing-pill status-todo",
+        InProgress => "standing-pill status-in-progress",
+        InReview => "standing-pill status-in-review",
+        Completed => "standing-pill status-completed",
     }
 }
 
