@@ -8,8 +8,8 @@ use tsumugi_model::github::Listing;
 use tsumugi_model::{EnvironmentId, TerminalProgram};
 
 use super::{
-    Area, Axis, Content, Dir, Opening, Shown, Spot, Tab, TabKind, TerminalAsk, closing, corner, cycled,
-    draft, draft_at, moved, settled, shows_prompt, spot_of,
+    Area, Axis, Content, Dir, Opening, Shown, Spot, Tab, TabKind, TerminalAsk, closing, corner,
+    cycled, draft, draft_at, moved, settled, shows_prompt, spot_of,
 };
 use crate::actions::Action;
 use crate::details;
@@ -153,9 +153,7 @@ pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
         Action::TabRecentPrev => crate::overlay::switcher::step(state, -1),
         Action::TabNextSame => edit(view, &|c| c.cycle_tab_of(1, Tab::kind)),
         Action::TabPrevSame => edit(view, &|c| c.cycle_tab_of(-1, Tab::kind)),
-        Action::TabCloseFiles => closing(view, |c| {
-            c.close_showing(|t| t.kind() == TabKind::File)
-        }),
+        Action::TabCloseFiles => closing(view, |c| c.close_showing(|t| t.kind() == TabKind::File)),
         Action::TabMovePrev => edit(view, &|c| c.shift_tab(-1)),
         Action::TabMoveNext => edit(view, &|c| c.shift_tab(1)),
         // The tabs of the area the keys are in: the details panel's sheets
@@ -379,7 +377,7 @@ pub(crate) fn show_session(
     ) {
         state.tree.selected = Some(row);
     }
-    state.content.place = Some(p);
+    state.content.go_to_place(p);
     state.content.windows.open(tab);
     Vec::new()
 }
@@ -407,7 +405,7 @@ pub(crate) fn edit_file(
     let content = &mut state.content;
     match open {
         Some(tab) => {
-            content.place = Some(place);
+            content.go_to_place(place);
             content.windows.open(tab);
             content.focus = Area::Console;
             Vec::new()
@@ -448,7 +446,7 @@ pub(crate) fn open_file(
     let content = &mut state.content;
     match opens {
         nav::Opens::Shows(thing, place) => {
-            content.place = place.or(Some(Place::at(&environment, worktree)));
+            content.go_to_place(place.unwrap_or_else(|| Place::at(&environment, worktree)));
             content.windows.open_in(thing, how);
             content.focus = Area::Console;
             Vec::new()
@@ -533,8 +531,8 @@ pub(crate) fn open_row(
         nav::Opens::Fold if in_place => view.folds.toggle(&item),
         nav::Opens::Fold => {}
         nav::Opens::Shows(thing, p) => {
-            if p.is_some() {
-                content.place = p;
+            if let Some(p) = p {
+                content.go_to_place(p);
             }
             show(content, thing);
         }
@@ -548,8 +546,8 @@ pub(crate) fn open_row(
         })),
         nav::Opens::Draft(worktree) => {
             let draft = draft_at(content, item.environment().clone(), worktree.clone());
+            content.go_to_place(Place::at(item.environment(), worktree));
             show(content, draft);
-            content.place = Some(Place::at(item.environment(), worktree));
         }
         nav::Opens::Unavailable => {
             return vec![Effect::Notice(super::REMOTE_PREVIEW.into())];

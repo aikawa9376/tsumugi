@@ -92,6 +92,139 @@ fn a_browser_opens_new_work_in_the_worktree_it_hangs_under() {
     );
 }
 
+fn two_worktrees() -> Scenario {
+    Scenario::new().send(opened(None)).event(
+        snapshot().listed(
+            listed()
+                .session(session("a").cwd("/r/a"))
+                .session(session("b").cwd("/r/b"))
+                .terminal(shell(1, "/r/a"))
+                .terminal(shell(2, "/r/b")),
+        ),
+    )
+}
+
+fn show_at(tab: Tab, worktree: &str) -> Msg {
+    Msg::Show {
+        thing: tab,
+        place: place(worktree),
+        how: None,
+    }
+}
+
+fn tabs_shown(run: &Scenario) -> usize {
+    run.state().content.windows.tabs().len()
+}
+
+#[test]
+fn selecting_another_worktree_shows_its_own_layout_and_the_last_worktree_s_comes_back() {
+    let run = two_worktrees()
+        .send(show_at(Tab::Terminal(here(), 1), "/r/a"))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(show_at(session_tab("a"), "/r/a"))
+        .send(Msg::Window(Action::WindowToTab));
+    assert_eq!(tabs_shown(&run), 2);
+    let run = run.send(show_at(Tab::Terminal(here(), 2), "/r/b"));
+    // Worktree b has a layout of its own, which a's did not leak into.
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 2)]);
+    assert_eq!(tabs_shown(&run), 1);
+    let run = run.send(show_at(Tab::Terminal(here(), 1), "/r/a"));
+    assert_eq!(tabs_shown(&run), 2);
+    assert!(shown(&run).contains(&session_tab("a")));
+    assert!(!shown(&run).contains(&Tab::Terminal(here(), 2)));
+    // And b's comes back as it was left.
+    let run = run.send(show_at(Tab::Terminal(here(), 2), "/r/b"));
+    assert_eq!(tabs_shown(&run), 1);
+}
+
+#[test]
+fn a_layout_comes_back_with_its_splits_and_the_window_focused() {
+    let run = two_worktrees()
+        .send(show_at(Tab::Terminal(here(), 1), "/r/a"))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(show_at(session_tab("a"), "/r/a"));
+    let before = run.state().content.windows.clone();
+    let run = run
+        .send(show_at(Tab::Terminal(here(), 2), "/r/b"))
+        .send(show_at(session_tab("a"), "/r/a"));
+    assert_eq!(run.state().content.windows, before);
+}
+
+#[test]
+fn selecting_the_worktree_already_selected_keeps_its_layout() {
+    let run = two_worktrees()
+        .send(show_at(Tab::Terminal(here(), 1), "/r/a"))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(show_at(session_tab("a"), "/r/a"));
+    let before = run.state().content.windows.clone();
+    let run = run.send(show_at(Tab::Terminal(here(), 1), "/r/a"));
+    assert_eq!(tabs_shown(&run), before.tabs().len());
+}
+
+#[test]
+fn what_a_layout_put_away_shows_still_counts_as_shown_to_the_host() {
+    let run = two_worktrees()
+        .send(show_at(Tab::Terminal(here(), 1), "/r/a"))
+        .send(show_at(Tab::Terminal(here(), 2), "/r/b"));
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 2)]);
+    let sight = crate::settle::sight(run.state(), &here());
+    assert_eq!(sight.terminals, BTreeSet::from([1, 2]));
+}
+
+#[test]
+fn a_terminal_that_ends_while_its_layout_is_put_away_is_not_in_it_when_it_comes_back() {
+    let run = two_worktrees()
+        .send(show_at(Tab::Terminal(here(), 1), "/r/a"))
+        .send(Msg::Window(Action::WindowVsplit))
+        .send(show_at(session_tab("a"), "/r/a"))
+        .send(show_at(Tab::Terminal(here(), 2), "/r/b"))
+        .send(Msg::ShellClosed {
+            environment: here(),
+            id: 1,
+        })
+        .send(show_at(session_tab("a"), "/r/a"));
+    assert_eq!(shown(&run), [session_tab("a")]);
+}
+
+#[test]
+fn a_worktree_with_no_layout_yet_shows_what_is_opened_in_it_alone() {
+    let run = two_worktrees()
+        .send(show_at(session_tab("a"), "/r/a"))
+        .send(show_at(session_tab("b"), "/r/b"));
+    assert_eq!(shown(&run), [session_tab("b")]);
+    assert_eq!(tabs_shown(&run), 1);
+}
+
+#[test]
+fn a_layout_of_a_forgotten_environment_is_not_brought_back() {
+    let far = Tab::Session(there(), "f".into());
+    let run = crate::testing::shows_there(two_worktrees(), [session("f").cwd("/r/f")])
+        .send(Msg::Show {
+            thing: far.clone(),
+            place: Some(Place::at(&there(), "/r/f")),
+            how: None,
+        })
+        .send(show_at(Tab::Terminal(here(), 2), "/r/b"))
+        .send(Msg::EnvironmentRemoved(there()))
+        .send(Msg::Show {
+            thing: Tab::Terminal(here(), 1),
+            place: place("/r/a"),
+            how: None,
+        });
+    assert_eq!(shown(&run), [Tab::Terminal(here(), 1)]);
+    assert!(!run.state().content.shows_in_any_layout(&far));
+}
+
+#[test]
+fn a_layout_holding_a_file_that_is_gone_comes_back_without_failing() {
+    let gone = Tab::Viewer(here(), "/r/a/removed.png".into());
+    let run = two_worktrees()
+        .send(show_at(gone.clone(), "/r/a"))
+        .send(show_at(Tab::Terminal(here(), 2), "/r/b"))
+        .send(show_at(Tab::Terminal(here(), 1), "/r/a"));
+    assert_eq!(shown(&run), [gone, Tab::Terminal(here(), 1)]);
+}
+
 fn viewer(name: &str) -> Tab {
     Tab::Viewer(here(), format!("/w/{name}").into())
 }
@@ -121,8 +254,14 @@ fn the_next_and_previous_tab_of_the_same_kind_pass_the_tabs_of_other_kinds() {
 #[test]
 fn closing_the_file_tabs_leaves_what_is_not_a_file_open() {
     let run = three_kinds().send(Msg::Window(Action::TabCloseFiles));
-    assert_eq!(shown(&run), [Tab::Terminal(here(), 1), Tab::Terminal(here(), 2)]);
-    assert_eq!(run.state().content.active(), Some(&Tab::Terminal(here(), 2)));
+    assert_eq!(
+        shown(&run),
+        [Tab::Terminal(here(), 1), Tab::Terminal(here(), 2)]
+    );
+    assert_eq!(
+        run.state().content.active(),
+        Some(&Tab::Terminal(here(), 2))
+    );
 }
 
 #[test]

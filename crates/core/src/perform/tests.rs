@@ -288,8 +288,15 @@ fn a_viewer_shown_takes_the_viewer_s_actions() {
 
 #[test]
 fn going_to_the_next_session_opens_it_in_a_tab_or_goes_to_the_one_showing_it() {
+    // Both sessions run in one worktree, so they share its layout.
     let run = Scenario::new()
-        .event(snapshot().listed(listed().session(session("a")).session(session("b"))))
+        .event(
+            snapshot().listed(
+                listed()
+                    .session(session("a").cwd("/r"))
+                    .session(session("b").cwd("/r")),
+            ),
+        )
         .send(Msg::ShowSession(here(), "a".into()))
         .send(Msg::Window(Action::SessionNext));
     let tabs = |run: &Scenario| run.state().content.windows.tabs().len();
@@ -298,6 +305,24 @@ fn going_to_the_next_session_opens_it_in_a_tab_or_goes_to_the_one_showing_it() {
     let run = run.send(Msg::Window(Action::SessionNext));
     assert_eq!(tabs(&run), 2);
     assert_eq!(run.state().content.active(), Some(&session_tab("a")));
+}
+
+#[test]
+fn going_to_the_next_session_of_another_worktree_shows_that_worktree_s_layout() {
+    let run = Scenario::new()
+        .event(snapshot().listed(listed().session(session("a")).session(session("b"))))
+        .send(Msg::ShowSession(here(), "a".into()))
+        .send(Msg::Window(Action::SessionNext));
+    let tabs = |run: &Scenario| run.state().content.windows.tabs().len();
+    assert_eq!(
+        (tabs(&run), run.state().content.active()),
+        (1, Some(&session_tab("b")))
+    );
+    let run = run.send(Msg::Window(Action::SessionNext));
+    assert_eq!(
+        (tabs(&run), run.state().content.active()),
+        (1, Some(&session_tab("a")))
+    );
 }
 
 #[test]

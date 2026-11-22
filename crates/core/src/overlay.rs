@@ -34,11 +34,11 @@ pub use banner::*;
 use confirm::Ask;
 use context_menu::{Reach, Target};
 use lightbox::Lightbox;
-use switcher::Switcher;
 use naming::Naming;
 pub(crate) use naming::{end_naming, keep_naming, start_naming, type_naming};
 use rename::Rename;
 pub(crate) use rename::{end_rename, keep_rename, start_rename, type_name};
+use switcher::Switcher;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Overlays {

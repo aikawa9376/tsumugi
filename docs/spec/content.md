@@ -10,8 +10,14 @@ of its kind ([viewers](#viewers)).
 
 The tabs line up above the windows, numbered from 1. A tab is named after what
 its focused window shows, with how many windows it holds, and keeps its own
-focused window while another tab is shown. A tab holds whatever was opened in
-it, from any worktree. Closing a tab closes every window in it. The tab shown
+focused window while another tab is shown. Every worktree has tabs of its own:
+selecting a worktree shows the tabs, windows and sizes it last had, or none
+when it had none yet, and puts away those of the worktree before it, to come
+back when that one is selected again. What is opened from a worktree opens in
+its tabs. Putting tabs away only hides what they show: sessions, terminals and
+Neovims run on, and what ended meanwhile is not among them when they come
+back. They are kept while the window runs ([across runs](#across-runs)).
+Closing a tab closes every window in it. The tab shown
 is moved a place to either side by keys ([keys](reference/keys.md#actions)),
 and any tab is dragged to another place among the tabs.
 
@@ -86,7 +92,7 @@ switching back to the console.
 
 Nothing opened takes the place of what a window shows, but for a document
 switched between its viewer and its Neovim ([viewers](#viewers)). Opening
-something moves the focus to a window of any tab already showing it; when no
+something moves the focus to a window of any tab of its worktree already showing it; when no
 window shows it, it opens in a new tab after the one shown. Going to the next
 or previous session, workspace or waiting session opens it so too.
 
@@ -115,8 +121,9 @@ its worktree is shown.
 ## Across runs
 
 The content as it was when the window closed comes back when a window with the
-same number opens ([windows](sessions.md#windows)): every tab, the windows it
-is split into and their sizes, the window focused in each, and the tab shown.
+same number opens ([windows](sessions.md#windows)): every tab of the worktree
+shown, the windows it is split into and their sizes, the window focused in
+each, and the tab shown. The tabs of the other worktrees, put away, do not.
 What cannot come back is left out, the layout closing around it as it does
 when what a window shows ends: a session or terminal no longer listed, a
 viewer, a session not started yet. With nothing left, the content opens

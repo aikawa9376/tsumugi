@@ -484,8 +484,7 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
         // the same, so the host does not ask it to quit.
         terminals: state
             .content
-            .windows
-            .shown()
+            .shown_in_layouts()
             .into_iter()
             .filter_map(|tab| match tab {
                 Tab::Terminal(e, id) if e == environment => Some(*id),

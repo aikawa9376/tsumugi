@@ -188,12 +188,12 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             if neovim {
                 vec![Effect::StartDiffEditor { place, spot }]
             } else {
+                state.content.go_to_place(place);
                 state.content.windows.open_tab(content::Tab::Diff {
                     environment,
                     worktree,
                     spot: Box::new(spot),
                 });
-                state.content.place = Some(place);
                 state.content.focus = content::Area::Console;
                 Vec::new()
             }

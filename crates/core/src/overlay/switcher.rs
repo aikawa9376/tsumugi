@@ -176,10 +176,11 @@ mod tests {
         let tabs = before.state().content.windows.tabs().len();
         let run = before.send(recent()).send(Msg::SwitcherRelease);
         assert_eq!(run.state().content.windows.tabs().len(), tabs);
-        assert!(run.last_effects().iter().all(|e| !matches!(
-            e,
-            Effect::Host { .. } | Effect::StartTerminal(_)
-        )));
+        assert!(
+            run.last_effects()
+                .iter()
+                .all(|e| !matches!(e, Effect::Host { .. } | Effect::StartTerminal(_)))
+        );
     }
 
     #[test]

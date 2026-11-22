@@ -206,8 +206,7 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
     let view = &mut state.content;
     // What was brought back takes the tabs of what it stands for, in place.
     for tab in view
-        .windows
-        .shown()
+        .shown_in_layouts()
         .into_iter()
         .cloned()
         .collect::<Vec<_>>()
@@ -265,7 +264,7 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
         |tab: &Tab, id: &str| matches!(tab, Tab::Session(e, s) if e == environment && s == id);
     // A session shown and no longer listed is not in the tree looked at
     // next, though it may stay live here a while yet.
-    let shown = view.windows.shown();
+    let shown: Vec<Tab> = view.shown_in_layouts().into_iter().cloned().collect();
     for t in &shown {
         if let Tab::Session(e, id) = t
             && e == environment
@@ -282,8 +281,7 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
     // A session gone from the list gives its windows up as a closed shell
     // does.
     let ended: Vec<String> = view
-        .windows
-        .shown()
+        .shown_in_layouts()
         .into_iter()
         .filter_map(|t| match t {
             Tab::Session(e, id)
@@ -343,8 +341,7 @@ fn listed_in(state: &mut ViewState, environment: &EnvironmentId) -> Vec<Effect> 
         .map(|t| t.id)
         .collect();
     let mut ended_shells: Vec<u128> = view
-        .windows
-        .shown()
+        .shown_in_layouts()
         .into_iter()
         .filter_map(|tab| match tab {
             Tab::Terminal(e, id)
