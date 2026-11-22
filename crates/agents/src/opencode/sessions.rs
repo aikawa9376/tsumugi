@@ -68,15 +68,18 @@ fn listed(context: &AgentContext, out: &str, dir: Option<&Path>) -> Vec<Past> {
             if dir.as_ref().is_some_and(|dir| dir != cwd) {
                 return None;
             }
+            let id: String = session["id"].as_str()?.into();
             Some(Past {
                 agent: context.agent(),
                 home: context.home.clone(),
                 profile: context.profile.clone(),
                 profile_name: context.profile_name.clone(),
-                id: session["id"].as_str()?.into(),
                 cwd: cwd.into(),
                 title: tsumugi_model::title_of(session["title"].as_str().unwrap_or_default()),
                 at_ms: session["time"]["updated"].as_u64().unwrap_or_default(),
+                log: None,
+                command: crate::resume_command(context, cwd, &id),
+                id,
             })
         })
         .collect()

@@ -292,6 +292,13 @@ pub enum Effect {
         environment: EnvironmentId,
         past: tsumugi_model::Past,
     },
+    /// Continue a copy of this conversation, which an agent of `environment`
+    /// kept, in a new session there; the conversation itself stays as it
+    /// was.
+    Fork {
+        environment: EnvironmentId,
+        past: tsumugi_model::Past,
+    },
     /// Tell the user, outside the window, that these sessions started
     /// waiting, each by its name and what it waits for.
     NotifyWaiting(Vec<(String, String)>),

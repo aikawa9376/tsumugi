@@ -38,6 +38,7 @@ mod system;
 mod timeline;
 mod usage;
 
+pub(crate) use past::preview as past_preview;
 pub use sessions::read_sessions;
 
 /// What tells a window an event; it never waits.

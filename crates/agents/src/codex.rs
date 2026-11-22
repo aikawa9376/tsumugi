@@ -221,6 +221,17 @@ impl AgentAdapter for Codex {
         args.extend(options(context));
         Some(args)
     }
+    fn fork_args(&self, context: &AgentContext, conversation: &str) -> Option<crate::Fork> {
+        let mut args = vec!["fork".into(), conversation.into()];
+        args.extend(options(context));
+        Some(crate::Fork {
+            args,
+            conversation: String::new(),
+        })
+    }
+    fn preview(&self, past: &tsumugi_model::Past) -> Option<tsumugi_model::Preview> {
+        past::preview(past.log.as_deref()?)
+    }
     fn start_args(
         &self,
         context: &AgentContext,
@@ -330,6 +341,18 @@ mod tests {
                 "{hint}"
             );
         }
+    }
+
+    #[test]
+    fn a_fork_is_a_copy_of_the_conversation_whose_id_codex_chooses() {
+        let mut context = AgentContext::builtin(Agent::Codex);
+        context.codex_mut().unwrap().model = "codex-model".into();
+        let fork = Codex.fork_args(&context, ID).unwrap();
+        assert_eq!(
+            fork.args,
+            ["fork", ID, "--no-alt-screen", "--model", "codex-model"]
+        );
+        assert_eq!(fork.conversation, "");
     }
 
     #[test]

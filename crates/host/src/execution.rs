@@ -63,6 +63,9 @@ pub struct StartRequest {
     /// The conversation the session continues, by its id; a new one when
     /// none is given.
     pub resume: Option<String>,
+    /// Whether it continues a copy of `resume`'s conversation, which stays
+    /// as it was, under a code and an id of its own.
+    pub fork: bool,
     /// The folder of a profile's own that keeps the conversation it
     /// continues, which it has to run in; none for its agent's own
     /// environment.
@@ -286,10 +289,21 @@ pub fn resolve(
         ));
     }
     let adapter = agents::adapter(request.agent);
-    let conversation = request
-        .resume
-        .clone()
-        .unwrap_or_else(|| adapter.conversation());
+    let forked = match (&request.resume, request.fork) {
+        (Some(id), true) => Some(
+            adapter
+                .fork_args(&context, id)
+                .ok_or_else(|| format!("{} cannot fork a conversation", request.agent.label()))?,
+        ),
+        _ => None,
+    };
+    let conversation = match &forked {
+        Some(fork) => fork.conversation.clone(),
+        None => request
+            .resume
+            .clone()
+            .unwrap_or_else(|| adapter.conversation()),
+    };
     let mut args = adapter.integration_args(tsumugi_program, &crate::paths::instance_state());
     if let Some(delegation) = &request.delegation {
         args.extend(delegation.args(request.agent, tsumugi_program));
@@ -311,6 +325,7 @@ pub fn resolve(
         args.extend(adapter.instruction_args(&instructions));
     }
     match &request.resume {
+        Some(_) if forked.is_some() => args.extend(forked.iter().flat_map(|f| f.args.clone())),
         Some(id) => args.extend(
             adapter
                 .resume_args(&context, id)

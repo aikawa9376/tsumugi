@@ -361,6 +361,44 @@ mod tests {
     }
 
     #[test]
+    fn a_conversation_forked_runs_its_agent_s_fork_and_is_not_the_conversation_it_copies() {
+        use crate::execution::{StartRequest, resolve};
+        let id = "019f7a4b-fee9-74d3-9977-5bc9bb134d11";
+        let fork = |agent| {
+            resolve(
+                &crate::settings::Settings::default(),
+                StartRequest {
+                    agent,
+                    cwd: "/repo".into(),
+                    resume: Some(id.into()),
+                    fork: true,
+                    ..Default::default()
+                },
+                std::path::Path::new("/tsumugi"),
+            )
+        };
+        let claude = fork(tsumugi_model::Agent::Claude).unwrap();
+        let args = &claude.spawn.args;
+        assert!(args.windows(2).any(|w| w == ["--resume", id]), "{args:?}");
+        assert!(args.iter().any(|a| a == "--fork-session"), "{args:?}");
+        assert_ne!(claude.conversation, id);
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--session-id", &claude.conversation])
+        );
+        let codex = fork(tsumugi_model::Agent::Codex).unwrap();
+        assert!(
+            codex.spawn.args.windows(2).any(|w| w == ["fork", id]),
+            "{:?}",
+            codex.spawn.args
+        );
+        // Codex chooses the copy's id, which the session learns later.
+        assert_eq!(codex.conversation, "");
+        let refused = fork(tsumugi_model::Agent::Cursor).err().unwrap();
+        assert!(refused.contains("cannot fork"), "{refused}");
+    }
+
+    #[test]
     fn a_session_whose_tags_do_not_say_how_it_was_launched_is_not_asked_for_its_input() {
         let tags = [tags::tagged(KIND, "claude"), tags::tagged(CWD, "/tmp")].concat();
         let Some(Kept::Agent(session)) = read(&kept(42, tags)) else {

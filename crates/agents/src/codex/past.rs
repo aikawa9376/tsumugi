@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde_json::Value;
-use tsumugi_model::{Agent, Past, title_of};
+use tsumugi_model::{Agent, Past, Preview, Speaker, Turn, title_of};
 
 /// How far into a record its first prompt is looked for.
 const HEAD: u64 = 512 * 1024;
@@ -102,7 +102,29 @@ fn conversation(path: &Path, dir: Option<&Path>, names: &HashMap<String, String>
         id,
         cwd,
         at_ms,
+        log: Some(path.to_path_buf()),
         ..Default::default()
+    })
+}
+
+/// What the conversation kept in the record at `path` says.
+pub(super) fn preview(path: &Path) -> Option<Preview> {
+    crate::preview::read(path, |v| {
+        let p = &v["payload"];
+        if v["type"] != "response_item" || p["type"] != "message" {
+            return None;
+        }
+        match p["role"].as_str()? {
+            "user" => Some(Turn {
+                speaker: Speaker::User,
+                text: typed(&serde_json::to_vec(v).ok()?)?,
+            }),
+            "assistant" => Some(Turn {
+                speaker: Speaker::Agent,
+                text: crate::preview::text_of(&p["content"], "output_text")?,
+            }),
+            _ => None,
+        }
     })
 }
 
@@ -173,6 +195,42 @@ mod tests {
         assert_eq!(got[0].id, ID);
         assert_eq!(got[0].cwd, PathBuf::from("/src/api"));
         assert_eq!(got[0].title, "review the API");
+    }
+
+    #[test]
+    fn a_conversation_names_the_record_it_is_kept_in_and_previews_what_was_said() {
+        let root = tempfile::tempdir().unwrap();
+        let answer = json!({"type": "response_item", "payload": {"type": "message",
+            "role": "assistant", "content": [{"type": "output_text", "text": "on it"}]}})
+        .to_string();
+        write(
+            root.path(),
+            "2026/10/22",
+            ID,
+            &[
+                meta(ID, "/r", "cli"),
+                said(
+                    "<environment_context>
+</environment_context>",
+                ),
+                said("review the API"),
+                answer,
+            ],
+        );
+        let got = read(root.path(), None);
+        let log = got[0].log.clone().unwrap();
+        assert!(log.ends_with(format!("rollout-2026-10-22T02-03-13-{ID}.jsonl")));
+        let preview = preview(&log).unwrap();
+        assert_eq!(preview.first, "review the API");
+        let said: Vec<(Speaker, &str)> = preview
+            .recent
+            .iter()
+            .map(|t| (t.speaker, t.text.as_str()))
+            .collect();
+        assert_eq!(
+            said,
+            [(Speaker::User, "review the API"), (Speaker::Agent, "on it")]
+        );
     }
 
     #[test]

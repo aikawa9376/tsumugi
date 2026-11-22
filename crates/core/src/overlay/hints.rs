@@ -126,6 +126,12 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
             moving(keymap, "move"),
             bound(keymap, &over, &Action::OverlayChoose, "resume"),
             Some(Hint::new("Ctrl+a", "this directory or every one")),
+            Some(Hint::new("Ctrl+g", "group")),
+            Some(Hint::new("Ctrl+f", "fork")),
+            Some(Hint::new("Ctrl+y", "copy command")),
+            Some(Hint::new("Ctrl+s", "copy ID")),
+            Some(Hint::new("Ctrl+l", "copy log path")),
+            Some(Hint::new("Ctrl+o", "open log")),
             close(),
         ],
         Picking::Commands(c) => match &c.stage {

@@ -103,6 +103,9 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
         Ask::PathEntries { root, typed } => crate::completion::read(root, typed)
             .await
             .map(|entries| Answer::PathEntries { entries }),
+        Ask::PastPreview { past } => Ok(Answer::PastPreview {
+            preview: crate::watch::past_preview(*past).await,
+        }),
         Ask::Apply { .. } | Ask::MutationStatus { .. } | Ask::MutationEpoch => {
             Err("mutation admission belongs to the work connection".into())
         }
@@ -438,7 +441,9 @@ fn here(place: HostPath) -> Result<PathBuf, String> {
 /// it: a draft's in the scratch folder, made if need be, when it is there.
 async fn start_session(watched: &Watched, start: SessionStart) -> Result<Answer, String> {
     let settings = settings::current();
-    let verb = if start.resume.is_some() {
+    let verb = if start.resume.is_some() && start.fork {
+        "fork"
+    } else if start.resume.is_some() {
         "resume"
     } else {
         "start"
@@ -463,12 +468,13 @@ async fn start_session(watched: &Watched, start: SessionStart) -> Result<Answer,
         prompt: start.prompt,
         images: start.images,
         resume: start.resume,
+        fork: start.fork,
         home: start.home,
         env: daemon::agent_env(),
         started_ms: now_ms(),
         ..Default::default()
     };
-    let resumed = verb == "resume";
+    let resumed = verb != "start";
     let (resolved, recorded) = delegation::prepare(
         &delegation::root(),
         &settings,
@@ -479,7 +485,7 @@ async fn start_session(watched: &Watched, start: SessionStart) -> Result<Answer,
     .await
     .map_err(|e| {
         if resumed {
-            format!("cannot resume {name}: {e}")
+            format!("cannot {verb} {name}: {e}")
         } else {
             e
         }

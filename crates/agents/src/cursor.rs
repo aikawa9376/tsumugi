@@ -1,8 +1,11 @@
 //! Cursor CLI, the `cursor-agent` program: started in its own terminal
-//! interface and asked what its login stands at. Its conversations, models
-//! and prompts are not read back.
+//! interface and asked what its login stands at. Its conversations are
+//! listed and read from what it keeps; its models and prompts are not read
+//! back.
 
 use super::*;
+
+mod past;
 
 pub struct Cursor;
 
@@ -75,6 +78,24 @@ impl AgentAdapter for Cursor {
         let mut args = options(context);
         args.extend(["--resume".into(), conversation.into()]);
         Some(args)
+    }
+
+    fn past(
+        &self,
+        context: &AgentContext,
+        home: &Path,
+        dir: Option<&Path>,
+    ) -> Vec<tsumugi_model::Past> {
+        let root = context
+            .home
+            .clone()
+            .or_else(|| context.variable("CURSOR_CONFIG_DIR"))
+            .unwrap_or_else(|| home.join(".cursor"));
+        crate::kept_in(context, past::read(&root, dir))
+    }
+
+    fn preview(&self, past: &tsumugi_model::Past) -> Option<tsumugi_model::Preview> {
+        past::preview(past.log.as_deref()?)
     }
 
     fn start_args(

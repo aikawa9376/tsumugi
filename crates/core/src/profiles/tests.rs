@@ -424,6 +424,7 @@ fn a_kept_conversation_is_listed_with_its_profile_and_a_login_of_its_own() {
         cwd: "/r".into(),
         title: "t".into(),
         at_ms: 0,
+        ..Default::default()
     };
     assert_eq!(
         resumed_as(&s, &past("claude-work", Some("/Users/me/work"))),

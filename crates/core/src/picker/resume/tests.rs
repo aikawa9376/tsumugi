@@ -265,3 +265,155 @@ fn another_environment_s_tab_lists_and_resumes_the_conversations_kept_there() {
         past: chosen,
     }));
 }
+
+/// A list of three conversations opened where the session `a` runs, the
+/// cursor on the first.
+fn listed() -> Scenario {
+    let mut kept = past(Agent::Claude, "c1", "/r/src", "fix the login");
+    kept.command = "cd /r/src && claude --resume c1".into();
+    kept.log = Some("/Users/me/.claude/projects/-r-src/c1.jsonl".into());
+    showing_a().send(Msg::ResumeOpen).tell(pasts(
+        Some("/r/src"),
+        vec![
+            kept,
+            past(Agent::Codex, "c2", "/r/docs", "review the API"),
+            past(Agent::Claude, "c3", "/r/docs", "write the guide"),
+        ],
+    ))
+}
+
+fn headed(run: &Scenario) -> Vec<(Option<String>, String)> {
+    drawn(run)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| (r.heading, r.past.title))
+        .collect()
+}
+
+#[test]
+fn rows_are_grouped_by_agent_or_by_directory_and_ungrouped_again() {
+    let run = listed();
+    assert!(headed(&run).iter().all(|(heading, _)| heading.is_none()));
+    let by_agent = run.send(key("g", true));
+    assert_eq!(
+        headed(&by_agent),
+        [
+            (Some("Claude Code".to_string()), "fix the login".to_string()),
+            (None, "write the guide".to_string()),
+            (Some("Codex".to_string()), "review the API".to_string()),
+        ]
+    );
+    let by_dir = by_agent.send(key("g", true));
+    assert_eq!(
+        headed(&by_dir),
+        [
+            (Some("/r/src".to_string()), "fix the login".to_string()),
+            (Some("/r/docs".to_string()), "review the API".to_string()),
+            (None, "write the guide".to_string()),
+        ]
+    );
+    let plain = by_dir.send(key("g", true));
+    assert!(headed(&plain).iter().all(|(heading, _)| heading.is_none()));
+}
+
+#[test]
+fn typing_narrows_a_grouped_list_and_keeps_its_groups() {
+    let run = listed().send(key("g", true)).send(key("g", true));
+    let run = run.send(Msg::PickerQuery("docs".into()));
+    assert_eq!(
+        headed(&run),
+        [
+            (Some("/r/docs".to_string()), "review the API".to_string()),
+            (None, "write the guide".to_string()),
+        ]
+    );
+}
+
+/// The effects `msg` has, on the list where the cursor is on the row `at`.
+fn acting(at: usize, msg: Msg) -> Vec<Effect> {
+    let mut run = listed();
+    for _ in 0..at {
+        run = run.send(key("n", true));
+    }
+    run.send(msg).last_effects().to_vec()
+}
+
+#[test]
+fn the_row_under_the_cursor_can_be_copied_as_its_resume_command_its_id_or_its_log_path() {
+    let copied = |text: &str, done: &str| {
+        vec![Effect::Copy {
+            text: text.into(),
+            done: done.into(),
+        }]
+    };
+    assert_eq!(
+        acting(0, key("y", true)),
+        copied(
+            "cd /r/src && claude --resume c1",
+            "Copied the resume command"
+        )
+    );
+    assert_eq!(
+        acting(0, key("s", true)),
+        copied("c1", "Copied the session ID")
+    );
+    assert_eq!(
+        acting(0, key("l", true)),
+        copied(
+            "/Users/me/.claude/projects/-r-src/c1.jsonl",
+            "Copied the log path"
+        )
+    );
+}
+
+#[test]
+fn copying_keeps_the_list_open_and_says_so_when_there_is_nothing_to_copy() {
+    let run = listed().send(key("y", true));
+    assert!(run.state().picker.open.is_some());
+    // The second row has no log and no command.
+    for typed in ["l", "y", "o"] {
+        let got = acting(1, key(typed, true));
+        assert!(
+            matches!(got.as_slice(), [Effect::Notice(_)]),
+            "{typed}: {got:?}"
+        );
+    }
+}
+
+#[test]
+fn the_log_is_opened_in_the_content_and_the_list_closes() {
+    let run = listed().send(key("o", true));
+    assert!(run.last_effects().contains(&Effect::OpenFile {
+        environment: crate::testing::here(),
+        path: "/Users/me/.claude/projects/-r-src/c1.jsonl".into(),
+        how: crate::content::Opening::Existing,
+    }));
+    assert!(run.state().picker.open.is_none());
+}
+
+#[test]
+fn a_conversation_is_forked_in_a_new_session_even_when_a_session_holds_it() {
+    let run = window()
+        .event(listing([session("a").cwd("/r/src").session_id("conv-a")]))
+        .send(Msg::ShowSession(crate::testing::here(), "a".into()))
+        .send(Msg::ResumeOpen)
+        .tell(pasts(
+            Some("/r/src"),
+            vec![past(Agent::Claude, "conv-a", "/r/src", "mine")],
+        ))
+        .send(key("f", true));
+    assert!(run.last_effects().contains(&Effect::Fork {
+        environment: crate::testing::here(),
+        past: past(Agent::Claude, "conv-a", "/r/src", "mine"),
+    }));
+    assert!(run.state().picker.open.is_none());
+}
+
+#[test]
+fn row_actions_with_no_list_read_do_nothing() {
+    for typed in ["y", "s", "l", "o", "f"] {
+        let run = showing_a().send(Msg::ResumeOpen).send(key(typed, true));
+        assert!(run.last_effects().is_empty(), "{typed}");
+        assert!(run.state().picker.open.is_some());
+    }
+}

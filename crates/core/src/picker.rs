@@ -352,6 +352,12 @@ pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
         return commands::press(state, key);
     }
     let ctrl = key.ctrl && !key.alt && !key.meta;
+    if ctrl
+        && matches!(state.picker.open, Some(Picking::Resume(_)))
+        && let Some(effects) = resume::act(state, &key.key)
+    {
+        return effects;
+    }
     let browsed = browsed(state);
     let work = state.hosts.work(&browsed);
     let tree = matches!(&state.picker.open, Some(Picking::Go(p)) if p.mode == Mode::Tree);
@@ -400,6 +406,10 @@ pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
         }
         Picking::Resume(r) if ctrl && key.key == "a" => {
             r.toggle_every();
+            return Vec::new();
+        }
+        Picking::Resume(r) if ctrl && key.key == "g" => {
+            r.cycle_group();
             return Vec::new();
         }
         Picking::Notices(_) if ctrl && key.key == "u" => return crate::notices::toggle(state),
