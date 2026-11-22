@@ -38,16 +38,15 @@ document.addEventListener('click',function(e){
     parent.postMessage({tsumugiGithub:'viewed',path:box.getAttribute('data-viewed'),viewed:box.checked},'*');
     return;
   }
-  // A link to an address is opened by the window, in the browser: the frame
-  // navigates nowhere. The document's own places are scrolled to by the
-  // document's script.
+  // The frame navigates nowhere: a link to an address is told to the window by
+  // the document's script, which opens it, and the document's own places are
+  // scrolled to by that script.
   var a=e.target&&e.target.closest&&e.target.closest('a[href]');
   if(!a)return;
   var href=a.getAttribute('href')||'';
   if(href.charAt(0)==='#')return;
   e.preventDefault();
   e.stopPropagation();
-  if(/^https?:\/\//i.test(a.href))parent.postMessage({tsumugiViewerOpen:1,url:a.href},'*');
 },true);
 document.addEventListener('DOMContentLoaded',function(){
   var thread=document.querySelector('.gh-thread');

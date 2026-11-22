@@ -25,6 +25,14 @@ function load(urls,then){
 window.handleMarkdownLinkClick=function(path){
   parent.postMessage({tsumugiViewerLink:1,path:String(path)},'*');
 };
+// A link to a web address is opened by the window, which says where.
+document.addEventListener('click',function(e){
+  var a=e.target&&e.target.closest&&e.target.closest('a[href]');
+  if(!a||!/^https?:\/\//i.test(a.href))return;
+  e.preventDefault();
+  e.stopPropagation();
+  parent.postMessage({tsumugiViewerOpen:1,url:a.href,modifier:e.shiftKey&&(e.metaKey||e.ctrlKey)},'*');
+},true);
 document.addEventListener('click',function(e){
   var a=e.target&&e.target.closest&&e.target.closest('a[href^="#"]');
   if(!a)return;

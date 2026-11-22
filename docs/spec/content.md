@@ -150,6 +150,14 @@ kept, and closed pages are not kept across application runs. With the keys in
 the page, Ctrl+F (Cmd+F) searches it and Ctrl+Shift+T (Cmd+Shift+T) reopens,
 as in a browser.
 
+The web links of a conversation, a pull request or issue and a Markdown
+document open in the system's browser, or in a new page of Tsumugi's browser
+under the worktree the keys are in when the settings say so. Pressing a link
+with Shift and Ctrl (Shift and Cmd on macOS) sends that one link the other
+way; the setting that lets it open Tsumugi's browser from the system's is off
+until it is chosen ([settings](settings.md)). Only web addresses are opened
+from a link.
+
 Switching tabs or worktrees keeps the page and its unfinished input, and the
 tree keeps listing a worktree's pages while another is shown. Closing a page ends
 it; pages are not restored across application runs. Website data belongs to

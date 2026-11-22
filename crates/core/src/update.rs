@@ -214,6 +214,11 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             crate::floating::act(state, action)
         }
         Msg::Window(action) => content::act(state, action),
+        Msg::OpenLink {
+            environment,
+            url,
+            modifier,
+        } => crate::browser::open_link(state, environment, url, modifier),
         Msg::WindowFocus(id) => content::focus_window(state, id),
         Msg::TabShow(at) => content::show_tab(state, at),
         Msg::SessionConversation { tab, shown } => content::show_conversation(state, tab, shown),

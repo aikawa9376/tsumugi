@@ -94,6 +94,15 @@ Starts a session that resolves the files in conflict; it does not push.
 | `ai_actions.resolve_conflicts.profile` | string |  | The profile whose agent is asked; the profile new sessions start from when left out. |
 | `ai_actions.resolve_conflicts.template` | string | `""` | The prompt, in which `{basePrompt}` stands for the built-in prompt of the action. A template that leaves it out replaces the built-in prompt, including what it tells the agent not to do. The other variables an action takes are in the [reference](../ai-actions.md#recipes). |
 
+## `[browser]`
+
+Where web links open: Tsumugi's browser or the system's.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `browser.modifier_inverts` | boolean | `false` | Let that modifier send a link to the other browser than the one `open_links_in_app` chooses: with links opening in the system's browser, it opens that one link in Tsumugi's. |
+| `browser.open_links_in_app` | boolean | `false` | Open the web links of conversations, pull requests, issues and documents in a page of Tsumugi's browser rather than in the system's. Holding Shift and Ctrl (Shift and Cmd on macOS) while pressing a link sends that one link to the system's browser. |
+
 ## `[console]`
 
 How the console takes keys and draws its cursor.

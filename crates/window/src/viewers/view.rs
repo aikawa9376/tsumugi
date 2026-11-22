@@ -282,7 +282,13 @@ fn ViewerOf(
                     shown: frame_doc,
                     gone,
                 }));
-                spawn(follow_frame(path, media_id.clone(), on_link, top.clone()));
+                spawn(follow_frame(
+                    path,
+                    media_id.clone(),
+                    on_link,
+                    try_consume_context::<crate::bridge::AppCtx>(),
+                    top.clone(),
+                ));
             }
             FileKind::Pdf => {
                 spawn(async move {
@@ -571,6 +577,7 @@ async fn follow_frame(
     path: PathBuf,
     frame: String,
     on_link: EventHandler<PathBuf>,
+    app: Option<crate::bridge::AppCtx>,
     top: Rc<Cell<f64>>,
 ) {
     let mut heard = document::eval(&format!(
@@ -580,6 +587,7 @@ async fn follow_frame(
            const m = e.data;
            if (!m) return;
            if (m.tsumugiViewerLink === 1 && typeof m.path === 'string') dioxus.send(['link', m.path]);
+           if (m.tsumugiViewerOpen === 1 && typeof m.url === 'string') dioxus.send(['open', [m.url, m.modifier === true]]);
            if (m.tsumugiViewerTop === 1 && typeof m.top === 'number') dioxus.send(['top', m.top]);
          }});
          await new Promise(() => {{}});"
@@ -589,6 +597,15 @@ async fn follow_frame(
             ("link", serde_json::Value::String(written)) => {
                 if let Some(file) = link_target(&path, &written).filter(|f| f.is_file()) {
                     on_link.call(file);
+                }
+            }
+            ("open", serde_json::Value::Array(told)) => {
+                if let (Some(app), Some(url)) = (app, told.first().and_then(|u| u.as_str())) {
+                    app.dispatch(tsumugi_core::msg::Msg::OpenLink {
+                        environment: app.active_environment(),
+                        url: url.to_string(),
+                        modifier: told.get(1).and_then(|m| m.as_bool()).unwrap_or_default(),
+                    });
                 }
             }
             ("top", value) => top.set(value.as_f64().unwrap_or_default()),

@@ -921,6 +921,19 @@ fn WindowPane(now: Settings, change: Callback<Change>) -> Element {
                     onchange: move |on| change(Box::new(move |s: &mut Settings| s.usage_left = on)),
                 }
             }
+            SettingRow { label: "Open links in Tsumugi's browser", hint: "Web links of conversations, pull requests, issues and documents open in a page of the browser; off, in the system's browser. Pressing a link with Shift and Ctrl (Shift and Cmd on macOS) sends that one link to the system's browser.",
+                Toggle {
+                    checked: now.browser.open_links_in_app,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.browser.open_links_in_app = on)),
+                }
+            }
+            SettingRow { label: if now.browser.open_links_in_app { "Let the modifier choose the system's browser" } else { "Let the modifier choose Tsumugi's browser" },
+                hint: if now.browser.open_links_in_app { "Shift and Ctrl (Shift and Cmd on macOS) pressed with a link opens that one link in the system's browser." } else { "Shift and Ctrl (Shift and Cmd on macOS) pressed with a link opens that one link in a page of Tsumugi's browser." },
+                Toggle {
+                    checked: now.browser.modifier_inverts,
+                    onchange: move |on| change(Box::new(move |s: &mut Settings| s.browser.modifier_inverts = on)),
+                }
+            }
     }
     }
 }

@@ -163,7 +163,7 @@ pub(crate) fn GitHubWindow(
                        const f = document.getElementById({media_id:?});
                        if (!f || e.source !== f.contentWindow) return;
                        const m = e.data;
-                       if (m && m.tsumugiViewerOpen === 1 && typeof m.url === 'string') dioxus.send(JSON.stringify({{ open: m.url }}));
+                       if (m && m.tsumugiViewerOpen === 1 && typeof m.url === 'string') dioxus.send(JSON.stringify({{ open: m.url, modifier: m.modifier === true }}));
                        else if (m && typeof m.tsumugiGithub === 'string') dioxus.send(JSON.stringify(m));
                      }});
                      await new Promise(() => {{}});"
@@ -173,9 +173,11 @@ pub(crate) fn GitHubWindow(
                         continue;
                     };
                     if let Some(url) = told["open"].as_str() {
-                        if url.starts_with("https://") || url.starts_with("http://") {
-                            crate::bridge::open([url.to_string()]);
-                        }
+                        app.dispatch(Msg::OpenLink {
+                            environment: environment.clone(),
+                            url: url.to_string(),
+                            modifier: told["modifier"] == true,
+                        });
                         continue;
                     }
                     match told["tsumugiGithub"].as_str() {

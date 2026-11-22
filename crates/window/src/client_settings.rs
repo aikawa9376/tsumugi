@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tsumugi_core::config::Config;
 use tsumugi_core::details::DetailsLayout;
-use tsumugi_core::settings::{Appearance, ConsoleSettings, Settings};
+use tsumugi_core::settings::{Appearance, BrowserSettings, ConsoleSettings, Settings};
 use tsumugi_model::EnvironmentId;
 use tsumugi_protocol::{ConfigFile, ConfigWork, FileText};
 
@@ -31,6 +31,8 @@ pub(crate) struct Preferences {
     #[serde(default = "on")]
     usage_left: bool,
     console: ConsoleSettings,
+    #[serde(default)]
+    browser: BrowserSettings,
     appearance: Appearance,
     light_theme: String,
     dark_theme: String,
@@ -83,6 +85,7 @@ impl Preferences {
             notify_usage: settings.notify_usage,
             usage_left: settings.usage_left,
             console: settings.console.clone(),
+            browser: settings.browser.clone(),
             appearance: settings.appearance,
             light_theme: settings.light_theme.clone(),
             dark_theme: settings.dark_theme.clone(),
@@ -103,6 +106,7 @@ impl Preferences {
         settings.notify_usage = self.notify_usage;
         settings.usage_left = self.usage_left;
         settings.console = self.console.clone();
+        settings.browser = self.browser.clone();
         settings.panel = self.panel.clone();
         self.looks().apply(settings);
     }
