@@ -237,6 +237,9 @@ pub struct Start {
     /// A model the agent lists (see `models`); its default when omitted.
     #[serde(default)]
     pub model: Option<String>,
+    /// The size of the work, `light`, `standard` or `heavy`: the user's settings say which profile and model each starts. It stands in for `agent`, `profile` and `model`, which it refuses beside it, and it fails, starting nothing, when the user has not defined the tier or its model is not offered.
+    #[serde(default)]
+    pub tier: Option<tsumugi_core::settings::Tier>,
     #[serde(default)]
     pub permissions: Option<AgentPermissions>,
     /// A short name; made from the prompt when omitted.

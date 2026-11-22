@@ -1365,3 +1365,141 @@ fn asking_for_the_gate_and_for_a_cleanup_act_for_the_session() {
     assert!(Command::RequestGate(Default::default()).acts());
     assert!(Command::CleanupWorktrees(Default::default()).acts());
 }
+
+fn tiered(tier: &str) -> protocol::Start {
+    serde_json::from_value(json!({"prompt": "go", "tier": tier})).unwrap()
+}
+
+fn with_settings(context: &mut Context, text: &'static str) {
+    context.settings = Arc::new(move || Ok(Settings::parse(text).unwrap()));
+}
+
+#[tokio::test]
+async fn a_start_by_a_tier_the_user_has_not_defined_fails_and_starts_nothing_else() {
+    let (_state, mut context, caller, _) = conversation_watch("lead");
+    with_settings(&mut context, "[worker_tiers.light]\nmodel = 'haiku'\n");
+
+    let refused = start(&context, &caller, tiered("heavy")).await.unwrap_err();
+
+    assert_eq!(refused.code, Code::Invalid);
+    assert!(
+        refused.message.contains("`heavy` is not defined"),
+        "{}",
+        refused.message
+    );
+    assert!(
+        refused.message.contains("[worker_tiers]"),
+        "{}",
+        refused.message
+    );
+    assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_tier_naming_a_profile_that_is_gone_fails_naming_both() {
+    let (_state, mut context, caller, _) = conversation_watch("lead");
+    with_settings(
+        &mut context,
+        "[worker_tiers.light]\nprofile = 'gone'\nmodel = 'haiku'\n",
+    );
+
+    let refused = start(&context, &caller, tiered("light")).await.unwrap_err();
+
+    assert_eq!(refused.code, Code::Invalid);
+    assert!(refused.message.contains("`light`"), "{}", refused.message);
+    assert!(refused.message.contains("`gone`"), "{}", refused.message);
+    assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_tier_whose_model_its_profile_does_not_list_fails_rather_than_starting_another() {
+    let (_state, mut context, caller, _) = conversation_watch("lead");
+    with_settings(
+        &mut context,
+        "[worker_tiers.light]\nprofile = 'claude'\nmodel = 'gpt-5'\n",
+    );
+    {
+        let mut models = context.models.lock().unwrap();
+        let claude = tsumugi_model::profile::ProfileId::builtin(tsumugi_model::Agent::Claude);
+        models.configure(
+            vec![tsumugi_model::Asked {
+                profile: claude.clone(),
+                agent: tsumugi_model::Agent::Claude,
+                home: None,
+                through: "x".into(),
+            }],
+            claude,
+        );
+        let generation = models.to_ask()[0].1;
+        models.learn(
+            generation,
+            vec![tsumugi_model::ProviderModel {
+                id: "haiku".into(),
+                resolved: None,
+                name: "Haiku".into(),
+                description: String::new(),
+            }],
+        );
+    }
+
+    let refused = start(&context, &caller, tiered("light")).await.unwrap_err();
+
+    assert_eq!(refused.code, Code::Invalid);
+    assert!(
+        refused.message.contains("worker tier `light`"),
+        "{}",
+        refused.message
+    );
+    assert!(refused.message.contains("`gpt-5`"), "{}", refused.message);
+    assert!(refused.message.contains("haiku"), "{}", refused.message);
+    assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_tier_stands_in_for_the_agent_profile_and_model_and_for_a_resume() {
+    let (_state, mut context, caller, _) = conversation_watch("lead");
+    with_settings(&mut context, "[worker_tiers.light]\nmodel = 'haiku'\n");
+
+    for (field, value) in [
+        ("agent", json!("codex")),
+        ("profile", json!("claude")),
+        ("model", json!("opus")),
+        ("resume", json!("zzzz")),
+    ] {
+        let mut asked = json!({"prompt": "go", "tier": "light"});
+        asked[field] = value;
+        let refused = start(&context, &caller, serde_json::from_value(asked).unwrap())
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code, Code::Invalid, "{field}");
+        assert!(
+            refused.message.contains("tier"),
+            "{field}: {}",
+            refused.message
+        );
+    }
+}
+
+#[test]
+fn a_tier_is_started_by_the_profile_and_model_the_settings_give_it() {
+    let settings = Settings::parse(
+        "[worker_tiers.light]\nmodel = 'haiku'\n[worker_tiers.heavy]\nprofile = 'codex'\nmodel = 'gpt-5'\n",
+    )
+    .unwrap();
+
+    let light = with_tier(&settings, tiered("light")).unwrap();
+    assert_eq!(light.profile, None);
+    assert_eq!(light.model.as_deref(), Some("haiku"));
+    let heavy = with_tier(&settings, tiered("heavy")).unwrap();
+    assert_eq!(heavy.profile.map(|p| p.to_string()), Some("codex".into()));
+    assert_eq!(heavy.model.as_deref(), Some("gpt-5"));
+    let plain = with_tier(&settings, plain_start(Path::new("/r"))).unwrap();
+    assert_eq!((plain.profile, plain.model), (None, None));
+}
+
+#[test]
+fn a_tier_with_no_model_starts_its_profile_s_own_default_model() {
+    let settings = Settings::parse("[worker_tiers.standard]\nprofile = 'codex'\n").unwrap();
+    let standard = with_tier(&settings, tiered("standard")).unwrap();
+    assert_eq!(standard.model, None);
+}

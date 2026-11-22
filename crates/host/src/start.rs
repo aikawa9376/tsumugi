@@ -135,6 +135,7 @@ async fn start_as(
             agent: asked.agent,
             profile: asked.profile.clone(),
             model: asked.model.clone(),
+            tier: None,
             permissions: Some(asked.permissions.clone()),
             name: asked.name.clone(),
             background: asked.background,

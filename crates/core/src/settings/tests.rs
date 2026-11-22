@@ -482,6 +482,27 @@ fn settings_written_read_back_the_same() {
                 known_failures: vec!["flaky".into()],
             }],
         },
+        language: "ja".into(),
+        leader: LeaderSettings {
+            profile: Some("codex-review".parse().unwrap()),
+            model: "opus".into(),
+            max_workers: 3,
+            discretion: DiscretionSettings {
+                push: Discretion::Decide,
+                ..Default::default()
+            },
+        },
+        worker_tiers: WorkerTiers {
+            light: Some(WorkerTier {
+                profile: None,
+                model: "haiku".into(),
+            }),
+            heavy: Some(WorkerTier {
+                profile: Some("codex-review".parse().unwrap()),
+                model: String::new(),
+            }),
+            ..Default::default()
+        },
     };
     assert_eq!(written_and_read(&s), s);
 }
@@ -1155,7 +1176,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),

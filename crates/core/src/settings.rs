@@ -291,6 +291,16 @@ pub struct Settings {
     /// The command that gates each repository, run once at a time on the work
     /// host for the sessions that ask.
     pub gate: GateSettings,
+    /// The language a leader speaks to the user in, as a tag such as `ja` or
+    /// `en`; empty for the language of the environment's locale. What the user
+    /// does not read — prompts to sessions, commit messages, code — stays
+    /// English whatever this says.
+    pub language: String,
+    /// Leader mode: the session that supervises the others, how many workers it
+    /// keeps at work and how far its discretion goes.
+    pub leader: LeaderSettings,
+    /// The tiers a leader starts its workers by, each one a profile and a model.
+    pub worker_tiers: WorkerTiers,
 }
 
 impl Serialize for Settings {
@@ -401,6 +411,9 @@ impl Default for Settings {
             ai_actions: AiActionsSettings::default(),
             governor: GovernorSettings::default(),
             gate: GateSettings::default(),
+            language: String::new(),
+            leader: LeaderSettings::default(),
+            worker_tiers: WorkerTiers::default(),
         }
     }
 }
@@ -595,6 +608,19 @@ impl Settings {
             profile.launch.command = words(std::mem::take(&mut profile.launch.command));
         }
         self.neovim.command = words(self.neovim.command);
+        self.language = self.language.trim().to_string();
+        self.leader.max_workers = self.leader.max_workers.max(1);
+        self.leader.model = self.leader.model.trim().to_string();
+        for tier in [
+            &mut self.worker_tiers.light,
+            &mut self.worker_tiers.standard,
+            &mut self.worker_tiers.heavy,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            tier.model = tier.model.trim().to_string();
+        }
         let d = &mut self.details;
         d.log_commits = d.log_commits.clamp(1, 1000);
         d.diff_lines = d.diff_lines.clamp(1, 100_000);
@@ -712,8 +738,13 @@ pub fn reread(current: &Settings, text: &str) -> Option<Settings> {
 mod ai_actions;
 mod earlier;
 mod governor;
+mod leader;
 pub use ai_actions::{AiActionsSettings, Recipe, RepositoryRecipe, Resolved};
 pub use governor::{BuildCache, GateSettings, GovernorSettings, RepositoryGate};
+pub use leader::{
+    Discretion, DiscretionSettings, LeaderSettings, Tier, WorkerTier, WorkerTiers, language,
+    language_instructions,
+};
 
 #[cfg(test)]
 pub(crate) mod tests;

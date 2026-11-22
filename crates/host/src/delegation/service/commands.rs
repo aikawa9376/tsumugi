@@ -609,6 +609,63 @@ fn resumed_request(old: &Session, name: String) -> crate::execution::StartReques
     }
 }
 
+/// `start` with the profile and model of the tier it names, from the user's
+/// settings; a start that names no tier as it was. A tier that is not defined
+/// fails, and so does one named beside what it stands in for, so nothing is
+/// ever started as something other than what was asked.
+pub(super) fn with_tier(
+    settings: &crate::settings::Settings,
+    mut start: protocol::Start,
+) -> Result<protocol::Start> {
+    let Some(tier) = start.tier.take() else {
+        return Ok(start);
+    };
+    let chosen = [
+        ("agent", start.agent.is_some()),
+        ("profile", start.profile.is_some()),
+        ("model", start.model.is_some()),
+        ("resume", start.resume.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(name, given)| given.then_some(name))
+    .collect::<Vec<_>>();
+    if !chosen.is_empty() {
+        return Err(Error::new(
+            Code::Invalid,
+            format!(
+                "a worker tier chooses the agent, profile and model, and is no part of a resume; leave {} out, or leave the tier out",
+                chosen.join(", ")
+            ),
+        ));
+    }
+    let named = settings
+        .worker_tiers
+        .resolve(tier)
+        .map_err(|error| Error::new(Code::Invalid, error))?;
+    if let Some(profile) = &named.profile
+        && settings.find_profile(profile).is_none()
+    {
+        return Err(Error::new(
+            Code::Invalid,
+            format!(
+                "worker tier `{}` names profile `{profile}`, which is not defined; the user fixes it under [worker_tiers] in settings.toml",
+                tier.name()
+            ),
+        ));
+    }
+    start.profile = named.profile.clone();
+    start.model = Some(named.model.clone()).filter(|model| !model.is_empty());
+    Ok(start)
+}
+
+/// `error` said as the tier it came from, when the start named one.
+fn tiered_error(tier: Option<crate::settings::Tier>, error: String) -> String {
+    match tier {
+        Some(tier) => format!("worker tier `{}`: {error}", tier.name()),
+        None => error,
+    }
+}
+
 /// What a session working an issue is first told: the issue, then what its
 /// opener adds.
 fn issue_prompt(number: u64, issue: &tsumugi_model::LocalIssue, added: &str) -> String {
@@ -635,6 +692,8 @@ pub(super) async fn start(
             "the user has switched off sessions opening sessions; carry on yourself, or ask the user to open the session",
         ));
     }
+    let tier = start.tier;
+    let start = with_tier(&settings, start)?;
     let resumed = match &start.resume {
         Some(wanted) => {
             if start.dir.is_some()
@@ -674,7 +733,7 @@ pub(super) async fn start(
         Some(old) => crate::programs::starting(&settings, Some(old.agent), Some(&old.profile)),
         None => crate::programs::starting(&settings, start.agent, start.profile.as_ref()),
     }
-    .map_err(|error| Error::new(Code::Invalid, error))?;
+    .map_err(|error| Error::new(Code::Invalid, tiered_error(tier, error)))?;
     let (agent, profile) = (chosen.agent(), chosen.profile);
     if resumed.is_none() {
         context
@@ -682,7 +741,7 @@ pub(super) async fn start(
             .lock()
             .expect("the models' lock")
             .check(&profile, start.model.as_deref())
-            .map_err(|error| Error::new(Code::Invalid, error))?;
+            .map_err(|error| Error::new(Code::Invalid, tiered_error(tier, error)))?;
     }
     let dir = match (&resumed, &start.dir, &worked) {
         (Some(old), _, _) => old.cwd.clone(),
