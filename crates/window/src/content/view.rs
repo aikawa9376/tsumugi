@@ -12,8 +12,8 @@ use tsumugi_core::msg::Msg;
 use tsumugi_core::tree as tree_view;
 
 use super::bodies::{
-    CheckLogWindow, ConversationScreen, DiffWindow, DrawnWindow, FocusedBody, GitHubWindow,
-    GithubFrame, UnfocusedBody, ViewerWindow,
+    BoardWindow, CheckLogWindow, ConversationScreen, DiffWindow, DrawnWindow, FocusedBody,
+    GitHubWindow, GithubFrame, UnfocusedBody, ViewerWindow,
 };
 use super::tabs_bar::TabsBar;
 use super::window::{ContentWindow, WindowBorder, WindowDrop, window_strip};
@@ -163,6 +163,8 @@ pub(crate) fn ContentPanel(
                             }
                         }
                     }
+                } else if let Tab::Board(_) = &shows {
+                    rsx! { BoardWindow { key: "{id}", window: id } }
                 } else if let Tab::CheckLog {
                     environment,
                     repository,

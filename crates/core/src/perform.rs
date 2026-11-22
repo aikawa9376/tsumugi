@@ -38,6 +38,9 @@ pub(crate) fn perform(
         && matches!(area, Area::Console | Area::Prompt)
         && !state.content.reading_conversation();
     let prompt_runs = state.console.prompt_runs;
+    if let Some(effects) = crate::board::act(state, &action) {
+        return effects;
+    }
     if let Some(effects) = crate::sidebar::press(state, &action) {
         return effects;
     }
@@ -52,7 +55,7 @@ pub(crate) fn perform(
     // log shown.
     if area == Area::Console
         && action == Action::Refresh
-        && let Some(tab @ (Tab::GitHub { .. } | Tab::CheckLog { .. })) = &thing
+        && let Some(tab @ (Tab::GitHub { .. } | Tab::CheckLog { .. } | Tab::Board(_))) = &thing
         && let Some(window) = state.content.windows.focused_window()
     {
         let mut effects = vec![Effect::Viewer {
@@ -72,6 +75,7 @@ pub(crate) fn perform(
                 | Tab::Drawn { .. }
                 | Tab::GitHub { .. }
                 | Tab::CheckLog { .. }
+                | Tab::Board(_)
                 | Tab::Diff { .. }
         ) || state.content.conversation(tab))
         && let Some(action) = ViewerAction::of(&action)
@@ -145,6 +149,21 @@ pub(crate) fn perform(
         | Action::GithubClose
         | Action::GithubReady
         | Action::CheckRerun
+        | Action::BoardOpen
+        | Action::BoardLeft
+        | Action::BoardRight
+        | Action::BoardDown
+        | Action::BoardUp
+        | Action::BoardFirst
+        | Action::BoardLast
+        | Action::BoardEnter
+        | Action::BoardIdle
+        | Action::BoardGroup
+        | Action::BoardExpand
+        | Action::BoardProject
+        | Action::BoardState
+        | Action::BoardClear
+        | Action::BoardSearch
         | Action::OverlayClose
         | Action::OverlayDown
         | Action::OverlayUp

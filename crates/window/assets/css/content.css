@@ -81,3 +81,42 @@
 .pic-layers img { display: block; max-width: 100%; }
 .pic-layers .pic-old { position: absolute; left: 0; top: 0; }
 .pic-stack input[type=range] { width: 100%; max-width: 480px; }
+/* The agent board: a column for each lane, a card for each session. */
+.board { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.board-bar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.board-title { font-weight: 600; }
+.board-total { color: var(--text-3); font-size: var(--ui-font-small); margin-right: auto; }
+.board-search { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); }
+.board-search:focus-within { border-color: var(--focus-border); }
+.board-search-input { width: 220px; color: var(--text); background: none; border: 0; outline: 0; font: inherit; }
+.board-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-shrink: 0; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.board-chips-gap { width: 8px; }
+.board-chip { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-2); background: var(--raised); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; font: inherit; font-size: var(--ui-font-small); }
+.board-chip.on { color: var(--text); border-color: var(--focus-border); }
+.board-chip-count { color: var(--text-3); font-size: var(--ui-font-caption); }
+.board-lanes { display: flex; flex: 1; min-height: 0; gap: 10px; padding: 10px 12px; overflow-x: auto; }
+.board-lane { display: flex; flex-direction: column; flex: 1 1 0; min-width: 240px; min-height: 0; border: 1px solid var(--line); border-radius: 8px; }
+.board-lane-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; color: var(--text-3); font-size: var(--ui-font-small); text-transform: uppercase; letter-spacing: 0.05em; }
+.board-lane-count { margin-left: auto; padding: 0 6px; border-radius: 999px; background: var(--raised); }
+.board-cards { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
+.board-none { margin: 0; padding: 4px; color: var(--text-3); font-size: var(--ui-font-small); }
+.board-card { display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; cursor: pointer; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
+.board-card:hover { background: var(--select); }
+.board-card.needs { border-color: var(--wait); }
+.board-card.done { border-color: var(--done); }
+.board-card.selected { box-shadow: 0 0 0 2px var(--focus-border); }
+.board-card-head { display: flex; align-items: center; gap: 6px; }
+.board-card-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.board-card.unread .board-card-name { color: var(--text); font-weight: 600; }
+.board-said { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--ui-font-small); }
+.board-said.user { -webkit-line-clamp: 1; color: var(--text-3); }
+.board-said-who { color: var(--text-3); font-weight: 600; }
+.board-ask { padding: 3px 6px; border-radius: 4px; color: var(--wait); border: 1px solid var(--wait); font-size: var(--ui-font-small); }
+.board-children-toggle { align-self: flex-start; cursor: pointer; color: var(--text-3); background: none; border: 0; padding: 0; font: inherit; font-size: var(--ui-font-small); }
+.board-children-asking { color: var(--wait); }
+.board-children { display: flex; flex-direction: column; gap: 2px; margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--line); }
+.board-child { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: var(--text-3); font-size: var(--ui-font-small); }
+.board-child:hover { color: var(--text); }
+.board-card-foot { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: var(--ui-font-small); }
+.board-card-where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-card-age { flex: none; font-variant-numeric: tabular-nums; }
