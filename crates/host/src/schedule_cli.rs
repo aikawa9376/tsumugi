@@ -737,7 +737,11 @@ mod tests {
         assert!(make(&["--trigger", "every"], None).is_err(), "how often?");
         assert!(make(&["--trigger", "daily", "--every-minutes", "30"], None).is_err());
         assert_eq!(
-            make(&["--every-minutes", "60"], Some(&Cadence::Every { minutes: 30 })).unwrap(),
+            make(
+                &["--every-minutes", "60"],
+                Some(&Cadence::Every { minutes: 30 })
+            )
+            .unwrap(),
             Some(Cadence::Every { minutes: 60 })
         );
         assert!(asked(&["create", "--every-minutes", "soon"]).is_none());
@@ -757,7 +761,10 @@ mod tests {
         assert!(shown.contains("when: every 30 min"), "{shown}");
         assert!(!shown.contains("profile:"), "{shown}");
         let listed = Shown::Schedules(vec![schedule.clone()]).render(false);
-        assert!(listed.contains("-> ab12") && listed.contains("held"), "{listed}");
+        assert!(
+            listed.contains("-> ab12") && listed.contains("held"),
+            "{listed}"
+        );
         assert_eq!(
             Shown::Held(schedule).render(false),
             "#3 holds a tick; the session gets it once it waits for input"

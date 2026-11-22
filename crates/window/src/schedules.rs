@@ -148,9 +148,7 @@ fn ScheduleRow(
         ScheduleTarget::Queue => schedule.dir.display().to_string(),
         ScheduleTarget::Session { code } => format!("wakes session {code}"),
     };
-    let held = schedule
-        .held_ms
-        .map(|ms| time::ago(now.saturating_sub(ms)));
+    let held = schedule.held_ms.map(|ms| time::ago(now.saturating_sub(ms)));
     let enable = !schedule.enabled;
     rsx! {
         div { class: "local-issue schedule",

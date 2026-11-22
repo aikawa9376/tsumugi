@@ -486,10 +486,7 @@ impl Store {
             return Ok(None);
         }
         let Some(recipient) = live_session(&transaction, code)? else {
-            transaction.execute(
-                "UPDATE schedules SET enabled = 0 WHERE id = ?1",
-                [id],
-            )?;
+            transaction.execute("UPDATE schedules SET enabled = 0 WHERE id = ?1", [id])?;
             transaction.execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?;
             let run = ScheduleRun {
                 due_ms: now_ms,
@@ -552,8 +549,9 @@ impl Store {
                     "INSERT OR REPLACE INTO schedule_ticks (schedule, held_ms) VALUES (?1, ?2)",
                     params![id, ms as i64],
                 )?,
-                None => transaction
-                    .execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?,
+                None => {
+                    transaction.execute("DELETE FROM schedule_ticks WHERE schedule = ?1", [id])?
+                }
             };
         }
         transaction.commit()?;
@@ -604,10 +602,7 @@ fn json<T: serde::Serialize>(value: &T) -> Result<String> {
 }
 
 /// The session a schedule wakes, if it has not ended.
-fn live_session(
-    connection: &rusqlite::Connection,
-    code: &str,
-) -> Result<Option<super::Session>> {
+fn live_session(connection: &rusqlite::Connection, code: &str) -> Result<Option<super::Session>> {
     Ok(connection
         .query_row(
             &format!(
@@ -991,7 +986,13 @@ mod tests {
             .unwrap();
         let mut schedule = new("Supervise");
         schedule.cadence = Cadence::Every { minutes: 30 };
-        let code = store.session(session.0).unwrap().unwrap().code.as_str().to_owned();
+        let code = store
+            .session(session.0)
+            .unwrap()
+            .unwrap()
+            .code
+            .as_str()
+            .to_owned();
         schedule.target = ScheduleTarget::Session { code };
         let id = schedule.id.clone();
         store.add_schedule(schedule).unwrap();
@@ -1030,9 +1031,7 @@ mod tests {
         assert!(run.issue.is_none());
         // Looking again, at the same time or later, adds nothing.
         assert_eq!(
-            store
-                .settle_tick(&id, None, 31 * MINUTE, &waiting)
-                .unwrap(),
+            store.settle_tick(&id, None, 31 * MINUTE, &waiting).unwrap(),
             None
         );
         assert_eq!(
@@ -1130,12 +1129,9 @@ mod tests {
                 .is_some()
         );
         // Two hosts that look at the same moment deliver it once.
-        let mut other =
-            Store::open(&directory.path().join("delegation/state.sqlite3")).unwrap();
+        let mut other = Store::open(&directory.path().join("delegation/state.sqlite3")).unwrap();
         assert_eq!(
-            other
-                .settle_tick(&id, None, 32 * MINUTE, &waiting)
-                .unwrap(),
+            other.settle_tick(&id, None, 32 * MINUTE, &waiting).unwrap(),
             None
         );
         assert_eq!(pending(&mut again, session).len(), 1);

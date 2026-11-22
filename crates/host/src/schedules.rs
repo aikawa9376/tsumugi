@@ -89,9 +89,7 @@ pub(crate) fn wake_due(
 
 /// Wake the sessions whose schedules are due. What it settles is shown to the
 /// windows with the schedules the watch publishes next.
-pub(crate) async fn wake(
-    shown: &[tsumugi_model::Session],
-) -> Result<(), String> {
+pub(crate) async fn wake(shown: &[tsumugi_model::Session]) -> Result<(), String> {
     let shown = shown.to_vec();
     let now_ms = tsumugi_model::time::now_ms();
     let settled = with_store(&root(), move |store| wake_due(store, now_ms, &shown))
@@ -408,7 +406,11 @@ mod tests {
         store: &mut Store,
         state: State,
         now: u64,
-    ) -> (String, tsumugi_model::SessionId, Vec<tsumugi_model::Session>) {
+    ) -> (
+        String,
+        tsumugi_model::SessionId,
+        Vec<tsumugi_model::Session>,
+    ) {
         let (session, _) = store
             .register(crate::delegation::store::NewSession {
                 parent: None,
@@ -425,7 +427,13 @@ mod tests {
                 code: None,
             })
             .unwrap();
-        let code = store.session(session).unwrap().unwrap().code.as_str().to_owned();
+        let code = store
+            .session(session)
+            .unwrap()
+            .unwrap()
+            .code
+            .as_str()
+            .to_owned();
         let new = NewSchedule {
             id: SessionId::new().to_string(),
             name: "Supervise".into(),
@@ -443,10 +451,7 @@ mod tests {
         (id, session, shown_as(session, state))
     }
 
-    fn shown_as(
-        session: tsumugi_model::SessionId,
-        state: State,
-    ) -> Vec<tsumugi_model::Session> {
+    fn shown_as(session: tsumugi_model::SessionId, state: State) -> Vec<tsumugi_model::Session> {
         let mut shown = tsumugi_model::testing::session("supervisor").build();
         shown.delegation = Some(session);
         shown.state = state;
@@ -508,7 +513,9 @@ mod tests {
             profile: Some("no-such-profile".into()),
             timezone: "UTC".into(),
             cadence: Cadence::Every { minutes: 30 },
-            target: ScheduleTarget::Session { code: "ab12".into() },
+            target: ScheduleTarget::Session {
+                code: "ab12".into(),
+            },
             enabled: true,
             grace_minutes: 10,
             next_ms: None,
