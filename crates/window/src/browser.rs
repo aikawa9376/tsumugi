@@ -5,18 +5,24 @@ mod annotations;
 mod capture;
 mod card;
 mod closed;
+mod downloads;
 mod feedback;
 mod find;
 mod markup;
 #[cfg(all(test, target_os = "linux"))]
 mod native_tests;
+mod profiles;
 mod reach;
+mod reload;
+#[cfg(all(test, target_os = "linux"))]
+mod reload_native_tests;
 mod retention;
+mod reuse;
 mod viewport;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,7 +30,6 @@ use std::time::Duration;
 use dioxus::core::{Runtime, RuntimeGuard};
 use dioxus::desktop::wry::{WebContext, WebView, WebViewBuilder};
 use dioxus::prelude::*;
-use sha2::{Digest, Sha256};
 use tsumugi_core::actions::Action;
 use tsumugi_core::content::{BrowserId, Tab, WindowId};
 use tsumugi_core::msg::Msg;
@@ -120,16 +125,6 @@ fn sync_marks(page: &Page) {
         .evaluate_script(&format!("window.tsumugiInspector?.marks([{keys}])"));
 }
 
-fn profile(root: &Path, environment: &EnvironmentId) -> PathBuf {
-    let digest = Sha256::digest(environment.to_string().as_bytes());
-    root.join(
-        digest
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>(),
-    )
-}
-
 fn address(typed: &str) -> Result<String, &'static str> {
     let typed = typed.trim();
     if typed.is_empty() || typed.chars().any(|c| c.is_whitespace() || c.is_control()) {
@@ -207,13 +202,17 @@ fn target(typed: &str, forward: impl FnOnce(u16) -> Result<u16, String>) -> Resu
 
 /// Load `page` again. A page that went through a forward goes through one
 /// made again, as the one it was loaded through went with the connection that
-/// made it; any other is reloaded as it is.
-fn reload_page(app: AppCtx, page: &Page, mut error: Signal<String>) {
+/// made it; any other is reloaded as it is, past the cache when `hard`.
+fn reload_page(app: AppCtx, page: &Page, mut error: Signal<String>, hard: bool) {
     let home = page.home.borrow().clone();
     let url = page.view.url().unwrap_or_default();
     let blank = url.is_empty() || url == "about:blank";
     let reach::Reload::Through(home) = reach::reload(&home, blank) else {
-        let _ = page.view.reload();
+        if hard {
+            reload::hard(&page.view);
+        } else {
+            let _ = page.view.reload();
+        }
         return;
     };
     match target(home, |port| app.forward_port(&page.environment, port)) {
@@ -326,6 +325,8 @@ struct Page {
     pending: Arc<Mutex<Option<String>>>,
     selection: Rc<RefCell<annotations::Selection>>,
     notes: Rc<RefCell<Vec<annotations::Note>>>,
+    /// What the page was asked to download, which the shelf lists.
+    downloads: Rc<RefCell<downloads::Shelf>>,
     next_note: Cell<u64>,
     // WebKit's context must outlive every view built with it.
     _context: Rc<RefCell<WebContext>>,
@@ -333,10 +334,19 @@ struct Page {
     child: crate::native_layer::Child,
 }
 
+/// What the pages of one environment share: the engine's context, which
+/// keeps their website data, and the downloads they were asked for.
+struct Site {
+    context: Rc<RefCell<WebContext>>,
+    downloads: Rc<RefCell<downloads::Shelf>>,
+    /// Whether a page of the context records its downloads already.
+    recording: Cell<bool>,
+}
+
 #[derive(Default)]
 struct Pool {
     pages: HashMap<BrowserId, Rc<Page>>,
-    contexts: HashMap<EnvironmentId, Rc<RefCell<WebContext>>>,
+    contexts: HashMap<(EnvironmentId, Option<String>), Site>,
     #[cfg(target_os = "linux")]
     layer: Option<Rc<crate::native_layer::Layer>>,
 }
@@ -355,16 +365,27 @@ impl Pool {
             return Ok(page.clone());
         }
         let desktop = dioxus::desktop::window();
-        let directory = profile(
+        let profile = profiles::chosen(browser);
+        let directory = profiles::directory(
             &crate::paths::data_dir().join("tsumugi/browser"),
             environment,
+            profile.as_deref(),
         );
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-        let context = self
+        let site = self
             .contexts
-            .entry(environment.clone())
-            .or_insert_with(|| Rc::new(RefCell::new(WebContext::new(Some(directory)))))
-            .clone();
+            .entry((environment.clone(), profile.clone()))
+            .or_insert_with(|| Site {
+                context: Rc::new(RefCell::new(WebContext::new(Some(directory)))),
+                downloads: Default::default(),
+                recording: Cell::new(false),
+            });
+        let context = site.context.clone();
+        let downloads = site.downloads.clone();
+        // WebKitGTK takes download handlers on the context the pages share,
+        // so one page of a context records for all of them; the other
+        // engines take them on the page.
+        let records = !cfg!(target_os = "linux") || !site.recording.replace(true);
         let mut context_ref = context.borrow_mut();
         let return_to = desktop.clone();
         // Native WebView callbacks run outside Dioxus's event dispatch.
@@ -390,6 +411,8 @@ impl Pool {
                 target(&saved.address, |port| app.forward_port(environment, port)).ok()
             })
             .unwrap_or_else(|| "about:blank".into());
+        let download_started = downloads.clone();
+        let download_finished = downloads.clone();
         let builder = WebViewBuilder::new_with_web_context(&mut context_ref)
             .with_url(start)
             .with_visible(false)
@@ -463,11 +486,25 @@ impl Pool {
                     }
                 }
             });
+        let builder = if records {
+            builder
+                .with_download_started_handler(move |url, path| {
+                    download_started
+                        .borrow_mut()
+                        .started(url, path, |path| path.exists());
+                    true
+                })
+                .with_download_completed_handler(move |url, path, ok| {
+                    download_finished.borrow_mut().finished(&url, path, ok);
+                })
+        } else {
+            builder
+        };
         #[cfg(target_os = "macos")]
         let builder = {
             use dioxus::desktop::wry::WebViewBuilderExtDarwin;
             use objc2_foundation::{NSOperatingSystemVersion, NSProcessInfo};
-            let digest = Sha256::digest(environment.to_string().as_bytes());
+            let digest = profiles::digest(environment, profile.as_deref());
             let persistent = NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(
                 NSOperatingSystemVersion {
                     majorVersion: 14,
@@ -513,6 +550,7 @@ impl Pool {
             pending,
             selection,
             notes: Default::default(),
+            downloads,
             next_note: Cell::new(1),
             _context: context,
             #[cfg(target_os = "linux")]
@@ -529,6 +567,7 @@ pub(crate) fn use_browsers(app: AppCtx) {
     let browsers = use_context_provider(Browsers::default);
     use_context_provider(|| Titles(Signal::new(HashMap::new())));
     let mut freed = use_context_provider(|| Freed(Signal::new(Default::default()))).0;
+    use_context_provider(|| Moves(Signal::new(0)));
     use_hook(move || {
         spawn(async move {
             loop {
@@ -549,6 +588,7 @@ pub(crate) fn use_browsers(app: AppCtx) {
                 for id in gone {
                     retention::forget(id);
                     if let Some(page) = pool.pages.remove(&id) {
+                        reuse::forget(id);
                         let url = page.view.url().unwrap_or_default();
                         let address = page
                             .ports
@@ -616,8 +656,27 @@ async fn keep_screenshot(app: AppCtx, page: &Page, environment: &EnvironmentId, 
     }
 }
 
+/// How many times a page was moved to another profile, which builds its view
+/// again: the engine fixes a view's website data when it is made.
+#[derive(Clone, Copy)]
+struct Moves(Signal<u64>);
+
+/// The page `id`, shown by its own view in the profile it is in.
 #[component]
 pub(crate) fn BrowserWindow(
+    window: WindowId,
+    environment: EnvironmentId,
+    worktree: PathBuf,
+    id: BrowserId,
+) -> Element {
+    // A moved page is a new view; the old one goes with its component.
+    let _ = use_context::<Moves>().0();
+    let profile = profiles::chosen(id).unwrap_or_default();
+    rsx! { BrowserView { key: "{profile}", window, environment, worktree, id } }
+}
+
+#[component]
+fn BrowserView(
     window: WindowId,
     environment: EnvironmentId,
     worktree: PathBuf,
@@ -628,7 +687,8 @@ pub(crate) fn BrowserWindow(
     let browsers = use_context::<Browsers>();
     let mut titles = use_context::<Titles>().0;
     let page_environment = environment.clone();
-    let page = use_hook(move || browsers.0.borrow_mut().page(id, &page_environment, app));
+    let building = browsers.clone();
+    let page = use_hook(move || building.0.borrow_mut().page(id, &page_environment, app));
     let mut searching = find::use_find();
     let mut size = use_signal(move || viewport::chosen(id).unwrap_or("responsive"));
     // What was typed and not entered stays with the page, so that putting
@@ -637,6 +697,10 @@ pub(crate) fn BrowserWindow(
     let mut current = use_signal(String::new);
     let mut error = use_signal(String::new);
     let mut route = use_signal(|| reach::Route::Here);
+    let mut shelf = use_signal(Vec::<downloads::Row>::new);
+    let moves = use_context::<Moves>().0;
+    let mut naming = use_signal(|| false);
+    let mut profile_typed = use_signal(String::new);
     let mut inspecting = use_signal(|| false);
     let mut grabbing = use_signal(|| false);
     // The element picked and waiting for its instruction, and the page
@@ -671,7 +735,13 @@ pub(crate) fn BrowserWindow(
         move || {
             if let Some(url) = START.with(|start| start.borrow_mut().remove(&id)) {
                 match target(&url, |port| app.forward_port(&starting, port)) {
-                    Ok(url) => *page.pending.lock().expect("browser navigation lock") = Some(url),
+                    Ok(url) => {
+                        reuse::at(
+                            id,
+                            shown_address(&url, |local| app.work_port(&starting, local)),
+                        );
+                        *page.pending.lock().expect("browser navigation lock") = Some(url);
+                    }
                     Err(message) => error.set(message),
                 }
             }
@@ -697,6 +767,7 @@ pub(crate) fn BrowserWindow(
                 let mut bounds = None;
                 let mut ticks = 0u32;
                 let mut keeps_typed = retention::typed(id).is_some();
+                let mut downloads_seen = 0;
                 loop {
                     tokio::time::sleep(Duration::from_millis(50)).await;
                     ticks = ticks.wrapping_add(1);
@@ -783,6 +854,9 @@ pub(crate) fn BrowserWindow(
                     if *size.peek() != chosen {
                         size.set(chosen);
                     }
+                    if let Some(rows) = page.downloads.borrow().since(&mut downloads_seen) {
+                        shelf.set(rows);
+                    }
                     if find::take(window) {
                         searching.open.set(true);
                         searching.asked += 1;
@@ -835,7 +909,7 @@ pub(crate) fn BrowserWindow(
                         // connection: once it is back, load the page through one
                         // made again.
                         if was_away && !reached.is_away() {
-                            reload_page(app, &page, error);
+                            reload_page(app, &page, error, false);
                         }
                     }
                     if !app.held().is_empty()
@@ -883,6 +957,7 @@ pub(crate) fn BrowserWindow(
                             .borrow_mut()
                             .shown(&url, |local| app.work_port(&listed, local));
                         titles.write().insert(id, name_of(&address));
+                        reuse::at(id, address.clone());
                         // The page the address was typed for is the one shown
                         // for the first time since it was put away: what was
                         // typed is not replaced by where the page is.
@@ -916,6 +991,29 @@ pub(crate) fn BrowserWindow(
             }
         }
     };
+    let shelves = page.clone();
+    // Move the page to `to`, the default profile for none, at the address it
+    // is at: its website data is the profile's, so its view is made again.
+    let move_to = {
+        let page = page.clone();
+        let moving = environment.clone();
+        Rc::new(move |to: Option<String>| {
+            let url = page.view.url().unwrap_or_default();
+            if !url.is_empty() && url != "about:blank" {
+                start_at(
+                    id,
+                    shown_address(&url, |local| app.work_port(&moving, local)),
+                );
+            }
+            profiles::choose(id, to);
+            browsers.0.borrow_mut().pages.remove(&id);
+            let mut moves = moves;
+            moves += 1;
+        })
+    };
+    let in_profile = profiles::chosen(id);
+    let made = profiles::made();
+    let (picked, named) = (move_to.clone(), move_to.clone());
     let back = page.clone();
     let forward = page.clone();
     let reload = page.clone();
@@ -960,7 +1058,19 @@ pub(crate) fn BrowserWindow(
             div { id: "browser-toolbar-{window}", class: "browser-toolbar",
                 IconButton { icon: Icon::SquareArrowLeft, title: "Back", onclick: move |_| { let _ = back.view.evaluate_script("history.back()"); } }
                 IconButton { icon: Icon::SquareArrowRight, title: "Forward", onclick: move |_| { let _ = forward.view.evaluate_script("history.forward()"); } }
-                IconButton { icon: Icon::Refresh, title: "Reload", onclick: move |_| reload_page(app, &reload, error) }
+                IconButton {
+                    icon: Icon::Refresh,
+                    title: "Reload (Shift-click or right-click: past the cache)",
+                    onmousedown: {
+                        let page = reload.clone();
+                        move |e: MouseEvent| {
+                            if e.trigger_button() == Some(dioxus::html::input_data::MouseButton::Secondary) {
+                                reload_page(app, &page, error, true);
+                            }
+                        }
+                    },
+                    onclick: move |e: MouseEvent| reload_page(app, &reload, error, e.modifiers().shift()),
+                }
                 if let reach::Route::Through { host, connected } = route() {
                     span {
                         class: if connected { "browser-host" } else { "browser-host offline" },
@@ -976,6 +1086,33 @@ pub(crate) fn BrowserWindow(
                         typed.set(value);
                     },
                     onenter: move |_| navigate.clone()(),
+                }
+                select {
+                    class: "browser-profile", aria_label: "Profile",
+                    title: "The profile whose cookies and website data the page uses",
+                    value: in_profile.as_ref().map_or_else(|| "d".to_string(), |name| format!("p:{name}")),
+                    onchange: move |e| match e.value().as_str() {
+                        "n" => { profile_typed.set(String::new()); naming.set(true); }
+                        "d" => picked(None),
+                        other => picked(other.strip_prefix("p:").map(str::to_string)),
+                    },
+                    option { value: "d", "{profiles::DEFAULT}" }
+                    for name in made {
+                        option { value: "p:{name}", "{name}" }
+                    }
+                    option { value: "n", "New profile…" }
+                }
+                if naming() {
+                    InlineField {
+                        class: "browser-profile-name", aria_label: "Profile name", placeholder: "Profile name", value: profile_typed(),
+                        focus: true, contained: true,
+                        oninput: move |value| profile_typed.set(value),
+                        onescape: move |_| naming.set(false),
+                        onenter: move |_| match profiles::make(&profile_typed.peek()) {
+                            Ok(name) => { naming.set(false); error.set(String::new()); named(Some(name)); }
+                            Err(message) => error.set(message),
+                        },
+                    }
                 }
                 select {
                     class: "browser-viewport", aria_label: "Page size",
@@ -1076,6 +1213,31 @@ pub(crate) fn BrowserWindow(
                 find::Bar { window, page: find::Searched(page.clone()), find: searching }
             }
             if !error().is_empty() { div { class: "browser-error", "{error}" } }
+            if !shelf.read().is_empty() {
+                downloads::Rows {
+                    rows: shelf(),
+                    on_open: {
+                        let page = shelves.clone();
+                        move |id| {
+                            if let Some(row) = page.downloads.borrow().row(id) {
+                                crate::bridge::open([row.path.to_string_lossy().into_owned()]);
+                            }
+                        }
+                    },
+                    on_show: {
+                        let page = shelves.clone();
+                        move |id| {
+                            if let Some(row) = page.downloads.borrow().row(id) {
+                                crate::bridge::open(["-R".into(), row.path.to_string_lossy().into_owned()]);
+                            }
+                        }
+                    },
+                    on_dismiss: {
+                        let page = shelves.clone();
+                        move |id| page.downloads.borrow_mut().dismiss(id)
+                    },
+                }
+            }
             if !sending.error.read().is_empty() && drawing().is_some() { div { class: "browser-error", "{sending.error}" } }
             if restoring() {
                 div { class: "browser-notice",
@@ -1092,7 +1254,7 @@ pub(crate) fn BrowserWindow(
                         button { class: "button", r#type: "button",
                             onclick: move |_| {
                                 app.retry_remote(&retrying);
-                                reload_page(app, &retry, error);
+                                reload_page(app, &retry, error, false);
                             },
                             "Retry"
                         }
@@ -1286,15 +1448,5 @@ mod tests {
         ] {
             assert!(address(typed).is_err(), "{typed}");
         }
-    }
-
-    #[test]
-    fn profile_names_never_interpret_environment_ids_as_paths() {
-        let root = std::path::Path::new("/profiles");
-        let a = profile(root, &tsumugi_model::EnvironmentId::new("../a"));
-        let b = profile(root, &tsumugi_model::EnvironmentId::new("a"));
-        assert_eq!(a.parent(), Some(root));
-        assert_ne!(a, b);
-        assert_ne!(profile(root, &Default::default()), b);
     }
 }

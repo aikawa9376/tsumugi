@@ -265,6 +265,10 @@ async fn execute(
             unreachable!("a new page is a browser tab")
         };
         let id = *id;
+        // A page an agent opens goes on as the user the page it works on is.
+        if let Some(now) = now {
+            super::profiles::inherit(now, id);
+        }
         app.dispatch(Msg::OpenBehind(tab));
         let page = page_of(app, browsers, environment, id)?;
         if let Some(url) = url {

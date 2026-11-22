@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use dioxus::prelude::ReadableExt;
 use tsumugi_core::content::{BrowserId, Opening, Tab};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::tree::nav::Page as Listed;
@@ -50,10 +51,26 @@ pub(crate) fn open_at(
     url: String,
     how: Opening,
 ) {
-    let thing = Tab::browser(environment.clone(), worktree.clone());
-    if let Tab::Browser { id, .. } = &thing {
-        super::start_at(*id, url);
-    }
+    // A link asks for a page, not for another of the same; a new tab or
+    // window that is asked for by name is still opened.
+    let listed = app.content.peek().pages();
+    let existing = matches!(how, Opening::Existing)
+        .then(|| super::reuse::existing(&listed, &environment, &worktree, &url))
+        .flatten();
+    let thing = match existing {
+        Some(id) => Tab::Browser {
+            environment: environment.clone(),
+            worktree: worktree.clone(),
+            id,
+        },
+        None => {
+            let thing = Tab::browser(environment.clone(), worktree.clone());
+            if let Tab::Browser { id, .. } = &thing {
+                super::start_at(*id, url);
+            }
+            thing
+        }
+    };
     app.dispatch(Msg::Show {
         thing,
         place: Some(tsumugi_core::tree::Place::at(&environment, worktree)),
