@@ -448,15 +448,19 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             ("dim", why, String::new(), None)
         }
         Item::Browser(_, _, id) => {
-            let name = crate::browser::title(&Tab::Browser {
+            let page = Tab::Browser {
                 environment: it.environment().clone(),
                 worktree: std::path::PathBuf::new(),
                 id: *id,
-            });
+            };
+            let name = crate::browser::title(&page);
+            // A page freed to save memory is dimmed and says so; it loads
+            // again where it was when it is shown.
+            let freed = crate::browser::is_freed(&page);
             (
-                "",
+                if freed { "dim" } else { "" },
                 name.unwrap_or_else(|| "New page".into()),
-                String::new(),
+                if freed { "Freed".into() } else { String::new() },
                 None,
             )
         }

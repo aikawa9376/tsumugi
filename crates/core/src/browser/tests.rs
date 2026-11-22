@@ -161,6 +161,7 @@ mod links {
         let settings = |app, invert| BrowserSettings {
             open_links_in_app: app,
             modifier_inverts: invert,
+            ..BrowserSettings::default()
         };
         for (app, invert, modifier, want) in [
             (false, false, false, Destination::System),

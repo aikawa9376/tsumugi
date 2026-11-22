@@ -8,6 +8,7 @@ use crate::effect::Effect;
 use crate::settings::BrowserSettings;
 use crate::state::ViewState;
 
+pub mod retention;
 #[cfg(test)]
 mod tests;
 

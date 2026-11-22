@@ -152,9 +152,9 @@ impl TerminalRenderer {
     }
 }
 
-/// Where the links of a conversation, a pull request, an issue or a document
-/// open.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+/// Where web links open and how long a hidden page of Tsumugi's browser stays
+/// loaded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct BrowserSettings {
     /// Open the web links of conversations, pull requests, issues and
@@ -166,6 +166,35 @@ pub struct BrowserSettings {
     /// `open_links_in_app` chooses: with links opening in the system's browser,
     /// it opens that one link in Tsumugi's.
     pub modifier_inverts: bool,
+    /// Free the memory of pages that have gone unviewed for
+    /// `memory_saver_hours`. A freed page keeps its address, its scroll
+    /// position and the address being typed, and loads again when it is
+    /// shown. A page an agent is using, or one with unsent input, is kept.
+    pub memory_saver: bool,
+    /// How many hours a page that is not shown goes unviewed before it is
+    /// freed, from 1 to 168.
+    pub memory_saver_hours: u32,
+}
+
+impl Default for BrowserSettings {
+    fn default() -> Self {
+        Self {
+            open_links_in_app: false,
+            modifier_inverts: false,
+            memory_saver: true,
+            memory_saver_hours: 4,
+        }
+    }
+}
+
+impl BrowserSettings {
+    /// How long a page goes unviewed before it is freed, none when pages are
+    /// not freed.
+    pub fn memory_saver_idle(&self) -> Option<std::time::Duration> {
+        self.memory_saver.then(|| {
+            std::time::Duration::from_secs(u64::from(self.memory_saver_hours.clamp(1, 168)) * 3600)
+        })
+    }
 }
 
 /// How the console is drawn and takes keys.
@@ -310,7 +339,7 @@ pub struct Settings {
     pub floating_terminal: FloatingTerminalSettings,
     /// How the console takes keys and draws its cursor.
     pub console: ConsoleSettings,
-    /// Where web links open: Tsumugi's browser or the system's.
+    /// Where web links open, and when hidden pages of Tsumugi's browser are freed.
     pub browser: BrowserSettings,
     /// How much the details panel reads and shows.
     pub details: DetailsSettings,

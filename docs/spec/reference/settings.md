@@ -96,10 +96,12 @@ Starts a session that resolves the files in conflict; it does not push.
 
 ## `[browser]`
 
-Where web links open: Tsumugi's browser or the system's.
+Where web links open, and when hidden pages of Tsumugi's browser are freed.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
+| `browser.memory_saver` | boolean | `true` | Free the memory of pages that have gone unviewed for `memory_saver_hours`. A freed page keeps its address, its scroll position and the address being typed, and loads again when it is shown. A page an agent is using, or one with unsent input, is kept. |
+| `browser.memory_saver_hours` | integer | `4` | How many hours a page that is not shown goes unviewed before it is freed, from 1 to 168. |
 | `browser.modifier_inverts` | boolean | `false` | Let that modifier send a link to the other browser than the one `open_links_in_app` chooses: with links opening in the system's browser, it opens that one link in Tsumugi's. |
 | `browser.open_links_in_app` | boolean | `false` | Open the web links of conversations, pull requests, issues and documents in a page of Tsumugi's browser rather than in the system's. Holding Shift and Ctrl (Shift and Cmd on macOS) while pressing a link sends that one link to the system's browser. |
 

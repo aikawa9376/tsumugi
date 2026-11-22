@@ -4,7 +4,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use dioxus::desktop::wry::WebView;
 use tsumugi_core::content::{BrowserId, Opening, Tab};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::tree::nav::Page as Listed;
@@ -32,14 +31,13 @@ pub(super) fn track(listed: &[(EnvironmentId, Listed)]) {
     });
 }
 
-/// The page `id`, shown in `view`, is closed: it can come back.
-pub(super) fn closing(app: AppCtx, id: BrowserId, view: &WebView) {
+/// The page `id`, which was at `url` as its environment writes it, is closed:
+/// it can come back.
+pub(super) fn closing_at(id: BrowserId, url: String) {
     let Some((environment, worktree)) = ORIGINS.with(|origins| origins.borrow_mut().remove(&id))
     else {
         return;
     };
-    let url = view.url().unwrap_or_default();
-    let url = super::shown_address(&url, |local| app.work_port(&environment, local));
     CLOSED.with(|closed| closed.borrow_mut().close(environment, worktree, url));
 }
 

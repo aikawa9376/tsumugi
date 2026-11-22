@@ -166,8 +166,14 @@ until it is chosen ([settings](settings.md)). Only web addresses are opened
 from a link.
 
 Switching tabs or worktrees keeps the page and its unfinished input, and the
-tree keeps listing a worktree's pages while another is shown. Closing a page ends
-it; pages are not restored across application runs. Website data belongs to
+tree keeps listing a worktree's pages while another is shown. A page that is
+not shown and goes unviewed for hours frees its memory, unless the settings
+turn that off or change the hours ([settings](reference/settings.md)). It
+stays listed, marked as freed, and loads again at its address and scroll
+position when it is shown, with the address that was being typed into its bar
+as it was. A page an agent is using, or one with unsent input or notes, is not
+freed, and freeing one page never frees another worktree's. Closing a page
+ends it; pages are not restored across application runs. Website data belongs to
 the environment, shared by its pages, and stays separate from that of other
 environments. On macOS before 14, website data is temporary.
 
@@ -179,7 +185,11 @@ ports ([details](details.md#components)). In a page of a remote environment,
 an address on `localhost`, `127.0.0.1` or `[::1]` with a port reaches that
 port of the work machine through a forward, however the page is opened, and
 the address field shows the address as the work machine writes it; links
-inside the page are not rewritten.
+inside the page are not rewritten. Such a page shows the work machine it goes
+through in its toolbar. While the work machine is not connected the page is
+covered by a notice that it cannot be reached, with a retry; the address field
+keeps what it showed and what was typed into it. When the connection returns,
+or on a retry, the page loads again through a forward made anew.
 
 Annotate lets the user select page elements, one after another until they
 turn it off or press Escape. Selecting an element shows a card by it, over a

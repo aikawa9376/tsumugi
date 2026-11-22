@@ -10,6 +10,8 @@ mod find;
 mod markup;
 #[cfg(all(test, target_os = "linux"))]
 mod native_tests;
+mod reach;
+mod retention;
 mod viewport;
 
 use std::cell::{Cell, RefCell};
@@ -72,6 +74,18 @@ pub(crate) fn has_focus() -> bool {
 /// it where the core, which knows no address, only says "Browser".
 #[derive(Clone, Copy)]
 struct Titles(Signal<HashMap<BrowserId, String>>);
+
+/// The pages freed to save memory, which the tree marks.
+#[derive(Clone, Copy)]
+struct Freed(Signal<std::collections::HashSet<BrowserId>>);
+
+/// Whether `tab` is a browser page freed to save memory.
+pub(crate) fn is_freed(tab: &Tab) -> bool {
+    let Tab::Browser { id, .. } = tab else {
+        return false;
+    };
+    try_consume_context::<Freed>().is_some_and(|freed| freed.0.read().contains(id))
+}
 
 /// What `tab` is called when it is a browser page that has loaded something.
 pub(crate) fn title(tab: &Tab) -> Option<String> {
@@ -191,6 +205,26 @@ fn target(typed: &str, forward: impl FnOnce(u16) -> Result<u16, String>) -> Resu
         .and_then(|url| through_forward(&url, forward))
 }
 
+/// Load `page` again. A page that went through a forward goes through one
+/// made again, as the one it was loaded through went with the connection that
+/// made it; any other is reloaded as it is.
+fn reload_page(app: AppCtx, page: &Page, mut error: Signal<String>) {
+    let home = page.home.borrow().clone();
+    let url = page.view.url().unwrap_or_default();
+    let blank = url.is_empty() || url == "about:blank";
+    let reach::Reload::Through(home) = reach::reload(&home, blank) else {
+        let _ = page.view.reload();
+        return;
+    };
+    match target(home, |port| app.forward_port(&page.environment, port)) {
+        Ok(url) => match page.view.load_url(&url) {
+            Ok(()) => error.set(String::new()),
+            Err(e) => error.set(e.to_string()),
+        },
+        Err(message) => error.set(message),
+    }
+}
+
 fn allowed(url: String) -> bool {
     url == "about:blank" || address(&url).is_ok_and(|a| a == url)
 }
@@ -272,7 +306,20 @@ fn set_visible(view: &WebView, on: bool) {
 }
 
 struct Page {
+    environment: EnvironmentId,
     view: WebView,
+    /// Whether the user has typed into the page since it loaded; such a page
+    /// is not freed.
+    edited: Rc<Cell<bool>>,
+    /// Where the page is scrolled to, as the page last said.
+    scroll: Rc<Cell<[f64; 2]>>,
+    /// Where to scroll the page once it has loaded, after it was freed.
+    restore: Cell<Option<[f64; 2]>>,
+    /// The address the page shows as its environment writes it, kept while
+    /// the page is away from its work machine and for reloading it through
+    /// a forward made again.
+    home: RefCell<String>,
+    ports: RefCell<reach::Ports>,
     /// How many loads of this page have finished, which a command that
     /// points it elsewhere waits on.
     loads: Rc<Cell<u64>>,
@@ -329,8 +376,22 @@ impl Pool {
         let loading = selection.clone();
         let loads = Rc::new(Cell::new(0));
         let loaded = loads.clone();
+        let edited = Rc::new(Cell::new(false));
+        let (edit_seen, edit_reset) = (edited.clone(), edited.clone());
+        let scroll = Rc::new(Cell::new([0.0, 0.0]));
+        let scroll_seen = scroll.clone();
+        // A page freed to save memory loads again where it was, through a
+        // forward made again; while its work machine is away it waits blank
+        // for the retry.
+        let saved = retention::take(browser);
+        let start = saved
+            .as_ref()
+            .and_then(|saved| {
+                target(&saved.address, |port| app.forward_port(environment, port)).ok()
+            })
+            .unwrap_or_else(|| "about:blank".into());
         let builder = WebViewBuilder::new_with_web_context(&mut context_ref)
-            .with_url("about:blank")
+            .with_url(start)
             .with_visible(false)
             .with_navigation_handler(allowed)
             .with_new_window_req_handler(move |url, _| {
@@ -349,6 +410,7 @@ impl Pool {
                 match event {
                     dioxus::desktop::wry::PageLoadEvent::Started => {
                         loading.borrow_mut().pending.clear();
+                        edit_reset.set(false);
                     }
                     dioxus::desktop::wry::PageLoadEvent::Finished => loaded.set(loaded.get() + 1),
                 }
@@ -390,6 +452,12 @@ impl Pool {
                         ));
                     }
                     ("annotation-cancel", _) => receive.borrow_mut().stop(),
+                    ("edited", _) => edit_seen.set(true),
+                    (message, _) if message.starts_with("scroll:") => {
+                        if let Some(at) = retention::scrolled(message) {
+                            scroll_seen.set(at);
+                        }
+                    }
                     (message, _) => {
                         receive.borrow_mut().receive(message);
                     }
@@ -434,7 +502,13 @@ impl Pool {
         }
         drop(context_ref);
         let page = Rc::new(Page {
+            environment: environment.clone(),
             view,
+            edited,
+            scroll,
+            restore: Cell::new(saved.as_ref().map(|saved| saved.scroll)),
+            home: RefCell::new(saved.map(|saved| saved.address).unwrap_or_default()),
+            ports: RefCell::default(),
             loads,
             pending,
             selection,
@@ -454,6 +528,7 @@ pub(crate) use agent::enqueue;
 pub(crate) fn use_browsers(app: AppCtx) {
     let browsers = use_context_provider(Browsers::default);
     use_context_provider(|| Titles(Signal::new(HashMap::new())));
+    let mut freed = use_context_provider(|| Freed(Signal::new(Default::default()))).0;
     use_hook(move || {
         spawn(async move {
             loop {
@@ -463,19 +538,40 @@ pub(crate) fn use_browsers(app: AppCtx) {
                 // each from 1.
                 let listed = app.content.peek().pages();
                 closed::track(&listed);
+                let open: Vec<BrowserId> = listed.iter().map(|(_, page)| page.id).collect();
                 let mut pool = browsers.0.borrow_mut();
                 let gone: Vec<BrowserId> = pool
                     .pages
                     .keys()
-                    .filter(|id| !listed.iter().any(|(_, page)| page.id == **id))
+                    .filter(|id| !open.contains(id))
                     .copied()
                     .collect();
                 for id in gone {
+                    retention::forget(id);
                     if let Some(page) = pool.pages.remove(&id) {
-                        closed::closing(app, id, &page.view);
+                        let url = page.view.url().unwrap_or_default();
+                        let address = page
+                            .ports
+                            .borrow_mut()
+                            .shown(&url, |local| app.work_port(&page.environment, local));
+                        closed::closing_at(id, address);
                     }
                 }
+                // A page closed while it was freed can still be reopened.
+                for id in retention::freed()
+                    .into_iter()
+                    .filter(|id| !open.contains(id))
+                {
+                    if let Some(address) = retention::forget(id) {
+                        closed::closing_at(id, address);
+                    }
+                }
+                retention::sweep(app, &mut pool, &open);
                 drop(pool);
+                let now = retention::freed();
+                if *freed.peek() != now {
+                    freed.set(now);
+                }
                 for (environment, call) in agent::take() {
                     let browsers = browsers.clone();
                     spawn(agent::run(app, browsers, environment, call));
@@ -535,9 +631,12 @@ pub(crate) fn BrowserWindow(
     let page = use_hook(move || browsers.0.borrow_mut().page(id, &page_environment, app));
     let mut searching = find::use_find();
     let mut size = use_signal(move || viewport::chosen(id).unwrap_or("responsive"));
-    let mut typed = use_signal(String::new);
+    // What was typed and not entered stays with the page, so that putting
+    // the page away or freeing it does not lose it.
+    let mut typed = use_signal(move || retention::typed(id).unwrap_or_default());
     let mut current = use_signal(String::new);
     let mut error = use_signal(String::new);
+    let mut route = use_signal(|| reach::Route::Here);
     let mut inspecting = use_signal(|| false);
     let mut grabbing = use_signal(|| false);
     // The element picked and waiting for its instruction, and the page
@@ -561,6 +660,11 @@ pub(crate) fn BrowserWindow(
             return rsx! { div { class: "browser-error", "Browser could not start: {message}" } };
         }
     };
+    // Shown from the page freed until it has loaded again where it was.
+    let mut restoring = use_signal({
+        let page = page.clone();
+        move || page.restore.get().is_some()
+    });
     use_hook({
         let page = page.clone();
         let starting = environment.clone();
@@ -592,6 +696,7 @@ pub(crate) fn BrowserWindow(
             spawn(async move {
                 let mut bounds = None;
                 let mut ticks = 0u32;
+                let mut keeps_typed = retention::typed(id).is_some();
                 loop {
                     tokio::time::sleep(Duration::from_millis(50)).await;
                     ticks = ticks.wrapping_add(1);
@@ -696,12 +801,50 @@ pub(crate) fn BrowserWindow(
                     if let Some(url) = pending {
                         let _ = page.view.load_url(&url);
                     }
+                    let shown_url = page.view.url().unwrap_or_default();
+                    let blank = shown_url.is_empty() || shown_url == "about:blank";
+                    // A page freed to save memory is scrolled back once it has
+                    // loaded where it was.
+                    if let Some(at) = page.restore.get()
+                        && !blank
+                        && page.loads.get() > 0
+                    {
+                        page.restore.set(None);
+                        restoring.set(false);
+                        let _ = page
+                            .view
+                            .evaluate_script(&format!("window.scrollTo({}, {})", at[0], at[1]));
+                    }
+                    // What the page shows is the environment's own address, kept
+                    // while its work machine is away, as is how it is reached.
+                    if !blank {
+                        let address = page
+                            .ports
+                            .borrow_mut()
+                            .shown(&shown_url, |local| app.work_port(&listed, local));
+                        if *page.home.borrow() != address {
+                            *page.home.borrow_mut() = address;
+                        }
+                    }
+                    let reached =
+                        reach::route(app.remote_status_of(&listed).as_ref(), &page.home.borrow());
+                    if *route.peek() != reached {
+                        let was_away = route.peek().is_away();
+                        route.set(reached.clone());
+                        // The forward the page was loaded through went with the
+                        // connection: once it is back, load the page through one
+                        // made again.
+                        if was_away && !reached.is_away() {
+                            reload_page(app, &page, error);
+                        }
+                    }
                     if !app.held().is_empty()
                         || app.content.peek().moving.is_some()
                         || app.content.peek().drag.is_some()
                         || app.chrome.peek().panels.drag.is_some()
                         || draft.peek().is_some()
                         || drawing.peek().is_some()
+                        || route.peek().is_away()
                     {
                         set_visible(&page.view, false);
                         FOCUSED.set(false);
@@ -735,9 +878,18 @@ pub(crate) fn BrowserWindow(
                         && url != "about:blank"
                         && *current.peek() != url
                     {
-                        let address = shown_address(&url, |local| app.work_port(&listed, local));
+                        let address = page
+                            .ports
+                            .borrow_mut()
+                            .shown(&url, |local| app.work_port(&listed, local));
                         titles.write().insert(id, name_of(&address));
-                        typed.set(address);
+                        // The page the address was typed for is the one shown
+                        // for the first time since it was put away: what was
+                        // typed is not replaced by where the page is.
+                        if !std::mem::take(&mut keeps_typed) {
+                            typed.set(address);
+                            retention::type_into(id, None);
+                        }
                         current.set(url);
                     }
                 }
@@ -753,6 +905,7 @@ pub(crate) fn BrowserWindow(
                 Ok(url) => match page.view.load_url(&url) {
                     Ok(()) => {
                         error.set(String::new());
+                        retention::type_into(id, None);
                         typed.set(shown_address(&url, |local| {
                             app.work_port(&navigating, local)
                         }));
@@ -766,6 +919,8 @@ pub(crate) fn BrowserWindow(
     let back = page.clone();
     let forward = page.clone();
     let reload = page.clone();
+    let retry = page.clone();
+    let retrying = environment.clone();
     let annotate = page.clone();
     let grab = page.clone();
     let cancel = page.clone();
@@ -805,11 +960,21 @@ pub(crate) fn BrowserWindow(
             div { id: "browser-toolbar-{window}", class: "browser-toolbar",
                 IconButton { icon: Icon::SquareArrowLeft, title: "Back", onclick: move |_| { let _ = back.view.evaluate_script("history.back()"); } }
                 IconButton { icon: Icon::SquareArrowRight, title: "Forward", onclick: move |_| { let _ = forward.view.evaluate_script("history.forward()"); } }
-                IconButton { icon: Icon::Refresh, title: "Reload", onclick: move |_| { let _ = reload.view.reload(); } }
+                IconButton { icon: Icon::Refresh, title: "Reload", onclick: move |_| reload_page(app, &reload, error) }
+                if let reach::Route::Through { host, connected } = route() {
+                    span {
+                        class: if connected { "browser-host" } else { "browser-host offline" },
+                        title: if connected { "Browsing through {host}" } else { "{host} is not connected" },
+                        IconView { icon: Icon::Server, size: 15 }
+                    }
+                }
                 InlineField {
                     class: "browser-address", aria_label: "Web address", placeholder: "Enter a URL, e.g. localhost:3000", value: typed(),
                     focus: true, contained: true,
-                    oninput: move |value| typed.set(value),
+                    oninput: move |value: String| {
+                        retention::type_into(id, Some(value.clone()));
+                        typed.set(value);
+                    },
                     onenter: move |_| navigate.clone()(),
                 }
                 select {
@@ -912,7 +1077,27 @@ pub(crate) fn BrowserWindow(
             }
             if !error().is_empty() { div { class: "browser-error", "{error}" } }
             if !sending.error.read().is_empty() && drawing().is_some() { div { class: "browser-error", "{sending.error}" } }
+            if restoring() {
+                div { class: "browser-notice",
+                    IconView { icon: Icon::Refresh, size: 13 }
+                    span { "Loading again a page that was freed to save memory" }
+                }
+            }
             div { id: "browser-{window}", class: "browser-page",
+                if let reach::Route::Through { host, connected: false } = route() {
+                    div { class: "browser-offline",
+                        IconView { icon: Icon::Server, size: 22 }
+                        div { class: "offline-title", "Can't reach the work machine" }
+                        div { class: "offline-text", "This page loads through {host}, which isn't connected right now. It loads again when the connection returns." }
+                        button { class: "button", r#type: "button",
+                            onclick: move |_| {
+                                app.retry_remote(&retrying);
+                                reload_page(app, &retry, error);
+                            },
+                            "Retry"
+                        }
+                    }
+                }
                 if let Some(pending) = draft() {
                     card::Card {
                         draft: pending.clone(),
