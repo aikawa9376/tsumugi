@@ -401,6 +401,32 @@ fn none_takes_a_key_away_even_from_later_areas() {
 }
 
 #[test]
+fn a_diff_tab_moves_over_changes_and_files_and_chooses_how_it_is_drawn_by_keys_of_vim_s_kind() {
+    let map = Keymap::defaults();
+    let viewer = [Context::Viewer, Context::Global];
+    for (before, key, action) in [
+        ("]", "c", Action::DiffNextHunk),
+        ("[", "c", Action::DiffPrevHunk),
+        ("]", "f", Action::DiffNextFile),
+        ("[", "f", Action::DiffPrevFile),
+    ] {
+        assert_eq!(step(&map, &viewer, &[before], key), Step::Run(action));
+    }
+    for (key, action) in [
+        ("w", Action::DiffWrap),
+        ("f", Action::DiffFiles),
+        ("m", Action::DiffPictures),
+    ] {
+        assert_eq!(step(&map, &viewer, &[], key), Step::Run(action), "{key}");
+    }
+    // The keys that move between windows are still two of the same key.
+    assert_eq!(
+        step(&map, &viewer, &["]"], "]"),
+        Step::Run(Action::WindowNext)
+    );
+}
+
+#[test]
 fn a_viewer_scrolls_zooms_turns_pages_plays_and_closes_by_its_own_keys() {
     let map = Keymap::defaults();
     let viewer = [Context::Viewer, Context::Global];

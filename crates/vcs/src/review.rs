@@ -148,6 +148,11 @@ async fn structural(
 }
 
 async fn blob(path: &Path, object: &str) -> Option<Vec<u8>> {
+    blob_upto(path, object, DIFF_BYTES).await
+}
+
+/// The blob `object` names, if it is at most `max` bytes.
+pub(crate) async fn blob_upto(path: &Path, object: &str, max: usize) -> Option<Vec<u8>> {
     use tokio::io::AsyncReadExt;
     let mut child = Command::new("git")
         .arg("-C")
@@ -163,11 +168,11 @@ async fn blob(path: &Path, object: &str) -> Option<Vec<u8>> {
     child
         .stdout
         .take()?
-        .take(DIFF_BYTES as u64 + 1)
+        .take(max as u64 + 1)
         .read_to_end(&mut bytes)
         .await
         .ok()?;
-    if bytes.len() > DIFF_BYTES {
+    if bytes.len() > max {
         let _ = child.kill().await;
         return None;
     }

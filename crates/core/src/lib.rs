@@ -13,6 +13,7 @@ pub mod console;
 pub mod content;
 pub mod cursor;
 pub mod details;
+pub mod diff_view;
 pub mod effect;
 pub mod file_icons;
 pub mod floating;

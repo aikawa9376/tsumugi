@@ -54,6 +54,8 @@ pub struct ContentView {
     /// A window being dragged with the mouse, to move it.
     pub moving: Option<WindowMove>,
     pub drafts: Drafts,
+    /// How each worktree's diff tabs are drawn, kept while the window runs.
+    pub diff_views: crate::diff_view::DiffViews,
     /// The sessions read as conversation instead of console in this window.
     conversations: std::collections::HashSet<Tab>,
     /// Where a session started with nothing open runs.
@@ -100,6 +102,7 @@ impl Default for ContentView {
             drag: None,
             moving: None,
             drafts: Drafts::default(),
+            diff_views: crate::diff_view::DiffViews::default(),
             conversations: std::collections::HashSet::new(),
             scratch: PathBuf::new(),
             spot: Spot::SIDEBAR,

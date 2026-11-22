@@ -449,6 +449,28 @@ panel and can open each changed file.
   of it as added.
 - Log lists the branch's most recent commits.
 
+## Diff tabs
+
+A diff tab on a file lists the files of its change beside the diff, the one
+shown marked; opening another replaces the diff, and the list can be hidden.
+Without leaving the keyboard you can move to the next or previous change of
+the file and to the next or previous file ([keys](reference/keys.md)); a
+move that has nowhere to go says so and stays where it is. Long lines scroll
+across, or wrap to the width of the tab on request.
+
+A picture that changed is not read as lines: its two versions, as the change
+had them, are drawn side by side, with a divider swiped across them, or with
+the old faded over the new. A picture that was added or deleted shows its one
+side. A file that is binary, renamed, deleted or too large to show says what
+happened in place of a diff, and breaks nothing: its list, its comments on
+other files and its keys stay as they were.
+
+How a worktree's diff is drawn — whether the files are listed, whether lines
+wrap and how pictures are compared — is chosen in any of its tabs and holds
+for all of them, and for tabs opened later, while the window runs. Another
+worktree keeps its own. Comments on lines are pinned to the line diff as
+before; none of this moves them ([review](review.md)).
+
 ## Keys
 
 In a list, `j` and `k` move, `gg` and `G` go to the first and the last row,

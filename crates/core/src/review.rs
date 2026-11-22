@@ -3,6 +3,7 @@
 //! being previewed. The comments themselves are kept by the work host; the
 //! window asks it, and this holds what the keys have decided.
 
+use crate::diff_view::Way;
 use tsumugi_model::repository::{DiffLine, Rev};
 use tsumugi_model::review::{self, Anchor, Change, Comment, Freshness, Judged, NewComment, Side};
 
@@ -158,14 +159,32 @@ impl Pane {
         self.mark.is_some()
     }
 
-    /// Move the cursor `by` places, or to the first or last of them.
+    /// Move the cursor `by` places, or to the first or last of them, or to
+    /// the heading of the next or previous hunk.
     pub fn go(&mut self, reading: &Reading, to: Go) {
         self.notice = None;
         let last = reading.places().saturating_sub(1);
+        let here = self.cursor(reading);
         self.cursor = match to {
-            Go::By(n) => self.cursor(reading).saturating_add_signed(n).min(last),
+            Go::By(n) => here.saturating_add_signed(n).min(last),
             Go::Top => 0,
             Go::Bottom => last,
+            Go::Hunk(way) => {
+                let starts = crate::diff_view::hunk_starts(reading.lines);
+                match crate::diff_view::hunk_from(&starts, Some(here), way) {
+                    Some(at) => at,
+                    None => {
+                        self.notice = Some(
+                            match way {
+                                Way::Next => "No later change",
+                                Way::Prev => "No earlier change",
+                            }
+                            .into(),
+                        );
+                        here
+                    }
+                }
+            }
         };
     }
 
@@ -337,6 +356,7 @@ pub enum Go {
     By(isize),
     Top,
     Bottom,
+    Hunk(Way),
 }
 
 #[cfg(test)]
@@ -389,6 +409,46 @@ mod tests {
             rev: &Rev::WorkingCopy,
             comments,
         }
+    }
+
+    #[test]
+    fn the_cursor_jumps_to_the_next_and_previous_hunk_and_stays_at_the_ends_saying_so() {
+        use DiffKind::*;
+        let lines = vec![
+            line(File, "a.rs"),
+            line(Hunk, "@@ -1 +1 @@"),
+            line(Added, "+one"),
+            line(Hunk, "@@ -9 +9 @@"),
+            line(Added, "+two"),
+        ];
+        let r = reading(&lines, &[]);
+        let mut pane = Pane::default();
+        pane.go(&r, Go::Hunk(Way::Next));
+        assert_eq!(pane.cursor(&r), 1);
+        pane.go(&r, Go::Hunk(Way::Next));
+        assert_eq!(pane.cursor(&r), 3);
+        assert_eq!(pane.notice, None);
+        pane.go(&r, Go::Hunk(Way::Next));
+        assert_eq!(pane.cursor(&r), 3);
+        assert!(pane.notice.is_some());
+        pane.go(&r, Go::Hunk(Way::Prev));
+        assert_eq!(pane.cursor(&r), 1);
+        pane.go(&r, Go::Hunk(Way::Prev));
+        assert_eq!(pane.cursor(&r), 1);
+        assert!(pane.notice.is_some());
+    }
+
+    #[test]
+    fn a_diff_with_no_hunk_has_no_change_to_jump_to() {
+        let lines = vec![
+            line(DiffKind::File, "a.png"),
+            line(DiffKind::Context, "Binary files differ"),
+        ];
+        let r = reading(&lines, &[]);
+        let mut pane = Pane::default();
+        pane.go(&r, Go::Hunk(Way::Next));
+        assert_eq!(pane.cursor(&r), 0);
+        assert!(pane.notice.is_some());
     }
 
     #[test]

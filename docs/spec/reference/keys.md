@@ -182,6 +182,13 @@ changes them ([keys](../keys.md)).
 | `review.resolve` |  | in a diff of lines, resolve the comment on the line the cursor is on, or open it again; only this resolves a comment | `viewer`: `r` |
 | `review.send` |  | in a diff of lines, show the prompt that carries every comment not resolved; shown, send it to the session chosen with the movement keys | `viewer`: `s` |
 | `review.draft` |  | in a diff of lines, or in the prompt shown, write the prompt in a new session's draft in the worktree instead of sending it | `viewer`: `S` |
+| `diff.next_hunk` |  | in a diff tab, move to the next change of the file ([details](../details.md#diff-tabs)) | `viewer`: `] c` |
+| `diff.prev_hunk` |  | in a diff tab, move to the previous change of the file | `viewer`: `[ c` |
+| `diff.next_file` |  | in a diff tab, open the next file of the list of files changed | `viewer`: `] f` |
+| `diff.prev_file` |  | in a diff tab, open the previous file of the list of files changed | `viewer`: `[ f` |
+| `diff.wrap` |  | in a diff tab, break long lines to the width of the tab, or scroll across them again; kept for the worktree | `viewer`: `w` |
+| `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
+| `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
 | `github.prev` |  | in a pull request's or an issue's tab, select the previous card of its conversation | `github`: `N` |
 | `github.comment` |  | in a pull request's or an issue's tab, write a new comment in the prompt under it; sending the prompt posts it, and leaving the prompt gives it up | `github`: `c` |
@@ -550,6 +557,13 @@ changes them ([keys](../keys.md)).
 "r" = "review.resolve"
 "s" = "review.send"
 "S" = "review.draft"
+"] c" = "diff.next_hunk"
+"[ c" = "diff.prev_hunk"
+"] f" = "diff.next_file"
+"[ f" = "diff.prev_file"
+"w" = "diff.wrap"
+"f" = "diff.files"
+"m" = "diff.pictures"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

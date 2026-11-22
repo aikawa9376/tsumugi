@@ -402,6 +402,19 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
             if !shown_part.repositories.contains(&read) {
                 shown_part.repositories.push(read);
             }
+            // The list of files beside a file's diff is of the revision the
+            // diff was read from.
+            if let tsumugi_model::repository::Spot::Diff(rev, _)
+            | tsumugi_model::repository::Spot::Lines(rev, _) = spot.as_ref()
+            {
+                let files = tsumugi_protocol::RepositorySight {
+                    worktree: worktree.clone(),
+                    spot: tsumugi_model::repository::Spot::Files(rev.clone()),
+                };
+                if !shown_part.repositories.contains(&files) {
+                    shown_part.repositories.push(files);
+                }
+            }
         }
     }
     // The profiles listed are of the environment whose heading is selected,
