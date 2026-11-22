@@ -213,6 +213,45 @@ fn main() {
             }
             return;
         }
+        Some(Command::Ssh {
+            host,
+            port,
+            remote_port,
+            start,
+            name,
+        }) => {
+            let ask = tsumugi_connect::ssh::Ask {
+                host,
+                local_port: port,
+                remote_port: remote_port.unwrap_or(tsumugi_connect::ssh::GATEWAY_PORT),
+                start,
+                name,
+            };
+            let program = std::env::var("TSUMUGI_SSH").unwrap_or_else(|_| "ssh".into());
+            let control = tsumugi_host::paths::instance_state().join("ssh");
+            let result = tsumugi_connect::ssh::run(
+                &ask,
+                &program,
+                &control,
+                &|text| println!("{text}"),
+                |address, environment| {
+                    tsumugi_connect::pair_cli_as(
+                        address,
+                        ask.name.as_deref(),
+                        environment,
+                        |text| println!("{text}"),
+                    )
+                },
+            );
+            match result {
+                Ok(text) => println!("{text}"),
+                Err(text) => {
+                    eprintln!("tsumugi: {text}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
         Some(Command::Discover) => {
             match tsumugi_connect::discover_cli() {
                 Ok(lines) if lines.is_empty() => {

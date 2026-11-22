@@ -171,6 +171,35 @@ authority of the user the work machine runs as; the gateway only refuses
 requests to manage the work host itself, such as stopping it, and closes the
 connection that sent one.
 
+## Through ssh
+
+`tsumugi connect ssh <host>` reaches a work machine through `ssh`, for one
+that opens no port but ssh or that should not announce itself. `<host>` is
+anything `ssh` takes: a name from `~/.ssh/config`, a host name or `user@host`.
+It makes a tunnel with the client's own `ssh`, which asks for the host key,
+passphrase or password on the terminal as it always does, ending on this
+computer's loopback and on the work machine's. It then pairs as `connect pair`
+does, adds an environment for the work machine, and leaves the tunnel running
+in the background. The work machine is known by its key as over any other
+network; the tunnel only carries bytes.
+
+The gateway on the work machine has to listen on its loopback at the port the
+tunnel reaches, 47130 unless `--remote-port` says otherwise. `--start` has the
+work machine do that first, as `tsumugi remote enable --listen 127.0.0.1:47130
+--no-advertise` does, so it opens no port on its network and announces
+nothing. Without it, the command assumes a gateway is serving there already.
+
+The tunnel ends in the same port on this computer for the same host, which
+`--port` chooses otherwise, so the environment keeps its address; running the
+command again makes the tunnel again when it was lost, and uses it while it
+answers. A lost tunnel is a lost connection, shown as any other. Tsumugi
+is not installed for the user on the work machine by this command: it says
+so when it is missing there.
+
+The command fails, saying why and pairing nothing, when `ssh` cannot be run
+or cannot connect, when the work machine has no `tsumugi`, when the tunnel
+does not come up, or when no gateway answers through it.
+
 ## Changes across a lost connection
 
 A remote work host admits changes by an ID bound to its instance and both
