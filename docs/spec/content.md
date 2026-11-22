@@ -159,7 +159,9 @@ open.
 
 The web links of a conversation, a pull request or issue and a Markdown
 document open in the system's browser, or in a new page of Tsumugi's browser
-under the worktree the keys are in when the settings say so. Pressing a link
+under the worktree the keys are in when the settings say so; when a page of
+that worktree is already at the same address, it is shown instead of a second
+one, unless a new tab or window is asked for. Pressing a link
 with Shift and Ctrl (Shift and Cmd on macOS) sends that one link the other
 way; the setting that lets it open Tsumugi's browser from the system's is off
 until it is chosen ([settings](settings.md)). Only web addresses are opened

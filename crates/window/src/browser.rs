@@ -12,6 +12,7 @@ mod markup;
 mod native_tests;
 mod reach;
 mod retention;
+mod reuse;
 mod viewport;
 
 use std::cell::{Cell, RefCell};
@@ -549,6 +550,7 @@ pub(crate) fn use_browsers(app: AppCtx) {
                 for id in gone {
                     retention::forget(id);
                     if let Some(page) = pool.pages.remove(&id) {
+                        reuse::forget(id);
                         let url = page.view.url().unwrap_or_default();
                         let address = page
                             .ports
@@ -671,7 +673,13 @@ pub(crate) fn BrowserWindow(
         move || {
             if let Some(url) = START.with(|start| start.borrow_mut().remove(&id)) {
                 match target(&url, |port| app.forward_port(&starting, port)) {
-                    Ok(url) => *page.pending.lock().expect("browser navigation lock") = Some(url),
+                    Ok(url) => {
+                        reuse::at(
+                            id,
+                            shown_address(&url, |local| app.work_port(&starting, local)),
+                        );
+                        *page.pending.lock().expect("browser navigation lock") = Some(url);
+                    }
                     Err(message) => error.set(message),
                 }
             }
@@ -883,6 +891,7 @@ pub(crate) fn BrowserWindow(
                             .borrow_mut()
                             .shown(&url, |local| app.work_port(&listed, local));
                         titles.write().insert(id, name_of(&address));
+                        reuse::at(id, address.clone());
                         // The page the address was typed for is the one shown
                         // for the first time since it was put away: what was
                         // typed is not replaced by where the page is.
