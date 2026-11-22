@@ -521,6 +521,35 @@ pub fn startable(settings: &Settings) -> Vec<AgentProfile> {
     settings.profiles.iter().cloned().chain(own).collect()
 }
 
+/// Every profile a draft offers: those [`startable`], then the
+/// command-line agents of the catalog that no profile takes the id of, in the
+/// catalog's order.
+pub fn offered(settings: &Settings) -> Vec<AgentProfile> {
+    let mut all = startable(settings);
+    let catalog = tsumugi_model::catalog::CATALOG
+        .iter()
+        .filter(|entry| !all.iter().any(|p| p.id.as_str() == entry.key))
+        .map(|entry| entry.profile())
+        .collect::<Vec<_>>();
+    all.extend(catalog);
+    all
+}
+
+/// `label`, and for a command agent whether its program is found where it
+/// starts, as its host said `standing`; other agents are not asked.
+pub fn with_install_mark(
+    label: String,
+    agent: Agent,
+    standing: Option<tsumugi_model::profile::LoginStanding>,
+) -> String {
+    use tsumugi_model::profile::LoginStanding;
+    match (agent, standing) {
+        (Agent::Generic, Some(LoginStanding::LoggedIn)) => format!("{label} · installed"),
+        (Agent::Generic, Some(LoginStanding::Missing)) => format!("{label} · not installed"),
+        _ => label,
+    }
+}
+
 /// What a draft offers `profile` as, the profile being all it chooses: its
 /// agent, its name when that is not the agent's own, as a running session's
 /// details name it, and that it has a login of its own when it has.

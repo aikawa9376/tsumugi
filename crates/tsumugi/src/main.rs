@@ -219,6 +219,7 @@ fn main() {
             port,
             remote_port,
             start,
+            install,
             name,
         }) => {
             let ask = tsumugi_connect::ssh::Ask {
@@ -227,6 +228,12 @@ fn main() {
                 remote_port: remote_port.unwrap_or(tsumugi_connect::ssh::GATEWAY_PORT),
                 start,
                 name,
+                install,
+                this: tsumugi_connect::ssh::Local::this(format!(
+                    "{} {}",
+                    env!("CARGO_BIN_NAME"),
+                    env!("CARGO_PKG_VERSION")
+                )),
             };
             let program = std::env::var("TSUMUGI_SSH").unwrap_or_else(|_| "ssh".into());
             let control = tsumugi_host::paths::instance_state().join("ssh");
@@ -240,6 +247,7 @@ fn main() {
                         address,
                         ask.name.as_deref(),
                         environment,
+                        Some(&ask.host),
                         |text| println!("{text}"),
                     )
                 },

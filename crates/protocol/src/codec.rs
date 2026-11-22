@@ -279,6 +279,7 @@ mod tests {
                 worktree: "/w".into(),
                 comment: "waiting on CI".into(),
                 status: Some(tsumugi_model::WorktreeStatus::InReview),
+                noted: "read the diff".into(),
                 updated_ms: 7,
             }],
         });

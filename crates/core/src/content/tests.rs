@@ -2409,3 +2409,37 @@ fn a_page_is_found_in_the_window_of_the_tab_shown_that_shows_it_and_nowhere_else
         content.windows.focused_window()
     );
 }
+
+#[test]
+fn a_session_whose_program_exited_says_how_it_left_once_that_was_seen() {
+    let (a, b) = (session_tab("a"), session_tab("b"));
+    let exit = tsumugi_model::Exit {
+        at_ms: 13_000,
+        tail: "gemini: no such flag".into(),
+    };
+    let run = listed_with([session("a").cwd("/r"), session("b").cwd("/r")])
+        .send(show(a.clone()))
+        .event(
+            patch(2).listed(
+                listed()
+                    .session(
+                        session("a")
+                            .cwd("/r")
+                            .started_ms(10_000)
+                            .rest(tsumugi_model::Rest::Exited)
+                            .exit(exit),
+                    )
+                    .session(session("b").cwd("/r").rest(tsumugi_model::Rest::Exited)),
+            ),
+        );
+
+    let hosts = &run.state().hosts;
+    assert_eq!(
+        exit_of(hosts, &a),
+        Some((
+            "Its program exited 3 s after it started.".into(),
+            "gemini: no such flag".into()
+        ))
+    );
+    assert_eq!(exit_of(hosts, &b), None, "nothing was seen of its exit");
+}

@@ -79,6 +79,8 @@ pub enum Command {
     Models,
     /// Drive a page of the browser of the caller's worktree.
     Browser(tsumugi_protocol::BrowserCommand),
+    /// Say how the work of the caller's worktree stands, or read it.
+    WorktreeCheckpoint(WorktreeCheckpoint),
     /// Name the caller's own session anew.
     Rename(Rename),
     /// End the caller's own session, once its user agreed, or a session the
@@ -125,6 +127,7 @@ impl Command {
                 | Self::RequestGate(_)
                 | Self::CleanupWorktrees(_)
                 | Self::MergeWorktree(_)
+                | Self::WorktreeCheckpoint(_)
                 | Self::Wait(_)
                 | Self::Browser(
                     tsumugi_protocol::BrowserCommand::Goto { .. }
@@ -371,6 +374,34 @@ pub struct Send {
     /// The recipient's code, or its id, as `sessions` lists them.
     pub to: String,
     pub body: String,
+}
+
+/// Say how the work of a worktree stands, for the user and other sessions.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorktreeCheckpoint {
+    /// One line: what just happened, where, and the next step.
+    #[serde(default)]
+    pub comment: Option<String>,
+    /// todo, in-progress, in-review or completed.
+    #[serde(default)]
+    pub status: Option<String>,
+    /// Empty the comment.
+    #[serde(default)]
+    pub clear_comment: bool,
+    /// Empty the status.
+    #[serde(default)]
+    pub clear_status: bool,
+    /// The worktree's directory on this work machine; the one you work in when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+}
+
+impl WorktreeCheckpoint {
+    /// Whether it changes what the worktree says, rather than reading it.
+    pub fn acts_on_a_worktree(&self) -> bool {
+        self.comment.is_some() || self.status.is_some() || self.clear_comment || self.clear_status
+    }
 }
 
 /// Name your own session anew.

@@ -99,6 +99,9 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::Resources(asked) => super::commands::resources(context, &caller, asked).await,
         Command::AddResource(asked) => super::commands::add_resource(context, &caller, asked).await,
         Command::RemoveResource(asked) => super::commands::remove_resource(context, asked).await,
+        Command::WorktreeCheckpoint(asked) => {
+            super::commands::worktree_checkpoint(context, &caller, asked).await
+        }
         Command::Rename(asked) => rename(context, &caller, asked).await,
         Command::Close(asked) => close(context, &caller, asked).await,
         Command::ReportDone(asked) => report_done(context, &caller, asked).await,

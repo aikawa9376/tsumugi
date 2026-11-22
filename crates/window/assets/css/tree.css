@@ -53,6 +53,11 @@
 .standing-pill.busy { background: var(--run-tint); color: var(--run); }
 .standing-pill.fail { background: var(--fail-tint); color: var(--fail); }
 .standing-pill.quiet { background: var(--raised); color: var(--text-2); }
+.standing-pill[class*="status-"] { cursor: pointer; }
+.standing-pill.status-todo { background: var(--raised); color: var(--text-2); }
+.standing-pill.status-in-progress { background: var(--run-tint); color: var(--run); }
+.standing-pill.status-in-review { background: var(--wait-tint); color: var(--wait); }
+.standing-pill.status-completed { background: var(--raised); color: var(--done); }
 .standing-pill.wait { background: var(--wait-tint); color: var(--wait); }
 .list-row.with-summary { height: auto; min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
 .list-row.environment.with-summary { min-height: 36px; }

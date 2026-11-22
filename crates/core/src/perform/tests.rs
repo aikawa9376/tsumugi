@@ -772,6 +772,14 @@ fn retrying_and_pairing_again_go_to_the_environment_of_the_selected_heading_or_e
         ran(from_console(showing_there()), Action::EnvironmentPair),
         [Effect::PairAgain(there())]
     );
+    assert_eq!(
+        ran(on_here(showing_there()), Action::EnvironmentEditor),
+        [Effect::OpenRemoteEditor(here())]
+    );
+    assert_eq!(
+        ran(from_console(showing_there()), Action::EnvironmentEditor),
+        [Effect::OpenRemoteEditor(there())]
+    );
 }
 
 /// The workspace row of the repository the session `a` and the shell 7 run

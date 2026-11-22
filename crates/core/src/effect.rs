@@ -131,6 +131,13 @@ pub enum Effect {
         id: u64,
         choice: tsumugi_model::SetupChoice,
     },
+    /// Ask the work host of `environment` to set the status of the worktree
+    /// at `worktree`, leaving what it says besides.
+    SetCheckpoint {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        status: tsumugi_model::Set<tsumugi_model::WorktreeStatus>,
+    },
     /// Ask the work host of `environment` to put the sessions with these ids
     /// to sleep.
     Sleep {
@@ -485,6 +492,9 @@ pub enum Effect {
     /// Open the sheet adding an environment on pairing again with the work
     /// machine of `environment`.
     PairAgain(EnvironmentId),
+    /// Open an editor on the work machine of `environment`, which was
+    /// reached through ssh.
+    OpenRemoteEditor(EnvironmentId),
 
     // The overlays.
     /// Run `action` where the keys are now.

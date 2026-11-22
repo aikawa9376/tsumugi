@@ -97,7 +97,13 @@ impl Watcher {
                         interrupted = true;
                     }
                     Fate::Ended if crate::restore::exited_on_its_own(listed.map(|n| n.exited)) => {
-                        context.call(move |store| store.exit(id)).await?;
+                        // What the program last wrote is why it left: the
+                        // terminal host reports no exit code.
+                        let screen = context.daemon.visible(terminal).await.unwrap_or_default();
+                        let exit = tsumugi_model::Exit::seen(crate::delegation::now_ms(), &screen);
+                        context
+                            .call(move |store| store.exit(id, Some(exit)))
+                            .await?;
                     }
                     Fate::Ended => context.call(move |store| store.end(id)).await?,
                     Fate::Runs | Fate::Unknown => {}

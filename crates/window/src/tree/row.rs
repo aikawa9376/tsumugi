@@ -28,14 +28,30 @@ use crate::nav::{self, Item};
 use crate::rename::{Place as RenamePlace, SessionName};
 use crate::shell::overlays::menu_opener;
 
-/// What the worktree at `path` says of how its work stands, for its row.
+/// What the worktree at `path` says of how its work stands.
+fn checkpoint_at<'a>(
+    work: Option<&'a tsumugi_protocol::WorkSnapshot>,
+    path: &std::path::Path,
+) -> Option<&'a tsumugi_model::Checkpoint> {
+    work.and_then(|work| work.tree.checkpoints.iter().find(|c| c.worktree == path))
+}
+
+/// The line the worktree at `path` says, for its row, beside its status chip.
 fn checkpoint_line(
     work: Option<&tsumugi_protocol::WorkSnapshot>,
     path: &std::path::Path,
 ) -> String {
-    work.and_then(|work| work.tree.checkpoints.iter().find(|c| c.worktree == path))
-        .map(|c| c.line())
+    checkpoint_at(work, path)
+        .map(|c| c.said().to_string())
         .unwrap_or_default()
+}
+
+/// The status the worktree at `path` is in, for its row's chip.
+fn checkpoint_status(
+    work: Option<&tsumugi_protocol::WorkSnapshot>,
+    path: &std::path::Path,
+) -> Option<tsumugi_model::WorktreeStatus> {
+    checkpoint_at(work, path).and_then(|c| c.status)
 }
 
 /// What a sidebar row is, told when the pointer rests on it.
@@ -571,6 +587,10 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
         kind
     };
     let target = Target::Row(it.clone());
+    let status = match &own {
+        Item::Workspace(_, path) | Item::Worktree(_, path) => checkpoint_status(work, path),
+        _ => None,
+    };
     // Where a session can start, a button starts one there.
     let starts = matches!(it, Item::Workspace(_, _) | Item::Worktree(_, _));
     // A workspace is taken out of the tree, a worktree closed, while
@@ -653,6 +673,18 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             }
             if let Some(summary) = summary {
                 WorkSummary { summary }
+            }
+            if let Some(status) = status {
+                span {
+                    class: "standing-pill status-{status.word()}",
+                    title: "{status.label()}: click to show only the worktrees in this status, again to show all",
+                    onclick: move |e| {
+                        e.stop_propagation();
+                        let text = tsumugi_core::tree::nav::status_toggled(&app.tree.read().filter, status);
+                        app.dispatch(Msg::TreeFilter(text));
+                    },
+                    "{status.label()}"
+                }
             }
             if !meta.is_empty() {
                 span { class: "list-row-meta", "{meta}" }
@@ -754,12 +786,15 @@ mod tests {
             worktree: "/w".into(),
             comment: "tests are red".into(),
             status: Some(tsumugi_model::WorktreeStatus::InProgress),
+            noted: String::new(),
             updated_ms: 1,
         }];
+        assert_eq!(checkpoint_line(Some(&work), "/w".as_ref()), "tests are red");
         assert_eq!(
-            checkpoint_line(Some(&work), "/w".as_ref()),
-            "In progress · tests are red"
+            checkpoint_status(Some(&work), "/w".as_ref()),
+            Some(tsumugi_model::WorktreeStatus::InProgress)
         );
+        assert_eq!(checkpoint_status(Some(&work), "/other".as_ref()), None);
         assert_eq!(checkpoint_line(Some(&work), "/other".as_ref()), "");
         assert_eq!(checkpoint_line(None, "/w".as_ref()), "");
     }

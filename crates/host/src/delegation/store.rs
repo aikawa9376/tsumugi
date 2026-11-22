@@ -8,12 +8,12 @@ use tsumugi_sys::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tsumugi_model::profile::ProfileId;
 use tsumugi_model::timeline::Entry;
-use tsumugi_model::{Agent, AgentPermissions, Rest, SessionCode, TerminalSession};
+use tsumugi_model::{Agent, AgentPermissions, Exit, Rest, SessionCode, TerminalSession};
 
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 18;
+const SCHEMA_VERSION: i64 = 20;
 
 mod checkpoints;
 mod issues;
@@ -204,6 +204,28 @@ const MIGRATIONS: &[&str] = &[
          comment TEXT NOT NULL,
          status TEXT,
          updated_ms INTEGER NOT NULL
+     );",
+    // The latest note a session's agent wrote on its timeline, shown as a
+    // worktree's line while it has no comment.
+    // The table is rebuilt, keeping its rows, because a column cannot be
+    // added where it may already be.
+    "CREATE TABLE checkpoints_with_notes (
+         worktree TEXT PRIMARY KEY,
+         comment TEXT NOT NULL,
+         status TEXT,
+         updated_ms INTEGER NOT NULL,
+         noted TEXT NOT NULL DEFAULT ''
+     );
+     INSERT INTO checkpoints_with_notes (worktree, comment, status, updated_ms)
+         SELECT worktree, comment, status, updated_ms FROM checkpoints;
+     DROP TABLE checkpoints;
+     ALTER TABLE checkpoints_with_notes RENAME TO checkpoints;",
+    // How the program of a session that exited on its own left: when, and the
+    // last lines on its screen.
+    "CREATE TABLE IF NOT EXISTS exits (
+         session TEXT PRIMARY KEY REFERENCES sessions(id),
+         at_ms INTEGER NOT NULL,
+         tail TEXT NOT NULL
      );",
 ];
 
@@ -525,14 +547,14 @@ impl Store {
     /// Records that the program of `id` exited on its own, so the session
     /// is listed still, to be restarted; one that had ended already stays as
     /// it ended.
-    pub fn exit(&mut self, id: SessionId) -> Result<()> {
-        self.rest(id, Rest::Exited)
+    pub fn exit(&mut self, id: SessionId, exit: Option<Exit>) -> Result<()> {
+        self.rest(id, Rest::Exited, exit)
     }
 
     /// Records that `id` was stopped to sleep, so the session is listed
     /// still, to be woken; one that had ended already stays as it ended.
     pub fn hibernate(&mut self, id: SessionId) -> Result<()> {
-        self.rest(id, Rest::Hibernated)
+        self.rest(id, Rest::Hibernated, None)
     }
 
     /// Records that the program of `id`, which was to be stopped to sleep,
@@ -555,7 +577,7 @@ impl Store {
         Ok(())
     }
 
-    fn rest(&mut self, id: SessionId, rest: Rest) -> Result<()> {
+    fn rest(&mut self, id: SessionId, rest: Rest, exit: Option<Exit>) -> Result<()> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -570,6 +592,12 @@ impl Store {
             "INSERT OR REPLACE INTO rests (session, rest) VALUES (?1, ?2)",
             params![id.to_string(), rest.word()],
         )?;
+        if let Some(exit) = exit {
+            transaction.execute(
+                "INSERT OR REPLACE INTO exits (session, at_ms, tail) VALUES (?1, ?2, ?3)",
+                params![id.to_string(), exit.at_ms as i64, exit.tail],
+            )?;
+        }
         transaction.commit()?;
         Ok(())
     }
@@ -603,6 +631,8 @@ impl Store {
         )?;
         self.connection
             .execute("DELETE FROM rests WHERE session = ?1", [id.to_string()])?;
+        self.connection
+            .execute("DELETE FROM exits WHERE session = ?1", [id.to_string()])?;
         Ok(())
     }
 
@@ -616,6 +646,8 @@ impl Store {
         )?;
         self.connection
             .execute("DELETE FROM rests WHERE session = ?1", [id.to_string()])?;
+        self.connection
+            .execute("DELETE FROM exits WHERE session = ?1", [id.to_string()])?;
         Ok(())
     }
 
@@ -788,7 +820,7 @@ impl Store {
     }
 }
 
-const SESSION_COLUMNS: &str = "id, parent, agent, name, cwd, terminal, conversation, readiness, started_ms, ended, profile, home, model, permissions, generation, interrupted, brought_back_by, name_given, code, (SELECT rest FROM rests WHERE session = sessions.id) AS rest";
+const SESSION_COLUMNS: &str = "id, parent, agent, name, cwd, terminal, conversation, readiness, started_ms, ended, profile, home, model, permissions, generation, interrupted, brought_back_by, name_given, code, (SELECT rest FROM rests WHERE session = sessions.id) AS rest, (SELECT at_ms FROM exits WHERE session = sessions.id) AS exit_ms, (SELECT tail FROM exits WHERE session = sessions.id) AS exit_tail";
 
 fn read_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Session>> {
     let id: String = row.get("id")?;
@@ -811,6 +843,8 @@ fn read_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Session>> {
     let name_given = row.get("name_given")?;
     let code: Option<String> = row.get("code")?;
     let rest: Option<String> = row.get("rest")?;
+    let exit_ms: Option<i64> = row.get("exit_ms")?;
+    let exit_tail: Option<String> = row.get("exit_tail")?;
     Ok((|| {
         Ok(Session {
             id: id.parse().map_err(Error::storage)?,
@@ -846,6 +880,10 @@ fn read_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Session>> {
                 .map_err(Error::storage)?,
             name_given,
             rest: rest.as_deref().and_then(Rest::parse),
+            exit: exit_ms.zip(exit_tail).map(|(at_ms, tail)| Exit {
+                at_ms: at_ms as u64,
+                tail,
+            }),
             code: code
                 .ok_or_else(|| Error::storage("a session has no code"))?
                 .parse()
@@ -1674,8 +1712,8 @@ PRAGMA user_version = 1;
         let (id, token) = store.register(new(None, "a")).unwrap();
         let ended = register(&mut store, None, "b");
         store.end(ended).unwrap();
-        store.exit(id).unwrap();
-        store.exit(ended).unwrap();
+        store.exit(id, None).unwrap();
+        store.exit(ended, None).unwrap();
 
         let kept = store.known(id).unwrap();
         assert!(kept.ended && !kept.interrupted);
@@ -1691,6 +1729,31 @@ PRAGMA user_version = 1;
             [id],
             "one ended by Tsumugi stays ended"
         );
+    }
+
+    #[test]
+    fn how_a_program_left_is_kept_with_the_session_until_it_is_restarted_or_closed() {
+        let (_dir, mut store) = store();
+        let (back, closed, plain) = (
+            register(&mut store, None, "back"),
+            register(&mut store, None, "closed"),
+            register(&mut store, None, "plain"),
+        );
+        let exit = tsumugi_model::Exit {
+            at_ms: 9,
+            tail: "gemini: boom".into(),
+        };
+        store.exit(back, Some(exit.clone())).unwrap();
+        store.exit(closed, Some(exit.clone())).unwrap();
+        store.exit(plain, None).unwrap();
+
+        assert_eq!(store.known(back).unwrap().exit, Some(exit.clone()));
+        assert_eq!(store.known(plain).unwrap().exit, None);
+        let by = register(&mut store, None, "back");
+        store.brought_back(back, by).unwrap();
+        store.let_go(closed).unwrap();
+        assert_eq!(store.known(back).unwrap().exit, None);
+        assert_eq!(store.known(closed).unwrap().exit, None);
     }
 
     #[test]
@@ -1724,7 +1787,7 @@ PRAGMA user_version = 1;
         assert!(!kept.ended);
         assert_eq!(kept.rest, None);
         let gone = register(&mut store, None, "b");
-        store.exit(gone).unwrap();
+        store.exit(gone, None).unwrap();
         store.stay_awake(gone).unwrap();
         assert!(store.known(gone).unwrap().ended, "one that exited stays so");
     }
@@ -1734,8 +1797,8 @@ PRAGMA user_version = 1;
         let (_dir, mut store) = store();
         let back = register(&mut store, None, "back");
         let closed = register(&mut store, None, "closed");
-        store.exit(back).unwrap();
-        store.exit(closed).unwrap();
+        store.exit(back, None).unwrap();
+        store.exit(closed, None).unwrap();
         let by = register(&mut store, None, "back");
 
         store.brought_back(back, by).unwrap();

@@ -61,6 +61,29 @@ pub fn narrowed_by(tree: &Tree, text: &str, checkpoints: &[tsumugi_model::Checkp
     narrowed_to_names(&kept, &rest)
 }
 
+/// `text` with the word `status:<status>` added, or taken away when it is
+/// there, as clicking a status chip narrows the tree to a status or widens it.
+pub fn status_toggled(text: &str, status: tsumugi_model::WorktreeStatus) -> String {
+    let named = |word: &str| {
+        word.strip_prefix("status:")
+            .and_then(tsumugi_model::WorktreeStatus::parse)
+            == Some(status)
+    };
+    if text.split_whitespace().any(named) {
+        return text
+            .split_whitespace()
+            .filter(|word| !named(word))
+            .collect::<Vec<_>>()
+            .join(" ");
+    }
+    let word = format!("status:{}", status.word());
+    if text.trim().is_empty() {
+        word
+    } else {
+        format!("{} {word}", text.trim())
+    }
+}
+
 /// The statuses `text` names by `status:` words, and the words left.
 fn split_statuses(text: &str) -> (Vec<tsumugi_model::WorktreeStatus>, String) {
     let mut statuses = Vec::new();

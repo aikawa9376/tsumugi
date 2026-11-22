@@ -106,6 +106,7 @@ pub enum Action {
     EnvironmentRename,
     EnvironmentRetry,
     EnvironmentPair,
+    EnvironmentEditor,
     WorkspaceAdd,
     LocalIssues,
     LocalIssuesLeader,
@@ -123,6 +124,11 @@ pub enum Action {
     WorktreeCleanup,
     WorktreeSleep,
     WorktreeWake,
+    WorktreeStatusTodo,
+    WorktreeStatusInProgress,
+    WorktreeStatusInReview,
+    WorktreeStatusCompleted,
+    WorktreeStatusClear,
     WorkspacePin,
     TreeSort,
     TreeHideSleeping,
@@ -528,6 +534,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::EnvironmentPair, "environment.pair", "pair again with the work machine of the environment selected in the tree, or else of the tab shown, as when it no longer accepts this computer or answers at another address ([details](environments.md#create-and-configure))")
         .icon(Icon::Link)
         .row("Pair again…", Reach),
+    S::new(A::EnvironmentEditor, "environment.editor", "open the editor on the work machine of the environment selected in the tree, or else of the tab shown, when the environment was made by `tsumugi connect ssh`: VS Code, VS Code Insiders or Cursor through Remote-SSH, or Zed by its ssh address, whichever `$TSUMUGI_REMOTE_EDITOR` names, VS Code when it names none ([details](remote-execution.md#through-ssh))")
+        .icon(Icon::Code)
+        .row("Open in editor (Remote-SSH)", Reach),
     S::new(A::WorkspaceAdd, "workspace.add", "open the picker on the directories alone, to add the one chosen to the tree with nothing running there ([details](tree.md#going-to-a-session-or-starting-one))")
         .bar("Add to Tree…", Icon::FolderPlus)
         .row("Add to tree…", Start),
@@ -579,6 +588,21 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeWake, "worktree.wake", "wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](tree.md#putting-a-worktree-to-sleep))")
         .icon(Icon::SunMoon)
         .row("Wake worktree", End),
+    S::new(A::WorktreeStatusTodo, "worktree.status_todo", "mark the worktree selected in the tree as to do, which its row shows and the tree's filter finds by `status:todo` ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Circle)
+        .row("Status: To do", Start),
+    S::new(A::WorktreeStatusInProgress, "worktree.status_in_progress", "mark the worktree selected in the tree as in progress ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Circle)
+        .row("Status: In progress", Start),
+    S::new(A::WorktreeStatusInReview, "worktree.status_in_review", "mark the worktree selected in the tree as in review ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Eye)
+        .row("Status: In review", Start),
+    S::new(A::WorktreeStatusCompleted, "worktree.status_completed", "mark the worktree selected in the tree as completed ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::Check)
+        .row("Status: Completed", Start),
+    S::new(A::WorktreeStatusClear, "worktree.status_clear", "take the status off the worktree selected in the tree, leaving its comment ([details](tree.md#saying-how-a-worktrees-work-stands))")
+        .icon(Icon::X)
+        .row("Clear status", Start),
     S::new(A::WorkspacePin, "workspace.pin", "pin the workspace or worktree selected in the tree to the top of the tree or of its workspace, or unpin it; what is pinned is never left out by the hide filters and stays pinned across runs ([details](tree.md#arranging-the-tree))")
         .icon(Icon::Highlight)
         .row("Pin or unpin", End),
@@ -978,6 +1002,7 @@ mod tests {
             EnvironmentRename,
             EnvironmentRetry,
             EnvironmentPair,
+            EnvironmentEditor,
             WorkspaceAdd,
             LocalIssues,
             LocalIssuesLeader,
@@ -995,6 +1020,11 @@ mod tests {
             WorktreeCleanup,
             WorktreeSleep,
             WorktreeWake,
+            WorktreeStatusTodo,
+            WorktreeStatusInProgress,
+            WorktreeStatusInReview,
+            WorktreeStatusCompleted,
+            WorktreeStatusClear,
             WorkspacePin,
             TreeSort,
             TreeHideSleeping,

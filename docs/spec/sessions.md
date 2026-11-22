@@ -142,7 +142,9 @@ may replace ([screen rules](screen-rules.md)); it has no login, model or
 conversation Tsumugi reads, cannot be kept read-only, starts no sessions of its
 own and is never put to sleep. It fails to start, saying what to do, when its
 profile names no command or the program is not found where it starts; its
-profile's login row says "CLI not found" in the same case.
+profile's login row says "CLI not found" in the same case. A new session's
+profile list offers the well-known agents after the profiles, each marked
+installed or not installed as the work machine finds its program.
 
 ## Instances
 
@@ -281,7 +283,9 @@ tree and keeps its tabs, shown as exited, with a Restart chip in its console.
 Restart, or `session.restart` on its row or tab, starts the same agent in the
 same directory, from the same profile and under the same code, continuing its
 conversation, and the new session takes the row's tabs in place; a session
-that never told its conversation starts afresh. A session that exited is
+that never told its conversation starts afresh. The console says how soon
+after it started the program exited and shows the last lines it wrote, since
+the terminal host reports no exit code. A session that exited is
 told to its supervisor as a failure, as any end without a report is. It
 survives the work host starting again. Ending it, as for any session, lists it
 no more; its conversation can still be resumed

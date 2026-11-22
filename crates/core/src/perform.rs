@@ -729,6 +729,9 @@ pub(crate) fn perform(
             ))]
         }
         Action::EnvironmentPair => vec![Effect::PairAgain(content::focused_environment(state))],
+        Action::EnvironmentEditor => vec![Effect::OpenRemoteEditor(content::focused_environment(
+            state,
+        ))],
         Action::WorkspaceRemove => match cur.filter(|_| on_list) {
             Some(Item::Workspace(environment, root)) => {
                 let tree = tree::listed(state.hosts.work(&environment));
@@ -816,6 +819,16 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::wake(state, &row),
             None => Vec::new(),
         },
+        Action::WorktreeStatusTodo
+        | Action::WorktreeStatusInProgress
+        | Action::WorktreeStatusInReview
+        | Action::WorktreeStatusCompleted
+        | Action::WorktreeStatusClear => {
+            match (cur.filter(|_| on_list), crate::worktree::status_of(&action)) {
+                (Some(row), Some(status)) => crate::worktree::set_status(state, &row, status),
+                _ => Vec::new(),
+            }
+        }
         Action::WorktreeCleanup => match cur.filter(|_| on_list) {
             Some(row) => crate::worktree::cleanup_open(state, &row),
             None => Vec::new(),
@@ -894,7 +907,7 @@ fn switch_profile(state: &mut ViewState, forward: bool) -> Vec<Effect> {
             Msg::Notice("Only a session not started yet can change its profile".into()),
         );
     }
-    let offered = crate::profiles::startable(&state.config.settings);
+    let offered = crate::profiles::offered(&state.config.settings);
     let now = content::profile_of(state, tab.as_ref());
     let Some(at) = offered.iter().position(|p| p.id == now) else {
         return Vec::new();

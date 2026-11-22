@@ -140,6 +140,11 @@ pub fn entries(
             .chain([
                 offer(Action::WorkspacePin),
                 offer(Action::WorktreeNew),
+                offer(Action::WorktreeStatusTodo),
+                offer(Action::WorktreeStatusInProgress),
+                offer(Action::WorktreeStatusInReview),
+                offer(Action::WorktreeStatusCompleted),
+                offer(Action::WorktreeStatusClear),
                 offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),
@@ -190,6 +195,7 @@ pub fn entries(
                 ])
                 .chain(retry.then(|| offer(Action::EnvironmentRetry)))
                 .chain(machine.then(|| offer(Action::EnvironmentPair)))
+                .chain(machine.then(|| offer(Action::EnvironmentEditor)))
                 .chain((environment != own).then(|| offer(Action::EnvironmentRemove)))
                 .collect()
         }

@@ -106,6 +106,7 @@ pub fn resting(records: &[Session]) -> Vec<tsumugi_model::Session> {
                 started_ms: Some(record.started_ms),
                 permissions: record.permissions.clone(),
                 rest: Some(record.rest?),
+                exit: record.exit.clone(),
                 ..Default::default()
             })
         })

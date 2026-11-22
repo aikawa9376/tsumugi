@@ -160,7 +160,21 @@ fn ProfileChoices(
     keys: Option<String>,
     onchoose: EventHandler<ProfileId>,
 ) -> Element {
+    let app = use_context::<AppCtx>();
     let chosen = profiles.iter().find(|p| p.id == current).cloned();
+    // Whether each command agent is installed is marked in the list, so it
+    // is asked of the host as the list is shown, once a while.
+    {
+        let (environment, profiles) = (environment.clone(), profiles.clone());
+        use_hook(move || {
+            for p in profiles.iter().filter(|p| p.agent == Agent::Generic) {
+                let known = app.logins.peek().get(&environment, &p.id).copied();
+                if crate::logins::stale(known.as_ref(), Instant::now()) {
+                    crate::logins::ask(app, environment.clone(), p.id.clone(), None);
+                }
+            }
+        });
+    }
     rsx! {
         label { class: "launch-form-label", r#for: "launch-profile", "Agent setup" }
         div {

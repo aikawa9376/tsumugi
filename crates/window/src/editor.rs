@@ -243,6 +243,7 @@ mod tests {
             archived: false,
             legacy_client: None,
             work_instance: None,
+            ssh: None,
         }
     }
 

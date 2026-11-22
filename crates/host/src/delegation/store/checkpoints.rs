@@ -23,12 +23,18 @@ impl Store {
         let key = worktree.to_string_lossy().into_owned();
         let before = transaction
             .query_row(
-                "SELECT comment, status FROM checkpoints WHERE worktree = ?1",
+                "SELECT comment, status, noted FROM checkpoints WHERE worktree = ?1",
                 [&key],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
             )
             .ok();
-        let (old_comment, old_status) = before.unwrap_or_default();
+        let (old_comment, old_status, noted) = before.unwrap_or_default();
         let comment = match comment {
             Set::Keep => old_comment,
             Set::Clear => String::new(),
@@ -43,20 +49,22 @@ impl Store {
             worktree: PathBuf::from(&key),
             comment,
             status,
+            noted,
             updated_ms: now_ms,
         };
         if now.is_empty() {
             transaction.execute("DELETE FROM checkpoints WHERE worktree = ?1", [&key])?;
         } else {
             transaction.execute(
-                "INSERT INTO checkpoints (worktree, comment, status, updated_ms)
-                 VALUES (?1, ?2, ?3, ?4)
+                "INSERT INTO checkpoints (worktree, comment, status, noted, updated_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
                  ON CONFLICT(worktree) DO UPDATE SET comment = excluded.comment,
                      status = excluded.status, updated_ms = excluded.updated_ms",
                 params![
                     key,
                     now.comment,
                     now.status.map(WorktreeStatus::word),
+                    now.noted,
                     now_ms as i64
                 ],
             )?;
@@ -65,10 +73,27 @@ impl Store {
         Ok(now)
     }
 
+    /// Keep `note`, the latest an agent working in `worktree` wrote on its
+    /// timeline, to show while the worktree has no comment. A note that is
+    /// empty leaves what is kept, and the time the checkpoint was set is
+    /// not changed: a note is not something anyone set.
+    pub fn note_checkpoint(&mut self, worktree: &Path, note: &str) -> Result<()> {
+        if note.is_empty() {
+            return Ok(());
+        }
+        self.connection.execute(
+            "INSERT INTO checkpoints (worktree, comment, status, noted, updated_ms)
+             VALUES (?1, '', NULL, ?2, 0)
+             ON CONFLICT(worktree) DO UPDATE SET noted = excluded.noted",
+            params![worktree.to_string_lossy(), note],
+        )?;
+        Ok(())
+    }
+
     /// Every checkpoint that says something, the latest set last.
     pub fn checkpoints(&self) -> Result<Vec<Checkpoint>> {
         let mut query = self.connection.prepare(
-            "SELECT worktree, comment, status, updated_ms FROM checkpoints
+            "SELECT worktree, comment, status, updated_ms, noted FROM checkpoints
              ORDER BY updated_ms, worktree",
         )?;
         let rows = query.query_map([], |row| {
@@ -79,6 +104,7 @@ impl Store {
                     .get::<_, Option<String>>(2)?
                     .as_deref()
                     .and_then(WorktreeStatus::parse),
+                noted: row.get(4)?,
                 updated_ms: row.get::<_, i64>(3)? as u64,
             })
         })?;
@@ -90,6 +116,11 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The schema versions a database is at before the step that makes the
+    /// checkpoints table, and the one that gives it the timeline's notes.
+    const TABLE_STEP: i64 = 17;
+    const NOTES_STEP: i64 = 18;
 
     fn store() -> (tempfile::TempDir, Store) {
         let dir = tempfile::tempdir().unwrap();
@@ -168,18 +199,66 @@ mod tests {
     }
 
     #[test]
+    fn a_timeline_note_is_kept_beside_what_was_set_and_survives_clearing_it() {
+        let (_dir, mut store) = store();
+        let w = Path::new("/w");
+        store.note_checkpoint(w, "read the diff").unwrap();
+        let [only] = &store.checkpoints().unwrap()[..] else {
+            panic!("one checkpoint")
+        };
+        assert_eq!(
+            (only.noted.as_str(), only.comment.as_str()),
+            ("read the diff", "")
+        );
+        store
+            .set_checkpoint(w, Set::To("mine".into()), Set::To(WorktreeStatus::Todo), 5)
+            .unwrap();
+        store.note_checkpoint(w, "wrote the test").unwrap();
+        store.note_checkpoint(w, "").unwrap();
+        let now = store.set_checkpoint(w, Set::Clear, Set::Clear, 6).unwrap();
+        assert_eq!(now.noted, "wrote the test");
+        assert!(!now.is_empty());
+        assert_eq!(store.checkpoints().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_database_from_before_timeline_notes_keeps_what_worktrees_said() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.sqlite3");
+        drop(Store::open(&path).unwrap());
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(&format!(
+                "DROP TABLE checkpoints;
+                 CREATE TABLE checkpoints (worktree TEXT PRIMARY KEY, comment TEXT NOT NULL, status TEXT, updated_ms INTEGER NOT NULL);
+                 INSERT INTO checkpoints VALUES ('/w', 'tests are red', 'in_review', 4);
+                 PRAGMA user_version = {};",
+                NOTES_STEP
+            ))
+            .unwrap();
+        drop(connection);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(
+            said(&store),
+            [(
+                "/w".into(),
+                "tests are red".into(),
+                Some(WorktreeStatus::InReview)
+            )]
+        );
+        assert_eq!(store.checkpoints().unwrap()[0].noted, "");
+    }
+
+    #[test]
     fn a_database_from_before_checkpoints_gains_the_table() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("state.sqlite3");
         drop(Store::open(&path).unwrap());
         let connection = rusqlite::Connection::open(&path).unwrap();
-        let before: i64 = connection
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .unwrap();
         connection
             .execute_batch(&format!(
                 "DROP TABLE checkpoints; PRAGMA user_version = {};",
-                before - 1
+                TABLE_STEP
             ))
             .unwrap();
         drop(connection);

@@ -212,6 +212,78 @@ pub(super) async fn remove_resource(
     answer(serde_json::json!({"removed": true}))
 }
 
+/// Change what the caller's worktree, or the one named, says of how its work
+/// stands as its agent asks, and tell what it now says; nothing is changed
+/// when nothing is asked.
+pub(super) async fn worktree_checkpoint(
+    context: &Context,
+    caller: &Session,
+    asked: protocol::WorktreeCheckpoint,
+) -> Result<Value> {
+    use tsumugi_model::{Set, WorktreeStatus};
+    let dir = match &asked.dir {
+        Some(dir) if dir.is_absolute() => dir.clone(),
+        Some(dir) => caller.cwd.join(dir),
+        None => caller.cwd.clone(),
+    };
+    let worktree = tsumugi_sys::fs::canonicalize(&dir)
+        .ok()
+        .filter(|dir| dir.is_dir())
+        .ok_or_else(|| Error::new(Code::Invalid, format!("{} is no directory", dir.display())))?;
+    let comment = match (&asked.comment, asked.clear_comment) {
+        (Some(_), true) => {
+            return Err(Error::new(
+                Code::Invalid,
+                "comment and clear_comment are both given",
+            ));
+        }
+        (Some(text), _) => Set::To(tsumugi_model::comment_of(text)),
+        (None, true) => Set::Clear,
+        (None, false) => Set::Keep,
+    };
+    let status = match (&asked.status, asked.clear_status) {
+        (Some(_), true) => {
+            return Err(Error::new(
+                Code::Invalid,
+                "status and clear_status are both given",
+            ));
+        }
+        (Some(word), _) => Set::To(WorktreeStatus::parse(word).ok_or_else(|| {
+            Error::new(
+                Code::Invalid,
+                format!("{word} is no status; use todo, in-progress, in-review or completed"),
+            )
+        })?),
+        (None, true) => Set::Clear,
+        (None, false) => Set::Keep,
+    };
+    let acts = asked.acts_on_a_worktree();
+    let now = crate::delegation::now_ms();
+    let said = context
+        .call(move |store| {
+            if acts {
+                return store.set_checkpoint(&worktree, comment, status, now);
+            }
+            Ok(store
+                .checkpoints()?
+                .into_iter()
+                .find(|c| c.worktree == worktree)
+                .unwrap_or_else(|| tsumugi_model::Checkpoint {
+                    worktree,
+                    comment: String::new(),
+                    status: None,
+                    noted: String::new(),
+                    updated_ms: 0,
+                }))
+        })
+        .await?;
+    answer(serde_json::json!({
+        "line": said.line(),
+        "comment": said.comment,
+        "status": said.status.map(WorktreeStatus::word),
+    }))
+}
+
 /// Make the changes the caller's agent asks of its timeline and journal
 /// them; the trees as they now stand, with each change that could not be
 /// made. A call none of whose changes could be made is refused and left out
@@ -225,6 +297,7 @@ pub(super) async fn record_timeline(
         return Err(Error::new(Code::Invalid, "ops names no change to make"));
     }
     let code = caller.code.clone();
+    let cwd = caller.cwd.clone();
     context
         .call(move |store| {
             let mut timeline = Timeline::replay(&store.timeline_of(&code)?);
@@ -247,6 +320,10 @@ pub(super) async fn record_timeline(
                 ));
             }
             store.record_timeline(&code, &entry)?;
+            if let Some(note) = entry.latest_note() {
+                let worktree = tsumugi_sys::fs::canonicalize(&cwd).unwrap_or(cwd);
+                store.note_checkpoint(&worktree, &tsumugi_model::comment_of(note))?;
+            }
             let mut answer = timeline.text();
             if !refused.is_empty() {
                 answer.push_str(
