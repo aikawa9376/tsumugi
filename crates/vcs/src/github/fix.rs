@@ -23,7 +23,7 @@ const EARLIER_LINES: usize = 30;
 const ERROR_CONTEXT: usize = 2;
 /// The most bytes of an excerpt.
 const EXCERPT_BYTES: usize = 16 * 1024;
-const EARLIER_SEPARATOR: &str = "… earlier errors …";
+pub(super) const EARLIER_SEPARATOR: &str = "… earlier errors …";
 
 /// The pull request `number` of the repository at `root`, as it ends now;
 /// with `with_checks`, the checks on that commit that failed or still run,
@@ -89,7 +89,7 @@ fn plan(all: Vec<Check>) -> Vec<(Check, Plan)> {
         .map(|check| {
             let plan = if check.outcome == Outcome::Pending {
                 Plan::Skip("the check is still running, so it has no final log".into())
-            } else if let Some(job) = job_of(&check) {
+            } else if let Some(job) = check.job() {
                 if read < LOGGED {
                     read += 1;
                     Plan::Read(job)
@@ -109,28 +109,8 @@ fn plan(all: Vec<Check>) -> Vec<(Check, Plan)> {
         .collect()
 }
 
-/// The id of the Actions job a check run is, from the address it tells
-/// more at.
-fn job_of(check: &Check) -> Option<u64> {
-    if check.by != "GitHub Actions" {
-        return None;
-    }
-    let after = |marker: &str| -> Option<u64> {
-        let rest = check.link.split_once(marker)?.1;
-        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-        digits.parse().ok()
-    };
-    // `/actions/runs/<run>/job/<job>` names the job; a check run's own page,
-    // `/runs/<id>`, is the job's id too; `/actions/runs/<run>` alone is the
-    // whole run, whose jobs are not known.
-    after("/job/").or_else(|| {
-        let before = check.link.split_once("/runs/")?.0;
-        (!before.ends_with("/actions")).then(|| after("/runs/"))?
-    })
-}
-
 /// The end of the log of the Actions job `job`, or why it could not be read.
-async fn read_log(root: &Path, slug: &str, job: u64) -> Log {
+pub(super) async fn read_log(root: &Path, slug: &str, job: u64) -> Log {
     let path = format!("repos/{slug}/actions/jobs/{job}/logs");
     match run("gh", &["api", &path], Some(root)).await {
         Ok(out) => {
@@ -342,33 +322,6 @@ mod tests {
     fn escape_sequences_and_control_characters_do_not_reach_the_prompt() {
         let (text, _) = excerpt("\x1b[31mred\x1b[0m\r\nbell\x07\x1b]0;title\x07 ok\rnext\tx\n");
         assert_eq!(text, "red\nbell ok\nnext\tx");
-    }
-
-    #[test]
-    fn the_job_of_an_actions_check_comes_from_its_address() {
-        assert_eq!(job_of(&job("a", 42)), Some(42));
-        let run_page = check(
-            "a",
-            Outcome::Failed,
-            "GitHub Actions",
-            "https://github.com/o/r/runs/77?check_suite_focus=true",
-        );
-        assert_eq!(job_of(&run_page), Some(77));
-    }
-
-    #[test]
-    fn no_job_is_named_by_a_whole_run_a_status_or_another_app() {
-        let whole = check(
-            "a",
-            Outcome::Failed,
-            "GitHub Actions",
-            "https://github.com/o/r/actions/runs/9",
-        );
-        let other = check("b", Outcome::Failed, "Buildkite", "https://x/runs/3");
-        let status = check("c", Outcome::Failed, "", "https://y/job/4");
-        assert_eq!(job_of(&whole), None);
-        assert_eq!(job_of(&other), None);
-        assert_eq!(job_of(&status), None);
     }
 
     #[test]

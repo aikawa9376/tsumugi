@@ -47,7 +47,9 @@ key but the window commands' prefix and `Mod` keys. A viewer's window has no
 prompt and takes the `viewer` area's keys; a pull request's or an issue's window
 is the exception, which shows the prompt it is written on GitHub with
 ([tree](tree.md#writing-on-a-pull-request-or-an-issue)), and takes the `github`
-area's keys before the `viewer` area's.
+area's keys before the `viewer` area's. A check's log
+([tree](tree.md#reading-a-checks-log)) is a viewer's window that takes the
+`check` area's keys first.
 
 ## Reading a conversation
 

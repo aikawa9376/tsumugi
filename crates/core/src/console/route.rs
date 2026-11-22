@@ -123,11 +123,18 @@ pub fn help_contexts(area: Area, shown: Option<&Tab>) -> Vec<Context> {
         Area::Console
             if matches!(
                 shown,
-                Some(Tab::Viewer(_, _) | Tab::GitHub { .. } | Tab::Diff { .. })
+                Some(
+                    Tab::Viewer(_, _)
+                        | Tab::GitHub { .. }
+                        | Tab::CheckLog { .. }
+                        | Tab::Diff { .. }
+                )
             ) =>
         {
             if matches!(shown, Some(Tab::GitHub { .. })) {
                 &[Context::GitHub, Context::Viewer, Context::Global]
+            } else if matches!(shown, Some(Tab::CheckLog { .. })) {
+                &[Context::Check, Context::Viewer, Context::Global]
             } else {
                 &[Context::Viewer, Context::Global]
             }
@@ -185,7 +192,12 @@ impl Footing<'_> {
             Area::Console
                 if matches!(
                     self.shown,
-                    Some(Tab::Viewer(_, _) | Tab::GitHub { .. } | Tab::Diff { .. })
+                    Some(
+                        Tab::Viewer(_, _)
+                            | Tab::GitHub { .. }
+                            | Tab::CheckLog { .. }
+                            | Tab::Diff { .. }
+                    )
                 ) =>
             {
                 ("VIEWER", "normal")

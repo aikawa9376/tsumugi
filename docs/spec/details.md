@@ -141,7 +141,8 @@ window or such a row is described.
 - **github-conversation**, **github-files** and **github-checks** — what was
   said on it, each post in brief; the files a pull request changes, with
   their lines added and taken out; and its checks, those that failed first,
-  each opening where it tells more.
+  each opening where it tells more, or, where it failed or runs in GitHub
+  Actions, its log ([tree](tree.md#reading-a-checks-log)).
 - **github-show**, **github-open** and **github-start** — buttons that open
   it in Tsumugi, open it on GitHub and start a session on it, as its row's
   keys do ([tree](tree.md)).

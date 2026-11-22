@@ -221,6 +221,28 @@ The repository's merge queue is not looked for: auto-merge is asked of
 `gh pr merge --auto`, which GitHub applies to a queue itself. The keys act on
 the tab shown; a pull request's row in the tree has none of them.
 
+## Reading a check's log
+
+A check of a pull request that failed or still runs, run by GitHub Actions,
+opens its job's log in a window of the content when it is clicked in the
+details panel; any other check opens where it tells more, as before. The
+window shows the end of the log, the same excerpt a request to fix the pull
+request quotes ([below](#asking-an-agent-to-fix-a-pull-request)), scrolled to
+the first error in it, and says so when earlier lines were left out. It is
+read with the viewer's keys, reads again with `refresh`, and `viewer.copy_path`
+copies the log shown.
+
+A log that cannot be read says why where the log would be: the check has not
+started or is still running, so it has no final log; the repository has no
+remote on GitHub; the login may not read it; or the network failed. Reading
+it again once the run is over shows it.
+
+`check.rerun` ([keys](reference/keys.md#actions)) runs the failed jobs of the
+check's Actions run again, and the jobs that need them, not the ones that
+passed. It asks first, naming the pull request, like the writes above, and
+writes nothing on any answer but yes. A check whose address does not name its
+run says so instead of asking. The window reads its log again once it is done.
+
 ## Asking an agent to fix a pull request
 
 From a pull request's tab, the keys of `github.fix_checks` and

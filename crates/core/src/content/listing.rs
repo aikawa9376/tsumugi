@@ -117,6 +117,7 @@ fn successor(listed: &Listed, tab: &Tab) -> Option<Tab> {
         | Tab::Viewer(_, _)
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
+        | Tab::CheckLog { .. }
         | Tab::Diff { .. } => None,
     }
 }
@@ -141,6 +142,7 @@ fn waits(listed: &Listed, tab: &Tab) -> bool {
         | Tab::Viewer(_, _)
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
+        | Tab::CheckLog { .. }
         | Tab::Diff { .. } => {
             return false;
         }
@@ -168,6 +170,7 @@ fn listed_at(hosts: &Hosts, tab: &Tab) -> Option<Place> {
         | Tab::Viewer(_, _)
         | Tab::Drawn { .. }
         | Tab::GitHub { .. }
+        | Tab::CheckLog { .. }
         | Tab::Diff { .. } => None,
     }
 }

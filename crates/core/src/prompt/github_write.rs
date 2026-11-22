@@ -258,6 +258,19 @@ fn subject(
             listing,
             number,
         }) => Some((environment.clone(), repository.clone(), *listing, *number)),
+        // A check's log belongs to a pull request, which is what writing to
+        // it, as running its jobs again, is done on.
+        Some(Tab::CheckLog {
+            environment,
+            repository,
+            number,
+            ..
+        }) => Some((
+            environment.clone(),
+            repository.clone(),
+            tsumugi_model::github::Listing::Pulls,
+            *number,
+        )),
         _ => None,
     }
 }
@@ -362,18 +375,25 @@ pub(crate) fn written(
     listing: tsumugi_model::github::Listing,
     number: u64,
 ) -> Vec<Effect> {
+    let (shown_environment, shown_repository) = (environment.clone(), repository.clone());
     let shown = Tab::GitHub {
         environment: environment.clone(),
         repository,
         listing,
         number,
     };
+    let log = |tab: Option<&Tab>| {
+        matches!(tab, Some(Tab::CheckLog { environment: e, repository: r, number: n, .. })
+            if *e == shown_environment && *r == shown_repository && *n == number)
+    };
     match state.content.windows.focused_window() {
-        Some(window) if state.content.active() == Some(&shown) => vec![Effect::Viewer {
-            environment,
-            window,
-            action: crate::viewers::ViewerAction::Reload,
-        }],
+        Some(window) if state.content.active() == Some(&shown) || log(state.content.active()) => {
+            vec![Effect::Viewer {
+                environment,
+                window,
+                action: crate::viewers::ViewerAction::Reload,
+            }]
+        }
         _ => Vec::new(),
     }
 }
@@ -903,6 +923,62 @@ mod tests {
             );
             let said = act(Github::Merge(None), &thread, None).unwrap_err();
             assert!(said.contains("conflicts"), "{said}");
+        }
+
+        fn log() -> Tab {
+            Tab::CheckLog {
+                environment: here(),
+                repository: "/r".into(),
+                number: 7,
+                job: std::sync::Arc::new(crate::content::CheckJob {
+                    id: 42,
+                    run: Some(9),
+                    name: "test".into(),
+                }),
+            }
+        }
+
+        #[test]
+        fn running_a_checks_failed_jobs_again_is_asked_of_the_user_before_it_is_written() {
+            let mut state = ViewState::default();
+            step(&mut state, show(log()));
+            let rerun = Write::Rerun { run: 9 };
+            let asked = step(&mut state, Msg::GitHubAsk(rerun.clone()));
+            assert_eq!(writes(&asked), []);
+            let (_, title, body, yes) = state.overlays.confirm.as_ref().unwrap().dialog();
+            assert_eq!(
+                (title.as_str(), yes),
+                ("Re-run failed jobs of PR #7?", "Re-run")
+            );
+            assert!(body.contains("run 9"), "{body}");
+            assert!(!state.overlays.confirm.as_ref().unwrap().destroys());
+            let yes = step(&mut state, Msg::ConfirmAnswer(true));
+            assert_eq!(writes(&yes), [(&rerun, false)]);
+            let no = {
+                step(&mut state, Msg::GitHubAsk(rerun));
+                step(&mut state, Msg::ConfirmAnswer(false))
+            };
+            assert_eq!(writes(&no), []);
+        }
+
+        #[test]
+        fn what_was_written_makes_the_log_shown_read_again() {
+            let mut state = ViewState::default();
+            step(&mut state, show(log()));
+            step(&mut state, Msg::Focus(Area::Console));
+            let effects = written(&mut state, here(), "/r".into(), Listing::Pulls, 7);
+            assert!(matches!(
+                effects.as_slice(),
+                [Effect::Viewer {
+                    action: crate::viewers::ViewerAction::Reload,
+                    ..
+                }]
+            ));
+        }
+
+        #[test]
+        fn a_check_s_log_shows_no_prompt_to_write_in() {
+            assert!(!shows_prompt(Some(&log())));
         }
 
         #[test]

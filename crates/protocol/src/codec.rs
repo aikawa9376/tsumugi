@@ -512,7 +512,27 @@ mod tests {
                 },
             },
         });
+        round_trips(Request::Ask {
+            asked: 16,
+            ask: Box::new(crate::Ask::GitHubCheckLog {
+                repository: "/w".into(),
+                job: 42,
+            }),
+        });
+        round_trips(Event::Answer {
+            asked: 16,
+            answer: crate::Answer::CheckLog {
+                log: tsumugi_model::github::CheckLog {
+                    log: tsumugi_model::github::Log::Excerpt {
+                        text: "error: 日本語".into(),
+                        cut: true,
+                    },
+                    first_error: Some(0),
+                },
+            },
+        });
         for write in [
+            tsumugi_model::github::Write::Rerun { run: 9 },
             tsumugi_model::github::Write::Comment {
                 body: "日本語 -x".into(),
             },

@@ -63,6 +63,7 @@ pub(super) fn TabsBar(
                     | Tab::Viewer(_, _)
                     | Tab::Drawn { .. }
                     | Tab::GitHub { .. }
+                    | Tab::CheckLog { .. }
                     | Tab::Diff { .. } => (None, None),
                 };
                 let name = tree_view::github_title(work, &shows)

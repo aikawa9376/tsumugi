@@ -255,6 +255,14 @@ pub fn question(number: u64, write: &Write) -> (String, String, &'static str, bo
             "Convert to draft",
             false,
         ),
+        Write::Rerun { run } => (
+            format!("Re-run failed jobs of PR #{number}?"),
+            format!(
+                "GitHub runs again the jobs that failed in run {run}, and those that needed them, as the login gh uses."
+            ),
+            "Re-run",
+            false,
+        ),
         _ => (
             format!("Write on PR #{number}?"),
             "This will update the pull request on GitHub.".into(),

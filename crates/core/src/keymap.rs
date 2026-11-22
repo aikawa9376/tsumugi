@@ -46,6 +46,8 @@ pub enum Context {
     /// A pull request or an issue in the focused window, before the
     /// viewer's bindings.
     GitHub,
+    /// A check's log in the focused window, before the viewer's bindings.
+    Check,
     /// The lightbox over the window, while it is open.
     Lightbox,
     /// The floating terminal over the window, while it has the keys.
@@ -64,7 +66,7 @@ pub enum Context {
 }
 
 impl Context {
-    pub const ALL: [Context; 19] = [
+    pub const ALL: [Context; 20] = [
         Context::Global,
         Context::Tree,
         Context::Agents,
@@ -75,6 +77,7 @@ impl Context {
         Context::Draft,
         Context::Viewer,
         Context::GitHub,
+        Context::Check,
         Context::Lightbox,
         Context::Floating,
         Context::Overlay,
@@ -97,6 +100,7 @@ impl Context {
             Context::Draft => "draft",
             Context::Viewer => "viewer",
             Context::GitHub => "github",
+            Context::Check => "check",
             Context::Lightbox => "lightbox",
             Context::Floating => "floating",
             Context::Overlay => "overlay",
@@ -121,6 +125,7 @@ impl Context {
             Context::Draft => "New session",
             Context::Viewer => "Viewer",
             Context::GitHub => "Pull request or issue",
+            Context::Check => "Check log",
             Context::Lightbox => "Lightbox",
             Context::Floating => "Floating terminal",
             Context::Overlay => "Over the window",
@@ -147,6 +152,9 @@ impl Context {
             Context::Viewer => "A viewer of an image, a movie, an HTML page or a PDF.",
             Context::GitHub => {
                 "Before the viewer's bindings while a pull request or an issue is shown."
+            }
+            Context::Check => {
+                "Before the viewer's bindings while the log of a pull request's check is shown."
             }
             Context::Lightbox => {
                 "The lightbox of a session's images, while it is open over the window."
