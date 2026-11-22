@@ -716,6 +716,34 @@ pub(super) async fn start(
         }
         None => None,
     };
+    // A session that rests is brought back as restarting it does, in its
+    // place, rather than started a second time.
+    if let Some(old) = resumed.as_ref().filter(|old| old.rest.is_some()) {
+        let woken = crate::restore::restart(old.id).await.map_err(|why| {
+            Error::new(
+                Code::Refused,
+                format!("{} ({}) cannot be brought back: {why}", old.name, old.code),
+            )
+        })?;
+        let (opener, id, supervised) = (caller.id, woken.id, start.supervised);
+        context
+            .call(move |store| {
+                if supervised {
+                    store.supervise(id)?;
+                }
+                if !prompt.is_empty() {
+                    store.send(opener, id, &prompt)?;
+                }
+                Ok(())
+            })
+            .await?;
+        return answer(protocol::Started {
+            id: woken.id,
+            code: woken.code,
+            name: woken.name,
+            dir: woken.cwd,
+        });
+    }
     let worked = match &start.issue {
         Some(wanted) => {
             let wanted = wanted.clone();
@@ -981,7 +1009,13 @@ pub(super) async fn listed(all: Vec<Session>, filter: &protocol::Sessions) -> Re
         .as_ref()
         .map(|dir| tsumugi_sys::fs::canonicalize(dir).unwrap_or(dir.clone()));
     let mut out = Vec::new();
-    for session in all.iter().filter(|session| !session.ended) {
+    // A session asleep is listed, as it is woken by a message; one that ended
+    // or exited is not.
+    let asleep = |session: &Session| session.rest == Some(tsumugi_model::Rest::Hibernated);
+    for session in all
+        .iter()
+        .filter(|session| !session.ended || asleep(session))
+    {
         let repository = tsumugi_vcs::common_dir(&session.cwd).await;
         if wanted_repo.is_some() && repository != wanted_repo {
             continue;
@@ -1004,6 +1038,7 @@ pub(super) async fn listed(all: Vec<Session>, filter: &protocol::Sessions) -> Re
             repository,
             readiness: session.readiness,
             opened_by,
+            asleep: asleep(session),
         });
     }
     answer(out)

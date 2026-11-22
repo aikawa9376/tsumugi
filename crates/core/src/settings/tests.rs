@@ -408,6 +408,7 @@ fn settings_written_read_back_the_same() {
         usage_left: false,
         rename_sessions: true,
         restore_sessions: RestoreSessions::Always,
+        hibernate_after: 45,
         close_successful_commands: false,
         shell: ShellLaunch {
             command: vec!["/bin/bash".into(), "-l".into()],
@@ -1176,7 +1177,7 @@ fn a_setting_the_file_should_not_hold_is_named_with_those_it_may() {
     let error = |text: &str| Settings::parse(text).unwrap_err().to_string();
     assert_eq!(
         error("nonsense = 1\n"),
-        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
+        "unknown field `nonsense`, expected one of `profile`, `profiles`, `delegation`, `zoom`, `auto_scale`, `prompt_min_rows`, `prompt_max_rows`, `font_family`, `font_size`, `font_weight`, `appearance`, `light_theme`, `dark_theme`, `theme`, `keep_awake`, `notify_waiting`, `notify_failed`, `notify_done`, `notify_usage`, `usage_left`, `rename_sessions`, `restore_sessions`, `hibernate_after`, `close_successful_commands`, `shell`, `neovim`, `scratch_dir`, `picker`, `floating_terminal`, `console`, `details`, `usage`, `panel`, `worktree_setup`, `ai_actions`, `governor`, `gate`, `language`, `leader`, `worker_tiers`\n"
     );
     assert_eq!(
         error("[delegation]\nnonsense = 1\n"),
@@ -1233,4 +1234,17 @@ fn the_floating_terminal_starts_in_the_home_folder_unless_a_directory_is_chosen(
 fn a_repositorys_run_policy_is_kept_in_the_settings_and_never_read_from_its_files() {
     assert!(Settings::parse("[worktree_setup]\nrun_policy = 'sometimes'\n").is_err());
     assert!(Settings::parse("[worktree_setup]\nsetup = 'make'\n").is_err());
+}
+
+#[test]
+fn sessions_are_never_hibernated_unless_the_settings_name_the_minutes() {
+    assert_eq!(Settings::parse("").unwrap().hibernate_after, 0);
+    assert_eq!(
+        Settings::parse("hibernate_after = 30\n")
+            .unwrap()
+            .hibernate_after,
+        30
+    );
+    assert!(Settings::parse("hibernate_after = -1\n").is_err());
+    assert!(Settings::parse("hibernate_after = \"soon\"\n").is_err());
 }

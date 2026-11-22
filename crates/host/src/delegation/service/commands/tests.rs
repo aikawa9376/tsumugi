@@ -559,6 +559,29 @@ async fn sessions_are_listed_with_their_codes_and_the_code_of_the_one_that_opene
     assert_eq!(listed[1]["opened_by"]["code"], opener.code.as_str());
 }
 
+#[tokio::test]
+async fn a_session_asleep_is_listed_as_asleep_and_one_that_exited_or_ended_is_not_listed() {
+    let mut asleep = record("asleep").ended().build();
+    asleep.rest = Some(tsumugi_model::Rest::Hibernated);
+    let mut exited = record("exited").ended().build();
+    exited.rest = Some(tsumugi_model::Rest::Exited);
+    let ended = record("ended").ended().build();
+    let running = record("running").build();
+
+    let listed = listed(
+        vec![asleep.clone(), exited, ended, running.clone()],
+        &protocol::Sessions::default(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(listed.as_array().unwrap().len(), 2);
+    assert_eq!(listed[0]["code"], asleep.code.as_str());
+    assert_eq!(listed[0]["asleep"], true);
+    assert_eq!(listed[1]["code"], running.code.as_str());
+    assert!(listed[1].get("asleep").is_none());
+}
+
 async fn saved(context: &Context, caller: &Session, title: &str, dir: &Path) -> String {
     let result = create_local_issue(
         context,

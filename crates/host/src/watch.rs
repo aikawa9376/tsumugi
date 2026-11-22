@@ -79,7 +79,7 @@ impl Watched {
     }
 
     /// What every window shows now, with the session each shows.
-    fn seen(&self) -> Vec<Seen> {
+    pub(crate) fn seen(&self) -> Vec<Seen> {
         self.seen.borrow().clone()
     }
 

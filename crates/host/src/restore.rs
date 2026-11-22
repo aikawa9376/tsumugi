@@ -239,7 +239,12 @@ pub fn plan(
             held.insert((record.agent, conversation), None);
         }
         resumed.insert(record.id);
-        let parent = record.parent.filter(|parent| resumed.contains(parent));
+        // A session that rested is opened still by the session that opened it,
+        // which runs on or was itself brought back; one the terminal host took
+        // is opened by what stands for its opener, if that is brought back.
+        let parent = record
+            .parent
+            .filter(|parent| record.rest.is_some() || resumed.contains(parent));
         steps.push(Step::Resume {
             record: Box::new(record.clone()),
             parent,
@@ -262,6 +267,54 @@ pub fn plan(
         }
     }
     steps
+}
+
+/// Bring `id`, a session whose program exited or that sleeps, back to run, as
+/// restarting it does, and the record of the session that now stands for it.
+pub async fn restart(id: SessionId) -> Result<Session, String> {
+    let root = crate::delegation::app::root();
+    let old = with_store(&root, move |store| store.known(id))
+        .await
+        .map_err(|e| e.to_string())?;
+    // Another ask woke it first: what stands for it now is what was asked.
+    let by = |old: &Session| old.brought_back_by;
+    let standing = |root: std::path::PathBuf, by: SessionId| async move {
+        with_store(&root, move |store| store.known(by))
+            .await
+            .map_err(|e| e.to_string())
+    };
+    if let Some(woken) = by(&old) {
+        return standing(root, woken).await;
+    }
+    let terminal = old
+        .terminal
+        .filter(|_| old.rest.is_some())
+        .ok_or_else(|| format!("{} rests no more", old.name))?;
+    let outcomes = bring_back(vec![crate::sessions::hex(terminal)]).await?;
+    let Some(outcome) = outcomes.into_iter().next() else {
+        // Brought back by another ask while this one waited its turn.
+        let now = with_store(&root, move |store| store.known(id))
+            .await
+            .map_err(|e| e.to_string())?;
+        return match by(&now) {
+            Some(woken) => standing(root, woken).await,
+            None => Err(format!("{} cannot be brought back", old.name)),
+        };
+    };
+    if let Some(why) = outcome.refused {
+        return Err(format!("{} cannot be brought back: {why}", old.name));
+    }
+    let by = outcome.by.and_then(|by| crate::sessions::id_of(&by));
+    with_store(&root, move |store| {
+        Ok(store
+            .sessions()?
+            .into_iter()
+            .rev()
+            .find(|s| s.terminal.is_some() && s.terminal == by))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| format!("{} was brought back, but its record is not found", old.name))
 }
 
 /// How long bringing back waits between one start and the next, so the
@@ -359,10 +412,15 @@ async fn resume(
         refused: Some(why),
     };
     let opener = match parent {
-        Some(parent) => with_store(root, move |store| Ok(store.known(parent)?.brought_back_by))
-            .await
-            .ok()
-            .flatten(),
+        Some(parent) => with_store(root, move |store| {
+            let opener = store.known(parent)?;
+            Ok(opener
+                .brought_back_by
+                .or_else(|| (!opener.ended).then_some(opener.id)))
+        })
+        .await
+        .ok()
+        .flatten(),
         None => None,
     };
     let request = crate::execution::StartRequest {
@@ -700,6 +758,18 @@ mod tests {
 
         assert_eq!(parents(&together), [None, Some(opener.id)]);
         assert_eq!(parents(&after), [Some(opener.id)]);
+    }
+
+    #[test]
+    fn a_session_woken_goes_on_being_opened_by_the_session_that_runs_and_opened_it() {
+        let opener = record("opener").build();
+        let mut asleep = exited("asleep", 2, Some("c2"));
+        asleep.rest = Some(tsumugi_model::Rest::Hibernated);
+        asleep.parent = Some(opener.id);
+
+        let steps = plan(&chosen(&[2]), &[opener.clone(), asleep], &[], &[], |_| true);
+
+        assert_eq!(parents(&steps), [Some(opener.id)]);
     }
 
     #[test]

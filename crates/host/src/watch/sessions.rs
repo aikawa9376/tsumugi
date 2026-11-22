@@ -23,6 +23,7 @@ pub(super) async fn watch(mut watched: Watched) {
     let mut cache: HashMap<PathBuf, (Instant, Option<Worktree>)> = HashMap::new();
     let mut lists: HashMap<PathBuf, (Instant, Vec<Worktree>)> = HashMap::new();
     let mut ran = Ran::default();
+    let mut quiet = crate::hibernation::Quiet::default();
     let mut notices = crate::notices::Kept::open(&crate::paths::instance_state());
     loop {
         // Due before the terminal host is asked, so that a time is settled
@@ -39,6 +40,7 @@ pub(super) async fn watch(mut watched: Watched) {
                         Vec::new()
                     }
                 };
+                crate::hibernation::tick(&watched, &mut quiet, &sessions).await;
                 if let Err(error) = crate::delegation::app::follow_workers(&sessions).await {
                     tracing::warn!(%error, "cannot tell supervisors how their workers stand");
                 }

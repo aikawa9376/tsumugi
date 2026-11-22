@@ -61,7 +61,8 @@ cannot act as another.
   conversation, brings an ended session's conversation back as
   [Resume Conversation](sessions.md#resuming-a-past-conversation) does: in
   the directory, from the profile and as the agent it ran, under the code it
-  had, and its record is left as it was. It is refused for a session that
+  had, and its record is left as it was; a session that sleeps or whose program
+  exited is brought back in its place instead, as restarting it does. It is refused for a session that
   runs, one with no conversation to resume, and one that does not exist, and
   when it also names a directory, worktree, agent or profile; a prompt it
   carries is sent to the resumed session as a message.
@@ -70,7 +71,9 @@ cannot act as another.
   names another.
 - **`send`** sends a message to another session by its code or its id. Any session Tsumugi
   started, running or not yet ready, can be sent to; one that has ended
-  cannot.
+  cannot. A session that sleeps ([hibernation](sessions.md#hibernation)) is
+  woken to take it, and the message is not lost: if it cannot be woken, the
+  send is refused, saying why.
 - **`report_done`** tells the session that supervises the caller how its work
   ended: `succeeded` or `failed`, a summary, and the files it modified. It is
   refused for a session nobody supervises, once the caller has reported, and

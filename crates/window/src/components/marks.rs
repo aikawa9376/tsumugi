@@ -27,7 +27,10 @@ pub(crate) fn session_glyph(
     state: &State,
 ) -> Option<(&'static str, Icon, &'static str)> {
     match rest {
-        Some(rest) => Some(("state-glyph idle", Icon::PlayerStop, rest.word())),
+        Some(Rest::Exited) => Some(("state-glyph idle", Icon::PlayerStop, Rest::Exited.word())),
+        Some(Rest::Hibernated) => {
+            Some(("state-glyph idle", Icon::SunMoon, Rest::Hibernated.word()))
+        }
         None => glyph(state),
     }
 }
@@ -131,6 +134,8 @@ mod tests {
     fn a_session_whose_program_exited_is_marked_so_whatever_its_state_was() {
         let (_, icon, word) = session_glyph(Some(Rest::Exited), &State::Done).unwrap();
         assert_eq!((icon, word), (Icon::PlayerStop, "exited"));
+        let (_, icon, word) = session_glyph(Some(Rest::Hibernated), &State::Idle).unwrap();
+        assert_eq!((icon, word), (Icon::SunMoon, "hibernated"));
         assert_eq!(session_glyph(None, &State::Idle), None);
         assert_eq!(session_glyph(None, &State::Done), glyph(&State::Done));
     }

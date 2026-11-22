@@ -521,6 +521,32 @@ impl Store {
         self.rest(id, Rest::Exited)
     }
 
+    /// Records that `id` was stopped to sleep, so the session is listed
+    /// still, to be woken; one that had ended already stays as it ended.
+    pub fn hibernate(&mut self, id: SessionId) -> Result<()> {
+        self.rest(id, Rest::Hibernated)
+    }
+
+    /// Records that the program of `id`, which was to be stopped to sleep,
+    /// was not, so it runs on.
+    pub fn stay_awake(&mut self, id: SessionId) -> Result<()> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let slept = transaction.execute(
+            "DELETE FROM rests WHERE session = ?1 AND rest = ?2",
+            params![id.to_string(), Rest::Hibernated.word()],
+        )?;
+        if slept > 0 {
+            transaction.execute(
+                "UPDATE sessions SET ended = 0 WHERE id = ?1",
+                [id.to_string()],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     fn rest(&mut self, id: SessionId, rest: Rest) -> Result<()> {
         let transaction = self
             .connection
@@ -553,6 +579,15 @@ impl Store {
 
     /// Records that the interrupted `id` was brought back as `by`.
     pub fn brought_back(&mut self, id: SessionId, by: SessionId) -> Result<()> {
+        let slept = known(&self.connection, id)?.rest == Some(Rest::Hibernated);
+        if slept {
+            // Woken, it goes on being supervised by the session that
+            // supervised it, as the same worker.
+            self.connection.execute(
+                "UPDATE OR IGNORE workers SET session = ?2 WHERE session = ?1",
+                params![id.to_string(), by.to_string()],
+            )?;
+        }
         self.update(
             id,
             "UPDATE sessions SET interrupted = 0, brought_back_by = ?2 WHERE id = ?1",
@@ -1648,6 +1683,42 @@ PRAGMA user_version = 1;
             [id],
             "one ended by Tsumugi stays ended"
         );
+    }
+
+    #[test]
+    fn a_session_stopped_to_sleep_has_ended_and_stays_listed_as_hibernated() {
+        let (_dir, mut store) = store();
+        let id = register(&mut store, None, "a");
+
+        store.hibernate(id).unwrap();
+
+        let kept = store.known(id).unwrap();
+        assert!(kept.ended && !kept.interrupted);
+        assert_eq!(kept.rest, Some(Rest::Hibernated));
+        assert_eq!(store.rested().unwrap().len(), 1);
+        let sender = register(&mut store, None, "b");
+        assert_eq!(
+            store.send(sender, id, "hello").unwrap_err().code,
+            Code::Refused,
+            "a message is sent to what woke it, not to the record that slept"
+        );
+    }
+
+    #[test]
+    fn a_session_whose_program_could_not_be_stopped_to_sleep_runs_on() {
+        let (_dir, mut store) = store();
+        let id = register(&mut store, None, "a");
+        store.hibernate(id).unwrap();
+
+        store.stay_awake(id).unwrap();
+
+        let kept = store.known(id).unwrap();
+        assert!(!kept.ended);
+        assert_eq!(kept.rest, None);
+        let gone = register(&mut store, None, "b");
+        store.exit(gone).unwrap();
+        store.stay_awake(gone).unwrap();
+        assert!(store.known(gone).unwrap().ended, "one that exited stays so");
     }
 
     #[test]

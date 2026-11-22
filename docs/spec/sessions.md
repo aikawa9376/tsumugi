@@ -280,6 +280,21 @@ worktree stays, and its conversation can be resumed
 ([resuming](#resuming-a-past-conversation)). Otherwise it goes on, to tell you
 what it did, do the work again, or take more.
 
+### Hibernation
+
+With `hibernate_after` set to a number of minutes in the
+[settings](settings.md), a session whose turn is done and which has been out
+of view and left alone for that long is put to sleep: its program is stopped,
+and its row and tabs stay, shown as hibernated. Focusing it, or sending it a
+message, wakes it as a restart does, with its conversation, under its code and
+opened by the session that opened it, and the message is waiting for it when
+it is ready. A session that works, waits on a dialog or is still starting, one
+whose own sessions still run, one that never told its conversation and a
+Cursor CLI session are never put to sleep. A supervisor is not told that a
+worker that sleeps failed. Ending a sleeping session lists it no more; its
+conversation can be resumed ([resuming](#resuming-a-past-conversation)). Set
+to 0, the default, no session sleeps.
+
 ## When the terminal host goes
 
 When the terminal host goes, restarted, crashed or with the machine, the
