@@ -150,6 +150,13 @@ kept, and closed pages are not kept across application runs. With the keys in
 the page, Ctrl+F (Cmd+F) searches it and Ctrl+Shift+T (Cmd+Shift+T) reopens,
 as in a browser.
 
+A page can be shown at the size of a phone, a tablet or a laptop, chosen in
+its toolbar: the page is drawn at that size, in the middle of the room it
+has, or at the room's size where that is smaller, and sees it as its window's
+size and in its media queries. Only the size is emulated, not the device's
+pixel density, touch or user agent. Each page keeps its size while it is
+open.
+
 The web links of a conversation, a pull request or issue and a Markdown
 document open in the system's browser, or in a new page of Tsumugi's browser
 under the worktree the keys are in when the settings say so. Pressing a link

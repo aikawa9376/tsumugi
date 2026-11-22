@@ -9,6 +9,7 @@ mod find;
 mod markup;
 #[cfg(all(test, target_os = "linux"))]
 mod native_tests;
+mod viewport;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -522,6 +523,7 @@ pub(crate) fn BrowserWindow(
             .page(id, window, &page_environment, app)
     });
     let mut searching = find::use_find();
+    let mut size = use_signal(move || viewport::chosen(id).unwrap_or("responsive"));
     let mut typed = use_signal(String::new);
     let mut current = use_signal(String::new);
     let mut error = use_signal(String::new);
@@ -703,6 +705,8 @@ pub(crate) fn BrowserWindow(
                     {
                         let zoom = crate::scaling::current();
                         let rect = rect.map(|v| v * zoom);
+                        let rect =
+                            viewport::fit(rect, viewport::chosen(id).and_then(viewport::preset));
                         if bounds != Some(rect) {
                             set_bounds(&page, rect);
                             bounds = Some(rect);
@@ -791,6 +795,19 @@ pub(crate) fn BrowserWindow(
                     focus: true, contained: true,
                     oninput: move |value| typed.set(value),
                     onenter: move |_| navigate.clone()(),
+                }
+                select {
+                    class: "browser-viewport", aria_label: "Page size",
+                    title: "Show the page at the size of a device",
+                    value: size(),
+                    onchange: move |e| {
+                        viewport::choose(id, &e.value());
+                        size.set(viewport::chosen(id).unwrap_or("responsive"));
+                    },
+                    option { value: "responsive", "Responsive" }
+                    for preset in viewport::PRESETS {
+                        option { value: preset.id, "{preset.label}" }
+                    }
                 }
                 div { class: "browser-tools", role: "group", aria_label: "Page tools",
                     button {
