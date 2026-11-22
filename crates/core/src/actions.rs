@@ -118,6 +118,7 @@ pub enum Action {
     WorktreeNew,
     WorktreeMerge,
     WorktreeDelete,
+    WorktreeCleanup,
     WindowClose,
     WindowOpen,
     Refresh,
@@ -555,6 +556,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeDelete, "worktree.delete", "delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](tree.md#making-and-deleting-worktrees))")
         .icon(Icon::Trash)
         .row("Delete worktree…", End),
+    S::new(A::WorktreeCleanup, "worktree.cleanup", "list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](tree.md#cleaning-up-worktrees))")
+        .icon(Icon::Trash)
+        .row("Clean Up Worktrees…", End),
     S::new(A::WindowClose, "window.close", "close the window; the instance's other windows stay open, and its sessions run on").bar("Close Window", Icon::AppWindow),
     S::new(A::WindowOpen, "window.open", "open another window of the instance ([windows](sessions.md#windows))").bar("New Window", Icon::CopyPlus),
     S::new(A::Refresh, "refresh", "read the sessions, and what git says of where they run, again now").bar("Refresh", Icon::Refresh),
@@ -948,6 +952,7 @@ mod tests {
             WorktreeNew,
             WorktreeMerge,
             WorktreeDelete,
+            WorktreeCleanup,
             WindowClose,
             WindowOpen,
             Refresh,

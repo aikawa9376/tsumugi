@@ -205,3 +205,88 @@ async fn the_answer_lists_what_stays_with_why_and_never_the_main_checkout() {
     assert_eq!(told["kept"][0]["why"][0], "1 changed files");
     assert!(told["removed"].is_null());
 }
+
+fn pull(branch: &str, head: &str, state: tsumugi_model::PullState) -> tsumugi_vcs::github::PullRef {
+    tsumugi_vcs::github::PullRef {
+        number: 12,
+        branch: branch.into(),
+        head: head.into(),
+        state,
+    }
+}
+
+#[tokio::test]
+async fn the_picker_lists_every_worktree_but_the_main_checkout_with_what_is_weighed() {
+    let dir = tempfile::tempdir().unwrap();
+    let primary = repository(dir.path());
+    let dirty = worktree(&primary, "dirty").await;
+    std::fs::write(dirty.join("new.txt"), "x").unwrap();
+    let ahead = worktree(&primary, "ahead").await;
+    std::fs::write(ahead.join("b.txt"), "b").unwrap();
+    git(&ahead, &["add", "."]);
+    git(&ahead, &["commit", "-q", "-m", "work"]);
+
+    let found = entries(&primary, &nowhere(), &[]).await.unwrap();
+
+    assert_eq!(found.len(), 2, "the main checkout is not offered");
+    let dirty = found.iter().find(|e| e.path == dirty).unwrap();
+    assert_eq!(dirty.standing.changed, 1);
+    assert!(dirty.merged);
+    assert!(dirty.bytes > 0);
+    assert!(dirty.last_commit.is_some());
+    let ahead = found.iter().find(|e| e.path == ahead).unwrap();
+    assert!(!ahead.merged);
+    assert_eq!(ahead.pull, None);
+}
+
+#[tokio::test]
+async fn a_pull_request_of_the_branch_is_listed_with_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let primary = repository(dir.path());
+    let done = worktree(&primary, "done").await;
+    let head = git(&done, &["rev-parse", "HEAD"]);
+
+    let found = entries(
+        &primary,
+        &nowhere(),
+        &[pull("done", &head, tsumugi_model::PullState::Merged)],
+    )
+    .await
+    .unwrap();
+
+    let pull = found[0].pull.clone().unwrap();
+    assert_eq!(pull.number, 12);
+    assert_eq!(pull.state, tsumugi_model::PullState::Merged);
+    assert!(found[0].finished());
+}
+
+#[test]
+fn what_a_pull_request_ends_at_is_pushed_whatever_the_remotes_hold() {
+    let mut standing = WorktreeStanding {
+        branch: Some("done".into()),
+        unpushed: 3,
+        ..Default::default()
+    };
+    let merged = tsumugi_model::PullState::Merged;
+
+    settle(
+        &mut standing,
+        Some("abc"),
+        Some(&pull("done", "abc", merged)),
+    );
+    assert_eq!(standing.unpushed, 0);
+
+    standing.unpushed = 3;
+    settle(
+        &mut standing,
+        Some("def"),
+        Some(&pull("done", "abc", merged)),
+    );
+    assert_eq!(standing.unpushed, 3, "a later commit stays unpushed");
+
+    settle(&mut standing, Some("abc"), None);
+    assert_eq!(
+        standing.unpushed, 3,
+        "without a pull request nothing changes"
+    );
+}

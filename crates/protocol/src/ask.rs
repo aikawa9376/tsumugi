@@ -261,6 +261,11 @@ pub enum Ask {
     WorktreeStanding {
         path: PathBuf,
     },
+    /// The worktrees of the repository at `repository` that a cleanup lists,
+    /// the main checkout left out, with what is weighed before deleting each.
+    CleanupEntries {
+        repository: PathBuf,
+    },
     /// Delete the worktree at `path`; one with changes only when `force`,
     /// and its branch as `branch` says.
     DeleteWorktree {
@@ -546,6 +551,10 @@ pub enum Answer {
     /// What came of merging a worktree's branch into the main checkout.
     Merged {
         merged: tsumugi_model::Merged,
+    },
+    /// The worktrees a cleanup lists.
+    CleanupEntries {
+        entries: Vec<tsumugi_model::CleanupEntry>,
     },
     /// The worktree was deleted, with what became of its branch.
     WorktreeRemoved {

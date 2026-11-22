@@ -26,3 +26,6 @@
 .picker-scopes { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 12px 6px; }
 .picker-scope { padding: 1px 8px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-3); font-size: var(--ui-font-caption); cursor: pointer; }
 .picker-scope.selected { color: var(--text); border-color: var(--line-strong); background: var(--select); }
+.dialog.cleanup-dialog { width: 860px; }
+.cleanup-box { font-family: var(--mono-font, monospace); color: var(--text-3); margin-right: 8px; }
+.dialog.cleanup-dialog .list-row-meta { white-space: normal; text-align: right; max-width: 55%; }

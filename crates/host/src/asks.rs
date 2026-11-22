@@ -162,6 +162,21 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             watched.read_again();
             done.map(|setup| Answer::WorktreeSetup { setup })
         }
+        Ask::CleanupEntries { repository } => {
+            // GitHub's word on each branch is asked only where it can be
+            // had; without it the entries are listed all the same.
+            let pulls = match tsumugi_vcs::github::remote(&repository).await {
+                Some(remote) if tsumugi_vcs::github::installed().await => {
+                    tsumugi_vcs::github::pull_refs_of(&repository, &remote.slug)
+                        .await
+                        .unwrap_or_default()
+                }
+                _ => Vec::new(),
+            };
+            crate::cleanup::entries(&repository, &crate::gate::folder(), &pulls)
+                .await
+                .map(|entries| Answer::CleanupEntries { entries })
+        }
         Ask::WorktreeStanding { path } => tsumugi_vcs::worktree::standing(&path)
             .await
             .map(|standing| Answer::WorktreeStanding { standing }),

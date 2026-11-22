@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use tsumugi_model::PullState;
 use tsumugi_model::github::{Checks, Counts, Item, Label, Listing, Pull, Read, Review};
 
 use crate::{Error, run};
@@ -81,6 +82,90 @@ pub async fn count(root: &Path, slug: &str) -> Result<Counts, String> {
         Err(Error::Failed { stderr, .. }) => Err(reason(&stderr)),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// The most pull requests of every state read to tell what became of a
+/// branch.
+const PULL_REFS_LIMIT: usize = 300;
+
+/// A pull request of any state, as a cleanup weighs it against a branch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PullRef {
+    pub number: u64,
+    /// The branch it comes from.
+    pub branch: String,
+    /// The commit it ends at.
+    pub head: String,
+    pub state: PullState,
+}
+
+/// The pull requests of the repository `slug`, open, merged and closed, as
+/// many as [`PULL_REFS_LIMIT`], asked in `root`.
+pub async fn pull_refs_of(root: &Path, slug: &str) -> Result<Vec<PullRef>, String> {
+    let limit = PULL_REFS_LIMIT.to_string();
+    let args = [
+        "pr",
+        "list",
+        "--repo",
+        slug,
+        "--state",
+        "all",
+        "--limit",
+        &limit,
+        "--json",
+        "number,headRefName,headRefOid,state",
+    ];
+    match run("gh", &args, Some(root)).await {
+        Ok(out) => pull_refs(&out),
+        Err(Error::Failed { stderr, .. }) => Err(reason(&stderr)),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// The pull requests `gh pr list --json` printed; a state it does not know
+/// leaves its pull request out.
+fn pull_refs(out: &str) -> Result<Vec<PullRef>, String> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Printed {
+        number: u64,
+        head_ref_name: String,
+        head_ref_oid: String,
+        state: String,
+    }
+    let printed: Vec<Printed> =
+        serde_json::from_str(out).map_err(|e| format!("gh printed what cannot be read: {e}"))?;
+    Ok(printed
+        .into_iter()
+        .filter_map(|p| {
+            let state = match p.state.as_str() {
+                "OPEN" => PullState::Open,
+                "MERGED" => PullState::Merged,
+                "CLOSED" => PullState::Closed,
+                _ => return None,
+            };
+            Some(PullRef {
+                number: p.number,
+                branch: p.head_ref_name,
+                head: p.head_ref_oid,
+                state,
+            })
+        })
+        .collect())
+}
+
+/// The pull request of `branch` that tells what became of it: one still
+/// open, else the latest.
+pub fn pull_of<'a>(all: &'a [PullRef], branch: &str) -> Option<&'a PullRef> {
+    let mut of = all.iter().filter(|p| p.branch == branch);
+    let first = of.next()?;
+    of.fold(first, |best, p| match (best.state, p.state) {
+        (PullState::Open, _) => best,
+        (_, PullState::Open) => p,
+        _ if p.number > best.number => p,
+        _ => best,
+    })
+    .into()
 }
 
 /// The most repositories of an owner read.
@@ -454,6 +539,46 @@ fn reason(stderr: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pull_requests_of_every_state_are_read_with_the_commit_they_end_at() {
+        let out = r#"[
+            {"number":4,"headRefName":"feat/a","headRefOid":"aaa","state":"MERGED"},
+            {"number":5,"headRefName":"feat/b","headRefOid":"bbb","state":"CLOSED"},
+            {"number":6,"headRefName":"feat/c","headRefOid":"ccc","state":"OPEN"},
+            {"number":7,"headRefName":"feat/d","headRefOid":"ddd","state":"SOMETHING"}
+        ]"#;
+
+        let read = pull_refs(out).unwrap();
+
+        assert_eq!(read.len(), 3, "a state nobody knows is left out");
+        assert_eq!(read[0].branch, "feat/a");
+        assert_eq!(read[0].state, PullState::Merged);
+        assert_eq!(read[0].head, "aaa");
+        assert_eq!(read[1].state, PullState::Closed);
+        assert_eq!(read[2].number, 6);
+        assert_eq!(read[2].state, PullState::Open);
+        assert!(pull_refs("not json").is_err());
+    }
+
+    #[test]
+    fn a_branch_with_pull_requests_of_several_states_has_the_one_still_open_else_the_latest() {
+        let refs = |n, state| PullRef {
+            number: n,
+            branch: "b".into(),
+            head: "h".into(),
+            state,
+        };
+        let all = [
+            refs(9, PullState::Closed),
+            refs(8, PullState::Merged),
+            refs(3, PullState::Closed),
+        ];
+        assert_eq!(pull_of(&all, "b").unwrap().number, 9);
+        let open = [refs(2, PullState::Open), refs(9, PullState::Merged)];
+        assert_eq!(pull_of(&open, "b").unwrap().number, 2);
+        assert!(pull_of(&open, "other").is_none());
+    }
 
     fn sh(dir: &Path, program: &str, args: &[&str]) -> String {
         let output = std::process::Command::new(program)

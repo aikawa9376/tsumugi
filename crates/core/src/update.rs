@@ -505,6 +505,13 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::ComposerFocus(field) => crate::worktree::focus(state, field),
         Msg::ComposerKey(key) => crate::worktree::composer_key(state, &key),
         Msg::ComposerCursor(at) => crate::worktree::cursor_at(state, at),
+        Msg::CleanupKey(key) => crate::worktree::cleanup_key(state, &key),
+        Msg::CleanupToggle(at) => crate::worktree::cleanup_toggle(state, at),
+        Msg::CleanupRead {
+            environment,
+            repository,
+            result,
+        } => crate::worktree::cleanup_read(state, &environment, &repository, result),
         Msg::WorktreeStarts {
             environment,
             repository,

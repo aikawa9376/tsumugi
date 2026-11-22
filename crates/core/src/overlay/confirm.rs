@@ -67,6 +67,12 @@ pub enum Ask {
         base: String,
         files: Vec<String>,
     },
+    /// Delete the worktrees a cleanup chose, each as it stands, after ending
+    /// what runs in them.
+    CleanUpWorktrees {
+        environment: EnvironmentId,
+        doomed: Vec<crate::worktree::Doomed>,
+    },
     /// Run the setup script of the pending worktree `id`, made at `worktree`
     /// of `repository` and called `name`, which the repository lists and the
     /// user's policy leaves to be asked about.
@@ -279,6 +285,35 @@ The main checkout is not touched. {base} is merged into {name} in its worktree i
                 ),
                 "Resolve in the branch",
             ),
+            Self::CleanUpWorktrees { doomed, .. } => {
+                let lines: Vec<String> = doomed
+                    .iter()
+                    .filter(|d| d.risky())
+                    .map(|d| {
+                        let mut what = Vec::new();
+                        if d.standing.dirty() {
+                            what.push(format!("{} with changes not committed will be lost", counted(d.standing.changed, "file").unwrap_or_default()));
+                        }
+                        if d.standing.unpushed > 0 {
+                            what.push(format!("{} not pushed anywhere", counted(d.standing.unpushed, "commit").unwrap_or_default()));
+                        }
+                        if d.standing.branch.is_none() {
+                            what.push("no branch is checked out, so its commits may be reached by nothing else".into());
+                        }
+                        if let Some(running) = Some(running(&d.sessions, &d.terminals)).filter(|r| !r.is_empty()) {
+                            what.push(format!("{running} end first"));
+                        }
+                        format!("{}: {}", d.name, what.join("; "))
+                    })
+                    .collect();
+                let lost = doomed.iter().any(|d| d.standing.dirty());
+                (
+                    Icon::Trash,
+                    format!("Delete {}?", counted(doomed.len(), "worktree").unwrap_or_default()),
+                    format!("Their directories are deleted. Conversations remain in the provider's history. A branch with commits nothing else has is kept.\n{}", lines.join("\n")),
+                    if lost { "Delete and discard changes" } else { "Delete" },
+                )
+            }
             Self::SetupWorktree { name, script, .. } => (
                 Icon::Terminal2,
                 format!("Run the setup of {name}?"),
@@ -403,6 +438,12 @@ The main checkout is not touched. {base} is merged into {name} in its worktree i
                     || !terminals.is_empty()
                     || (*delete_branch && standing.unmerged > 0)
             }
+            Self::CleanUpWorktrees { doomed, .. } => doomed.iter().any(|d| {
+                d.standing.dirty()
+                    || d.standing.unpushed > 0
+                    || d.standing.branch.is_none()
+                    || !d.terminals.is_empty()
+            }),
             Self::PullWrite { number, write, .. } => crate::pull_change::question(*number, write).3,
             Self::Stop(..)
             | Self::RemoveEnvironment(..)

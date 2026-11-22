@@ -142,12 +142,17 @@ pub fn entries(
                 offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),
+                offer(Action::WorktreeCleanup),
             ])
             .collect(),
         Target::Row(Item::Workspace(_, _)) => [fold, copy_path, mute]
             .into_iter()
             .chain(here)
-            .chain([offer(Action::WorktreeNew), offer(Action::WorkspaceRemove)])
+            .chain([
+                offer(Action::WorktreeNew),
+                offer(Action::WorktreeCleanup),
+                offer(Action::WorkspaceRemove),
+            ])
             .collect(),
         Target::Row(Item::Pending(..)) => Vec::new(),
         Target::Row(Item::File { dir: true, .. }) => [fold, copy_path]

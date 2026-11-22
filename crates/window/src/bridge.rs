@@ -871,6 +871,30 @@ impl AppCtx {
                     }
                 });
             }
+            Effect::CleanupScan {
+                environment,
+                repository,
+            } => {
+                let asked = self.ask_in(
+                    &environment,
+                    Ask::CleanupEntries {
+                        repository: repository.clone(),
+                    },
+                );
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::CleanupEntries { entries } => Ok(entries),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::CleanupRead {
+                        environment,
+                        repository,
+                        result,
+                    });
+                });
+            }
             Effect::WorktreeStarts {
                 environment,
                 repository,

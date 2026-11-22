@@ -797,6 +797,10 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::merge(state, &row),
             None => Vec::new(),
         },
+        Action::WorktreeCleanup => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::cleanup_open(state, &row),
+            None => Vec::new(),
+        },
         Action::TreeToggle => step(state, Msg::PanelToggle(Side::Sidebar)),
         Action::TreeFocus => crate::sidebar::switch(state, crate::sidebar::Panel::Tree),
         Action::DetailsToggle => step(state, Msg::PanelToggle(Side::Details)),

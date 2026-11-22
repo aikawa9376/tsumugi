@@ -123,6 +123,12 @@ pub enum Effect {
         id: u64,
         choice: tsumugi_model::SetupChoice,
     },
+    /// Ask the work host of `environment` to list the worktrees of the
+    /// repository at `repository` for a cleanup.
+    CleanupScan {
+        environment: EnvironmentId,
+        repository: PathBuf,
+    },
     /// Ask the work host of `environment` how the worktree at `path` stands,
     /// before the person is asked to delete it.
     WorktreeInspect {

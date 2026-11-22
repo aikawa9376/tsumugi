@@ -515,6 +515,32 @@ mod tests {
             }),
         });
         round_trips(Request::Ask {
+            asked: 24,
+            ask: Box::new(crate::Ask::CleanupEntries {
+                repository: "/w".into(),
+            }),
+        });
+        round_trips(Event::Answer {
+            asked: 24,
+            answer: crate::Answer::CleanupEntries {
+                entries: vec![tsumugi_model::CleanupEntry {
+                    path: "/w-wt/fix-login".into(),
+                    standing: tsumugi_model::WorktreeStanding {
+                        branch: Some("fix-login".into()),
+                        changed: 1,
+                        ..Default::default()
+                    },
+                    bytes: 4096,
+                    merged: true,
+                    last_commit: Some(1_700_000_000),
+                    pull: Some(tsumugi_model::CleanupPull {
+                        number: 4,
+                        state: tsumugi_model::PullState::Merged,
+                    }),
+                }],
+            },
+        });
+        round_trips(Request::Ask {
             asked: 13,
             ask: Box::new(crate::Ask::GitHubThread {
                 repository: "/w".into(),

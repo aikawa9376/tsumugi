@@ -262,6 +262,49 @@ pub enum Merged {
     Conflicts { files: Vec<String> },
 }
 
+/// How a pull request of a worktree's branch stands on GitHub.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullState {
+    Open,
+    Merged,
+    Closed,
+}
+
+/// The pull request GitHub has for a worktree's branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CleanupPull {
+    pub number: u64,
+    pub state: PullState,
+}
+
+/// A worktree as the cleanup lists it, with what the person weighs before
+/// deleting it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CleanupEntry {
+    pub path: std::path::PathBuf,
+    pub standing: WorktreeStanding,
+    /// What it takes of the disk, in bytes.
+    pub bytes: u64,
+    /// Whether its branch holds nothing the repository's base branch lacks.
+    pub merged: bool,
+    /// When its last commit was made, in seconds since the epoch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_commit: Option<u64>,
+    /// The pull request of its branch, when GitHub has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull: Option<CleanupPull>,
+}
+
+impl CleanupEntry {
+    /// Whether the work of its branch is done with, as GitHub says: its pull
+    /// request is merged or closed.
+    pub fn finished(&self) -> bool {
+        self.pull
+            .as_ref()
+            .is_some_and(|p| matches!(p.state, PullState::Merged | PullState::Closed))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

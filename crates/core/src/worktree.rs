@@ -2,14 +2,20 @@
 //! for a new one, the rows of those being made, and the question asked
 //! before one is deleted.
 
+mod cleanup;
 pub(crate) mod composer;
 mod delete;
 mod merge;
 mod pending;
 
+pub use cleanup::{Cleanup, Doomed, Row, size as cleanup_size};
 pub use composer::{Composer, Field, Starts};
 pub use pending::{PIPELINE, Pending, Progress, Step};
 
+pub(crate) use cleanup::{
+    deletions, key as cleanup_key, open as cleanup_open, read as cleanup_read,
+    toggle as cleanup_toggle,
+};
 pub(crate) use composer::{composer_key, cursor_at, focus, open, open_at, read_starts, type_into};
 pub(crate) use delete::{confirmed as delete_confirmed, delete, inspected, removed};
 pub(crate) use merge::{

@@ -604,6 +604,17 @@ pub enum Msg {
     ComposerKey(Key),
     /// The place to start from in row `n` of the dialog's list chosen.
     ComposerCursor(usize),
+    /// A key while the list of worktrees to clean up holds the keys.
+    CleanupKey(Key),
+    /// The worktree in this row of the list is chosen, or unchosen.
+    CleanupToggle(usize),
+    /// The work host listed the worktrees of `repository` to clean up, or
+    /// said why it could not.
+    CleanupRead {
+        environment: EnvironmentId,
+        repository: PathBuf,
+        result: Result<Vec<tsumugi_model::CleanupEntry>, String>,
+    },
     /// The work host listed where a worktree of `repository` may start, or
     /// why it could not.
     WorktreeStarts {

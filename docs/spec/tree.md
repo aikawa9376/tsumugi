@@ -336,6 +336,25 @@ with it.
 The same merge is made from the command line and by agents; see
 [merging a finished branch](leader-mode.md#integrating-a-finished-branch).
 
+## Cleaning up worktrees
+
+Clean Up Worktrees ([keys](reference/keys.md#actions)), from a workspace's or a
+worktree's row or its menu, lists the repository's worktrees, the main checkout
+left out, each with what to weigh before deleting it: its branch, the files
+changed and commits not pushed, whether the branch is merged into the base
+branch, the state of its pull request, the disk it takes and the age of its
+last commit. Worktrees whose pull request GitHub says is merged or closed are
+chosen beforehand, when `gh` can say; one with changes or commits not pushed,
+and a locked one, never is. A locked worktree cannot be chosen at all.
+
+The chosen worktrees are deleted together. A worktree that loses nothing, with
+nothing running in it, is deleted without a question; as soon as one of them
+would lose changes, commits not pushed, a detached head's commits or running
+sessions and terminals, one question names each of them and what it loses, and
+nothing is deleted until it is answered yes. A branch whose commits nothing
+else has is kept, as deleting a worktree keeps it. What the list says of
+GitHub is left out where it cannot be asked, and nothing is chosen beforehand.
+
 The filter at the top of the tree narrows it as it is typed into, by the
 fuzzy match the pickers use, fzf's syntax included, on the names of
 sessions, terminals, worktrees and workspaces; a worktree or a workspace that
