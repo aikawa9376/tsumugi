@@ -345,6 +345,8 @@ pub enum Msg {
     ReadsRestored(crate::notices::Reads),
     /// What the window silenced when it last closed.
     MutesRestored(crate::notices::Mutes),
+    /// What the window arranged of the tree when it last closed.
+    OrganizeRestored(crate::tree::Organize),
     /// Mark a session unread, as if it had finished out of view.
     SessionMarkUnread {
         environment: EnvironmentId,

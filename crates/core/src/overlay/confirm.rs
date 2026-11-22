@@ -301,9 +301,10 @@ The main checkout is not touched. {base} is merged into {name} in its worktree i
                 terminals,
                 ..
             } => {
-                let mut lines = vec![format!(
+                let mut lines = vec![
                     "Its files and branch stay, and so do its sessions' rows and tabs; waking it brings the conversations back."
-                )];
+                        .to_string(),
+                ];
                 if !terminals.is_empty() {
                     lines.push(format!("{} end, and what runs in them is lost.", counted(terminals.len(), "terminal").unwrap_or_default()));
                 }

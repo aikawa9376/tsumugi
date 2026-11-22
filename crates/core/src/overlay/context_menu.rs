@@ -138,6 +138,7 @@ pub fn entries(
             .chain([copy_path, mute])
             .chain(here)
             .chain([
+                offer(Action::WorkspacePin),
                 offer(Action::WorktreeNew),
                 offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
@@ -151,6 +152,7 @@ pub fn entries(
             .into_iter()
             .chain(here)
             .chain([
+                offer(Action::WorkspacePin),
                 offer(Action::WorktreeNew),
                 offer(Action::WorktreeCleanup),
                 offer(Action::WorkspaceRemove),

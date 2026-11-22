@@ -797,6 +797,17 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::merge(state, &row),
             None => Vec::new(),
         },
+        Action::WorkspacePin => match cur.filter(|_| on_list) {
+            Some(row) => crate::tree::pin(state, &row),
+            None => Vec::new(),
+        },
+        Action::TreeSort => crate::tree::sort_worktrees(state),
+        Action::TreeHideSleeping => {
+            crate::tree::hide_worktrees(state, crate::tree::Filter::Sleeping)
+        }
+        Action::TreeHideIdle => crate::tree::hide_worktrees(state, crate::tree::Filter::Idle),
+        Action::TreeHideMain => crate::tree::hide_worktrees(state, crate::tree::Filter::Main),
+        Action::TreeRevealCurrent => crate::tree::reveal_current(state),
         Action::WorktreeSleep => match cur.filter(|_| on_list) {
             Some(row) => crate::worktree::sleep(state, &row),
             None => Vec::new(),

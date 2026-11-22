@@ -370,6 +370,24 @@ in the middle of a turn, or a terminal, is stopped only after a question that
 says so. A session that cannot be woken into its conversation again is not put
 to sleep, and the status line names it.
 
+## Arranging the tree
+
+A workspace or a worktree is pinned from its row or its menu
+([keys](reference/keys.md#actions)): a pinned workspace stands above the
+others, scratch excepted, and a pinned worktree above the others of its
+workspace. The rest of a workspace's worktrees keep the order the work host
+lists them in, or are put in the order of their last activity, which is when a
+session in them was last written to or started, or of their names. Hide
+filters leave worktrees out of the tree: those that sleep, those where nothing
+works, waits or starts, and the main checkout of a workspace that lists other
+worktrees. A worktree left out still has its sessions and terminals listed
+under its workspace, and a pinned one is never left out. The pins, the order
+and the filters are kept for the next run of the window.
+
+Reveal Current selects the row of the session or terminal the focused window
+shows, unfolding the way to it, and shows its worktree again where a filter
+left it out.
+
 The filter at the top of the tree narrows it as it is typed into, by the
 fuzzy match the pickers use, fzf's syntax included, on the names of
 sessions, terminals, worktrees and workspaces; a worktree or a workspace that

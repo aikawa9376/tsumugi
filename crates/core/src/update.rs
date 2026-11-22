@@ -386,6 +386,7 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         Msg::NoticesOpen => crate::notices::open(state),
         Msg::ReadsRestored(reads) => crate::notices::restore(state, reads),
         Msg::MutesRestored(mutes) => crate::notices::mute::restore(state, mutes),
+        Msg::OrganizeRestored(organize) => tree::restore_organize(&mut state.tree, organize),
         Msg::SessionMarkUnread { environment: _, id } => crate::unread::mark(state, &id),
         Msg::NotificationsMute { environment, path } => {
             crate::notices::mute::toggle(state, &environment, &path)

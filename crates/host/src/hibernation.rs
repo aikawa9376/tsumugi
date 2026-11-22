@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use tsumugi_model::{Agent, Session, State};
+use tsumugi_model::{Session, State};
 
 use crate::delegation::app::{root, with_store};
 use crate::watch::Watched;
@@ -165,7 +165,7 @@ async fn hibernate(session: &Session) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use tsumugi_model::testing::session;
-    use tsumugi_model::{SessionId, Wait};
+    use tsumugi_model::{Agent, SessionId, Wait};
 
     use super::*;
 

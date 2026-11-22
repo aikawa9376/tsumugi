@@ -4,8 +4,13 @@
 //! keep read.
 
 pub mod nav;
+mod organize;
 mod place;
 
+pub(crate) use organize::{
+    Filter, hide as hide_worktrees, pin, reveal_current, sort as sort_worktrees,
+};
+pub use organize::{Hide, Organize, Sort};
 pub use place::*;
 
 use std::cell::RefCell;
@@ -38,6 +43,8 @@ pub struct TreeView {
     pub every_worktree: bool,
     /// Whether the files whose names start with `.` are listed.
     pub show_hidden: bool,
+    /// How the user arranged the rows: pins, order and what is left out.
+    pub organize: Organize,
     /// The sessions finished that the user has seen since.
     pub completions: Completions,
     /// When the window saw each session's state last change.
@@ -96,6 +103,7 @@ type BuiltFrom = (
     bool,
     Vec<(EnvironmentId, nav::Page)>,
     Vec<Item>,
+    Organize,
 );
 
 /// A key on the tree.
@@ -256,6 +264,39 @@ pub(crate) fn reveal_session(
     true
 }
 
+/// Reveal a terminal's row under its worktree, as [`reveal_session`] does a
+/// session's.
+pub(crate) fn reveal_terminal(
+    view: &mut TreeView,
+    environment: &EnvironmentId,
+    tree: &Tree,
+    id: u128,
+) -> bool {
+    let Some((workspace, worktree, _)) = tree.terminal(id) else {
+        return false;
+    };
+    let in_environment = Item::Environment(environment.clone());
+    let workspace_row = Item::Workspace(environment.clone(), workspace.root.clone());
+    let worktree_row = Item::Worktree(environment.clone(), worktree.worktree.path.clone());
+    let heading = Item::Heading(
+        environment.clone(),
+        worktree.worktree.path.clone(),
+        Heading::Terminals,
+    );
+    for row in [in_environment, workspace_row, worktree_row, heading] {
+        view.folds.set(&row, true);
+    }
+    view.filter.clear();
+    view.selected = Some(Item::Terminal(environment.clone(), id));
+    true
+}
+
+/// What the window arranged before it closed comes back.
+pub(crate) fn restore_organize(view: &mut TreeView, kept: Organize) -> Vec<Effect> {
+    organize::restore(view, kept);
+    Vec::new()
+}
+
 pub(crate) fn fold(view: &mut TreeView, row: &Item, open: bool) -> Vec<Effect> {
     view.folds.set(row, open);
     Vec::new()
@@ -367,6 +408,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
         view.show_hidden,
         pages.to_vec(),
         view.making.iter().map(|p| p.row()).collect::<Vec<_>>(),
+        view.organize.clone(),
     );
     if view.built.from.as_ref() == Some(&from) {
         return;
@@ -379,7 +421,9 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
     let mut rows = Vec::new();
     for (environment, host) in hosts.each() {
         let facts = facts(host.work.as_ref());
-        let narrowed = nav::narrowed(facts.tree(), &view.filter);
+        let mut narrowed = nav::narrowed(facts.tree(), &view.filter);
+        view.organize.order(environment, &mut narrowed);
+        let hidden = view.organize.hidden(environment, &narrowed);
         let of = |tree: &Tree| inbox(tree).into_iter().map(|i| (environment.clone(), i));
         view.built.waiting.extend(of(facts.tree()));
         view.built.narrowed_waiting.extend(of(&narrowed));
@@ -402,7 +446,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
                 .filter(|(e, _)| e == environment)
                 .map(|(_, page)| page.clone())
                 .collect();
-            let listed = nav::items_with_issues(
+            let listed = nav::items_organized(
                 environment,
                 &narrowed,
                 &view.folds,
@@ -410,6 +454,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
                 &facts.github,
                 &facts.local_issues,
                 &own,
+                &hidden,
             );
             rows.extend(nav::with_making(listed, &view.making, &view.folds));
         }

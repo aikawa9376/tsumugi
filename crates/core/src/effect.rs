@@ -316,6 +316,8 @@ pub enum Effect {
     /// Keep which workspaces and worktrees the window silenced, for when it
     /// opens again.
     KeepMutes(crate::notices::Mutes),
+    /// Keep how the tree is arranged, for when the window opens again.
+    KeepOrganize(crate::tree::Organize),
 
     // The tree.
     /// Give the filter's field the keys, or take them from it.

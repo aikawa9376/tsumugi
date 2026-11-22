@@ -541,6 +541,13 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             _ => false,
         }
     };
+    let pinned = matches!(&own, Item::Workspace(..) | Item::Worktree(..))
+        && match &own {
+            Item::Workspace(environment, path) | Item::Worktree(environment, path) => {
+                view.organize.is_pinned(environment, path)
+            }
+            _ => false,
+        };
     let sleeping = match &own {
         Item::Worktree(_, path) => t
             .worktrees()
@@ -616,6 +623,11 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 } else { "{text}" }
             }
             SessionMark { mark }
+            if pinned {
+                span { class: "muted-mark", title: "Pinned: it stays at the top",
+                    IconView { icon: Icon::Highlight, size: 12 }
+                }
+            }
             if sleeping {
                 span { class: "muted-mark", title: "Asleep: its sessions' programs are stopped; Wake brings them back",
                     IconView { icon: Icon::SunMoon, size: 12 }

@@ -236,6 +236,18 @@ pub(crate) fn use_app() -> AppCtx {
                 [Msg::MutesRestored(mutes)],
             ));
         }
+        // How this window's tree was arranged before it closed.
+        if let Some(organize) = std::fs::read(organize_path())
+            .ok()
+            .and_then(|bytes| tsumugi_core::tree::Organize::from_json(&bytes).ok())
+        {
+            effects.extend(pump(
+                &mut view,
+                &links,
+                &mut events,
+                [Msg::OrganizeRestored(organize)],
+            ));
+        }
         // This computer's details panel, over whatever the hosts read.
         let chosen = crate::client_settings::chosen().map(|p| Msg::PanelChosen(p.panel));
         effects.extend(pump(
@@ -1424,6 +1436,15 @@ impl AppCtx {
                     tracing::warn!(%error, "cannot keep what was muted");
                 }
             }
+            Effect::KeepOrganize(organize) => {
+                let path = organize_path();
+                if let Some(dir) = path.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if let Err(error) = std::fs::write(&path, organize.to_json()) {
+                    tracing::warn!(%error, "cannot keep how the tree is arranged");
+                }
+            }
             Effect::OpenSettings(environment) => self.open_settings(&environment),
             Effect::EnvironmentClosed(environment) => {
                 let mut links = self.links;
@@ -1689,6 +1710,11 @@ fn reads_path() -> std::path::PathBuf {
 /// under its number.
 fn mutes_path() -> std::path::PathBuf {
     crate::window_socket::kept_path("notice-mutes.json")
+}
+
+/// Where this window keeps how it arranged the tree, under its number.
+fn organize_path() -> std::path::PathBuf {
+    crate::window_socket::kept_path("tree-organize.json")
 }
 
 /// Where this window kept the one tab its focused window showed, before it
