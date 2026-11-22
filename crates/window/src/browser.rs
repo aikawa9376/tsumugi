@@ -164,6 +164,14 @@ fn through_forward(
     Ok(format!("{scheme}://{host}:{local}{after}"))
 }
 
+/// `url` as the environment itself writes it: a loopback port that a forward
+/// made here is swapped back for the port of the work machine it reaches, so
+/// that the address shown goes through the forward again when entered.
+fn shown_address(url: &str, work_port: impl FnOnce(u16) -> Option<u16>) -> String {
+    through_forward(url, |local| Ok(work_port(local).unwrap_or(local)))
+        .unwrap_or_else(|_| url.to_string())
+}
+
 /// Where a page goes for `typed`, an address typed or one given whole: the
 /// address of a web page, with a loopback port swapped for the one `forward`
 /// makes reach the environment's own loopback. Every way to point a page at an
@@ -540,6 +548,7 @@ pub(crate) fn BrowserWindow(
         }
     });
     let (shot_environment, shot_worktree) = (environment.clone(), worktree.clone());
+    let listed = environment.clone();
     use_hook({
         let page = page.clone();
         move || {
@@ -678,8 +687,9 @@ pub(crate) fn BrowserWindow(
                         && url != "about:blank"
                         && *current.peek() != url
                     {
-                        typed.set(url.clone());
-                        titles.write().insert(id, name_of(&url));
+                        let address = shown_address(&url, |local| app.work_port(&listed, local));
+                        titles.write().insert(id, name_of(&address));
+                        typed.set(address);
                         current.set(url);
                     }
                 }
@@ -695,7 +705,9 @@ pub(crate) fn BrowserWindow(
                 Ok(url) => match page.view.load_url(&url) {
                     Ok(()) => {
                         error.set(String::new());
-                        typed.set(url);
+                        typed.set(shown_address(&url, |local| {
+                            app.work_port(&navigating, local)
+                        }));
                     }
                     Err(e) => error.set(e.to_string()),
                 },
@@ -977,6 +989,25 @@ mod tests {
             target("localhost:3000", |_| Err("not connected".into())),
             Err("not connected".into())
         );
+    }
+
+    #[test]
+    fn a_forwarded_address_is_shown_as_the_work_machines_own() {
+        // So that entering the address again forwards the work machine's port,
+        // not a port of the work machine that happens to equal the local one.
+        let shown = |url: &str| shown_address(url, |local| (local == 41000).then_some(3000));
+        assert_eq!(
+            shown("http://localhost:41000/a?b#c"),
+            "http://localhost:3000/a?b#c"
+        );
+        for url in [
+            "http://localhost:5173/",
+            "http://example.com:41000/",
+            "https://example.com/",
+            "about:blank",
+        ] {
+            assert_eq!(shown(url), url, "{url}");
+        }
     }
 
     #[test]

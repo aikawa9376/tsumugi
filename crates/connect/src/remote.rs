@@ -475,6 +475,15 @@ impl Ports {
         Ok(local)
     }
 
+    /// The port of the work machine that `local`, a port of this computer,
+    /// reaches, when a forward made it.
+    pub fn work_port(&self, local: u16) -> Option<u16> {
+        self.forwarded()
+            .into_iter()
+            .find(|(_, forwarded)| *forwarded == local)
+            .map(|(remote, _)| remote)
+    }
+
     /// The ports forwarded, as (the work machine's, this computer's).
     pub fn forwarded(&self) -> Vec<(u16, u16)> {
         self.open
@@ -650,6 +659,12 @@ mod tests {
         let local = ports.forward(echoed).unwrap();
         assert_eq!(ports.forward(echoed), Ok(local), "one local port for each");
         assert_eq!(ports.forwarded(), [(echoed, local)]);
+        assert_eq!(ports.work_port(local), Some(echoed));
+        assert_eq!(
+            ports.work_port(echoed),
+            None,
+            "only a port made here stands for one there"
+        );
         {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut near = tokio::net::TcpStream::connect(("127.0.0.1", local))

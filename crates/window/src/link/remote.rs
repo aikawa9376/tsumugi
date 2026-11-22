@@ -128,6 +128,11 @@ impl Sender {
             .ok_or_else(|| "the work machine is not connected".to_string())?
             .forward(port)
     }
+    /// The port of the work machine that `local` of this computer reaches
+    /// through a forward, while connected.
+    pub fn work_port(&self, local: u16) -> Option<u16> {
+        lock(&self.shared.ports).clone()?.work_port(local)
+    }
     pub fn send(&self, request: Request, waiting: &Waiting) {
         self.send_prompt(request, None, waiting);
     }

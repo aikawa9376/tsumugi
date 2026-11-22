@@ -557,6 +557,11 @@ impl AppCtx {
     ) -> Result<u16, String> {
         self.link_of(environment).forward_port(port)
     }
+    /// The port of `environment`'s work machine that `local` reaches through a
+    /// forward.
+    pub(crate) fn work_port(&self, environment: &EnvironmentId, local: u16) -> Option<u16> {
+        self.link_of(environment).work_port(local)
+    }
     pub(crate) fn remote_draft(
         &self,
         environment: &EnvironmentId,

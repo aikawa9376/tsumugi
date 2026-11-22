@@ -123,6 +123,14 @@ impl Link {
             Sending::Local(_) => Ok(port),
         }
     }
+    /// The port of the work machine that `local` of this computer reaches
+    /// through a forward; none for a link to this computer.
+    pub(crate) fn work_port(&self, local: u16) -> Option<u16> {
+        match &self.requests {
+            Sending::Remote(sender) => sender.work_port(local),
+            Sending::Local(_) => None,
+        }
+    }
     pub(crate) fn query_remote(&self, stamp: tsumugi_protocol::MutationStamp) {
         if let Sending::Remote(sender) = &self.requests {
             sender.query(stamp);
