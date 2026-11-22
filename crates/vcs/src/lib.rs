@@ -11,12 +11,14 @@ pub mod generate;
 pub mod ghq;
 pub mod git;
 pub mod github;
+mod picture;
 mod review;
 mod view;
 pub mod worktree;
 pub mod write;
 
 pub use discover::*;
+pub use picture::version as picture_version;
 pub use tsumugi_model::repository::*;
 pub use view::*;
 

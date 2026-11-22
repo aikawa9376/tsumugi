@@ -250,6 +250,11 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 .map(|cleared| Answer::DraftConsumed { cleared })
         }
         Ask::Picture { path, whole } => Ok(picture(path, whole).await),
+        Ask::DiffPicture {
+            worktree,
+            rev,
+            path,
+        } => Ok(diff_picture(&worktree, rev.as_deref(), path).await),
         Ask::Run { args, cwd, input } => Ok(match args.split_first() {
             Some((command, rest)) if command == "issue" => {
                 crate::issue_cli::run(watched, rest, &cwd, input)
@@ -613,6 +618,23 @@ async fn picture(path: std::path::PathBuf, whole: bool) -> Answer {
     .await
     .ok()
     .flatten();
+    Answer::Picture {
+        url: url.map(|u| u.to_string()),
+    }
+}
+
+/// One version of a picture a diff compares, or none when it is not there.
+async fn diff_picture(worktree: &std::path::Path, rev: Option<&str>, path: String) -> Answer {
+    let bytes = tsumugi_vcs::picture_version(worktree, rev, &path).await;
+    let url = match bytes {
+        Some(bytes) => crate::environment::spawn_blocking(move || {
+            crate::pictures::shown_bytes(std::path::Path::new(&path), &bytes)
+        })
+        .await
+        .ok()
+        .flatten(),
+        None => None,
+    };
     Answer::Picture {
         url: url.map(|u| u.to_string()),
     }

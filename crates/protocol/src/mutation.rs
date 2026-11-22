@@ -33,6 +33,7 @@ impl Ask {
                 | Self::Drafts
                 | Self::Review { .. }
                 | Self::Picture { .. }
+                | Self::DiffPicture { .. }
                 | Self::LoginStanding { .. }
                 | Self::Cloned { .. }
                 | Self::Apply { .. }

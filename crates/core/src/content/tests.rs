@@ -2066,6 +2066,54 @@ fn a_diff_tab_keeps_its_work_machine_and_repository_watched_without_a_prompt() {
 }
 
 #[test]
+fn a_diff_tab_on_a_file_keeps_the_list_of_files_beside_it_read() {
+    use tsumugi_model::repository::{Change, Rev, Spot as RepositorySpot};
+    let change = Change {
+        status: " M".into(),
+        path: "a.rs".into(),
+        from: None,
+    };
+    let spot = RepositorySpot::Lines(Rev::Commit("abc".into()), change);
+    let run = Scenario::new().send(Msg::OpenDiff {
+        environment: there(),
+        worktree: "/remote/repo".into(),
+        spot: spot.clone(),
+        neovim: false,
+    });
+    let read = |spot| tsumugi_protocol::RepositorySight {
+        worktree: "/remote/repo".into(),
+        spot,
+    };
+    let read_now = crate::settle::sight(run.state(), &there()).repositories;
+    for wanted in [
+        read(spot),
+        read(RepositorySpot::Files(Rev::Commit("abc".into()))),
+    ] {
+        assert_eq!(read_now.iter().filter(|r| **r == wanted).count(), 1);
+    }
+}
+
+#[test]
+fn how_a_diff_is_drawn_is_kept_for_the_worktree_across_its_tabs() {
+    use crate::diff_view::Choice;
+    let choose = |choice| Msg::DiffView {
+        environment: there(),
+        worktree: "/remote/repo".into(),
+        choice,
+    };
+    let run = Scenario::new()
+        .send(choose(Choice::Wrap))
+        .send(choose(Choice::Files));
+    let views = &run.state().content.diff_views;
+    let kept = views.of(&there(), std::path::Path::new("/remote/repo"));
+    assert!(kept.wrap && !kept.files);
+    assert_eq!(
+        views.of(&there(), std::path::Path::new("/remote/other")),
+        Default::default()
+    );
+}
+
+#[test]
 fn opening_a_diff_in_neovim_targets_the_work_machine_and_the_opened_commit_file() {
     use tsumugi_model::repository::{Change, Rev, Spot as RepositorySpot};
     let spot = RepositorySpot::Diff(

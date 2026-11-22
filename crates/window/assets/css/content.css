@@ -61,3 +61,23 @@
 .check-log-line.first-error { background: var(--select); color: var(--fail); }
 .check-log-note { color: var(--text-3); font-size: var(--ui-font-small); white-space: pre-wrap; margin: 0 0 8px; }
 .diff-structural { white-space: pre; min-height: 1em; }
+/* A diff tab: the files changed beside the diff, which can be hidden, and long lines that scroll across or wrap. */
+.diff-review-toolbar button.on { border-color: var(--focus-border); }
+.diff-body { display: flex; flex: 1; min-height: 0; }
+.diff-files { flex: none; width: 260px; min-width: 120px; max-width: 60%; overflow: auto; resize: horizontal; border-right: 1px solid var(--line); padding: 4px 0; direction: ltr; }
+.diff-files-empty { padding: 8px; color: var(--text-3); }
+.diff-file-row { display: flex; width: 100%; gap: 8px; padding: 3px 8px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; font: inherit; font-size: var(--ui-font-small); }
+.diff-file-row:hover { background: var(--select); }
+.diff-file-row.selected { background: var(--select); box-shadow: inset 2px 0 0 var(--focus-border); }
+.diff-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-review.wrap .diff, .diff-review.wrap .diff-structural { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Two versions of a picture: beside each other, or one over the other with a divider or a fade. */
+.pic-diff { display: flex; flex-direction: column; gap: 8px; }
+.pic-pair { display: flex; gap: 12px; align-items: flex-start; }
+.pic-side { flex: 1; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.pic-side img { max-width: 100%; border: 1px solid var(--line); background: repeating-conic-gradient(var(--raised) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.pic-stack { display: flex; flex-direction: column; gap: 6px; }
+.pic-layers { position: relative; display: inline-block; max-width: 100%; }
+.pic-layers img { display: block; max-width: 100%; }
+.pic-layers .pic-old { position: absolute; left: 0; top: 0; }
+.pic-stack input[type=range] { width: 100%; max-width: 480px; }

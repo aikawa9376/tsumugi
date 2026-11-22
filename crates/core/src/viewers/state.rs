@@ -2,6 +2,7 @@
 
 use super::kind::FileKind;
 use crate::actions::Action;
+use crate::diff_view::{Choice, Way};
 use tsumugi_model::github::Method;
 
 /// What a key does in a viewer.
@@ -25,6 +26,8 @@ pub enum ViewerAction {
     Close,
     /// What a diff of lines does with a comment.
     Review(Review),
+    /// What a diff tab does beside the diff itself.
+    Diff(Diff),
     /// Read what is shown again from where it comes from.
     Reload,
     /// What a pull request's or an issue's tab does with its cards.
@@ -53,6 +56,17 @@ pub enum Github {
     Close,
     /// Mark a draft ready, or an open one a draft.
     Ready,
+}
+
+/// What a key does in a diff tab beside the diff itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Diff {
+    /// Move to the next or previous change of the file.
+    Hunk(Way),
+    /// Open the next or previous file of the list.
+    File(Way),
+    /// Change how the tab is drawn, as kept for its worktree.
+    Choose(Choice),
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -95,6 +109,13 @@ impl ViewerAction {
             Action::ReviewResolve => V::Review(Review::Resolve),
             Action::ReviewSend => V::Review(Review::Send),
             Action::ReviewDraft => V::Review(Review::Draft),
+            Action::DiffNextHunk => V::Diff(Diff::Hunk(Way::Next)),
+            Action::DiffPrevHunk => V::Diff(Diff::Hunk(Way::Prev)),
+            Action::DiffNextFile => V::Diff(Diff::File(Way::Next)),
+            Action::DiffPrevFile => V::Diff(Diff::File(Way::Prev)),
+            Action::DiffWrap => V::Diff(Diff::Choose(Choice::Wrap)),
+            Action::DiffFiles => V::Diff(Diff::Choose(Choice::Files)),
+            Action::DiffPictures => V::Diff(Diff::Choose(Choice::Pictures)),
             Action::GithubNext => V::Github(Github::Next),
             Action::GithubPrev => V::Github(Github::Prev),
             Action::GithubComment => V::Github(Github::Comment),
@@ -343,7 +364,7 @@ impl ViewerState {
             A::Close => Effect::Close,
             A::Reload => Effect::Reload,
             // Only a diff of lines has comments to act on.
-            A::Review(_) | A::Github(_) | A::Rerun => Effect::Nothing,
+            A::Review(_) | A::Github(_) | A::Diff(_) | A::Rerun => Effect::Nothing,
         }
     }
 }

@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use tsumugi_core::content::{Area, WindowId};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::review::{Go, Mode, Pane, Reading, Target};
-use tsumugi_core::viewers::{Review, ViewerAction};
+use tsumugi_core::viewers::{Diff, Review, ViewerAction};
 use tsumugi_model::repository::{DiffKind, DiffLine, Rev};
 use tsumugi_model::review::{self as notes, Change, Judged};
 use tsumugi_model::{Agent, EnvironmentId};
@@ -213,6 +213,7 @@ impl Review_ {
             (_, ViewerAction::ScrollUp) => go(Go::By(-1)),
             (_, ViewerAction::ScrollHalfDown) => go(Go::By(12)),
             (_, ViewerAction::ScrollHalfUp) => go(Go::By(-12)),
+            (_, ViewerAction::Diff(Diff::Hunk(way))) => go(Go::Hunk(way)),
             (_, ViewerAction::ScrollTop) => go(Go::Top),
             (_, ViewerAction::ScrollBottom) => go(Go::Bottom),
             (_, ViewerAction::Review(Review::Select)) => pane.write().select(&reading),

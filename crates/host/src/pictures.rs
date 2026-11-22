@@ -114,11 +114,16 @@ pub fn file_shown(path: &Path) -> Option<Arc<str>> {
     if len > READ_FILE {
         return None;
     }
-    let bytes = std::fs::read(path).ok()?;
-    if len <= WHOLE_FILE {
-        return Some(data_url(mime(path), &bytes));
+    shown_bytes(path, &std::fs::read(path).ok()?)
+}
+
+/// The image `bytes` make, named `path` for its type, to show whole: as it
+/// is, or, when it is large, made smaller.
+pub fn shown_bytes(path: &Path, bytes: &[u8]) -> Option<Arc<str>> {
+    if bytes.len() as u64 <= WHOLE_FILE {
+        return Some(data_url(mime(path), bytes));
     }
-    let image = decode(path, &bytes, SHOWN_SIDE)?;
+    let image = decode(path, bytes, SHOWN_SIDE)?;
     let image = if image.width().max(image.height()) > SHOWN_SIDE {
         image.thumbnail(SHOWN_SIDE, SHOWN_SIDE)
     } else {
@@ -214,6 +219,14 @@ mod tests {
                 svg.to_string_lossy().into_owned()
             ]
         );
+    }
+
+    #[test]
+    fn the_bytes_of_a_version_are_shown_with_the_type_its_name_gives() {
+        let url = shown_bytes(Path::new("old/shot.PNG"), b"bytes").unwrap();
+        assert!(url.starts_with("data:image/png;base64,"), "{url}");
+        let url = shown_bytes(Path::new("logo.svg"), b"<svg/>").unwrap();
+        assert!(url.starts_with("data:image/svg+xml;base64,"), "{url}");
     }
 
     #[test]

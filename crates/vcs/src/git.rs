@@ -126,6 +126,20 @@ pub fn parse_diff(out: &str, max: usize) -> Vec<DiffLine> {
             in_header = false;
             DiffKind::Hunk
         } else if in_header {
+            // Nothing else tells what happened to a file with no hunk.
+            let note = if let Some(from) = l.strip_prefix("rename from ") {
+                Some(format!("Renamed from {from}"))
+            } else if l.starts_with("Binary files ") || l.starts_with("GIT binary patch") {
+                Some("Binary files differ".to_string())
+            } else {
+                None
+            };
+            if let Some(text) = note {
+                lines.push(DiffLine {
+                    kind: DiffKind::Context,
+                    text,
+                });
+            }
             continue;
         } else if l.starts_with('+') {
             DiffKind::Added
@@ -726,6 +740,24 @@ mod tests {
                 (DiffKind::Context, " keep".into()),
                 (DiffKind::Removed, "-old".into()),
                 (DiffKind::Added, "+new".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_binary_file_and_a_pure_rename_say_what_happened_where_no_hunk_does() {
+        let out = "diff --git a/old.png b/new.png\nsimilarity index 100%\nrename from old.png\nrename to new.png\ndiff --git a/b.bin b/b.bin\nindex 1..2 100644\nBinary files a/b.bin and b/b.bin differ\n";
+        let lines: Vec<_> = parse_diff(out, 100)
+            .into_iter()
+            .map(|d| (d.kind, d.text))
+            .collect();
+        assert_eq!(
+            lines,
+            vec![
+                (DiffKind::File, "new.png".into()),
+                (DiffKind::Context, "Renamed from old.png".into()),
+                (DiffKind::File, "b.bin".into()),
+                (DiffKind::Context, "Binary files differ".into()),
             ]
         );
     }

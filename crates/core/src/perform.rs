@@ -121,6 +121,13 @@ pub(crate) fn perform(
         | Action::ReviewResolve
         | Action::ReviewSend
         | Action::ReviewDraft
+        | Action::DiffNextHunk
+        | Action::DiffPrevHunk
+        | Action::DiffNextFile
+        | Action::DiffPrevFile
+        | Action::DiffWrap
+        | Action::DiffFiles
+        | Action::DiffPictures
         | Action::GithubNext
         | Action::GithubPrev
         | Action::GithubComment

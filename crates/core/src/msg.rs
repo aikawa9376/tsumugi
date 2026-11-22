@@ -189,6 +189,13 @@ pub enum Msg {
         spot: tsumugi_model::repository::Spot,
         neovim: bool,
     },
+    /// A key chose how the diff tabs of the worktree are drawn; kept for the
+    /// worktree.
+    DiffView {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        choice: crate::diff_view::Choice,
+    },
     /// A row was clicked: it opens as `cursor.go` opens it.
     RowClicked(Item),
     /// A key or a menu asked the content to do this.

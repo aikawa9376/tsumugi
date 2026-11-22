@@ -170,6 +170,14 @@ pub enum Ask {
         path: PathBuf,
         whole: bool,
     },
+    /// One version of a picture a diff compares, as a `data:` URL: the file
+    /// `path` of the worktree as Git has it in `rev`, or the worktree's own
+    /// file when `rev` is none. Answered as `Picture` is.
+    DiffPicture {
+        worktree: PathBuf,
+        rev: Option<String>,
+        path: String,
+    },
     /// Whether the profile `profile` is logged in, as the CLI it starts says
     /// where it runs it, asked once the terminal `after`, when one is named,
     /// has ended.

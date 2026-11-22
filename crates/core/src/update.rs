@@ -174,6 +174,17 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
                 Vec::new()
             }
         }
+        Msg::DiffView {
+            environment,
+            worktree,
+            choice,
+        } => {
+            state
+                .content
+                .diff_views
+                .choose(&environment, &worktree, choice);
+            Vec::new()
+        }
         Msg::RowClicked(item) => content::click_row(state, item),
         Msg::Window(action) if crate::floating::is_own(&action) => {
             crate::floating::act(state, action)

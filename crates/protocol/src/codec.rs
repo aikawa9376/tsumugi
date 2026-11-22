@@ -56,6 +56,26 @@ mod tests {
     }
 
     #[test]
+    fn a_picture_a_diff_compares_is_asked_by_revision_and_path_and_changes_nothing() {
+        use crate::{Answer, Ask};
+        let ask = Ask::DiffPicture {
+            worktree: "/project with spaces/日本語".into(),
+            rev: Some("abc^".into()),
+            path: "画像/a b.png".into(),
+        };
+        assert!(!ask.mutates());
+        round_trips(ask);
+        round_trips(Ask::DiffPicture {
+            worktree: "/w".into(),
+            rev: None,
+            path: "a.png".into(),
+        });
+        round_trips(Answer::Picture {
+            url: Some("data:image/png;base64,AA==".into()),
+        });
+    }
+
+    #[test]
     fn review_comments_asked_and_changed_round_trip_and_only_changing_them_mutates() {
         use crate::{Answer, Ask};
         use tsumugi_model::repository::Rev;
