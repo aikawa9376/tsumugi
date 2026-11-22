@@ -123,8 +123,10 @@ line in OpenCode.
 Cursor CLI sessions are started in Cursor's own terminal interface and shown
 as it stands by its screen alone. Tsumugi can override its model, and a
 read-only session runs in its ask mode and sandbox. Cursor has no account usage
-to show, and its conversations are not listed, resumed from Tsumugi or read
-into the details panel. A Cursor session starts no sessions of its own.
+to show, and its conversations are not read into the details panel. Its
+conversations are listed and resumed like the others
+([resuming](#resuming-a-past-conversation)), but cannot be forked. A Cursor
+session starts no sessions of its own.
 
 ## Instances
 
@@ -329,8 +331,8 @@ close, and Resume Conversation still finds each conversation.
 
 ## Resuming a past conversation
 
-Claude Code, Codex, Pi and OpenCode keep each conversation after its
-session ends, and Tsumugi lists only the sessions it runs. Resume Conversation in the Session
+Claude Code, Codex, Pi, OpenCode and Cursor CLI keep each conversation after
+its session ends, and Tsumugi lists only the sessions it runs. Resume Conversation in the Session
 menu, or `session.resume`, opens a list of the conversations the agents kept,
 in every login a profile runs in,
 for the directory the focused window works in, the newest first, each with its
@@ -340,6 +342,17 @@ last talked in. `Ctrl+a` lists those of every directory instead, and pressed aga
 the directory's; with nothing open, every directory's are listed. Typing
 narrows the list by a fuzzy match on the title and the directory. The keys
 [over the window](keys.md#over-the-window) move, choose and close the list.
+`Ctrl+g` groups the rows by agent, then by directory, then not at all.
+
+Below the list, the conversation under the cursor shows its first prompt, in
+full, and its latest turns, read from what its agent kept. It is read without
+reading the whole of its file, so a transcript of any size, or one that is
+broken, neither stalls the list nor is listed wrongly: one no prompt can be
+read from is left out, and one whose file cannot be read is listed without a
+preview. For the row under the cursor, `Ctrl+y` copies the shell line that
+resumes it in a terminal, `Ctrl+s` its session ID, `Ctrl+l` the path of its
+log, and `Ctrl+o` opens the log in the content area; a conversation its agent
+keeps in no file has no log to copy or open, and says so.
 
 Choosing a conversation resumes it in a new session of its agent, in the
 directory it ran in, with the agent's own resume, in the login that
@@ -348,6 +361,12 @@ hold that profile with that login, the resume is refused, naming why,
 and never runs under another login. Nothing running is stopped
 or changed. A conversation a session of this instance already holds is not
 resumed a second time: choosing it shows that session.
+
+`Ctrl+f` forks the conversation under the cursor instead: a new session
+continues a copy of it through its agent's own fork, in the directory and
+login it ran in, and the conversation itself is not changed, even while a
+session holds it. The copy is a session of its own, with its own code. Claude
+Code, Codex and Pi fork; for the other agents the fork is refused, saying so.
 
 Conversations no one wrote a prompt in, and those Codex ran without its own
 interface, are not listed.

@@ -25,7 +25,8 @@ impl Ui {
     /// Carry out `effect`, which the window holds the means of.
     fn run(&self, effect: Effect) {
         match effect {
-            Effect::Resume { environment, past } => self.resume(environment, past),
+            Effect::Resume { environment, past } => self.resume(environment, past, false),
+            Effect::Fork { environment, past } => self.resume(environment, past, true),
             Effect::RestartDaemon(environment) => self.restart_daemon(environment),
             Effect::BringBack { environment, ids } => self.bring_back(environment, ids),
             Effect::LetGo { environment, ids } => self.let_go(environment, ids),

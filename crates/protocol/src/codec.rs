@@ -56,6 +56,40 @@ mod tests {
     }
 
     #[test]
+    fn a_conversation_is_previewed_by_asking_and_a_fork_is_a_start_that_says_so() {
+        use crate::{Answer, Ask, SessionStart};
+        let past = tsumugi_model::Past {
+            id: "c1".into(),
+            cwd: "/r".into(),
+            log: Some("/l/c1.jsonl".into()),
+            ..Default::default()
+        };
+        let ask = Ask::PastPreview {
+            past: Box::new(past),
+        };
+        assert!(!ask.mutates());
+        round_trips(ask);
+        round_trips(Answer::PastPreview {
+            preview: Some(tsumugi_model::Preview {
+                first: "hello".into(),
+                recent: vec![tsumugi_model::Turn {
+                    speaker: tsumugi_model::Speaker::Agent,
+                    text: "hi".into(),
+                }],
+            }),
+        });
+        let start = SessionStart {
+            resume: Some("c1".into()),
+            fork: true,
+            ..Default::default()
+        };
+        round_trips(start.clone());
+        let plain = encode(&SessionStart::default());
+        assert!(!plain.contains("fork"), "{plain}");
+        assert!(!SessionStart::default().fork);
+    }
+
+    #[test]
     fn a_picture_a_diff_compares_is_asked_by_revision_and_path_and_changes_nothing() {
         use crate::{Answer, Ask};
         let ask = Ask::DiffPicture {

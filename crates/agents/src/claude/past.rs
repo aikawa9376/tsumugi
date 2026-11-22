@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde_json::Value;
-use tsumugi_model::{Agent, Past, title_of};
+use tsumugi_model::{Agent, Past, Preview, Speaker, Turn, title_of};
 
 /// How far into a transcript its directory and first prompt are looked for.
 const HEAD: u64 = 256 * 1024;
@@ -82,7 +82,24 @@ fn conversation(path: &Path) -> Option<Past> {
         cwd: seen.cwd?,
         title: title_of(seen.title.as_deref().unwrap_or(&prompt)),
         at_ms,
+        log: Some(path.to_path_buf()),
         ..Default::default()
+    })
+}
+
+/// What the conversation kept in the file at `path` says.
+pub(crate) fn preview(path: &Path) -> Option<Preview> {
+    crate::preview::read(path, |v| {
+        if v["isMeta"] == true || v["isSidechain"] == true {
+            return None;
+        }
+        let content = &v["message"]["content"];
+        let (speaker, text) = match v["type"].as_str()? {
+            "user" => (Speaker::User, typed(content)?),
+            "assistant" => (Speaker::Agent, crate::preview::text_of(content, "text")?),
+            _ => return None,
+        };
+        Some(Turn { speaker, text })
     })
 }
 
@@ -254,6 +271,79 @@ mod tests {
             .collect();
         ids.sort();
         assert_eq!(ids, ["one", "two"]);
+    }
+
+    #[test]
+    fn a_huge_or_broken_transcript_is_listed_or_left_out_without_reading_it_whole() {
+        let projects = tempfile::tempdir().unwrap();
+        // One line of 64 MiB, then the prompt: the line is never read to its
+        // end, so the conversation has none to be listed by.
+        let huge = format!("{{\"pad\":\"{}\"}}\n", "x".repeat(64 * 1024 * 1024));
+        write(
+            projects.path(),
+            "/r",
+            "huge",
+            &[huge, user("/r", json!("late"))],
+        );
+        write(
+            projects.path(),
+            "/r",
+            "broken",
+            &["\u{0}\u{1}{{{ not json\n".repeat(1000)],
+        );
+        write(projects.path(), "/r", "fine", &[user("/r", json!("hello"))]);
+        let started = std::time::Instant::now();
+        let got = read(projects.path(), Some(Path::new("/r")));
+        assert!(started.elapsed().as_secs() < 5);
+        let ids: Vec<&str> = got.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["fine"]);
+    }
+
+    #[test]
+    fn a_conversation_names_the_file_it_is_kept_in() {
+        let projects = tempfile::tempdir().unwrap();
+        let path = write(projects.path(), "/r", "a1", &[user("/r", json!("hi"))]);
+        assert_eq!(read(projects.path(), None)[0].log, Some(path));
+    }
+
+    #[test]
+    fn a_preview_holds_the_first_prompt_and_the_latest_turns_of_both() {
+        let dir = tempfile::tempdir().unwrap();
+        let assistant = |text: &str| {
+            line(json!({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "thinking", "thinking": "hm"}, {"type": "text", "text": text}]}}))
+        };
+        let side = line(json!({"type": "user", "isSidechain": true,
+            "message": {"content": "inside a subagent"}}));
+        let path = write(
+            dir.path(),
+            "/r",
+            "a1",
+            &[
+                user("/r", json!("<command-name>/model</command-name>")),
+                user("/r", json!("fix the login")),
+                assistant("looking"),
+                side,
+                user("/r", json!("and the logout")),
+                assistant("done"),
+            ],
+        );
+        let got = preview(&path).unwrap();
+        assert_eq!(got.first, "fix the login");
+        let said: Vec<(Speaker, &str)> = got
+            .recent
+            .iter()
+            .map(|t| (t.speaker, t.text.as_str()))
+            .collect();
+        assert_eq!(
+            said,
+            [
+                (Speaker::User, "fix the login"),
+                (Speaker::Agent, "looking"),
+                (Speaker::User, "and the logout"),
+                (Speaker::Agent, "done"),
+            ]
+        );
     }
 
     #[test]

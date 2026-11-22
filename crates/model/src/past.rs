@@ -24,6 +24,37 @@ pub struct Past {
     pub title: String,
     /// When it was last written to, in milliseconds since the Unix epoch.
     pub at_ms: u64,
+    /// The file its agent keeps it in, when it keeps one a person can read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<PathBuf>,
+    /// The shell line that resumes it from a terminal, in its directory and
+    /// login; empty for an agent that cannot.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub command: String,
+}
+
+/// Who spoke a turn of a conversation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Speaker {
+    #[default]
+    User,
+    Agent,
+}
+
+/// One thing said in a conversation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Turn {
+    pub speaker: Speaker,
+    pub text: String,
+}
+
+/// What a conversation says, read for a person to look at before choosing
+/// it: the first prompt whole and the latest turns, each cut short.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Preview {
+    pub first: String,
+    pub recent: Vec<Turn>,
 }
 
 /// The most a title keeps of what it is made from, in characters.

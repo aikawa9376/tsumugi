@@ -1466,6 +1466,7 @@ impl AppCtx {
             | Effect::PromptRestore { .. }
             | Effect::PromptShow(_)
             | Effect::Resume { .. }
+            | Effect::Fork { .. }
             | Effect::RestartDaemon(_)
             | Effect::BringBack { .. }
             | Effect::LetGo { .. }

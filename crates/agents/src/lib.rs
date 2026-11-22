@@ -14,6 +14,7 @@ pub mod oneshot;
 pub mod opencode;
 pub mod own_login;
 pub mod pi;
+mod preview;
 pub mod rules;
 pub mod skills;
 mod tail;
@@ -85,9 +86,34 @@ pub(crate) fn kept_in(
             home: context.home.clone(),
             profile: context.profile.clone(),
             profile_name: context.profile_name.clone(),
+            command: resume_command(context, &past.cwd, &past.id),
             ..past
         })
         .collect()
+}
+
+/// The shell line that continues the conversation `id` from a terminal, as a
+/// session of `context`'s login would: in `cwd`, with the folder the login
+/// keeps its state in; empty for an agent that cannot resume.
+fn resume_command(context: &AgentContext, cwd: &Path, id: &str) -> String {
+    let adapter = adapter(context.agent());
+    let Some(args) = adapter.resume_args(context, id) else {
+        return String::new();
+    };
+    let mut line = format!("cd {} && ", shell_word(cwd));
+    if let Some(home) = &context.home {
+        line.push_str(&format!(
+            "{}={} ",
+            adapter.state_variable(),
+            shell_word(home)
+        ));
+    }
+    line.push_str(&shell_word(adapter.program()));
+    for arg in args {
+        line.push(' ');
+        line.push_str(&shell_word(arg));
+    }
+    line
 }
 
 /// Read `agent`'s `listed` sessions against tsumugi's `own`: each of `own`
@@ -302,6 +328,15 @@ type ConversationLookup =
 /// Why a session cannot start, as its agent's program tells of itself.
 type Refusal = std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>;
 
+/// How to continue a copy of a conversation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fork {
+    pub args: Vec<String>,
+    /// The id the copy goes by, empty when the agent chooses it and Tsumugi
+    /// learns it from the session.
+    pub conversation: String,
+}
+
 /// A terminal agent owns its arguments, environment and optional integrations.
 pub trait AgentAdapter: Sync {
     /// The agent this adapter starts, asks and reads.
@@ -501,6 +536,17 @@ pub trait AgentAdapter: Sync {
     fn resume_args(&self, _context: &AgentContext, _conversation: &str) -> Option<Vec<String>> {
         None
     }
+    /// The arguments that continue a copy of the conversation
+    /// `conversation` in a new session, leaving the conversation itself as
+    /// it is, with the id the copy goes by when the agent lets the caller
+    /// choose it; none for an agent that cannot.
+    fn fork_args(&self, _context: &AgentContext, _conversation: &str) -> Option<Fork> {
+        None
+    }
+    /// What the conversation `past` says, read from the file it is kept in.
+    fn preview(&self, _past: &tsumugi_model::Past) -> Option<tsumugi_model::Preview> {
+        None
+    }
     /// The conversations the agent kept that ran in `dir`, or in any
     /// directory when none is given, `home` being the user's home.
     fn past(
@@ -600,6 +646,50 @@ mod tests {
     use super::*;
     use crate::testing::{program, recorded, screen, started};
     use tsumugi_model::Agent;
+
+    #[test]
+    fn a_conversation_kept_carries_the_shell_line_that_resumes_it() {
+        let past = |id: &str, cwd: &str| tsumugi_model::Past {
+            id: id.into(),
+            cwd: cwd.into(),
+            ..Default::default()
+        };
+        let own = kept_in(
+            &AgentContext::builtin(Agent::Claude),
+            vec![past("c1", "/my repo")],
+        );
+        assert_eq!(own[0].command, "cd '/my repo' && claude --resume c1");
+        let login = AgentContext {
+            home: Some("/w/codex".into()),
+            ..AgentContext::builtin(Agent::Codex)
+        };
+        let kept = kept_in(&login, vec![past("c1", "/r")]);
+        assert!(
+            kept[0]
+                .command
+                .starts_with("cd /r && CODEX_HOME=/w/codex codex resume c1"),
+            "{}",
+            kept[0].command
+        );
+    }
+
+    #[test]
+    fn only_some_agents_fork_a_conversation() {
+        for (agent, forks) in [
+            (Agent::Claude, true),
+            (Agent::Codex, true),
+            (Agent::Pi, true),
+            (Agent::OpenCode, false),
+            (Agent::Cursor, false),
+        ] {
+            let context = AgentContext::builtin(agent);
+            assert_eq!(
+                adapter(agent).fork_args(&context, "c1").is_some(),
+                forks,
+                "{agent:?}"
+            );
+        }
+    }
 
     #[test]
     fn each_agent_s_adapter_names_its_agent() {

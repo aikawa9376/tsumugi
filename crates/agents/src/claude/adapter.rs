@@ -158,6 +158,18 @@ impl AgentAdapter for Claude {
             &options(&context.claude()),
         ))
     }
+    fn fork_args(&self, context: &AgentContext, conversation: &str) -> Option<crate::Fork> {
+        let copy = super::new_session_id();
+        let mut args = super::resume_args(conversation, &options(&context.claude()));
+        args.extend(["--fork-session".into(), "--session-id".into(), copy.clone()]);
+        Some(crate::Fork {
+            args,
+            conversation: copy,
+        })
+    }
+    fn preview(&self, past: &tsumugi_model::Past) -> Option<tsumugi_model::Preview> {
+        super::past::preview(past.log.as_deref()?)
+    }
     fn past(
         &self,
         context: &AgentContext,

@@ -98,6 +98,12 @@ pub enum Ask {
         root: Option<HostPath>,
         typed: String,
     },
+    /// Read what the conversation `past` says, from the file its agent keeps
+    /// it in. The host finds the conversation itself, by its agent, login,
+    /// directory and id; the file the window names, if any, is not read.
+    PastPreview {
+        past: Box<tsumugi_model::Past>,
+    },
     Apply {
         stamp: crate::MutationStamp,
         request: Box<crate::Request>,
@@ -418,6 +424,10 @@ pub struct SessionStart {
     pub images: Vec<PathBuf>,
     /// The conversation it continues, by its id.
     pub resume: Option<String>,
+    /// Whether it continues a copy of `resume`'s conversation, which its
+    /// agent makes, and leaves the conversation itself as it was.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fork: bool,
     /// The folder of a profile's own that keeps the conversation it
     /// continues, which it has to run in; none for its agent's own
     /// environment.
@@ -491,6 +501,10 @@ pub enum Answer {
     },
     PathEntries {
         entries: Vec<crate::PathEntry>,
+    },
+    /// What the conversation says; none when the host cannot read it.
+    PastPreview {
+        preview: Option<tsumugi_model::Preview>,
     },
     Mutation {
         status: crate::MutationState,

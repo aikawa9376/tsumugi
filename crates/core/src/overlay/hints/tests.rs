@@ -62,7 +62,7 @@ fn the_picker_s_file_tree_hints_at_the_filer_s_keys() {
 }
 
 #[test]
-fn the_list_of_past_conversations_hints_at_widening_it_to_every_directory() {
+fn the_list_of_past_conversations_hints_at_its_row_actions() {
     let hints = picker(&Keymap::defaults(), &Picking::Resume(Resume::default()));
     assert_eq!(
         shown(&hints),
@@ -70,6 +70,12 @@ fn the_list_of_past_conversations_hints_at_widening_it_to_every_directory() {
             ("Ctrl+n/p", "move"),
             ("Enter", "resume"),
             ("Ctrl+a", "this directory or every one"),
+            ("Ctrl+g", "group"),
+            ("Ctrl+f", "fork"),
+            ("Ctrl+y", "copy command"),
+            ("Ctrl+s", "copy ID"),
+            ("Ctrl+l", "copy log path"),
+            ("Ctrl+o", "open log"),
             ("Esc", "close"),
         ]
     );

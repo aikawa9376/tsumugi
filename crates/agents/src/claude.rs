@@ -462,6 +462,25 @@ mod tests {
     }
 
     #[test]
+    fn a_fork_copies_the_conversation_under_an_id_of_its_own() {
+        use crate::AgentAdapter;
+        let context = crate::AgentContext::builtin(tsumugi_model::Agent::Claude);
+        let fork = Claude.fork_args(&context, "old").unwrap();
+        assert_eq!(
+            fork.args,
+            [
+                "--resume",
+                "old",
+                "--fork-session",
+                "--session-id",
+                fork.conversation.as_str()
+            ]
+        );
+        assert_ne!(fork.conversation, "old");
+        assert_eq!(fork.conversation.len(), 36);
+    }
+
+    #[test]
     fn a_new_conversation_id_is_a_random_uuid_v4() {
         let id = new_session_id();
         let groups: Vec<usize> = id.split('-').map(str::len).collect();

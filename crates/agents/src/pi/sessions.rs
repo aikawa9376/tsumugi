@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde_json::Value;
-use tsumugi_model::{Agent, Past, title_of};
+use tsumugi_model::{Agent, Past, Preview, Speaker, Turn, title_of};
 
 use crate::AgentContext;
 
@@ -101,6 +101,7 @@ pub(super) fn typed(entry: &Value) -> Option<String> {
 /// its id, directory, name, the prompts in it, and when it was last
 /// written to; read no further than `limit` bytes in.
 struct Kept {
+    path: PathBuf,
     id: String,
     cwd: PathBuf,
     name: Option<String>,
@@ -126,6 +127,7 @@ fn kept(path: &Path, dir: Option<&[PathBuf]>, limit: u64) -> Option<Kept> {
         return None;
     }
     let mut kept = Kept {
+        path: path.to_path_buf(),
         id,
         cwd,
         name: None,
@@ -175,10 +177,31 @@ pub(super) fn past(root: &Path, dir: Option<&Path>) -> Vec<Past> {
                 id: kept.id,
                 cwd: kept.cwd,
                 at_ms: kept.at_ms,
+                log: Some(kept.path),
                 ..Default::default()
             })
         })
         .collect()
+}
+
+/// What the conversation kept in the session file at `path` says.
+pub(super) fn preview(path: &Path) -> Option<Preview> {
+    crate::preview::read(path, |entry| {
+        if entry["type"] != "message" {
+            return None;
+        }
+        match entry["message"]["role"].as_str()? {
+            "user" => Some(Turn {
+                speaker: Speaker::User,
+                text: typed(entry)?,
+            }),
+            "assistant" => Some(Turn {
+                speaker: Speaker::Agent,
+                text: crate::preview::text_of(&entry["message"]["content"], "text")?,
+            }),
+            _ => None,
+        }
+    })
 }
 
 /// The prompts sent in `project`, oldest first, from every conversation Pi
@@ -281,6 +304,23 @@ mod tests {
         assert_eq!(titles, [("named", "probe one"), ("plain", "fix the tests")]);
         assert!(found.iter().all(|p| p.agent == Agent::Pi && p.at_ms > 0));
         assert_eq!(past(dir.path(), None).len(), 3);
+    }
+
+    #[test]
+    fn a_conversation_names_its_file_and_previews_what_was_said() {
+        let dir = tempfile::tempdir().unwrap();
+        let answer = r#"{"type":"message","id":"a2","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hm"},{"type":"text","text":"sure"}]}}"#;
+        let file = session(dir.path(), "a", "/r/a", &[&user("first"), answer]);
+        let found = past(dir.path(), None);
+        assert_eq!(found[0].log.as_deref(), Some(file.as_path()));
+        let got = preview(&file).unwrap();
+        assert_eq!(got.first, "first");
+        let said: Vec<(Speaker, &str)> = got
+            .recent
+            .iter()
+            .map(|t| (t.speaker, t.text.as_str()))
+            .collect();
+        assert_eq!(said, [(Speaker::User, "first"), (Speaker::Agent, "sure")]);
     }
 
     #[cfg(unix)]

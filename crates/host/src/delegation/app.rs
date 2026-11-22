@@ -88,7 +88,9 @@ async fn record(
         name_given: request.name_given,
         code: request.code.clone(),
     };
-    let resumes = request.resume.clone();
+    // A fork is a conversation of its own, and takes no code from the one it
+    // copies.
+    let resumes = request.resume.clone().filter(|_| !request.fork);
     let local_issue = request.local_issue.clone();
     let (id, token, code) = with_store(root, move |store| {
         let new = match (&new.code, &resumes) {
@@ -379,6 +381,47 @@ mod tests {
             ("mine", None)
         );
     }
+    #[tokio::test]
+    async fn a_resumed_conversation_keeps_its_code_and_a_fork_of_it_gets_a_code_of_its_own() {
+        let root = tempfile::tempdir().unwrap();
+        let settings = &Settings::default();
+        let held = {
+            let mut request = crate::execution::StartRequest {
+                agent: Agent::Claude,
+                name: "first".into(),
+                cwd: "/repo".into(),
+                ..Default::default()
+            };
+            let recorded = record(root.path(), settings, &mut request, None)
+                .await
+                .unwrap();
+            let id = recorded.id;
+            with_store(root.path(), move |store| {
+                store.learn_conversation(id, "conv")
+            })
+            .await
+            .unwrap();
+            recorded.code
+        };
+        let dir = root.path();
+        let started = |fork| async move {
+            let mut request = crate::execution::StartRequest {
+                agent: Agent::Claude,
+                name: "again".into(),
+                cwd: "/repo".into(),
+                resume: Some("conv".into()),
+                fork,
+                ..Default::default()
+            };
+            record(dir, settings, &mut request, None)
+                .await
+                .unwrap()
+                .code
+        };
+        assert_eq!(started(false).await, held);
+        assert_ne!(started(true).await, held);
+    }
+
     #[tokio::test]
     #[cfg_attr(windows, ignore = "fakes the agent with a shell script")]
     async fn a_start_that_is_refused_records_nothing_and_runs_no_agent() {

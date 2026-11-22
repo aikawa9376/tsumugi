@@ -194,6 +194,19 @@ impl AgentAdapter for Pi {
         Some(args)
     }
 
+    fn fork_args(&self, context: &AgentContext, conversation: &str) -> Option<crate::Fork> {
+        let mut args = options(context);
+        args.extend(["--fork".into(), conversation.into()]);
+        Some(crate::Fork {
+            args,
+            conversation: String::new(),
+        })
+    }
+
+    fn preview(&self, past: &tsumugi_model::Past) -> Option<tsumugi_model::Preview> {
+        sessions::preview(past.log.as_deref()?)
+    }
+
     fn past(
         &self,
         context: &AgentContext,
@@ -387,6 +400,27 @@ mod tests {
                 "c0ffee"
             ]
         );
+    }
+
+    #[test]
+    fn a_fork_is_a_copy_of_the_conversation_whose_id_pi_chooses() {
+        let context = with(PiOptions {
+            model: "fake/slow".into(),
+            ..PiOptions::default()
+        });
+        let fork = Pi.fork_args(&context, "c0ffee").unwrap();
+        assert_eq!(
+            fork.args,
+            [
+                "--tui-mode",
+                "regular",
+                "--model",
+                "fake/slow",
+                "--fork",
+                "c0ffee"
+            ]
+        );
+        assert_eq!(fork.conversation, "");
     }
 
     #[test]

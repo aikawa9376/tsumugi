@@ -30,6 +30,7 @@ impl Ask {
             self,
             Self::TerminalHost
                 | Self::PathEntries { .. }
+                | Self::PastPreview { .. }
                 | Self::Drafts
                 | Self::Review { .. }
                 | Self::Picture { .. }

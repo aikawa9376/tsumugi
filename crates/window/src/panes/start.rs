@@ -417,6 +417,7 @@ impl Ui {
                 prompt: text,
                 images: taken.images.clone(),
                 resume: None,
+                fork: false,
                 home: None,
                 cols: size.cols,
                 rows: size.rows,
@@ -501,8 +502,9 @@ impl Ui {
     }
 
     /// Continue a conversation an agent of `environment` kept in a new
-    /// session there, in the directory it ran in, shown where the user is.
-    pub(crate) fn resume(&self, environment: EnvironmentId, past: tsumugi_model::Past) {
+    /// session there, in the directory it ran in, shown where the user is;
+    /// a copy of it when `fork`.
+    pub(crate) fn resume(&self, environment: EnvironmentId, past: tsumugi_model::Past, fork: bool) {
         let (app, ui) = (self.app, self.clone());
         spawn(async move {
             let size = *ui.local.console_size.peek();
@@ -515,19 +517,24 @@ impl Ui {
             };
             let taken: Vec<&str> = names.iter().map(String::as_str).collect();
             let name = fresh_name(&label_from(&past.title), &taken);
-            app.status(Some(format!("resuming {name}…")));
+            let (verb, doing) = match fork {
+                true => ("fork", "forking"),
+                false => ("resume", "resuming"),
+            };
+            app.status(Some(format!("{doing} {name}…")));
             let start = SessionStart {
                 agent: past.agent,
                 profile: Some(past.profile.clone()),
                 name: name.clone(),
                 cwd: HostPath::local(&past.cwd),
                 resume: Some(past.id.clone()),
+                fork,
                 home: past.home.clone(),
                 cols: size.cols,
                 rows: size.rows,
                 ..Default::default()
             };
-            let failed = |e| format!("cannot resume {name}: {e}");
+            let failed = |e| format!("cannot {verb} {name}: {e}");
             match ui.start_session(&environment, start, failed).await {
                 Ok(id) => {
                     app.status(None);
