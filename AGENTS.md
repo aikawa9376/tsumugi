@@ -6,6 +6,11 @@ An Agent Workspace for people who live in Vim: drive any coding agent in its own
 
 - **Test first.** Red → green → refactor. Write the failing test before the
   code that makes it pass.
+- **Only the Vim way is fixed.** Moving by Vim's keys and the embedded
+  Neovims are what Tsumugi keeps whatever else changes. The other choices in
+  `docs/concept.md` and `docs/adr/` came from the app Tsumugi began as. When a
+  better design, such as Orca's or hunk's, needs one of them changed, rewrite
+  that record instead of working around it.
 - **Each layer holds one thing.** Put a fact in the one layer that owns it,
   and nowhere else.
 

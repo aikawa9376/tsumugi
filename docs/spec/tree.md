@@ -327,6 +327,26 @@ usual, and several `status:` words keep the worktrees in any of them. Clicking
 a worktree's status chip adds its word to the filter, and clicking it again
 takes the word away.
 
+## A branch against its base
+
+A worktree's row, and a workspace's row standing for its main checkout, says
+how its branch stands against its base ([the base](details.md#branch-and-conflicts)):
+how many commits it is ahead and behind, and the lines it added and took out
+since the two parted, what is only edited in the worktree included. A branch
+that cannot be compared shows nothing there. The numbers follow the disk and
+the base's last fetch.
+
+From the row, or its right-click menu ([keys](reference/keys.md#actions)):
+
+- the branch's change opens in a diff tab: the worktree against its base, or
+  only what the branch committed ([diff tabs](details.md#diff-tabs));
+- two revisions of the repository, named in the prompt, open in a diff tab
+  against each other;
+- a draft in the worktree asks an agent to review the branch's change, to
+  explain it, or to leave notes on it for your review
+  ([review](review.md#notes-from-agents)); sending the draft starts the
+  session, as with the [AI actions](ai-actions.md).
+
 ## Merging a worktree into main
 
 A finished worktree's branch is merged into the branch the main checkout has

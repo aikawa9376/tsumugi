@@ -53,5 +53,9 @@ conversation or an editor's unsaved buffer.
 Tsumugi supplies the workspace around independently installed tools. Agent
 providers supply model access, authentication and their own execution policies.
 Repositories remain ordinary Git repositories, and files remain yours to
-open with other editors. The workspace is a place to do and review work, with
-its own small set of controls for keeping that work connected.
+open with other editors. The workspace is a place to do and review work.
+Reading what the agents changed is its own work, done as well as a dedicated
+review tool does it: a change is read whole, across its files, against what it
+will be merged into, with the agents' notes beside it. The Git commands that
+finish a change, from staging to opening a pull request, are within reach.
+For anything else, Git is a shell away.

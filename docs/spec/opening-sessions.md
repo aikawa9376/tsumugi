@@ -69,6 +69,12 @@ cannot act as another.
   A start that names a **local issue** works it ([see
   below](#working-an-issue)); it starts in the issue's directory unless it
   names another.
+- **`review`** reads the review of the caller's worktree: every comment and
+  note, with its file, side, lines, what it says, and whether it is outdated,
+  resolved or sent ([review](review.md#notes-from-agents)).
+- **`annotate`** leaves a note on a side and lines of a file of a change in
+  the caller's worktree, or changes or deletes a note the caller left. Lines
+  that are not in the change's line diff are refused.
 - **`send`** sends a message to another session by its code or its id. Any session Tsumugi
   started, running or not yet ready, can be sent to; one that has ended
   cannot. A session that sleeps ([hibernation](sessions.md#hibernation)) is

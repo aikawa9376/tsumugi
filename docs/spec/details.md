@@ -439,10 +439,10 @@ machine. Neovim uses the user's diffview.nvim when available, including
 command-loaded plugins, and otherwise opens a built-in diff without installing
 plugins.
 
-Inline diffs and dedicated diff tabs use difft on the work machine when it
-is available, falling back to Git's unified diff when it cannot be used.
-The dedicated tab keeps reading its repository independently of the details
-panel and can open each changed file.
+Inline diffs use difft on the work machine when it is available, falling
+back to Git's unified diff when it cannot be used. A diff tab draws the line
+diff and shows difftastic's view of a file on request. It keeps reading its
+repository independently of the details panel and follows the disk.
 
 - Changes lists the files changed in the worktree against its last commit,
   staged or not, and each untracked file. An untracked file's diff shows all
@@ -451,25 +451,51 @@ panel and can open each changed file.
 
 ## Diff tabs
 
-A diff tab on a file lists the files of its change beside the diff, the one
-shown marked; opening another replaces the diff, and the list can be hidden.
-Without leaving the keyboard you can move to the next or previous change of
-the file and to the next or previous file ([keys](reference/keys.md)); a
-move that has nowhere to go says so and stays where it is. Long lines scroll
-across, or wrap to the width of the tab on request.
+A diff tab shows a change: every file of it, one after another, in one
+scroll, beside the list of its files. The list marks the file in sight, and
+opening a file there moves the stream to it. The list can be hidden. A change
+is one of these:
+
+- the worktree against its branch's base, the default: what the branch
+  committed since the two parted, together with what is staged, unstaged and
+  untracked;
+- the worktree's uncommitted changes alone;
+- one commit;
+- any two revisions you name, the later read against the earlier.
+
+The tab says which change it shows and against what. From the tab you can
+switch to another change, and you can name the two revisions in the prompt.
+A revision that is not a commit of the repository is refused, and the tab
+keeps what it showed.
+
+Without leaving the keyboard you can move to the next or previous change,
+hunk by hunk across the files, and to the next or previous file
+([keys](reference/keys.md)). A move that has nowhere to go says so and stays
+where it is. `/` searches the stream. Unchanged lines between hunks are
+folded, and each fold opens on request.
+
+A file's lines are drawn in one column, removed lines above added ones, or in
+two, the old beside the new. By default the tab draws two columns where it is
+wide enough for them and one where it is not, and switches as it is resized.
+The words that changed inside a line are marked. Long lines scroll across, or
+wrap to the width of the tab on request.
 
 A picture that changed is not read as lines: its two versions, as the change
 had them, are drawn side by side, with a divider swiped across them, or with
 the old faded over the new. A picture that was added or deleted shows its one
-side. A file that is binary, renamed, deleted or too large to show says what
-happened in place of a diff, and breaks nothing: its list, its comments on
-other files and its keys stay as they were.
+side. A file that is binary, renamed, deleted or too large to show says so in
+its place, and breaks nothing: the other files, their comments and the keys
+stay as they were.
 
-How a worktree's diff is drawn — whether the files are listed, whether lines
-wrap and how pictures are compared — is chosen in any of its tabs and holds
-for all of them, and for tabs opened later, while the window runs. Another
-worktree keeps its own. Comments on lines are pinned to the line diff as
-before; none of this moves them ([review](review.md)).
+In a change that holds the worktree, a hunk or the lines marked in it can be
+staged, unstaged or discarded from the stream, as a file can from
+[Changes](#changes); discarding asks first.
+
+How a worktree's diffs are drawn — whether the files are listed, how many
+columns, whether lines wrap and how pictures are compared — is chosen in any
+of its tabs and holds for all of them, and for tabs opened later, while the
+window runs. Another worktree keeps its own. Comments and notes on lines stay
+pinned to the line diff; none of this moves them ([review](review.md)).
 
 ## Keys
 
