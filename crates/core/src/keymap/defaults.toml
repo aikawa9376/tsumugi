@@ -154,6 +154,7 @@
 "D" = "worktree.delete"
 "C" = "worktree.cleanup"
 "d" = "worktree.diff"
+"b" = "worktree.branch"
 "g r" = "worktree.review"
 "g e" = "worktree.explain"
 "g n" = "worktree.notes"

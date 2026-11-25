@@ -586,6 +586,7 @@ fn the_picker_starts_with_one_scope_going_to_sessions_and_directories_and_others
             (";", &PickerSource::Files),
             ("*", &PickerSource::Resources),
             (":", &PickerSource::Worktrees),
+            ("@", &PickerSource::Branches),
             ("&", &PickerSource::Worktrees),
         ]
     );

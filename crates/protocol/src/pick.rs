@@ -23,6 +23,9 @@ pub struct PickSight {
     /// The worktrees whose files the picker searches.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub files: BTreeSet<PathBuf>,
+    /// The worktrees whose repository's branches the picker offers.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub branches: BTreeSet<PathBuf>,
 }
 
 /// The directories offered, by where each was found, in the order each
@@ -61,6 +64,11 @@ pub struct PickWork {
     /// a worktree until they are listed, and once the picker closes.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub files: BTreeMap<PathBuf, Vec<String>>,
+    /// The branches of the repository of each worktree asked for, newest
+    /// first; none of a worktree until they are listed, and once the picker
+    /// closes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub branches: BTreeMap<PathBuf, Vec<tsumugi_model::StartChoice>>,
 }
 
 /// One change to what the host listed for the picker.
@@ -84,6 +92,11 @@ pub enum PickChange {
         worktree: PathBuf,
         files: Vec<String>,
     },
+    /// The branches of the repository of the worktree `worktree`.
+    Branches {
+        worktree: PathBuf,
+        branches: Vec<tsumugi_model::StartChoice>,
+    },
     /// The host no longer lists them.
     Left,
 }
@@ -105,13 +118,19 @@ impl PickWork {
                 let was = self.files.insert(worktree, files.clone());
                 was.as_ref() != Some(&files)
             }
+            PickChange::Branches { worktree, branches } => {
+                let was = self.branches.insert(worktree, branches.clone());
+                was.as_ref() != Some(&branches)
+            }
             PickChange::Left => {
                 let owned = !self.owned.is_empty();
                 let files = !self.files.is_empty();
+                let branches = !self.branches.is_empty();
                 self.owned.clear();
                 self.files.clear();
+                self.branches.clear();
                 let accounts = set(&mut self.accounts, None);
-                set(&mut self.offers, None) | owned | accounts | files
+                set(&mut self.offers, None) | owned | accounts | files | branches
             }
         }
     }
@@ -157,6 +176,29 @@ mod tests {
         assert_eq!(work.files[Path::new("/w")], ["a.rs", "b/c.rs"]);
         assert!(work.apply(PickChange::Left));
         assert!(work.files.is_empty());
+    }
+
+    #[test]
+    fn a_repositorys_branches_are_kept_by_worktree_until_the_picker_closes() {
+        let mut work = PickWork::default();
+        let listed = |worktree: &str, names: &[&str]| PickChange::Branches {
+            worktree: worktree.into(),
+            branches: names
+                .iter()
+                .map(|n| tsumugi_model::StartChoice {
+                    point: tsumugi_model::StartPoint::Local {
+                        branch: n.to_string(),
+                    },
+                    subject: String::new(),
+                    checked_out: None,
+                })
+                .collect(),
+        };
+        assert!(work.apply(listed("/w", &["main", "topic"])));
+        assert!(!work.apply(listed("/w", &["main", "topic"])));
+        assert_eq!(work.branches[Path::new("/w")].len(), 2);
+        assert!(work.apply(PickChange::Left));
+        assert!(work.branches.is_empty());
     }
 
     #[test]

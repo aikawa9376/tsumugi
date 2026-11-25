@@ -847,6 +847,21 @@ pub(crate) fn perform(
             Some(row) => crate::worktree::branch_diff(state, &row),
             None => Vec::new(),
         },
+        Action::WorktreeBranch => {
+            // The row selected in the tree, else the worktree shown, so the
+            // picker's actions reach it too.
+            let row = cur.filter(|_| on_list).and_then(|row| match row.own() {
+                crate::tree::nav::Item::Worktree(environment, path)
+                | crate::tree::nav::Item::Workspace(environment, path) => {
+                    Some(crate::tree::Place::at(environment, path.clone()))
+                }
+                _ => None,
+            });
+            match row.or_else(|| state.content.place.clone()) {
+                Some(place) => crate::picker::open_branches(state, place),
+                None => Vec::new(),
+            }
+        }
         Action::WorktreeReview | Action::WorktreeExplain | Action::WorktreeNotes => {
             match cur.filter(|_| on_list) {
                 Some(row) => crate::worktree::branch_draft(state, &row, &action),

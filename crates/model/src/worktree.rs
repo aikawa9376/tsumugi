@@ -41,6 +41,10 @@ pub struct NewWorktree {
     /// given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    /// Whether it checks out the branch `start` names, as it is, instead of
+    /// making a branch from it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub checkout: bool,
 }
 
 /// How a worktree stands, as far as deleting it can lose work.
@@ -90,6 +94,9 @@ pub struct StartChoice {
     /// The last commit's subject, for the list to show.
     #[serde(default)]
     pub subject: String,
+    /// The worktree a local branch is checked out in, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_out: Option<std::path::PathBuf>,
 }
 
 /// What becomes of a worktree's branch when the worktree is deleted.

@@ -120,6 +120,7 @@ changes them ([keys](../keys.md)).
 | `worktree.delete` |  | delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `D` |
 | `worktree.cleanup` |  | list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](../tree.md#cleaning-up-worktrees)) | `tree`: `C` |
 | `worktree.diff` |  | open in a diff tab the change of the branch of the worktree or workspace selected in the tree: the worktree against the branch's base, committed or not, or what is not committed where the branch cannot be compared ([details](../tree.md#a-branch-against-its-base)) | `tree`: `d` |
+| `worktree.branch` | Go to Branch… | open the picker on the branches of the repository of the worktree or workspace selected in the tree, or of the worktree shown: choosing one goes to the worktree it is checked out in, or makes one that checks it out, and `Ctrl+o` switches that worktree to it instead ([details](../tree.md#going-to-a-branch)) | `tree`: `b` |
 | `worktree.review` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to review the branch's change against its base; sending the draft starts the session ([details](../tree.md#a-branch-against-its-base)) | `tree`: `g r` |
 | `worktree.explain` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to explain the branch's change against its base; sending the draft starts the session ([details](../tree.md#a-branch-against-its-base)) | `tree`: `g e` |
 | `worktree.notes` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to leave notes on the lines of the branch's change for your review, through its `annotate` tool; sending the draft starts the session ([review](../review.md#notes-from-agents)) | `tree`: `g n` |
@@ -446,6 +447,7 @@ changes them ([keys](../keys.md)).
 "D" = "worktree.delete"
 "C" = "worktree.cleanup"
 "d" = "worktree.diff"
+"b" = "worktree.branch"
 "g r" = "worktree.review"
 "g e" = "worktree.explain"
 "g n" = "worktree.notes"

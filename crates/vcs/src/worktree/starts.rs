@@ -25,7 +25,7 @@ pub async fn starts(source: &Path) -> Result<Vec<StartChoice>> {
         &[
             "for-each-ref".as_ref(),
             "--sort=-committerdate".as_ref(),
-            "--format=%(refname)\t%(contents:subject)".as_ref(),
+            "--format=%(refname)\t%(worktreepath)\t%(contents:subject)".as_ref(),
             "refs/heads".as_ref(),
             "refs/remotes".as_ref(),
         ],
@@ -34,10 +34,17 @@ pub async fn starts(source: &Path) -> Result<Vec<StartChoice>> {
     let mut local = Vec::new();
     let mut remote = Vec::new();
     for line in listed.lines() {
-        let (name, subject) = line.split_once('\t').unwrap_or((line, ""));
+        let mut fields = line.splitn(3, '\t');
+        let name = fields.next().unwrap_or_default();
+        let checked_out = fields
+            .next()
+            .filter(|path| !path.is_empty())
+            .map(std::path::PathBuf::from);
+        let subject = fields.next().unwrap_or_default();
         let choice = |point| StartChoice {
             point,
             subject: subject.to_string(),
+            checked_out: checked_out.clone(),
         };
         if let Some(branch) = name.strip_prefix("refs/heads/") {
             local.push(choice(StartPoint::Local {
@@ -58,6 +65,7 @@ pub async fn starts(source: &Path) -> Result<Vec<StartChoice>> {
     Ok([StartChoice {
         point: StartPoint::Head,
         subject: head.trim().to_string(),
+        checked_out: None,
     }]
     .into_iter()
     .chain(local)

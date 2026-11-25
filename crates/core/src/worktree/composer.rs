@@ -92,6 +92,7 @@ impl Composer {
             listed.push(StartChoice {
                 point: StartPoint::Head,
                 subject: String::new(),
+                checked_out: None,
             });
         }
         let query = self.query.trim();
@@ -114,6 +115,7 @@ impl Composer {
             rows.push(StartChoice {
                 point: StartPoint::Rev { rev: query.into() },
                 subject: String::new(),
+                checked_out: None,
             });
         }
         rows
@@ -138,6 +140,7 @@ impl Composer {
             name: name.into(),
             start: self.chosen(),
             branch: (!branch.is_empty()).then(|| branch.into()),
+            checkout: false,
         })
     }
 }

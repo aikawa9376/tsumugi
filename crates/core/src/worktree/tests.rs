@@ -54,6 +54,7 @@ fn choice(point: StartPoint, subject: &str) -> StartChoice {
     StartChoice {
         point,
         subject: subject.into(),
+        checked_out: None,
     }
 }
 
@@ -292,6 +293,7 @@ fn enter_closes_the_dialog_and_makes_the_worktree_in_the_background_as_asked() {
             name: "Fix login".into(),
             start: remote("main"),
             branch: Some("feat/login".into()),
+            checkout: false,
         }
     );
     // Its row is listed under its workspace, running its first step.

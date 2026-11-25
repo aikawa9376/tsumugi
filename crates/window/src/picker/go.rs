@@ -60,6 +60,9 @@ pub(super) fn Go(picker: GoPicker) -> Element {
                                 }
                             }
                         }
+                        if aim.sources.contains(&tsumugi_core::settings::PickerSource::Branches) {
+                            div { class: "picker-hint", "Enter goes to the branch's worktree, made where it has none · Ctrl+o switches this worktree to it" }
+                        }
                         div { class: "list-rows",
                             if rows.is_empty() {
                                 ListRow { kind: "dim", "Nothing matches" }
@@ -73,7 +76,7 @@ pub(super) fn Go(picker: GoPicker) -> Element {
                                         kind: if matches!(line.mark, Mark::Directory | Mark::Clone | Mark::File) { "mono" } else { "" },
                                         selected: i == picker.list.cursor,
                                         onclick: move |_| app.dispatch(Msg::PickerChoose(i)),
-                                        PlaceMark { icon: match line.mark { Mark::Scratch => Icon::Notes, Mark::Session => Icon::Message, Mark::Directory => Icon::Folder, Mark::Clone => Icon::FolderDown, Mark::Owner => Icon::BrandGithub, Mark::Help => Icon::InfoCircle, Mark::Worktree => Icon::GitBranch, Mark::NewWorktree => Icon::FolderPlus, Mark::Resource => Icon::Link, Mark::File => Icon::File, Mark::Action => Icon::Keyboard } }
+                                        PlaceMark { icon: match line.mark { Mark::Scratch => Icon::Notes, Mark::Session => Icon::Message, Mark::Directory => Icon::Folder, Mark::Clone => Icon::FolderDown, Mark::Owner => Icon::BrandGithub, Mark::Help => Icon::InfoCircle, Mark::Worktree => Icon::GitBranch, Mark::NewWorktree => Icon::FolderPlus, Mark::Resource => Icon::Link, Mark::File => Icon::File, Mark::Action => Icon::Keyboard, Mark::Branch => Icon::GitBranch } }
                                         span { class: "list-row-name",
                                             {marked(&query, &line.name)}
                                             if let Some(place) = &line.place {

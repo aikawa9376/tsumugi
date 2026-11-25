@@ -25,7 +25,7 @@ pub(crate) use delete::{confirmed as delete_confirmed, delete, inspected, remove
 pub(crate) use merge::{
     confirmed as merge_confirmed, inspected as merge_inspected, merge, merged, resolved,
 };
-pub(crate) use pending::{answered, dismiss, made, set_up};
+pub(crate) use pending::{answered, begin_in, dismiss, made, set_up};
 pub(crate) use sleep::{confirmed as slept_confirmed, sleep, slept, wake};
 pub(crate) use status::{set as set_status, status_of};
 

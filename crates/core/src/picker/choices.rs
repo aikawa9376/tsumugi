@@ -9,7 +9,9 @@ use tsumugi_model::{CloneTarget, EnvironmentId, GitHubTyped, Session, Tree};
 use tsumugi_protocol::{Offers, PickWork};
 
 use super::fuzzy::{Query, best};
-use super::sources::{ActionOffer, FileOffer, NewWorktreeOffer, ResourceOffer, WorktreeOffer};
+use super::sources::{
+    ActionOffer, BranchOffer, FileOffer, NewWorktreeOffer, ResourceOffer, WorktreeOffer,
+};
 use crate::attention::{self, Changes};
 use crate::completion::Completions;
 use crate::settings::PickerSource;
@@ -48,6 +50,8 @@ pub enum Mark {
     File,
     /// An action to run.
     Action,
+    /// A branch to go to or switch to.
+    Branch,
 }
 
 /// What the scratch row says.
@@ -81,6 +85,8 @@ pub enum Choice {
     File(FileOffer),
     /// An action to run.
     Action(ActionOffer),
+    /// A branch to go to, or switch the worktree shown to.
+    Branch(BranchOffer),
 }
 
 impl Choice {
@@ -106,6 +112,9 @@ impl Choice {
             (Choice::NewWorktree(a), Choice::NewWorktree(b)) => a == b,
             (Choice::File(a), Choice::File(b)) => a == b,
             (Choice::Action(a), Choice::Action(b)) => a.name == b.name,
+            (Choice::Branch(a), Choice::Branch(b)) => {
+                a.environment == b.environment && a.point == b.point
+            }
             _ => false,
         }
     }
@@ -589,6 +598,19 @@ pub fn labelled_lines(
                         place: Some(a.name.into()),
                         badge: String::new(),
                         mark: Mark::Action,
+                    },
+                ),
+                Choice::Branch(b) => (
+                    Some(PickerSource::Branches.heading()),
+                    Line {
+                        heading: None,
+                        name: b.point.name(),
+                        place: Some(b.subject.clone()).filter(|s| !s.is_empty()),
+                        badge: match b.checked_out {
+                            Some(_) => "checked out".into(),
+                            None => String::new(),
+                        },
+                        mark: Mark::Branch,
                     },
                 ),
             };

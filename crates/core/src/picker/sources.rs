@@ -65,6 +65,30 @@ pub struct NewWorktreeOffer {
     pub name: String,
 }
 
+/// A branch of the repository of the project shown, to go to or switch to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchOffer {
+    pub environment: EnvironmentId,
+    /// The worktree shown, which a switch changes and whose repository it is
+    /// of.
+    pub worktree: PathBuf,
+    pub point: tsumugi_model::StartPoint,
+    /// Its last commit's subject.
+    pub subject: String,
+    /// The worktree it is checked out in, if any.
+    pub checked_out: Option<PathBuf>,
+}
+
+impl BranchOffer {
+    /// The name of the local branch it is, or is checked out as.
+    pub fn local(&self) -> String {
+        match &self.point {
+            tsumugi_model::StartPoint::Remote { branch, .. } => branch.clone(),
+            other => other.name(),
+        }
+    }
+}
+
 /// An action to run, as the keys and menus name it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActionOffer {
@@ -134,6 +158,56 @@ pub fn worktrees(hosts: &Hosts, focus: Option<&Place>, query: &str, cap: usize) 
         }));
     }
     rows
+}
+
+/// The branches of the repository of `focus`, the worktree shown, as the
+/// host listed them, newest first with nothing typed, else the best `cap`
+/// for what is typed against the name and the last commit's subject. A
+/// remote's branch is left out where a local branch has its name, as both
+/// come to the same.
+pub fn branches(hosts: &Hosts, focus: Option<&Place>, query: &str, cap: usize) -> Vec<Choice> {
+    use tsumugi_model::StartPoint;
+    let Some(focus) = focus else {
+        return Vec::new();
+    };
+    let Some(listed) = hosts
+        .work(&focus.environment)
+        .and_then(|w| w.pick.branches.get(&focus.worktree))
+    else {
+        return Vec::new();
+    };
+    let local = |name: &str| {
+        listed
+            .iter()
+            .any(|c| matches!(&c.point, StartPoint::Local { branch } if branch == name))
+    };
+    let offers = listed
+        .iter()
+        .filter(|c| match &c.point {
+            StartPoint::Local { .. } => true,
+            StartPoint::Remote { branch, .. } => !local(branch),
+            StartPoint::Head | StartPoint::Rev { .. } => false,
+        })
+        .map(|c| BranchOffer {
+            environment: focus.environment.clone(),
+            worktree: focus.worktree.clone(),
+            point: c.point.clone(),
+            subject: c.subject.clone(),
+            checked_out: c.checked_out.clone(),
+        });
+    let query = Query::new(query);
+    if query.is_empty() {
+        return offers.take(cap).map(Choice::Branch).collect();
+    }
+    best(
+        offers.filter_map(|o| {
+            let name = o.point.name();
+            query
+                .rank_named(&format!("{name} {}", o.subject), &name)
+                .map(|rank| (rank, Choice::Branch(o)))
+        }),
+        cap,
+    )
 }
 
 /// The resources the projects of `hosts` keep, those of the project of

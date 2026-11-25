@@ -258,6 +258,7 @@ fn chosen(found: &[Choice]) -> Vec<String> {
             Choice::Resource(r) => format!("resource {}", r.resource.id),
             Choice::File(f) => format!("file {}", f.path),
             Choice::Action(a) => format!("action {}", a.name),
+            Choice::Branch(b) => format!("branch {}", b.point.name()),
         })
         .collect()
 }

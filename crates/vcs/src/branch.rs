@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use tsumugi_model::StartPoint;
 use tsumugi_model::repository::{Branch, Compared, Comparison, Head, Operation, Standing};
 
 use crate::Error;
@@ -39,6 +40,47 @@ pub async fn operation(path: &Path) -> Option<Operation> {
     } else {
         None
     }
+}
+
+/// Switches the checkout at `path` to the branch `to` names: a local
+/// branch, or a remote's, checked out as the local branch of its name, made
+/// to track it where there is none. Refused while the checkout has
+/// uncommitted changes or an operation Git has not finished, so nothing in
+/// it is carried over or lost; Git refuses a branch another worktree has
+/// checked out.
+pub async fn switch(path: &Path, to: &StartPoint) -> Result<(), String> {
+    if let Some(operation) = operation(path).await {
+        return Err(format!(
+            "a {} is unfinished here; finish or abort it first",
+            operation.name()
+        ));
+    }
+    let changed = git(path, &["status", "--porcelain", "--untracked-files=no"])
+        .await
+        .map_err(|e| e.to_string())?;
+    if !changed.trim().is_empty() {
+        return Err("there are uncommitted changes here; commit or stash them first".into());
+    }
+    let args: Vec<String> = match to {
+        StartPoint::Local { branch } => vec![branch.clone()],
+        StartPoint::Remote { remote, branch } => {
+            let local = format!("refs/heads/{branch}");
+            if git(path, &["show-ref", "--verify", "--quiet", &local])
+                .await
+                .is_ok()
+            {
+                vec![branch.clone()]
+            } else {
+                vec!["--track".into(), format!("{remote}/{branch}")]
+            }
+        }
+        StartPoint::Head | StartPoint::Rev { .. } => {
+            return Err(format!("{} is not a branch", to.name()));
+        }
+    };
+    let mut all = vec!["switch", "--quiet"];
+    all.extend(args.iter().map(String::as_str));
+    git(path, &all).await.map(drop).map_err(|e| e.to_string())
 }
 
 /// The base the user chose for `branch`.
@@ -317,6 +359,87 @@ mod tests {
         commit(dir.path(), "main-only.txt", "m\n");
         git_in(dir.path(), &["switch", "-q", "feature"]);
         dir
+    }
+
+    fn current(dir: &Path) -> String {
+        let out = std::process::Command::new("git")
+            .args(["branch", "--show-current"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    }
+
+    fn local(branch: &str) -> StartPoint {
+        StartPoint::Local {
+            branch: branch.into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_clean_checkout_is_switched_to_a_local_branch() {
+        let dir = diverged();
+
+        switch(dir.path(), &local("main")).await.unwrap();
+
+        assert_eq!(current(dir.path()), "main");
+    }
+
+    #[tokio::test]
+    async fn a_checkout_with_uncommitted_changes_is_not_switched() {
+        let dir = diverged();
+        std::fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+
+        let refused = switch(dir.path(), &local("main")).await.unwrap_err();
+
+        assert!(refused.contains("uncommitted"), "{refused}");
+        assert_eq!(current(dir.path()), "feature");
+    }
+
+    #[tokio::test]
+    async fn a_checkout_with_an_operation_unfinished_is_not_switched() {
+        let dir = diverged();
+        let git_dir = dir.path().join(".git");
+        std::fs::write(
+            git_dir.join("MERGE_HEAD"),
+            "0000000000000000000000000000000000000000\n",
+        )
+        .unwrap();
+
+        let refused = switch(dir.path(), &local("main")).await.unwrap_err();
+
+        assert!(refused.contains("merge"), "{refused}");
+        assert_eq!(current(dir.path()), "feature");
+    }
+
+    #[tokio::test]
+    async fn a_remote_branch_is_switched_to_as_a_local_branch_tracking_it() {
+        let origin = diverged();
+        let dir = tempfile::tempdir().unwrap();
+        let clone = dir.path().join("clone");
+        git_in(
+            dir.path(),
+            &[
+                "clone",
+                "-q",
+                "-b",
+                "main",
+                origin.path().to_str().unwrap(),
+                clone.to_str().unwrap(),
+            ],
+        );
+
+        switch(
+            &clone,
+            &StartPoint::Remote {
+                remote: "origin".into(),
+                branch: "feature".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(current(&clone), "feature");
     }
 
     fn change(status: &str, path: &str) -> Change {

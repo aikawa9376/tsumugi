@@ -340,6 +340,12 @@ pub enum Ask {
         worktree: PathBuf,
         op: GitOp,
     },
+    /// Switch the checkout at `worktree` to the branch `to` names, refused
+    /// while an agent works there.
+    SwitchBranch {
+        worktree: PathBuf,
+        to: tsumugi_model::StartPoint,
+    },
     /// Read the pull request or the issue `number` of the repository at
     /// `repository` whole, with what was said on it and the images shown.
     GitHubThread {

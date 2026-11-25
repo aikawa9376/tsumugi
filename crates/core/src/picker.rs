@@ -41,7 +41,9 @@ use interrupted::Waiting;
 pub use list::*;
 use resume::Resume;
 pub use scopes::Aim;
-pub use sources::{ActionOffer, FileOffer, NewWorktreeOffer, ResourceOffer, WorktreeOffer};
+pub use sources::{
+    ActionOffer, BranchOffer, FileOffer, NewWorktreeOffer, ResourceOffer, WorktreeOffer,
+};
 
 /// The most sessions, and the most directories, the picker going to a
 /// session lists at once.
@@ -126,10 +128,13 @@ impl PickerView {
         let aim = p.aim();
         let clones = p.offered.get(environment).is_some_and(|o| o.clones)
             && aim.sources.contains(&PickerSource::Directories);
-        if aim.sources.contains(&PickerSource::Files)
-            && let Some(place) = p.place.as_ref().filter(|pl| pl.environment == *environment)
-        {
-            sight.files.insert(place.worktree.clone());
+        if let Some(place) = p.place.as_ref().filter(|pl| pl.environment == *environment) {
+            if aim.sources.contains(&PickerSource::Files) {
+                sight.files.insert(place.worktree.clone());
+            }
+            if aim.sources.contains(&PickerSource::Branches) {
+                sight.branches.insert(place.worktree.clone());
+            }
         }
         match GitHubTyped::parse(aim.query).filter(|_| clones) {
             Some(GitHubTyped::Owner(_)) => sight.accounts = true,
@@ -238,6 +243,9 @@ pub fn go_rows(picker: &GoPicker, home: &Path, hosts: &Hosts, tree: &TreeView) -
                 rows.extend(sources::files(hosts, picker.place.as_ref(), query, cap));
             }
             PickerSource::Actions => rows.extend(sources::actions(query, cap)),
+            PickerSource::Branches => {
+                rows.extend(sources::branches(hosts, picker.place.as_ref(), query, cap));
+            }
         }
     }
     match picker.purpose {
@@ -390,6 +398,22 @@ pub(crate) fn press(state: &mut ViewState, key: &Key) -> Vec<Effect> {
         Picking::Go(p) if ctrl && key.key == "f" => {
             p.toggle_mode();
             return Vec::new();
+        }
+        Picking::Go(p) if ctrl && key.key == "o" && p.mode == Mode::List => {
+            let under = go_rows(p, &state.picker.home, &state.hosts, &state.tree)
+                .into_iter()
+                .nth(p.list.cursor);
+            return match under {
+                Some(Choice::Branch(b)) => {
+                    close(&mut state.picker);
+                    vec![Effect::SwitchBranch {
+                        environment: b.environment,
+                        worktree: b.worktree,
+                        to: b.point,
+                    }]
+                }
+                _ => Vec::new(),
+            };
         }
         Picking::Go(p) if ctrl && key.key.eq_ignore_ascii_case("g") && p.mode == Mode::List => {
             p.step_scope(if key.shift { -1 } else { 1 });
@@ -551,10 +575,60 @@ pub(crate) fn choose(state: &mut ViewState, at: usize) -> Vec<Effect> {
                 None => Vec::new(),
             }
         }
+        Some(Choice::Branch(b)) => {
+            close(&mut state.picker);
+            go_to_branch(state, b)
+        }
         Some(Choice::Owner(owner)) => query(&mut state.picker, GitHubTyped::owner_query(&owner)),
         Some(Choice::GitHubHelp) => query(&mut state.picker, GitHubTyped::PREFIX.to_string()),
         None => Vec::new(),
     }
+}
+
+/// Go to the branch `b`: to the worktree it is checked out in, else to a
+/// worktree made to check it out.
+fn go_to_branch(state: &mut ViewState, b: sources::BranchOffer) -> Vec<Effect> {
+    if let Some(path) = b.checked_out.clone() {
+        return go_to_worktree(
+            state,
+            WorktreeOffer {
+                environment: b.environment,
+                path,
+                name: String::new(),
+                place: String::new(),
+            },
+        );
+    }
+    let new = tsumugi_model::NewWorktree {
+        name: b.local(),
+        start: b.point,
+        branch: None,
+        checkout: true,
+    };
+    crate::worktree::begin_in(state, b.environment, b.worktree, new)
+}
+
+/// Open the picker on the branches of the repository of the worktree at
+/// `place`: stepped to the first scope that offers branches alone, else to
+/// the first that offers them at all.
+pub(crate) fn open_branches(state: &mut ViewState, place: Place) -> Vec<Effect> {
+    let effects = open(state, Purpose::Go);
+    if let Some(Picking::Go(p)) = &mut state.picker.open {
+        let alone = p
+            .scopes
+            .iter()
+            .position(|s| s.sources == [PickerSource::Branches]);
+        let any = || {
+            p.scopes
+                .iter()
+                .position(|s| s.sources.contains(&PickerSource::Branches))
+        };
+        if let Some(at) = alone.or_else(any) {
+            p.scope = at;
+        }
+        p.place = Some(place);
+    }
+    effects
 }
 
 /// Go to the worktree `w` in the tree: its workspace opened and its row
@@ -720,6 +794,7 @@ fn under_cursor(state: &ViewState) -> Option<(EnvironmentId, PathBuf)> {
         }
         Choice::Directory(c) => Some((c.environment, c.path)),
         Choice::Worktree(w) => Some((w.environment, w.path)),
+        Choice::Branch(b) => b.checked_out.map(|path| (b.environment, path)),
         Choice::Clone(_)
         | Choice::Owner(_)
         | Choice::GitHubHelp

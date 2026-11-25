@@ -287,7 +287,7 @@ What the picker searches, each `[[picker.scopes]]` table one mix of sources: the
 | --- | --- | --- | --- |
 | `picker.scopes.name` | string | `""` | What the scope is called where the picker shows it. |
 | `picker.scopes.prefix` | string | `""` | What is typed first to enter the scope instead of stepping to it; none when empty. What follows it is what is searched for. |
-| `picker.scopes.sources` | array of `sessions`, `directories`, `worktrees`, `resources`, `files`, `actions` | `[]` | The sources it mixes, their rows listed in this order. |
+| `picker.scopes.sources` | array of `sessions`, `directories`, `worktrees`, `resources`, `files`, `actions`, `branches` | `[]` | The sources it mixes, their rows listed in this order. |
 
 ## `[[profiles]]`
 

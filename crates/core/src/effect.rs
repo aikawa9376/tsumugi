@@ -113,6 +113,13 @@ pub enum Effect {
         environment: EnvironmentId,
         repository: PathBuf,
     },
+    /// Ask the work host of `environment` to switch the checkout at
+    /// `worktree` to the branch `to` names.
+    SwitchBranch {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        to: tsumugi_model::StartPoint,
+    },
     /// Ask the work host of `environment` to make `new` in `repository`, as
     /// the step of the pending worktree `id`.
     WorktreeCreate {

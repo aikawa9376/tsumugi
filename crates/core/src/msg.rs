@@ -644,6 +644,12 @@ pub enum Msg {
         repository: PathBuf,
         result: Result<Vec<tsumugi_model::StartChoice>, String>,
     },
+    /// The work host answered switching a checkout to the branch `to`:
+    /// done, or why it was refused.
+    BranchSwitched {
+        to: String,
+        result: Result<(), String>,
+    },
     /// The work host answered the step of the pending worktree `id`: where
     /// the worktree is, or why it could not be made.
     WorktreeMade {

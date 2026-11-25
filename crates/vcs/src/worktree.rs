@@ -44,6 +44,7 @@ pub async fn create(source: &Path, name: &str, base: Option<&str>) -> Result<Wor
             name: name.into(),
             start,
             branch: None,
+            checkout: false,
         },
     )
     .await
@@ -54,6 +55,9 @@ pub async fn create(source: &Path, name: &str, base: Option<&str>) -> Result<Wor
 /// revision or a remote that cannot be fetched, makes nothing: git makes
 /// the directory and the branch together or neither.
 pub async fn create_new(source: &Path, new: &NewWorktree) -> Result<Worktree> {
+    if new.checkout {
+        return check_out(source, &new.start).await;
+    }
     if let Some(branch) = &new.branch {
         valid_branch(source, branch).await?;
     }
@@ -170,6 +174,30 @@ pub async fn create_on_branch(source: &Path, branch: &str, remote: &str) -> Resu
         ])
         .await?;
         Ok(spot.with(base, Some(branch.to_string())))
+    }
+}
+
+/// Makes a worktree of the repository holding `source` that checks out the
+/// branch `start` names, as it is: a local branch, or a remote's, fetched and
+/// checked out as the local branch of its name, made to track it where there
+/// is none. Git refuses a branch another worktree has checked out.
+async fn check_out(source: &Path, start: &StartPoint) -> Result<Worktree> {
+    match start {
+        StartPoint::Local { branch } => {
+            let spot = Spot::find(source, branch, Branch::Existing(branch)).await?;
+            let base = revision(&spot.source, branch).await?;
+            spot.git(&[spot.path.as_os_str(), branch.as_ref()]).await?;
+            Ok(spot.with(base, None))
+        }
+        StartPoint::Remote { remote, branch } => {
+            let (root, _) = identify(&canonical(source)?).await?;
+            fetch(&root, remote, branch).await?;
+            create_on_branch(source, branch, remote).await
+        }
+        StartPoint::Head | StartPoint::Rev { .. } => Err(format!(
+            "{} is not a branch, so there is nothing to check out",
+            start.name()
+        )),
     }
 }
 
@@ -1018,6 +1046,124 @@ mod tests {
 
         assert!(refused.contains("locked"), "{refused}");
         assert!(made.path.exists());
+    }
+
+    fn checking_out(start: StartPoint) -> NewWorktree {
+        NewWorktree {
+            name: start.name(),
+            start,
+            checkout: true,
+            ..NewWorktree::default()
+        }
+    }
+
+    fn branch_of(path: &Path) -> String {
+        run(path, "git", &["branch", "--show-current"])
+            .trim()
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn a_local_branch_is_checked_out_in_a_worktree_of_its_own_without_a_new_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = git_repository(dir.path());
+        run(&source, "git", &["branch", "topic"]);
+        let before = run(&source, "git", &["branch", "--list"]);
+
+        let made = create_new(
+            &source,
+            &checking_out(StartPoint::Local {
+                branch: "topic".into(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(branch_of(&made.path), "topic");
+        assert_eq!(
+            run(&source, "git", &["branch", "--list"]).lines().count(),
+            before.lines().count()
+        );
+        assert_eq!(
+            made.branch, None,
+            "the branch it checked out is not its own to remove"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_remote_branch_is_checked_out_as_a_local_one_that_tracks_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let (origin, clone) = cloned_with_newer_remote_branch(dir.path());
+        let tip = run(&origin, "git", &["rev-parse", "feature"]);
+
+        let made = create_new(
+            &clone,
+            &checking_out(StartPoint::Remote {
+                remote: "origin".into(),
+                branch: "feature".into(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(branch_of(&made.path), "feature");
+        assert_eq!(run(&made.path, "git", &["rev-parse", "HEAD"]), tip);
+        assert_eq!(
+            run(
+                &made.path,
+                "git",
+                &["rev-parse", "--abbrev-ref", "@{upstream}"]
+            )
+            .trim(),
+            "origin/feature"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_branch_checked_out_elsewhere_or_a_commit_gets_no_worktree() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = git_repository(dir.path());
+
+        let taken = create_new(
+            &source,
+            &checking_out(StartPoint::Local {
+                branch: "main".into(),
+            }),
+        )
+        .await;
+        let commit = create_new(&source, &checking_out(StartPoint::Head)).await;
+
+        assert!(taken.is_err());
+        assert!(commit.is_err());
+        assert_eq!(
+            run(&source, "git", &["worktree", "list"]).lines().count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn the_branches_listed_say_where_each_local_one_is_checked_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = git_repository(dir.path());
+        run(&source, "git", &["branch", "topic"]);
+        let made = create_new(&source, &new("other")).await.unwrap();
+
+        let listed = starts(&source).await.unwrap();
+        let at = |branch: &str| {
+            listed
+                .iter()
+                .find(|c| {
+                    c.point
+                        == StartPoint::Local {
+                            branch: branch.into(),
+                        }
+                })
+                .map(|c| c.checked_out.clone().map(|p| p.canonicalize().unwrap()))
+        };
+
+        assert_eq!(at("main"), Some(Some(source.canonicalize().unwrap())));
+        assert_eq!(at("other"), Some(Some(made.path.canonicalize().unwrap())));
+        assert_eq!(at("topic"), Some(None));
     }
 
     #[tokio::test]

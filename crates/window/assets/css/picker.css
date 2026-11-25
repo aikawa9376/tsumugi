@@ -9,6 +9,7 @@
 .picker-heading { padding: 8px 8px 2px; color: var(--text-3); font-size: var(--ui-font-caption); text-transform: uppercase; letter-spacing: 0.04em; }
 .picker-heading:first-child { padding-top: 0; }
 .picker-place { margin-left: 10px; color: var(--text-3); font-size: var(--ui-font-small); }
+.picker-hint { padding: 0 8px 6px; color: var(--text-3); font-size: var(--ui-font-small); }
 .picker-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 8px 0; border-top: 1px solid var(--line); font-size: var(--ui-font-small); color: var(--text-3); }
 .command-preview { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .command-preview h3 { margin: 0; font-size: var(--ui-font); }

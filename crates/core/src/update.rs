@@ -536,6 +536,13 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             result,
         } => crate::worktree::read_starts(state, &environment, &repository, result),
         Msg::WorktreeMade { id, result } => crate::worktree::made(state, id, result),
+        Msg::BranchSwitched { to, result } => {
+            let text = match result {
+                Ok(()) => format!("Switched to {to}"),
+                Err(why) => format!("Cannot switch to {to}: {why}"),
+            };
+            crate::chrome::status_line::notice(&mut state.chrome.status, text)
+        }
         Msg::WorktreeSetUp { id, result } => crate::worktree::set_up(state, id, result),
         Msg::WorktreeDismiss(id) => crate::worktree::dismiss(state, id),
         Msg::WorktreeInspected {

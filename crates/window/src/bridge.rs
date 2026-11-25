@@ -960,6 +960,23 @@ impl AppCtx {
                     });
                 });
             }
+            Effect::SwitchBranch {
+                environment,
+                worktree,
+                to,
+            } => {
+                let name = to.name();
+                let asked = self.ask_in(&environment, Ask::SwitchBranch { worktree, to });
+                let app = *self;
+                spawn(async move {
+                    let result = match asked.await {
+                        Answer::Done => Ok(()),
+                        Answer::Failed { text } => Err(text),
+                        answer => Err(format!("the work host answered {answer:?}")),
+                    };
+                    app.dispatch(Msg::BranchSwitched { to: name, result });
+                });
+            }
             Effect::WorktreeStarts {
                 environment,
                 repository,

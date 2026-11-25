@@ -84,6 +84,7 @@ mod tests {
             name: name.into(),
             start: StartPoint::Head,
             branch: None,
+            checkout: false,
         }
     }
 

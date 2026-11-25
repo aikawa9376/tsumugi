@@ -102,6 +102,17 @@ pub(super) fn begin(state: &mut ViewState, composer: Composer, new: NewWorktree)
         repository,
         ..
     } = composer;
+    begin_in(state, environment, repository, new)
+}
+
+/// `new` starts being made in the repository at `repository` of
+/// `environment`, as one the dialog asked for is.
+pub(crate) fn begin_in(
+    state: &mut ViewState,
+    environment: EnvironmentId,
+    repository: PathBuf,
+    new: NewWorktree,
+) -> Vec<Effect> {
     let tree = crate::tree::listed(state.hosts.work(&environment));
     let root = tree
         .workspace_of(&repository)

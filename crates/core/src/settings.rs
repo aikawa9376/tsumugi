@@ -552,6 +552,8 @@ pub enum PickerSource {
     Files,
     // Every action Tsumugi runs, as the keys and menus name them.
     Actions,
+    // The branches of the repository of the project shown.
+    Branches,
 }
 
 impl PickerSource {
@@ -564,6 +566,7 @@ impl PickerSource {
             PickerSource::Resources => "Resources",
             PickerSource::Files => "Files",
             PickerSource::Actions => "Actions",
+            PickerSource::Branches => "Branches",
         }
     }
 }
@@ -601,6 +604,7 @@ impl PickerScope {
             Self::of("Files", ";", &[Files]),
             Self::of("Resources", "*", &[Resources]),
             Self::of("Worktrees", ":", &[Worktrees]),
+            Self::of("Branches", "@", &[Branches]),
             Self::of("Project", "&", &[Worktrees, Resources, Files]),
         ]
     }

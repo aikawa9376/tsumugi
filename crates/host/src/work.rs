@@ -743,6 +743,10 @@ fn in_sight(change: &Change, sight: &Sight) -> bool {
             .pick
             .as_ref()
             .is_some_and(|pick| pick.files.contains(worktree)),
+        Change::Pick(PickChange::Branches { worktree, .. }) => sight
+            .pick
+            .as_ref()
+            .is_some_and(|pick| pick.branches.contains(worktree)),
         Change::Pick(PickChange::Left) => true,
         Change::Place(PlaceChange::Read { read }) => sight.place.as_ref() == Some(&read.worktree),
         Change::Place(PlaceChange::Left) => true,

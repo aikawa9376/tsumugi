@@ -15,6 +15,7 @@ use tsumugi_protocol::{Change, Event, Sight};
 use crate::work::{Host, Seen, Sent, WindowId};
 
 pub(crate) mod behind;
+mod branches;
 mod commands;
 mod config;
 mod context;
@@ -340,6 +341,7 @@ pub fn start(watched: Watched) {
     crate::environment::spawn(offers::watch(watched.clone()));
     crate::environment::spawn(owners::watch(watched.clone()));
     crate::environment::spawn(files::watch(watched.clone()));
+    crate::environment::spawn(branches::watch(watched.clone()));
     crate::environment::spawn(commands::watch(watched.clone()));
     crate::environment::spawn(place::watch(watched.clone()));
     crate::environment::spawn(entries::watch(watched.clone()));

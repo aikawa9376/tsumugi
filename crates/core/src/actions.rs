@@ -123,6 +123,7 @@ pub enum Action {
     WorktreeDelete,
     WorktreeCleanup,
     WorktreeDiff,
+    WorktreeBranch,
     WorktreeReview,
     WorktreeExplain,
     WorktreeNotes,
@@ -603,6 +604,10 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeDiff, "worktree.diff", "open in a diff tab the change of the branch of the worktree or workspace selected in the tree: the worktree against the branch's base, committed or not, or what is not committed where the branch cannot be compared ([details](tree.md#a-branch-against-its-base))")
         .icon(Icon::GitBranch)
         .row("Open branch diff", Go),
+    S::new(A::WorktreeBranch, "worktree.branch", "open the picker on the branches of the repository of the worktree or workspace selected in the tree, or of the worktree shown: choosing one goes to the worktree it is checked out in, or makes one that checks it out, and `Ctrl+o` switches that worktree to it instead ([details](tree.md#going-to-a-branch))")
+        .icon(Icon::GitBranch)
+        .bar("Go to Branch…", Icon::GitBranch)
+        .row("Go to branch…", Go),
     S::new(A::WorktreeReview, "worktree.review", "open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to review the branch's change against its base; sending the draft starts the session ([details](tree.md#a-branch-against-its-base))")
         .icon(Icon::GitBranch)
         .row("Review branch with AI…", Start),
@@ -1063,6 +1068,7 @@ mod tests {
             WorktreeDelete,
             WorktreeCleanup,
             WorktreeDiff,
+            WorktreeBranch,
             WorktreeReview,
             WorktreeExplain,
             WorktreeNotes,

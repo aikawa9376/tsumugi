@@ -992,7 +992,7 @@ fn scope_name(run: &Scenario) -> String {
 fn the_picker_opens_on_the_first_scope_and_ctrl_g_steps_through_the_rest_and_round() {
     let mut run = scoped("");
     let mut seen = vec![scope_name(&run)];
-    for _ in 0..6 {
+    for _ in 0..7 {
         run = run.send(ctrl("g"));
         seen.push(scope_name(&run));
     }
@@ -1004,6 +1004,7 @@ fn the_picker_opens_on_the_first_scope_and_ctrl_g_steps_through_the_rest_and_rou
             "Files",
             "Resources",
             "Worktrees",
+            "Branches",
             "Project",
             "Go"
         ]
@@ -1227,6 +1228,155 @@ fn the_picker_adding_to_the_tree_keeps_to_directories_whatever_the_scopes_say() 
     assert_eq!(picker(&run).scope, 0);
 }
 
+fn branches_of(worktree: &str, listed: &[(&str, Option<&str>)]) -> PickChange {
+    PickChange::Branches {
+        worktree: worktree.into(),
+        branches: listed
+            .iter()
+            .map(|(name, at)| tsumugi_model::StartChoice {
+                point: match name.split_once('/') {
+                    Some((remote, branch)) => tsumugi_model::StartPoint::Remote {
+                        remote: remote.into(),
+                        branch: branch.into(),
+                    },
+                    None => tsumugi_model::StartPoint::Local {
+                        branch: (*name).into(),
+                    },
+                },
+                subject: format!("{name} work"),
+                checked_out: at.map(PathBuf::from),
+            })
+            .collect(),
+    }
+}
+
+/// The repository of the project shown has `main` checked out in its
+/// worktree, `topic` nowhere, and a remote with both and `feat`.
+fn branching() -> Scenario {
+    scoped("").tell(branches_of(
+        "/r/a",
+        &[
+            ("main", Some("/r/a")),
+            ("topic", None),
+            ("origin/main", None),
+            ("origin/feat", None),
+        ],
+    ))
+}
+
+#[test]
+fn the_branches_of_the_project_shown_are_asked_of_the_host_only_while_a_scope_offers_them() {
+    let run = scoped("");
+    assert_eq!(
+        asked(&run).flatten().map(|s| s.branches),
+        Some(BTreeSet::new())
+    );
+    let run = run.send(Msg::PickerQuery("@".into()));
+    assert_eq!(
+        asked(&run).flatten().map(|s| s.branches),
+        Some(BTreeSet::from([PathBuf::from("/r/a")]))
+    );
+}
+
+#[test]
+fn branches_say_where_they_are_checked_out_and_a_remote_one_is_left_out_beside_its_local_namesake()
+{
+    let run = branching().send(Msg::PickerQuery("@".into()));
+    assert_eq!(names(&run), ["main", "topic", "origin/feat"]);
+    let lines = go_lines(
+        picker(&run),
+        &run.state().picker.home,
+        &run.state().hosts,
+        &run.state().tree,
+    );
+    assert_eq!(lines[0].heading, Some("Branches"));
+    assert!(lines.iter().all(|l| l.mark == Mark::Branch));
+    assert_eq!(lines[0].badge, "checked out");
+    assert_eq!(lines[1].badge, "");
+    let run = run.send(Msg::PickerQuery("@fea".into()));
+    assert_eq!(names(&run), ["origin/feat"]);
+}
+
+#[test]
+fn choosing_a_branch_checked_out_goes_to_its_worktree() {
+    let run = branching()
+        .send(Msg::PickerQuery("@main".into()))
+        .send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    assert!(matches!(
+        &run.state().tree.selected,
+        Some(crate::tree::nav::Item::Worktree(_, w)) if w == &PathBuf::from("/r/a")
+    ));
+    assert!(run.state().tree.making.is_empty());
+}
+
+#[test]
+fn choosing_a_branch_checked_out_nowhere_makes_a_worktree_that_checks_it_out() {
+    let run = branching()
+        .send(Msg::PickerQuery("@origin/feat".into()))
+        .send(key("Enter"));
+    assert_eq!(run.state().picker.open, None);
+    let making = &run.state().tree.making;
+    assert_eq!(making.len(), 1, "{making:?}");
+    let new = &making[0].new;
+    assert!(new.checkout);
+    assert_eq!(new.name, "feat");
+    assert_eq!(
+        new.start,
+        tsumugi_model::StartPoint::Remote {
+            remote: "origin".into(),
+            branch: "feat".into()
+        }
+    );
+    assert!(
+        run.last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::WorktreeCreate { new, .. } if new.checkout)),
+        "{:?}",
+        run.last_effects()
+    );
+}
+
+#[test]
+fn ctrl_o_switches_the_worktree_shown_to_the_branch_instead() {
+    let run = branching()
+        .send(Msg::PickerQuery("@topic".into()))
+        .send(ctrl("o"));
+    assert_eq!(run.state().picker.open, None);
+    assert!(
+        run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::SwitchBranch { worktree, to, .. }
+                if worktree == &PathBuf::from("/r/a")
+                    && to == &tsumugi_model::StartPoint::Local { branch: "topic".into() }
+        )),
+        "{:?}",
+        run.last_effects()
+    );
+}
+
+#[test]
+fn ctrl_o_on_a_row_that_is_no_branch_does_nothing() {
+    let run = branching().send(ctrl("o"));
+    assert!(run.state().picker.open.is_some());
+    assert!(
+        !run.last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::SwitchBranch { .. }))
+    );
+}
+
+#[test]
+fn the_tree_opens_the_picker_on_the_branches_of_the_row_selected() {
+    let run = scoped("").send(Msg::PickerClose).send(Msg::Perform {
+        action: crate::actions::Action::WorktreeBranch,
+        key: None,
+        probe: Box::default(),
+    });
+    let p = picker(&run);
+    assert_eq!(p.scopes[p.scope].sources, [PickerSource::Branches]);
+}
+
 #[test]
 fn a_name_no_worktree_has_is_offered_as_a_worktree_to_create_after_the_matches() {
     let run = scoped("").send(Msg::PickerQuery(":ma".into()));
@@ -1281,5 +1431,5 @@ fn ctrl_shift_g_steps_back_round_to_the_last_scope() {
     let run = scoped("").send(Msg::PickerKey(Key::new("G").ctrl().shift()));
     assert_eq!(scope_name(&run), "Project");
     let run = run.send(Msg::PickerKey(Key::new("G").ctrl().shift()));
-    assert_eq!(scope_name(&run), "Worktrees");
+    assert_eq!(scope_name(&run), "Branches");
 }

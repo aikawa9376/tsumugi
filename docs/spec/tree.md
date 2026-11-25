@@ -393,6 +393,27 @@ nothing is deleted until it is answered yes. A branch whose commits nothing
 else has is kept, as deleting a worktree keeps it. What the list says of
 GitHub is left out where it cannot be asked, and nothing is chosen beforehand.
 
+## Going to a branch
+
+The branches of a repository, its own and its remotes', newest first, are
+picked from the picker ([below](#searching-more-than-sessions-and-directories)),
+opened on them from a workspace's or a worktree's row
+([keys](reference/keys.md#actions)). Each says where it is checked out, if
+anywhere.
+
+Choosing a branch goes to the worktree it is checked out in, selecting its row
+as going to a worktree does. A branch checked out nowhere gets a worktree of
+its own that checks it out, made as any new worktree is, with its row, its
+setup and a session's draft; a remote's branch is checked out as the local
+branch of that name, made to track it where there is none. No branch is made
+from the one chosen, and deleting that worktree keeps the branch.
+
+From the picker, a branch can instead be switched to in the worktree the picker
+was opened on. The switch is refused, changing nothing and saying why, while an
+agent works there, while the worktree has uncommitted changes, while Git has an
+operation in it unfinished, or while another worktree has the branch checked
+out.
+
 ## Putting a worktree to sleep
 
 Sleep, from a worktree's row or its menu ([keys](reference/keys.md#actions)),
@@ -570,6 +591,10 @@ session or starts one as above. The sources are:
 - **files**, those git tracks or would track in the worktree shown, ranked by
   their path; choosing one opens it as a row of the file tree does. They are
   read only while a scope that searches them is in use;
+- **branches**, those of the repository of the project shown, each saying
+  where it is checked out; choosing one goes to it, and `Ctrl+o` switches the
+  worktree shown to it instead ([branches](#going-to-a-branch)). They are read
+  only while a scope that searches them is in use;
 - **actions**, everything the keys and menus run
   ([keys](reference/keys.md#actions)), by the name the menus give it or the
   name bindings use; choosing one closes the picker and runs it as its key
@@ -581,8 +606,8 @@ What is typed stays. A scope with a prefix is entered by typing the prefix
 first, and what follows is what is searched for, as `>` for the actions: the
 prefix wins over the scope stepped to. A prefix of letters stands alone as a
 word. The picker starts with scopes for going to a session or a directory,
-for the actions, the files, the resources and the worktrees each alone, and
-for the last three together; the settings replace them with any mix and any
+for the actions, the files, the resources, the worktrees and the branches each
+alone, and for the worktrees, resources and files together; the settings replace them with any mix and any
 prefixes ([settings](reference/settings.md#picker)). Adding to the tree
 offers directories alone, whatever the scopes say.
 

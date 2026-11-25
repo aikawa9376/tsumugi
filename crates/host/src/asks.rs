@@ -237,6 +237,20 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             watched.read_again();
             resolved.map(|text| Answer::Told { text })
         }
+        Ask::SwitchBranch { worktree, to } => {
+            let busy = {
+                let host = watched.host();
+                working_in(host.work().tree().sessions(), &worktree).map(|s| s.name.clone())
+            };
+            let switched = match busy {
+                Some(name) => Err(format!(
+                    "{name} is working in this worktree; switch once it is done"
+                )),
+                None => tsumugi_vcs::branch::switch(&worktree, &to).await,
+            };
+            watched.read_again();
+            switched.map(|()| Answer::Done)
+        }
         Ask::Git { worktree, op } => {
             let made = git_op(&worktree, op).await;
             // The listing shows what was made without waiting on the disk's watch.
@@ -413,6 +427,17 @@ async fn blocking<T: Send + 'static>(
         .await
         .map_err(|e| e.to_string())
         .and_then(|done| done)
+}
+
+/// An agent's session working in the worktree at `worktree`, whose files a
+/// switch of its branch would change under it.
+fn working_in<'a>(
+    sessions: &'a [tsumugi_model::Session],
+    worktree: &std::path::Path,
+) -> Option<&'a tsumugi_model::Session> {
+    sessions
+        .iter()
+        .find(|s| s.state == tsumugi_model::State::Working && s.cwd.starts_with(worktree))
 }
 
 async fn submit_prompt(
@@ -850,6 +875,22 @@ async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<Answer, tsumugi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_branch_switch_waits_on_an_agent_working_in_the_worktree_or_below_it() {
+        use tsumugi_model::testing::session;
+        let sessions = [
+            session("idle").cwd("/w").build(),
+            session("deep").cwd("/w/sub").working().build(),
+            session("elsewhere").cwd("/v").working().build(),
+        ];
+        assert_eq!(
+            working_in(&sessions, "/w".as_ref()).map(|s| s.id.as_str()),
+            Some("deep")
+        );
+        assert_eq!(working_in(&sessions[..1], "/w".as_ref()), None);
+        assert_eq!(working_in(&sessions, "/u".as_ref()), None);
+    }
 
     #[test]
     fn a_session_or_terminal_starts_on_this_host_alone() {

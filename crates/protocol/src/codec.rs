@@ -386,6 +386,7 @@ mod tests {
                 owners: BTreeSet::from(["aikawa9376".into()]),
                 accounts: true,
                 files: BTreeSet::from(["/w".into()]),
+                branches: BTreeSet::from(["/w".into()]),
             }),
             place: Some(crate::HostPath::local("/w")),
             commands: Some(CommandsSight {
@@ -513,6 +514,7 @@ mod tests {
                         branch: "main".into(),
                     },
                     branch: Some("feat/login".into()),
+                    checkout: false,
                 },
             }),
         });
@@ -536,6 +538,16 @@ mod tests {
             asked: 16,
             ask: Box::new(crate::Ask::WorktreeStarts {
                 repository: "/w".into(),
+            }),
+        });
+        round_trips(Request::Ask {
+            asked: 16,
+            ask: Box::new(crate::Ask::SwitchBranch {
+                worktree: "/w".into(),
+                to: tsumugi_model::StartPoint::Remote {
+                    remote: "origin".into(),
+                    branch: "topic".into(),
+                },
             }),
         });
         round_trips(Request::Ask {
@@ -878,6 +890,17 @@ mod tests {
                 owned: [("aikawa9376".into(), vec!["tsumugi".into()])].into(),
                 accounts: Some(vec!["aikawa9376".into()]),
                 files: [("/w".into(), vec!["src/main.rs".into()])].into(),
+                branches: [(
+                    "/w".into(),
+                    vec![tsumugi_model::StartChoice {
+                        point: tsumugi_model::StartPoint::Local {
+                            branch: "main".into(),
+                        },
+                        subject: "first".into(),
+                        checked_out: Some("/w".into()),
+                    }],
+                )]
+                .into(),
             },
             place: PlaceWork {
                 read: Some(PlaceRead::default()),
