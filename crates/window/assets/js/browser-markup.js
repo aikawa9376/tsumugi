@@ -1,6 +1,6 @@
 // Drawing on a still of the page. The still and the canvas are the
 // workspace's own, so what is drawn never meets the page's scripts.
-(async () => {
+await (async () => {
   const start = await dioxus.recv();
   // The script starts as the component is made, before its nodes are drawn.
   let base = null;

@@ -24,6 +24,8 @@ impl PartialEq for Still {
     }
 }
 
+const SCRIPT: &str = include_str!("../../assets/js/browser-markup.js");
+
 const COLOURS: [&str; 7] = [
     "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#111827", "#ffffff",
 ];
@@ -56,7 +58,7 @@ pub(super) fn Markup(
     let mut can_undo = use_signal(|| false);
     let mut can_redo = use_signal(|| false);
     let eval = use_hook(|| {
-        let eval = document::eval(include_str!("../../assets/js/browser-markup.js"));
+        let eval = document::eval(SCRIPT);
         let _ = eval.send(json!({ "window": window.to_string() }));
         let mut replies = eval;
         spawn(async move {
@@ -159,5 +161,22 @@ pub(super) fn Markup(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SCRIPT;
+
+    // Dioxus closes an eval's channel as soon as the script's body returns,
+    // and drops what it is sent from then on; a script that only starts an
+    // async function never hears its first message.
+    #[test]
+    fn the_drawing_script_awaits_its_body_so_it_hears_what_it_is_sent() {
+        let body = SCRIPT
+            .lines()
+            .find(|line| !line.trim_start().starts_with("//"))
+            .unwrap_or_default();
+        assert!(body.starts_with("await (async () => {"), "{body}");
     }
 }
