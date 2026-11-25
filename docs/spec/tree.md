@@ -119,8 +119,8 @@ branch, tracking the remote's, when it comes from the repository, and at its
 head, on a branch named after its number, when it comes from a fork.
 
 Files starts folded. Unfolded, it lists the worktree's files as a
-[file tree](#file-trees). Hidden files once shown, and what git ignores, are
-drawn dim; version control metadata is not listed. A file Git sees changed is
+[file tree](#file-trees), hidden files included until they are hidden.
+Hidden files and what git ignores are drawn dim; version control metadata is not listed. A file Git sees changed is
 marked at the end of its row with the letter Git gives it, and a directory
 holding one with a dot. The marks and the listing follow the disk within seconds.
 Opening a file shows it in a viewer or in Neovim, by its kind

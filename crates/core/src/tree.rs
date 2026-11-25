@@ -41,8 +41,9 @@ pub struct TreeView {
     /// Whether every worktree git knows of is listed, those where nothing
     /// runs too.
     pub every_worktree: bool,
-    /// Whether the files whose names start with `.` are listed.
-    pub show_hidden: bool,
+    /// Whether the files whose names start with `.` are left out; they are
+    /// listed until hidden.
+    pub hide_dotfiles: bool,
     /// How the user arranged the rows: pins, order and what is left out.
     pub organize: Organize,
     /// The sessions finished that the user has seen since.
@@ -375,7 +376,7 @@ fn press(view: &mut TreeView, key: Key) -> Vec<Effect> {
             }
         }
         Key::Hidden => {
-            view.show_hidden = !view.show_hidden;
+            view.hide_dotfiles = !view.hide_dotfiles;
             return Vec::new();
         }
         Key::Into => {
@@ -408,7 +409,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
             .collect(),
         view.filter.clone(),
         view.folds.clone(),
-        view.show_hidden,
+        view.hide_dotfiles,
         pages.to_vec(),
         view.making.iter().map(|p| p.row()).collect::<Vec<_>>(),
         view.organize.clone(),
@@ -439,7 +440,7 @@ pub(crate) fn build(view: &mut TreeView, hosts: &Hosts, pages: &[(EnvironmentId,
                     .borrow_mut()
                     .insert((environment.clone(), dir.to_path_buf()));
                 let mut entries = facts.entries.get(dir).cloned().unwrap_or_default();
-                if !view.show_hidden {
+                if view.hide_dotfiles {
                     entries.retain(|e| !tsumugi_model::files::is_hidden(&e.path));
                 }
                 entries

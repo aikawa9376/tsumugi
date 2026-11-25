@@ -432,7 +432,7 @@ fn a_file_s_row_takes_the_filer_s_keys_before_the_tree_s() {
 }
 
 #[test]
-fn hidden_files_are_listed_only_while_shown() {
+fn hidden_files_are_listed_until_hidden() {
     let (run, _) = with_src();
     let run = run.event(patch(3).change(TreeChange::Entries {
         dir: "/r".into(),
@@ -453,8 +453,10 @@ fn hidden_files_are_listed_only_while_shown() {
         path: "/r/.env".into(),
         dir: false,
     };
-    assert!(!rows(&run).contains(&env));
-    let shown = run.send(Msg::TreeKey(Key::Hidden));
+    assert!(rows(&run).contains(&env));
+    let hidden = run.send(Msg::TreeKey(Key::Hidden));
+    assert!(!rows(&hidden).contains(&env));
+    let shown = hidden.send(Msg::TreeKey(Key::Hidden));
     assert!(rows(&shown).contains(&env));
 }
 
