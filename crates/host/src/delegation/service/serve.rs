@@ -102,6 +102,8 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         Command::WorktreeCheckpoint(asked) => {
             super::commands::worktree_checkpoint(context, &caller, asked).await
         }
+        Command::ReadReview(asked) => super::review::read(&caller, asked).await,
+        Command::Annotate(asked) => super::review::annotate(&caller, asked).await,
         Command::Rename(asked) => rename(context, &caller, asked).await,
         Command::Close(asked) => close(context, &caller, asked).await,
         Command::ReportDone(asked) => report_done(context, &caller, asked).await,

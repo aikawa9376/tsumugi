@@ -132,6 +132,15 @@ impl<'a> Reading<'a> {
             .collect()
     }
 
+    /// The lines an agent's note is drawn under, in order.
+    pub fn note_ends(&self) -> Vec<usize> {
+        let mut ends: Vec<usize> = (0..self.lines.len())
+            .filter(|&i| self.ending_at(i).iter().any(|j| j.comment.is_note()))
+            .collect();
+        ends.dedup();
+        ends
+    }
+
     /// The comment under the cursor place `at`: a line one stands on, or an
     /// outdated one.
     pub fn comment_at(&self, at: usize) -> Option<&'a Judged> {
@@ -230,6 +239,22 @@ impl Pane {
             Go::By(n) => here.saturating_add_signed(n).min(last),
             Go::Top => 0,
             Go::Bottom => last,
+            Go::Note(way) => {
+                let ends = reading.note_ends();
+                match crate::diff_view::hunk_from(&ends, Some(here), way) {
+                    Some(at) => at,
+                    None => {
+                        self.notice = Some(
+                            match way {
+                                Way::Next => "No later note",
+                                Way::Prev => "No earlier note",
+                            }
+                            .into(),
+                        );
+                        here
+                    }
+                }
+            }
             Go::File(way) => {
                 let starts = reading.file_starts();
                 match crate::diff_view::hunk_from(&starts, Some(here), way) {
@@ -338,6 +363,7 @@ impl Pane {
                 anchor: anchor.clone(),
                 quoted: quoted.clone(),
                 text: text.clone(),
+                author: None,
             }),
             Target::Edit { id } => Change::Edit {
                 id: *id,
@@ -395,7 +421,7 @@ impl Pane {
         }
         let carries = comments
             .iter()
-            .filter(|j| !j.comment.resolved)
+            .filter(|j| !j.comment.resolved && !j.comment.is_note())
             .map(|j| (j.comment.id, j.comment.text.clone()))
             .collect();
         self.mode = Mode::Previewing(Preview {
@@ -436,6 +462,8 @@ pub enum Go {
     Hunk(Way),
     /// To the heading of the next or previous file.
     File(Way),
+    /// To the next or previous line an agent's note is under.
+    Note(Way),
 }
 
 #[cfg(test)]
@@ -475,6 +503,7 @@ mod tests {
                 text: format!("comment {id}"),
                 resolved: false,
                 sent: false,
+                author: None,
             },
             freshness,
         }
@@ -494,6 +523,40 @@ mod tests {
             line(Hunk, "@@ -1 +1 @@"),
             line(Added, "+one"),
         ]
+    }
+
+    #[test]
+    fn the_cursor_steps_between_the_lines_agents_notes_are_under() {
+        let lines = stream();
+        let mut note = stored(1, Side::New, 1, "one", Freshness::Current);
+        note.comment.anchor.path = "b.rs".into();
+        note.comment.author = Some("abcd fixer".into());
+        let mut mine = stored(2, Side::New, 1, "one", Freshness::Current);
+        mine.comment.anchor.path = "a.rs".into();
+        let comments = [note, mine];
+        let r = reading(&lines, &comments);
+        assert_eq!(r.note_ends(), [5], "a person's comment is no note");
+        let mut pane = Pane::default();
+        pane.go(&r, Go::Note(Way::Next));
+        assert_eq!(pane.cursor(&r), 5);
+        pane.go(&r, Go::Note(Way::Next));
+        assert!(pane.notice.is_some());
+    }
+
+    #[test]
+    fn notes_are_never_carried_to_an_agent() {
+        let mut note = stored(1, Side::New, 2, "TWO", Freshness::Current);
+        note.comment.author = Some("abcd fixer".into());
+        let mut pane = Pane::default();
+        pane.preview(&[note.clone()]);
+        assert_eq!(pane.mode, Mode::Browsing, "nothing to send");
+        let mine = stored(2, Side::New, 2, "TWO", Freshness::Current);
+        pane.preview(&[note, mine]);
+        let Mode::Previewing(preview) = &pane.mode else {
+            panic!("no preview");
+        };
+        assert_eq!(preview.carries.len(), 1);
+        assert!(!preview.text.contains("comment 1"));
     }
 
     #[test]

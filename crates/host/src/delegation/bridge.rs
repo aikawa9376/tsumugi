@@ -244,6 +244,16 @@ fn tools() -> Vec<Value> {
             schemars::schema_for!(super::protocol::WorktreeCheckpoint),
         ),
         tool(
+            "review",
+            "Read the review of your worktree in Tsumugi: every comment the user left on lines of its changes and every note an agent left, each with its file, side (old or new), lines, what it says, the change it is on, whether it is outdated (its lines changed since), resolved or sent, and who left it. Use it to check your fix against the user's comments.",
+            schemars::schema_for!(super::protocol::ReadReview),
+        ),
+        tool(
+            "annotate",
+            "Leave a note for the user reviewing your change, on lines of a file of it: why the lines are as they are, or what to look at closely. The user reads it beside the lines in Tsumugi's diff; it is not sent back to you and never moves their view. Name `path`, `side` (new, the default, or old for removed lines), `start` and `end` as numbered on that side, and `text`; `change` is branch (the default: the worktree against the branch's base), uncommitted, or a commit. Lines not in that change's diff are refused. With `id` it changes a note of yours to `text`, or deletes it with `delete`. Leave a few notes where they help, not one per line.",
+            schemars::schema_for!(super::protocol::Annotate),
+        ),
+        tool(
             "rename_session",
             "Name your own session anew, as the user sees it in Tsumugi: a few words saying what it works on, in the language the user writes in. Call it once you have answered the first prompt, after the conversation is cleared once you have answered the next one, and otherwise only when the work turns to something else entirely, never as it moves from step to step. When it is refused, keep the name.",
             schemars::schema_for!(Rename),
@@ -432,6 +442,8 @@ fn command(name: &str, arguments: Value) -> std::result::Result<Command, String>
         "set_worktree_checkpoint" => {
             Command::WorktreeCheckpoint(serde_json::from_value(arguments).map_err(parsed)?)
         }
+        "review" => Command::ReadReview(serde_json::from_value(arguments).map_err(parsed)?),
+        "annotate" => Command::Annotate(serde_json::from_value(arguments).map_err(parsed)?),
         "rename_session" => Command::Rename(serde_json::from_value(arguments).map_err(parsed)?),
         "close_session" => Command::Close(serde_json::from_value(arguments).map_err(parsed)?),
         "report_done" => Command::ReportDone(serde_json::from_value(arguments).map_err(parsed)?),
@@ -873,6 +885,8 @@ mod tests {
                 "cleanup_worktrees",
                 "merge_worktree",
                 "set_worktree_checkpoint",
+                "review",
+                "annotate",
                 "rename_session",
                 "close_session",
                 "timeline_tasks",

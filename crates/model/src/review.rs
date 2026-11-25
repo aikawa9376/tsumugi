@@ -39,6 +39,17 @@ pub struct Comment {
     pub resolved: bool,
     /// Whether a prompt carrying it went to an agent.
     pub sent: bool,
+    /// The session whose agent left it as a note, by its code and name; a
+    /// person's comment has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+}
+
+impl Comment {
+    /// Whether an agent left it, as a note, rather than a person.
+    pub fn is_note(&self) -> bool {
+        self.author.is_some()
+    }
 }
 
 /// A comment to keep, before the work host gives it an id.
@@ -48,6 +59,9 @@ pub struct NewComment {
     pub anchor: Anchor,
     pub quoted: Vec<String>,
     pub text: String,
+    /// The session whose agent leaves it as a note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 /// Whether the lines a comment was made on still read as they did.
@@ -252,7 +266,11 @@ pub fn judge(comment: &Comment, lines: &[DiffLine]) -> Freshness {
 
 /// The prompt that carries `comments` to an agent, those resolved left out.
 pub fn prompt(comments: &[Judged]) -> String {
-    let mut open: Vec<&Judged> = comments.iter().filter(|j| !j.comment.resolved).collect();
+    // An agent's notes are for the person reviewing, never sent back.
+    let mut open: Vec<&Judged> = comments
+        .iter()
+        .filter(|j| !j.comment.resolved && !j.comment.is_note())
+        .collect();
     if open.is_empty() {
         return String::new();
     }
@@ -392,6 +410,7 @@ mod tests {
             text: "why?".into(),
             resolved: false,
             sent: false,
+            author: None,
         }
     }
 

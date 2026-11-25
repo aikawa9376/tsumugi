@@ -87,6 +87,7 @@ pub fn change(directory: &Path, worktree: &Path, change: Change) -> Result<Vec<C
                 text: text.to_owned(),
                 resolved: false,
                 sent: false,
+                author: new.author,
             });
             *next += 1;
         }
@@ -170,6 +171,7 @@ mod tests {
             },
             quoted: (start..=end).map(|n| format!("line {n}")).collect(),
             text: text.into(),
+            author: None,
         })
     }
 
@@ -307,6 +309,7 @@ mod tests {
             text: "t".into(),
             resolved: false,
             sent: false,
+            author: None,
         }
     }
 

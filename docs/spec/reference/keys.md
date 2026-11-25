@@ -122,6 +122,7 @@ changes them ([keys](../keys.md)).
 | `worktree.diff` |  | open in a diff tab the change of the branch of the worktree or workspace selected in the tree: the worktree against the branch's base, committed or not, or what is not committed where the branch cannot be compared ([details](../tree.md#a-branch-against-its-base)) | `tree`: `d` |
 | `worktree.review` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to review the branch's change against its base; sending the draft starts the session ([details](../tree.md#a-branch-against-its-base)) | `tree`: `g r` |
 | `worktree.explain` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to explain the branch's change against its base; sending the draft starts the session ([details](../tree.md#a-branch-against-its-base)) | `tree`: `g e` |
+| `worktree.notes` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to leave notes on the lines of the branch's change for your review, through its `annotate` tool; sending the draft starts the session ([review](../review.md#notes-from-agents)) | `tree`: `g n` |
 | `worktree.sleep` |  | put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](../tree.md#putting-a-worktree-to-sleep)) | `tree`: `Z` |
 | `worktree.wake` |  | wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](../tree.md#putting-a-worktree-to-sleep)) |  |
 | `worktree.status_todo` |  | mark the worktree selected in the tree as to do, which its row shows and the tree's filter finds by `status:todo` ([details](../tree.md#saying-how-a-worktrees-work-stands)) |  |
@@ -227,6 +228,8 @@ changes them ([keys](../keys.md)).
 | `diff.search_prev` |  | in a diff tab, bring the cursor to the previous line holding what was searched for, going round at the start | `viewer`: `N` |
 | `diff.unfold` |  | in a diff tab, show the file the cursor is in whole, its unchanged lines unfolded, or as its hunks again ([details](../details.md#diff-tabs)) | `viewer`: `z a` |
 | `diff.viewed` |  | in a diff tab, mark the file the cursor is in viewed, which folds it and checks it off in the list until its diff changes, or not viewed ([review](../review.md#viewed-files)) | `viewer`: `V` |
+| `diff.next_note` |  | in a diff tab, move to the next line an agent left a note under ([review](../review.md#notes-from-agents)) | `viewer`: `] n` |
+| `diff.prev_note` |  | in a diff tab, move to the previous line an agent left a note under | `viewer`: `[ n` |
 | `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
 | `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
@@ -445,6 +448,7 @@ changes them ([keys](../keys.md)).
 "d" = "worktree.diff"
 "g r" = "worktree.review"
 "g e" = "worktree.explain"
+"g n" = "worktree.notes"
 "p" = "workspace.pin"
 "S" = "tree.sort"
 "g h s" = "tree.hide_sleeping"
@@ -652,6 +656,8 @@ changes them ([keys](../keys.md)).
 "N" = "diff.search_prev"
 "z a" = "diff.unfold"
 "V" = "diff.viewed"
+"] n" = "diff.next_note"
+"[ n" = "diff.prev_note"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

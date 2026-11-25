@@ -125,6 +125,7 @@ pub enum Action {
     WorktreeDiff,
     WorktreeReview,
     WorktreeExplain,
+    WorktreeNotes,
     WorktreeSleep,
     WorktreeWake,
     WorktreeStatusTodo,
@@ -229,6 +230,8 @@ pub enum Action {
     DiffSearchPrev,
     DiffUnfold,
     DiffViewed,
+    DiffNextNote,
+    DiffPrevNote,
     DiffFiles,
     DiffPictures,
     GithubNext,
@@ -606,6 +609,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeExplain, "worktree.explain", "open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to explain the branch's change against its base; sending the draft starts the session ([details](tree.md#a-branch-against-its-base))")
         .icon(Icon::GitBranch)
         .row("Explain branch with AI…", Start),
+    S::new(A::WorktreeNotes, "worktree.notes", "open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to leave notes on the lines of the branch's change for your review, through its `annotate` tool; sending the draft starts the session ([review](review.md#notes-from-agents))")
+        .icon(Icon::GitBranch)
+        .row("Notes on branch with AI…", Start),
     S::new(A::WorktreeSleep, "worktree.sleep", "put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](tree.md#putting-a-worktree-to-sleep))")
         .icon(Icon::SunMoon)
         .row("Sleep worktree…", End),
@@ -755,6 +761,8 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::DiffSearchPrev, "diff.search_prev", "in a diff tab, bring the cursor to the previous line holding what was searched for, going round at the start").says("Previous match"),
     S::new(A::DiffUnfold, "diff.unfold", "in a diff tab, show the file the cursor is in whole, its unchanged lines unfolded, or as its hunks again ([details](details.md#diff-tabs))").says("Unfold the file"),
     S::new(A::DiffViewed, "diff.viewed", "in a diff tab, mark the file the cursor is in viewed, which folds it and checks it off in the list until its diff changes, or not viewed ([review](review.md#viewed-files))").says("Mark viewed"),
+    S::new(A::DiffNextNote, "diff.next_note", "in a diff tab, move to the next line an agent left a note under ([review](review.md#notes-from-agents))").says("Next note"),
+    S::new(A::DiffPrevNote, "diff.prev_note", "in a diff tab, move to the previous line an agent left a note under").says("Previous note"),
     S::new(A::DiffFiles, "diff.files", "in a diff tab, show or hide the list of files changed; kept for the worktree").says("Show or hide the files"),
     S::new(A::DiffPictures, "diff.pictures", "in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree").says("Compare pictures another way"),
     S::new(A::GithubNext, "github.next", "in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](tree.md#writing-on-a-pull-request-or-an-issue))").says("Next card"),
@@ -1057,6 +1065,7 @@ mod tests {
             WorktreeDiff,
             WorktreeReview,
             WorktreeExplain,
+            WorktreeNotes,
             WorktreeSleep,
             WorktreeWake,
             WorktreeStatusTodo,
@@ -1161,6 +1170,8 @@ mod tests {
             DiffSearchPrev,
             DiffUnfold,
             DiffViewed,
+            DiffNextNote,
+            DiffPrevNote,
             DiffFiles,
             DiffPictures,
             GithubNext,

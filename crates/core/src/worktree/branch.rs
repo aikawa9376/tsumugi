@@ -60,6 +60,9 @@ fn prompt(action: &Action, since: Option<&str>) -> String {
         Action::WorktreeReview => {
             "Review the change of this branch. Name each problem you find: bugs first, then risks, then what could be simpler, each with its file and lines and why it matters. Do not edit any file."
         }
+        Action::WorktreeNotes => {
+            "Leave notes for the person about to review the change of this branch, with your `annotate` tool: on the lines where a reader needs to know why the code is as it is, or what to check closely, a few words each. Leave a few notes where they help, not one per line, and do not edit any file. Finish by saying how many notes you left."
+        }
         _ => {
             "Explain the change of this branch to someone about to review it: what it sets out to do, how it does it file by file, and what to look at closely. Do not edit any file."
         }
@@ -156,6 +159,8 @@ mod tests {
         assert!(review.contains("Review"));
         assert!(review.contains("git diff m"));
         assert!(review.contains("Do not edit"));
+        let notes = prompt(&Action::WorktreeNotes, Some("m"));
+        assert!(notes.contains("annotate"));
         let explain = prompt(&Action::WorktreeExplain, None);
         assert!(explain.contains("Explain"));
         assert!(explain.contains("git diff HEAD"));

@@ -341,9 +341,10 @@ From the row, or its right-click menu ([keys](reference/keys.md#actions)):
 - the branch's change opens in a diff tab: the worktree against its base, or
   what is not committed where the branch cannot be compared
   ([diff tabs](details.md#diff-tabs));
-- a draft in the worktree asks an agent to review the branch's change or to
-  explain it; sending the draft starts the session, as with the
-  [AI actions](ai-actions.md).
+- a draft in the worktree asks an agent to review the branch's change, to
+  explain it, or to leave notes on it for your review
+  ([review](review.md#notes-from-agents)); sending the draft starts the
+  session, as with the [AI actions](ai-actions.md).
 
 ## Merging a worktree into main
 

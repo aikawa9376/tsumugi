@@ -148,6 +148,7 @@ pub fn entries(
                 offer(Action::WorktreeDiff),
                 offer(Action::WorktreeReview),
                 offer(Action::WorktreeExplain),
+                offer(Action::WorktreeNotes),
                 offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),
@@ -165,6 +166,7 @@ pub fn entries(
                 offer(Action::WorktreeDiff),
                 offer(Action::WorktreeReview),
                 offer(Action::WorktreeExplain),
+                offer(Action::WorktreeNotes),
                 offer(Action::WorktreeCleanup),
                 offer(Action::WorkspaceRemove),
             ])

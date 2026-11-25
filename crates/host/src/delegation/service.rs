@@ -19,6 +19,7 @@ mod commands;
 #[cfg(test)]
 mod fixtures;
 mod models;
+mod review;
 mod serve;
 mod watcher;
 

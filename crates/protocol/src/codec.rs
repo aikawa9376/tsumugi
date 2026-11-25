@@ -134,6 +134,7 @@ mod tests {
                 anchor: anchor.clone(),
                 quoted: vec!["a\tb".into(), "".into()],
                 text: "なぜ?\n理由".into(),
+                author: None,
             })),
         };
         assert!(change.mutates());
@@ -149,6 +150,7 @@ mod tests {
                     text: "t".into(),
                     resolved: true,
                     sent: true,
+                    author: None,
                 },
                 freshness: Freshness::Outdated,
             }],

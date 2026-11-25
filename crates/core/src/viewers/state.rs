@@ -83,6 +83,8 @@ pub enum Diff {
     Unfold,
     /// Mark the file the cursor is in viewed, or not.
     Viewed,
+    /// Move to the next or previous line an agent's note is under.
+    Note(Way),
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -139,6 +141,8 @@ impl ViewerAction {
             Action::DiffSearchPrev => V::Diff(Diff::Found(Way::Prev)),
             Action::DiffUnfold => V::Diff(Diff::Unfold),
             Action::DiffViewed => V::Diff(Diff::Viewed),
+            Action::DiffNextNote => V::Diff(Diff::Note(Way::Next)),
+            Action::DiffPrevNote => V::Diff(Diff::Note(Way::Prev)),
             Action::DiffUnstage => V::Diff(Diff::Unstage),
             Action::DiffDiscard => V::Diff(Diff::Discard),
             Action::DiffStructural => V::Diff(Diff::Choose(Choice::Structural)),

@@ -81,6 +81,11 @@ pub enum Command {
     Browser(tsumugi_protocol::BrowserCommand),
     /// Say how the work of the caller's worktree stands, or read it.
     WorktreeCheckpoint(WorktreeCheckpoint),
+    /// Read the review of the caller's worktree: its comments and notes.
+    ReadReview(ReadReview),
+    /// Leave a note on lines of a change of the caller's worktree, or change
+    /// or delete one the caller left.
+    Annotate(Annotate),
     /// Name the caller's own session anew.
     Rename(Rename),
     /// End the caller's own session, once its user agreed, or a session the
@@ -128,6 +133,7 @@ impl Command {
                 | Self::CleanupWorktrees(_)
                 | Self::MergeWorktree(_)
                 | Self::WorktreeCheckpoint(_)
+                | Self::Annotate(_)
                 | Self::Wait(_)
                 | Self::Browser(
                     tsumugi_protocol::BrowserCommand::Goto { .. }
@@ -480,6 +486,47 @@ pub struct Send {
     /// The recipient's code, or its id, as `sessions` lists them.
     pub to: String,
     pub body: String,
+}
+
+/// Read the review of a worktree.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReadReview {
+    /// The worktree's directory on this work machine; the one you work in when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
+}
+
+/// A note on lines of a change, for the person reviewing it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Annotate {
+    /// The file, as its path from the top of the worktree.
+    #[serde(default)]
+    pub path: Option<String>,
+    /// `new` for lines as they are after the change, the default; `old` for lines the change removed.
+    #[serde(default)]
+    pub side: Option<String>,
+    /// The first line, numbered on that side.
+    #[serde(default)]
+    pub start: Option<u32>,
+    /// The last line; the first when omitted.
+    #[serde(default)]
+    pub end: Option<u32>,
+    /// What the note says: why the lines are as they are, or what to look at.
+    #[serde(default)]
+    pub text: Option<String>,
+    /// The change the lines are of: `branch`, the default, is the worktree against the branch's base, as the reviewer opens it; `uncommitted` is what is not committed; anything else names a commit.
+    #[serde(default)]
+    pub change: Option<String>,
+    /// A note of yours to change to `text`, or to delete with `delete`.
+    #[serde(default)]
+    pub id: Option<u64>,
+    #[serde(default)]
+    pub delete: bool,
+    /// The worktree's directory on this work machine; the one you work in when omitted.
+    #[serde(default)]
+    pub dir: Option<PathBuf>,
 }
 
 /// Say how the work of a worktree stands, for the user and other sessions.

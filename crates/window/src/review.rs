@@ -338,6 +338,7 @@ impl Review_ {
             (_, ViewerAction::Diff(Diff::Found(way))) => self.find(way),
             (_, ViewerAction::Diff(Diff::Unfold)) => self.unfold(),
             (_, ViewerAction::Diff(Diff::Viewed)) => self.viewed(),
+            (_, ViewerAction::Diff(Diff::Note(way))) => go(Go::Note(way)),
             (_, ViewerAction::Diff(Diff::Unstage)) => self.stage(Staging::Unstage),
             (_, ViewerAction::Diff(Diff::Discard)) => self.stage(Staging::Discard),
             (_, ViewerAction::ScrollTop) => go(Go::Top),
@@ -449,13 +450,15 @@ fn LineCell(
 fn Thread(judged: Judged, at: bool, outdated: bool) -> Element {
     let comment = judged.comment;
     let class = format!(
-        "rv-thread{}{}{}",
+        "rv-thread{}{}{}{}",
+        if comment.is_note() { " rv-note" } else { "" },
         if comment.resolved { " resolved" } else { "" },
         if outdated { " outdated" } else { "" },
         if at { " rv-cursor" } else { "" },
     );
     rsx! { div { class,
         div { class: "rv-head",
+            if let Some(author) = &comment.author { span { class: "rv-badge rv-author", title: "A note the session's agent left", "note · {author}" } }
             span { class: "rv-range", "{said(&comment.anchor)}" }
             if outdated { span { class: "rv-badge", title: "The lines changed since it was written; it is not moved to others", "outdated" } }
             if comment.resolved { span { class: "rv-badge", "resolved" } }
@@ -500,6 +503,7 @@ pub(crate) fn ReviewRows(
     let comments = use_signal(Vec::<Judged>::new);
     let armed = use_signal(|| false);
     let mut searching = use_signal(|| None::<String>);
+    let mut hide_notes = use_signal(|| false);
     let mut sought = use_signal(String::new);
     let this = Review_ {
         app,
@@ -670,7 +674,7 @@ pub(crate) fn ReviewRows(
                                 }
                             }
                         }
-                        for judged in reading.ending_at(i) {
+                        for judged in reading.ending_at(i).into_iter().filter(|j| !(hide_notes() && j.comment.is_note())) {
                             Thread { key: "{judged.comment.id}", judged: judged.clone(), at: reading.comment_at(cursor).is_some_and(|c| c.comment.id == judged.comment.id), outdated: false }
                         }
                     }
@@ -745,6 +749,13 @@ pub(crate) fn ReviewRows(
             div { class: "rv-bar",
                 if let Some(notice) = &state.notice { span { class: "rv-notice", "{notice}" } }
                 else { span { class: "rv-dim", "c comment · v mark lines · Enter edit · dd delete · r resolve · s send" } }
+                if all.iter().any(|j| j.comment.is_note()) {
+                    button { class: if hide_notes() { "rv-notes" } else { "rv-notes on" },
+                        title: "Show or hide the notes agents left",
+                        onclick: move |_| { let now = !hide_notes(); hide_notes.set(now); },
+                        if hide_notes() { "Notes hidden" } else { "Notes shown" }
+                    }
+                }
                 span { class: "rv-count", "{open} open · {all.len() - open} resolved" }
             }
         }
