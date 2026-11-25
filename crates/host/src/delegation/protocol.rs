@@ -86,6 +86,9 @@ pub enum Command {
     /// Leave a note on lines of a change of the caller's worktree, or change
     /// or delete one the caller left.
     Annotate(Annotate),
+    /// A file the caller's agent is about to write, or has just written,
+    /// with one of its own tools, told by the hooks around the tool.
+    Writing(Writing),
     /// Name the caller's own session anew.
     Rename(Rename),
     /// End the caller's own session, once its user agreed, or a session the
@@ -527,6 +530,16 @@ pub struct Annotate {
     /// The worktree's directory on this work machine; the one you work in when omitted.
     #[serde(default)]
     pub dir: Option<PathBuf>,
+}
+
+/// A file an agent writes with one of its tools, read before and after.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Writing {
+    pub path: PathBuf,
+    /// The tool's call, which ties the read after to the one before.
+    pub call: String,
+    /// Read after the write rather than before it.
+    pub done: bool,
 }
 
 /// Say how the work of a worktree stands, for the user and other sessions.

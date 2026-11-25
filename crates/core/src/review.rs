@@ -44,6 +44,24 @@ impl<'a> Reading<'a> {
         }
     }
 
+    /// Who wrote each line, of what agents are known to have written of the
+    /// worktree's files as they read now: lines of the new side only, and
+    /// none where the new side is not the worktree.
+    pub fn written_by<'w>(&self, written: &'w [review::Written]) -> Vec<Option<&'w str>> {
+        if !matches!(self.rev, Rev::WorkingCopy | Rev::Base(_)) || written.is_empty() {
+            return vec![None; self.lines.len()];
+        }
+        (0..self.lines.len())
+            .map(|i| {
+                let kind = self.lines[i].kind;
+                if !matches!(kind, DiffKind::Added | DiffKind::Context) {
+                    return None;
+                }
+                review::written_by(written, self.path_at(i), self.numbers[i].new?)
+            })
+            .collect()
+    }
+
     /// Where each file of the diff begins: its heading, or the first line
     /// when there is none.
     pub fn file_starts(&self) -> Vec<usize> {
@@ -523,6 +541,43 @@ mod tests {
             line(Hunk, "@@ -1 +1 @@"),
             line(Added, "+one"),
         ]
+    }
+
+    #[test]
+    fn lines_of_the_new_side_are_told_by_who_wrote_them_only_where_it_is_the_worktree() {
+        use DiffKind::*;
+        use tsumugi_model::review::{Written, WrittenRun};
+        let lines = vec![
+            line(File, "a.rs"),
+            line(Hunk, "@@ -1,2 +1,2 @@"),
+            line(Context, " one"),
+            line(Removed, "-two"),
+            line(Added, "+TWO"),
+            line(File, "b.rs"),
+            line(Hunk, "@@ -0,0 +1 @@"),
+            line(Added, "+new"),
+        ];
+        let run = |path: &str, start, end| Written {
+            path: path.into(),
+            runs: vec![WrittenRun {
+                start,
+                end,
+                by: "s1 fixer".into(),
+            }],
+        };
+        let written = [run("a.rs", 1, 2), run("b.rs", 1, 1)];
+        let w = Some("s1 fixer");
+        for rev in [Rev::WorkingCopy, Rev::Base("abc".into())] {
+            let r = Reading::new(&lines, "a.rs", &rev, &[]);
+            assert_eq!(
+                r.written_by(&written),
+                [None, None, w, None, w, None, None, w],
+                "{rev:?}"
+            );
+        }
+        let commit = Rev::Commit("abc".into());
+        let r = Reading::new(&lines, "a.rs", &commit, &[]);
+        assert!(r.written_by(&written).iter().all(Option::is_none));
     }
 
     #[test]

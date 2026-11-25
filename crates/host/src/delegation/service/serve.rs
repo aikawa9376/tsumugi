@@ -104,6 +104,7 @@ async fn dispatch(context: &Context, request: Request) -> Result<Value> {
         }
         Command::ReadReview(asked) => super::review::read(&caller, asked).await,
         Command::Annotate(asked) => super::review::annotate(&caller, asked).await,
+        Command::Writing(asked) => super::review::writing(&caller, asked).await,
         Command::Rename(asked) => rename(context, &caller, asked).await,
         Command::Close(asked) => close(context, &caller, asked).await,
         Command::ReportDone(asked) => report_done(context, &caller, asked).await,

@@ -186,6 +186,11 @@ pub enum Ask {
     Viewed {
         worktree: PathBuf,
     },
+    /// The lines of a worktree's files its sessions' agents wrote, as the
+    /// files read now.
+    Written {
+        worktree: PathBuf,
+    },
     /// Mark the file of `mark` viewed, or not; answered as `Viewed` is.
     MarkViewed {
         worktree: PathBuf,
@@ -647,6 +652,10 @@ pub enum Answer {
     /// The files of a worktree's changes marked viewed.
     Viewed {
         marks: Vec<tsumugi_model::review::Viewed>,
+    },
+    /// The lines of a worktree's files its sessions' agents wrote.
+    Written {
+        files: Vec<tsumugi_model::review::Written>,
     },
     /// The commits two revisions compared name, by their full ids.
     Compared {

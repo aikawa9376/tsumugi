@@ -79,6 +79,7 @@ pub mod workspaces;
 mod worktree_cli;
 pub mod worktree_setup;
 mod worktrees;
+pub mod written_lines;
 
 use tsumugi_core::content;
 

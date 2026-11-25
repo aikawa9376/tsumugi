@@ -49,3 +49,5 @@
 .rv-author { color:#8a63d2; }
 .rv-notes { margin-left:auto; cursor:pointer; color:var(--text-2); background:none; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font:inherit; font-size:var(--ui-font-small); }
 .rv-notes.on { border-color:#8a63d2; }
+.rv-no.rv-ai { color:#8a63d2; box-shadow:inset -2px 0 0 #8a63d2; }
+.rv-by { margin-left:auto; padding:0 8px; color:#8a63d2; font-size:var(--ui-font-small); white-space:nowrap; }

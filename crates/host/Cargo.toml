@@ -29,6 +29,7 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
+similar = { version = "3.2.1", default-features = false, features = ["std"] }
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 toml.workspace = true
 thiserror.workspace = true

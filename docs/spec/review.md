@@ -38,6 +38,23 @@ The agent can also read the worktree's review: every comment and note, with
 its file, side, lines and whether it is outdated, resolved or sent. It cannot
 change or resolve a comment of yours.
 
+## Lines agents wrote
+
+A diff of the worktree marks, in the gutter beside the line numbers of its
+new side, every line a session's agent wrote, and names that session on the
+line under the cursor and when the mark is pointed at. A line is the agent's
+when the agent wrote it with one of its own file-writing tools, in a session
+Tsumugi started with Claude Code; whatever else changes a file, a person, a
+shell command or a formatter, leaves the lines it changed unmarked.
+
+The marks follow each file as it reads now, committed or not: a line keeps
+its mark wherever it moves, loses it once a person changes it, and gets it
+back if the change is undone. A diff of commits, or of two revisions, shows
+no marks.
+
+The marks are kept on the work host, per worktree, in files of Tsumugi's
+own, and never in the repository.
+
 ## Viewed files
 
 A file of the stream can be marked viewed, which folds it and checks it off in
@@ -82,3 +99,10 @@ is not marked as sent.
 - A note is kept and checked as a comment is, and is told apart from one.
 - An agent reads every comment and note of its own worktree only.
 - A viewed mark goes once the file's diff changes, and stays while it does not.
+- A write marks the lines it changed or added and no other.
+- A person's edit turns the line back, and undoing it brings the mark back.
+- A line moved keeps who wrote it.
+- What a person changed between two writes is not taken by the second.
+- A write the file was not read before marks nothing.
+- Lines of the new side are marked only where it is the worktree.
+- The plugin tells Tsumugi of each write before and after it.

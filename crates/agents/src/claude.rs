@@ -19,6 +19,7 @@ pub mod models;
 mod past;
 pub mod places;
 pub(crate) mod plugin;
+pub use plugin::WRITING_TOOLS;
 pub mod subagents;
 mod transcript;
 pub mod usage;

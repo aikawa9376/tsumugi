@@ -66,6 +66,8 @@ struct Review_ {
     armed: Signal<bool>,
     /// What is being written to search for, while it is.
     searching: Signal<Option<String>>,
+    /// The lines of the worktree's files its sessions' agents wrote.
+    written: Signal<Vec<notes::Written>>,
     /// What was last searched for.
     sought: Signal<String>,
     onviewed: Option<EventHandler<String>>,
@@ -187,7 +189,23 @@ impl Review_ {
     /// Read what the work host keeps again, and say why when it cannot.
     fn reload(&self) {
         let (this, mut pane, mut comments) = (self.clone(), self.pane, self.comments);
+        let mut written = self.written;
         spawn(async move {
+            // Only the worktree's files as they read now carry the marks.
+            let now = if matches!(this.rev, Rev::WorkingCopy | Rev::Base(_)) {
+                let ask = Ask::Written {
+                    worktree: this.worktree.clone(),
+                };
+                match this.app.ask_in(&this.environment, ask).await {
+                    Answer::Written { files } => files,
+                    _ => Vec::new(),
+                }
+            } else {
+                Vec::new()
+            };
+            if *written.peek() != now {
+                written.set(now);
+            }
             let ask = Ask::Review {
                 worktree: this.worktree.clone(),
             };
@@ -428,6 +446,9 @@ fn LineCell(
     i: usize,
     line: DiffLine,
     number: Option<u32>,
+    /// The session that wrote the line, on the new side.
+    #[props(default)]
+    by: Option<String>,
     marks: Vec<(usize, usize)>,
     class: String,
     pane: Signal<Pane>,
@@ -440,9 +461,21 @@ fn LineCell(
                 let mut pane = pane;
                 pane.write().place(i);
             },
-            span { class: "rv-no", "{number.map(|n| n.to_string()).unwrap_or_default()}" }
+            NewNumber { number, by: by.clone() }
             Words { text: line.text.clone(), marks }
+            if class.contains("rv-cursor") && let Some(by) = by { span { class: "rv-by", "written by {by}" } }
         }
+    }
+}
+
+/// A line's number on the new side, marked in the gutter when a session's
+/// agent wrote the line.
+#[component]
+fn NewNumber(number: Option<u32>, by: Option<String>) -> Element {
+    let shown = number.map(|n| n.to_string()).unwrap_or_default();
+    match by {
+        Some(by) => rsx! { span { class: "rv-no rv-ai", title: "Written by {by}", "{shown}" } },
+        None => rsx! { span { class: "rv-no", "{shown}" } },
     }
 }
 
@@ -506,6 +539,7 @@ pub(crate) fn ReviewRows(
     let pane = use_signal(Pane::default);
     let comments = use_signal(Vec::<Judged>::new);
     let armed = use_signal(|| false);
+    let written = use_signal(Vec::<notes::Written>::new);
     let mut searching = use_signal(|| None::<String>);
     let mut hide_notes = use_signal(|| false);
     let mut sought = use_signal(String::new);
@@ -520,12 +554,13 @@ pub(crate) fn ReviewRows(
         comments,
         armed,
         searching,
+        written,
         sought,
         onviewed,
     };
     // What the work host keeps is read when the diff is, so a change to the
     // code shows at once which comments no longer stand.
-    use_effect(use_reactive((&lines, &worktree), {
+    use_effect(use_reactive((&lines, &worktree, &rev), {
         let this = this.clone();
         move |_| this.reload()
     }));
@@ -608,6 +643,12 @@ pub(crate) fn ReviewRows(
     };
     let marks = word_marks(&lines);
     let folded = folds(&lines);
+    let written_now = written.read().clone();
+    let by: Vec<Option<String>> = reading
+        .written_by(&written_now)
+        .into_iter()
+        .map(|by| by.map(str::to_string))
+        .collect();
     rsx! {
         div { id: "{id}", class: "review",
             div { class: if two { "rv-lines two" } else { "rv-lines" },
@@ -631,7 +672,7 @@ pub(crate) fn ReviewRows(
                         Row::Whole(i) if two && lines[i].kind == DiffKind::Context && numbers[i].old.is_some() => rsx! {
                             div { key: "{k}", class: "rv-row2",
                                 LineCell { i, line: lines[i].clone(), number: numbers[i].old, marks: Vec::new(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
-                                LineCell { i, line: lines[i].clone(), number: numbers[i].new, marks: Vec::new(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
+                                LineCell { i, line: lines[i].clone(), number: numbers[i].new, by: by[i].clone(), marks: Vec::new(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
                             }
                         },
                         Row::Whole(i) => rsx! {
@@ -643,8 +684,9 @@ pub(crate) fn ReviewRows(
                                     pane.write().place(i);
                                 },
                                 span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
-                                span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
+                                NewNumber { number: numbers[i].new, by: by[i].clone() }
                                 if lines[i].kind == DiffKind::Difft { "{lines[i].text}" } else { Words { text: lines[i].text.clone(), marks: marks[i].clone() } }
+                                if i == cursor && let Some(by) = &by[i] { span { class: "rv-by", "written by {by}" } }
                                 if lines[i].kind == DiffKind::File && viewed.contains(&lines[i].text) {
                                     span { class: "rv-viewed", title: "Viewed: folded until its diff changes (V)", "✓ viewed" }
                                 }
@@ -656,7 +698,7 @@ pub(crate) fn ReviewRows(
                                     LineCell { i, line: lines[i].clone(), number: numbers[i].old, marks: marks[i].clone(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
                                 } else { div { class: "rv-line rv-empty" } }
                                 if let Some(i) = new {
-                                    LineCell { i, line: lines[i].clone(), number: numbers[i].new, marks: marks[i].clone(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
+                                    LineCell { i, line: lines[i].clone(), number: numbers[i].new, by: by[i].clone(), marks: marks[i].clone(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
                                 } else { div { class: "rv-line rv-empty" } }
                             }
                         },
@@ -670,8 +712,9 @@ pub(crate) fn ReviewRows(
                                         pane.write().place(i);
                                     },
                                     span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
-                                    span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
+                                    NewNumber { number: numbers[i].new, by: by[i].clone() }
                                     Words { text: lines[i].text.clone(), marks: marks[i].clone() }
+                                    if i == cursor && let Some(by) = &by[i] { span { class: "rv-by", "written by {by}" } }
                                 }
                             }
                         },

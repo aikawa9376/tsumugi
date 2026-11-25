@@ -321,6 +321,16 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 .await
                 .map(|marks| Answer::Viewed { marks })
         }
+        Ask::Written { worktree } => {
+            let dir = crate::paths::instance_state();
+            blocking(move || {
+                crate::written_lines::load(&dir, &worktree, |path| {
+                    std::fs::read(worktree.join(path)).ok()
+                })
+            })
+            .await
+            .map(|files| Answer::Written { files })
+        }
         Ask::MarkViewed {
             worktree,
             mark,

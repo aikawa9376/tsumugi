@@ -180,6 +180,60 @@ async fn quoted(worktree: &Path, rev: &Rev, anchor: &Anchor) -> Result<Vec<Strin
     tsumugi_model::review::text_at(&lines, anchor).ok_or_else(not_there)
 }
 
+/// The file the caller's agent is about to write, or has just written, read
+/// so the lines the write changes are marked the caller's. It answers at
+/// once, whatever it finds: a file in no worktree is not followed.
+pub(super) async fn writing(caller: &Session, asked: protocol::Writing) -> Result<Value> {
+    let file = if asked.path.is_absolute() {
+        asked.path
+    } else {
+        caller.cwd.join(asked.path)
+    };
+    let Some((worktree, path)) = place_of(&file).await else {
+        return Ok(Value::Null);
+    };
+    let by = author(caller);
+    let directory = crate::paths::instance_state();
+    let kept = tokio::task::spawn_blocking(move || {
+        let text = match std::fs::read(&file) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(e.to_string()),
+        };
+        if asked.done {
+            crate::written_lines::after(&directory, &worktree, &path, &text, &asked.call, &by)
+        } else {
+            crate::written_lines::before(&directory, &worktree, &path, &text, &asked.call)
+        }
+    })
+    .await
+    .map_err(Error::storage)?;
+    if let Err(why) = kept {
+        tracing::debug!("the lines written could not be kept: {why}");
+    }
+    Ok(Value::Null)
+}
+
+/// The worktree `file` is in, and its path from the worktree's top, even
+/// before the file and the folders it is to be written into exist.
+async fn place_of(file: &Path) -> Option<(PathBuf, String)> {
+    let mut there = file.parent()?;
+    while !there.is_dir() {
+        there = there.parent()?;
+    }
+    let worktree = tsumugi_vcs::inspect(there).await?.path;
+    let top = std::fs::canonicalize(&worktree).ok()?;
+    let rest = file.strip_prefix(there).ok()?;
+    let file = std::fs::canonicalize(there).ok()?.join(rest);
+    let path = file.strip_prefix(&top).ok()?;
+    let path = path
+        .components()
+        .map(|c| c.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>()?
+        .join("/");
+    (!path.is_empty() && !path.starts_with(".git/")).then_some((worktree, path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,5 +244,25 @@ mod tests {
         assert_eq!(side_of(Some("new")).unwrap(), Side::New);
         assert_eq!(side_of(Some("old")).unwrap(), Side::Old);
         assert!(side_of(Some("left")).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_file_is_placed_in_its_worktree_before_it_or_its_folders_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        let git = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&repo)
+            .status()
+            .unwrap();
+        assert!(git.success());
+        let (worktree, path) = place_of(&repo.join("src/new/a.rs")).await.unwrap();
+        assert_eq!(path, "src/new/a.rs");
+        assert_eq!(
+            std::fs::canonicalize(worktree).unwrap(),
+            std::fs::canonicalize(&repo).unwrap()
+        );
+        assert_eq!(place_of(&dir.path().join("loose.txt")).await, None);
     }
 }

@@ -35,6 +35,7 @@ impl Ask {
                 | Self::Drafts
                 | Self::Review { .. }
                 | Self::Viewed { .. }
+                | Self::Written { .. }
                 | Self::Picture { .. }
                 | Self::DiffPicture { .. }
                 | Self::Compare { .. }

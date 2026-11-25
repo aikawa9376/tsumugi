@@ -158,6 +158,27 @@ mod tests {
     }
 
     #[test]
+    fn the_lines_agents_wrote_round_trip_and_asking_for_them_does_not_mutate() {
+        use crate::{Answer, Ask};
+        use tsumugi_model::review::{Written, WrittenRun};
+        let ask = Ask::Written {
+            worktree: "/project with spaces/日本語".into(),
+        };
+        assert!(!ask.mutates());
+        round_trips(ask);
+        round_trips(Answer::Written {
+            files: vec![Written {
+                path: "日本語/メモ 1.md".into(),
+                runs: vec![WrittenRun {
+                    start: 2,
+                    end: 5,
+                    by: "5rsu 名前".into(),
+                }],
+            }],
+        });
+    }
+
+    #[test]
     fn schedule_requests_and_listings_round_trip_and_all_change_the_host() {
         use crate::Ask;
         use tsumugi_model::{

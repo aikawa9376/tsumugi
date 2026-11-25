@@ -361,6 +361,36 @@ pub fn digest(lines: &[DiffLine]) -> String {
     format!("{hash:016x}")
 }
 
+/// Lines of a worktree's file a session's agent wrote, as the file reads now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Written {
+    /// From the top of the worktree.
+    pub path: String,
+    /// The lines, in order and apart from each other.
+    pub runs: Vec<WrittenRun>,
+}
+
+/// Lines one after another the same session wrote, numbered from 1.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WrittenRun {
+    pub start: u32,
+    /// The last line, never before `start`.
+    pub end: u32,
+    /// The session: its code, then its name.
+    pub by: String,
+}
+
+/// Who wrote line `line` of the file at `path`, numbered as it reads now.
+pub fn written_by<'a>(written: &'a [Written], path: &str, line: u32) -> Option<&'a str> {
+    written
+        .iter()
+        .find(|w| w.path == path)?
+        .runs
+        .iter()
+        .find(|r| (r.start..=r.end).contains(&line))
+        .map(|r| r.by.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -633,5 +663,24 @@ Review comments on your changes. Each comment names a file, the side of the chan
         assert!(!text.contains("line 1"), "{text}");
         assert!(text.contains("line 2 (uncommitted changes, outdated: the code changed since this comment was made)"), "{text}");
         assert!(prompt(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_line_is_told_by_the_run_it_falls_in_of_its_own_file() {
+        let run = |start, end, by: &str| WrittenRun {
+            start,
+            end,
+            by: by.into(),
+        };
+        let written = [Written {
+            path: "a".into(),
+            runs: vec![run(2, 3, "s1 one"), run(5, 5, "s2 two")],
+        }];
+        assert_eq!(written_by(&written, "a", 1), None);
+        assert_eq!(written_by(&written, "a", 2), Some("s1 one"));
+        assert_eq!(written_by(&written, "a", 3), Some("s1 one"));
+        assert_eq!(written_by(&written, "a", 4), None);
+        assert_eq!(written_by(&written, "a", 5), Some("s2 two"));
+        assert_eq!(written_by(&written, "b", 2), None);
     }
 }

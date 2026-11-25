@@ -21,8 +21,12 @@ pub fn install(program: &Path, dir: &Path) -> std::io::Result<()> {
     std::fs::write(hooks.join("hooks.json"), self::hooks(program))
 }
 
+/// The tools Claude Code writes a file with, each naming it `file_path`.
+pub const WRITING_TOOLS: [&str; 3] = ["Edit", "MultiEdit", "Write"];
+
 /// The hooks that ask `program` what to tell Claude: once a conversation is
-/// cleared and as each prompt arrives.
+/// cleared and as each prompt arrives; and that tell it of each file Claude
+/// is about to write and has written.
 fn hooks(program: &Path) -> String {
     let asked = serde_json::json!([{
         "type": "command",
@@ -32,6 +36,8 @@ fn hooks(program: &Path) -> String {
     let hooks = serde_json::json!({"hooks": {
         "SessionStart": [{"matcher": "clear", "hooks": asked}],
         "UserPromptSubmit": [{"hooks": asked}],
+        "PreToolUse": [{"matcher": WRITING_TOOLS.join("|"), "hooks": asked}],
+        "PostToolUse": [{"matcher": WRITING_TOOLS.join("|"), "hooks": asked}],
     }});
     serde_json::to_string_pretty(&hooks).expect("the hooks are JSON")
 }
@@ -79,6 +85,24 @@ mod tests {
         assert_eq!(start["hooks"][0]["command"], asked);
         let prompt = &hooks["hooks"]["UserPromptSubmit"][0];
         assert_eq!(prompt["hooks"][0]["command"], asked);
+    }
+
+    #[test]
+    fn the_plugin_tells_tsumugi_of_each_write_before_and_after_it() {
+        let dir = tempfile::tempdir().unwrap();
+        install(Path::new("/bin/tsumugi"), dir.path()).unwrap();
+        let hooks: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("hooks/hooks.json")).unwrap(),
+        )
+        .unwrap();
+        for event in ["PreToolUse", "PostToolUse"] {
+            let around = &hooks["hooks"][event][0];
+            assert_eq!(around["matcher"], "Edit|MultiEdit|Write", "{event}");
+            assert_eq!(
+                around["hooks"][0]["command"], "/bin/tsumugi mcp hook",
+                "{event}"
+            );
+        }
     }
 
     #[test]

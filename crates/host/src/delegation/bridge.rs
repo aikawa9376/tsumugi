@@ -624,12 +624,19 @@ async fn rpc_error<W: AsyncWrite + Unpin>(
 
 /// What a Claude Code hook `event` is answered with: what the work host
 /// tells the agent as a prompt arrives or once the conversation was cleared;
-/// nothing for any other event, or while the work host cannot say.
+/// nothing for any other event, or while the work host cannot say. Around a
+/// tool that writes a file, the work host is told so and nothing is said.
 async fn hook(event: &Value, daemon: impl Daemon) -> Option<Value> {
     let name = event["hook_event_name"].as_str()?;
     let cleared = match name {
         "UserPromptSubmit" => false,
         "SessionStart" if event["source"] == "clear" => true,
+        "PreToolUse" | "PostToolUse" => {
+            if let Some(writing) = writing(event, name == "PostToolUse") {
+                let _ = daemon.ask(Command::Writing(writing), None).await;
+            }
+            return None;
+        }
         _ => return None,
     };
     let answer = daemon.ask(Command::Prompted { cleared }, None).await.ok()?;
@@ -637,6 +644,25 @@ async fn hook(event: &Value, daemon: impl Daemon) -> Option<Value> {
         .ok()?
         .note?;
     Some(json!({"hookSpecificOutput": {"hookEventName": name, "additionalContext": note}}))
+}
+
+/// The file a writing tool's hook `event` names, read after the tool ran
+/// when `done`.
+fn writing(event: &Value, done: bool) -> Option<super::protocol::Writing> {
+    let tool = event["tool_name"].as_str()?;
+    if !tsumugi_agents::claude::WRITING_TOOLS.contains(&tool) {
+        return None;
+    }
+    let path = Path::new(event["tool_input"]["file_path"].as_str()?);
+    let path = match event["cwd"].as_str() {
+        Some(cwd) if path.is_relative() => Path::new(cwd).join(path),
+        _ => path.to_path_buf(),
+    };
+    Some(super::protocol::Writing {
+        path,
+        call: event["tool_use_id"].as_str()?.to_string(),
+        done,
+    })
 }
 
 /// `tsumugi mcp hook`: answers the hook event on standard input. It always
@@ -784,6 +810,39 @@ mod tests {
             assert_eq!(hook(&event, daemon.clone()).await, None, "{source}");
             assert!(daemon.asked.lock().unwrap().is_empty(), "{source}");
         }
+    }
+
+    #[test]
+    fn a_writing_tool_s_hooks_name_its_file_and_call_and_other_tools_name_none() {
+        let event = |tool: &str, path: &str| {
+            json!({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": "/w",
+                "tool_use_id": "toolu_1", "tool_input": {"file_path": path}})
+        };
+        let told = writing(&event("Edit", "/w/a.rs"), false).unwrap();
+        assert_eq!(
+            told,
+            super::super::protocol::Writing {
+                path: "/w/a.rs".into(),
+                call: "toolu_1".into(),
+                done: false,
+            }
+        );
+        assert_eq!(
+            writing(&event("Write", "b.rs"), true).unwrap().path,
+            Path::new("/w/b.rs")
+        );
+        assert!(writing(&event("Read", "/w/a.rs"), false).is_none());
+    }
+
+    #[tokio::test]
+    async fn the_work_host_is_told_of_a_write_and_the_agent_nothing() {
+        let daemon = Fake::new();
+        for name in ["PreToolUse", "PostToolUse"] {
+            let event = json!({"hook_event_name": name, "tool_name": "Write",
+                "tool_use_id": "toolu_1", "tool_input": {"file_path": "/w/a", "content": "x"}});
+            assert_eq!(hook(&event, daemon.clone()).await, None);
+        }
+        assert_eq!(*daemon.asked.lock().unwrap(), ["writing", "writing"]);
     }
 
     #[tokio::test]
