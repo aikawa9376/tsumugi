@@ -50,4 +50,5 @@ tsumugi-model = { workspace = true, features = ["testing"] }
 tsumugi-protocol = { workspace = true, features = ["testing"] }
 libc.workspace = true
 tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 wuff = "0.2.10"

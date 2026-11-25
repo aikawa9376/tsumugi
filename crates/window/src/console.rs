@@ -98,6 +98,9 @@ pub struct Hub {
     pub attaching: Rc<RefCell<std::collections::HashSet<Tab>>>,
     /// Told which pane has new output.
     pub wake: mpsc::UnboundedSender<Tab>,
+    /// Notified each time a pane on screen is drawn anew, so a display
+    /// that draws it elsewhere does so at once.
+    pub(crate) drawn: Rc<tokio::sync::Notify>,
     /// The theme's palette, which a new theme replaces.
     pub palette: Signal<Palette>,
 }
@@ -264,7 +267,11 @@ pub fn ConsoleScreen(
     };
     rsx! {
         div { class: "console-screen", "data-native-pane": "{pane.id()}", style: "background:{background}", onwheel,
-            ScreenView { screen, cell_width, show_cursor: focused, pictures }
+            // Under a native display the page's copy is never seen, and
+            // drawing it at each key keeps the page from the keys.
+            if native.is_none() {
+                ScreenView { screen, cell_width, show_cursor: focused, pictures }
+            }
             Clicks { cell_width: hit_width, cell_height: Some(hit_height), onclick }
         }
         if if remote { pane.program_exited() } else { pane.exited() } {

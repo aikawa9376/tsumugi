@@ -281,28 +281,61 @@ pub(crate) fn use_native_layer(ui: &Ui) {
         }
     });
 }
+/// What woke the display to follow the page.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Woke {
+    /// The tick, which reads the page's layout again.
+    Tick,
+    /// A pane on screen drawn anew.
+    Drawn,
+}
+
+/// The page's layout as the display last read it: the tab it was read for,
+/// the console's rectangle and what a banner covers of it.
+#[derive(Default)]
+struct Shown {
+    tab: Option<Tab>,
+    rect: Option<[f64; 4]>,
+    cover: Option<Option<[f64; 4]>>,
+}
+
+impl Shown {
+    /// The layout to draw `tab` in without asking the page: a redraw of the
+    /// tab whose layout is known. Asking would wait on the page, busy with
+    /// the very keys whose echo is drawn; the tick still asks.
+    fn layout(&self, woke: Woke, tab: Option<&Tab>) -> Option<([f64; 4], Option<[f64; 4]>)> {
+        if woke != Woke::Drawn || self.tab.as_ref() != tab {
+            return None;
+        }
+        Some((self.rect?, self.cover?))
+    }
+}
+
 async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
     let desktop = dioxus::desktop::window();
     let mut layer = None;
     let mut native: Option<Display> = None;
     let mut last_frame = None;
-    let mut last_rect = None;
-    let mut last_cover = None;
+    let mut shown = Shown::default();
     let mut last_font = None;
     let mut last_palette = None;
     let mut last_tab = None;
     let mut last_renderer = None;
     let mut failed = false;
+    // The tick follows the page's layout; a frame drawn is shown at once
+    // rather than at the next tick, which would hold a key's echo back.
     let mut tick = tokio::time::interval(Duration::from_millis(33));
     loop {
-        tick.tick().await;
+        let woke = tokio::select! {
+            _ = tick.tick() => Woke::Tick,
+            () = ui.hub.drawn.notified() => Woke::Drawn,
+        };
         let app = ui.app;
         let renderer = app.config.peek().settings.console.renderer;
         if last_renderer != Some(renderer) {
             native = None;
             last_frame = None;
-            last_rect = None;
-            last_cover = None;
+            shown = Shown::default();
             last_font = None;
             last_palette = None;
             last_renderer = Some(renderer);
@@ -334,15 +367,23 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
                 shown_size.set(None);
             }
             last_frame = None;
+            // Shown again, it reads the layout afresh.
+            shown.tab = None;
             continue;
         }
         let Some(pane) = pane else { continue };
         let zoom = crate::scaling::current();
-        let script = format!(
-            "const c = document.querySelector('#focused-console > .console-screen[data-native-pane=\"{}\"]');",
-            pane.id()
-        );
-        let mut query = document::eval(&format!(
+        let known = shown
+            .layout(woke, tab.as_ref())
+            .filter(|_| native.is_some());
+        let (rect, cover) = match known {
+            Some(known) => known,
+            None => {
+                let script = format!(
+                    "const c = document.querySelector('#focused-console > .console-screen[data-native-pane=\"{}\"]');",
+                    pane.id()
+                );
+                let mut query = document::eval(&format!(
             "{script}\n{}",
             "
              if (!c || !c.isConnected) { dioxus.send(null); } else {
@@ -355,38 +396,44 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
                dioxus.send([rect, cover ? [cover.x-rect[0],cover.y-rect[1],cover.width,cover.height] : null]);
              }"
         ));
-        let (rect, cover) = match query.recv::<Option<([f64; 4], Option<[f64; 4]>)>>().await {
-            Ok(Some((rect, cover)))
-                if rect.iter().all(|v| v.is_finite()) && rect[2] > 1.0 && rect[3] > 1.0 =>
-            {
-                (
-                    rect.map(|v| v * zoom),
-                    cover
-                        .filter(|c| c.iter().all(|v| v.is_finite()) && c[2] > 0.0 && c[3] > 0.0)
-                        .map(|c| c.map(|v| v * zoom)),
-                )
-            }
-            _ => {
-                if let Some(display) = &native {
-                    display.widget().hide();
+                let (rect, cover) = match query.recv::<Option<([f64; 4], Option<[f64; 4]>)>>().await
+                {
+                    Ok(Some((rect, cover)))
+                        if rect.iter().all(|v| v.is_finite()) && rect[2] > 1.0 && rect[3] > 1.0 =>
+                    {
+                        (
+                            rect.map(|v| v * zoom),
+                            cover
+                                .filter(|c| {
+                                    c.iter().all(|v| v.is_finite()) && c[2] > 0.0 && c[3] > 0.0
+                                })
+                                .map(|c| c.map(|v| v * zoom)),
+                        )
+                    }
+                    _ => {
+                        if let Some(display) = &native {
+                            display.widget().hide();
+                        }
+                        if shown_size.peek().is_some() {
+                            shown_size.set(None);
+                        }
+                        last_frame = None;
+                        continue;
+                    }
+                };
+                // WebKit may reply after the user switches tabs or opens a dialog.
+                if app.active() != tab || !app.held().is_empty() {
+                    if let Some(display) = &native {
+                        display.widget().hide();
+                    }
+                    if shown_size.peek().is_some() {
+                        shown_size.set(None);
+                    }
+                    continue;
                 }
-                if shown_size.peek().is_some() {
-                    shown_size.set(None);
-                }
-                last_frame = None;
-                continue;
+                (rect, cover)
             }
         };
-        // WebKit may reply after the user switches tabs or opens a dialog.
-        if app.active() != tab || !app.held().is_empty() {
-            if let Some(display) = &native {
-                display.widget().hide();
-            }
-            if shown_size.peek().is_some() {
-                shown_size.set(None);
-            }
-            continue;
-        }
         if native.is_none() {
             if layer.is_none() {
                 match Layer::install(&desktop) {
@@ -429,12 +476,13 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
             last_palette = Some(palette);
             last_frame = None;
         }
-        let geometry_changed = last_rect != Some(rect);
+        let geometry_changed = shown.rect != Some(rect);
         if geometry_changed {
             display.rect(rect);
-            last_rect = Some(rect);
+            shown.rect = Some(rect);
             last_frame = None;
         }
+        shown.tab.clone_from(&tab);
         if !display.widget().is_visible() {
             tracing::debug!(pane = %pane.id(), "native terminal display shown");
         }
@@ -450,9 +498,9 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
                 continue;
             }
         };
-        if geometry_changed || last_cover != Some(cover) {
+        if geometry_changed || shown.cover != Some(cover) {
             display.cover([rect[2], rect[3]], cover);
-            last_cover = Some(cover);
+            shown.cover = Some(cover);
         }
         let css_size = Size {
             cell_width: size.cell_width / zoom,
@@ -482,6 +530,28 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
 mod tests {
     use super::*;
     use tsumugi_term::{Daemon, Pane, Spawn};
+
+    #[test]
+    fn a_redraw_of_the_tab_shown_reuses_its_layout_and_a_tick_or_another_tab_asks_again() {
+        let env = tsumugi_model::EnvironmentId::new("here");
+        let (a, b) = (Tab::Terminal(env.clone(), 1), Tab::Terminal(env, 2));
+        let rect = [1.0, 2.0, 300.0, 200.0];
+        let cover = Some([0.0, 0.0, 300.0, 20.0]);
+        let shown = Shown {
+            tab: Some(a.clone()),
+            rect: Some(rect),
+            cover: Some(cover),
+        };
+        assert_eq!(shown.layout(Woke::Drawn, Some(&a)), Some((rect, cover)));
+        assert_eq!(shown.layout(Woke::Tick, Some(&a)), None);
+        assert_eq!(shown.layout(Woke::Drawn, Some(&b)), None);
+        let unknown = Shown {
+            tab: Some(a.clone()),
+            rect: None,
+            cover: None,
+        };
+        assert_eq!(unknown.layout(Woke::Drawn, Some(&a)), None);
+    }
 
     fn settle() {
         let until = std::time::Instant::now() + Duration::from_millis(160);

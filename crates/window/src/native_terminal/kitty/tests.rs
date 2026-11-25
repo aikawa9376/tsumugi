@@ -56,6 +56,22 @@ fn a_slow_display_keeps_complete_frames_and_coalesces_later_updates() {
     assert_eq!(String::from_utf8(received).unwrap(), "日本語 firstnewest");
 }
 
+#[test]
+fn a_frame_is_written_as_it_is_sent_not_at_the_next_poll() {
+    let mut output = Output::default();
+    let mut received = Vec::new();
+    output.send("first".into(), &mut received).unwrap();
+    assert_eq!(received, b"first");
+    let mut slow = Limited {
+        received: &mut received,
+        allowance: 0,
+    };
+    output.send("second".into(), &mut slow).unwrap();
+    output.send("newest".into(), &mut slow).unwrap();
+    output.flush(&mut received).unwrap();
+    assert_eq!(String::from_utf8(received).unwrap(), "firstnewest");
+}
+
 struct Limited<'a> {
     received: &'a mut Vec<u8>,
     allowance: usize,

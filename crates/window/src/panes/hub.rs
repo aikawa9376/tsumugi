@@ -41,7 +41,14 @@ pub(crate) fn use_hub(app: AppCtx, local: Local) -> Hub {
     let hub = use_hook(|| {
         let (wake, woken) = mpsc::unbounded_channel::<Tab>();
         let panes: Panes = Rc::new(RefCell::new(HashMap::new()));
-        spawn(redraw_woken(app, local, panes.clone(), woken));
+        let drawn = Rc::new(tokio::sync::Notify::new());
+        spawn(redraw_woken(
+            app,
+            local,
+            panes.clone(),
+            drawn.clone(),
+            woken,
+        ));
         Hub {
             daemons: Rc::new(move |environment| app.daemon_of(environment)),
             panes,
@@ -49,6 +56,7 @@ pub(crate) fn use_hub(app: AppCtx, local: Local) -> Hub {
             guis: Rc::new(RefCell::new(HashMap::new())),
             attaching: Rc::new(RefCell::new(HashSet::new())),
             wake,
+            drawn,
             palette,
         }
     });
@@ -66,6 +74,29 @@ pub(crate) fn use_hub(app: AppCtx, local: Local) -> Hub {
     hub
 }
 
+/// The longest a console's redraws are held back: one frame.
+const FRAME: Duration = Duration::from_millis(16);
+
+/// The tabs woken for the next redraw. A wakeup after a quiet frame is
+/// answered at once, so a key's echo is not held back; wakeups that follow
+/// within a frame of the last redraw wait out the rest of it and come
+/// together.
+async fn next_wakeups(
+    woken: &mut mpsc::UnboundedReceiver<Tab>,
+    drawn_at: &mut Option<tokio::time::Instant>,
+) -> Option<Vec<Tab>> {
+    let first = woken.recv().await?;
+    if let Some(at) = *drawn_at {
+        tokio::time::sleep_until(at + FRAME).await;
+    }
+    let mut woke = vec![first];
+    while let Ok(t) = woken.try_recv() {
+        woke.push(t);
+    }
+    *drawn_at = Some(tokio::time::Instant::now());
+    Some(woke)
+}
+
 /// Coalesce wakeups into at most one redraw a frame, and only for the panes
 /// on screen; another pane is drawn afresh when it is shown. The images a
 /// console drew are kept, and a shell that has exited has its windows
@@ -74,15 +105,12 @@ async fn redraw_woken(
     app: AppCtx,
     local: Local,
     panes: Panes,
+    drawn: Rc<tokio::sync::Notify>,
     mut woken: mpsc::UnboundedReceiver<Tab>,
 ) {
     let mut frame = local.frame;
-    while let Some(first) = woken.recv().await {
-        tokio::time::sleep(Duration::from_millis(16)).await;
-        let mut woke = vec![first];
-        while let Ok(t) = woken.try_recv() {
-            woke.push(t);
-        }
+    let mut drawn_at = None;
+    while let Some(woke) = next_wakeups(&mut woken, &mut drawn_at).await {
         for tab in &woke {
             if let Tab::Session(environment, id) = tab {
                 let drawn = panes
@@ -114,6 +142,7 @@ async fn redraw_woken(
             .is_some_and(|t| t.windows().iter().any(|w| woke.contains(&w.shows)));
         if on_screen {
             *frame.write() += 1;
+            drawn.notify_one();
         }
     }
 }
@@ -149,4 +178,52 @@ pub(crate) fn use_redraws_told(app: AppCtx, local: Local) {
             );
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::Instant;
+
+    fn tab(n: u128) -> Tab {
+        Tab::Terminal(tsumugi_model::EnvironmentId::new("here"), n)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_wakeup_after_a_quiet_frame_is_redrawn_at_once() {
+        let (wake, mut woken) = mpsc::unbounded_channel();
+        let mut drawn_at = None;
+        wake.send(tab(1)).unwrap();
+        let start = Instant::now();
+        let woke = next_wakeups(&mut woken, &mut drawn_at).await.unwrap();
+        assert_eq!(woke, vec![tab(1)]);
+        assert_eq!(start.elapsed(), Duration::ZERO);
+        tokio::time::sleep(FRAME * 3).await;
+        wake.send(tab(1)).unwrap();
+        let start = Instant::now();
+        next_wakeups(&mut woken, &mut drawn_at).await.unwrap();
+        assert_eq!(start.elapsed(), Duration::ZERO);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn wakeups_within_a_frame_of_a_redraw_wait_it_out_and_come_together() {
+        let (wake, mut woken) = mpsc::unbounded_channel();
+        let mut drawn_at = None;
+        wake.send(tab(1)).unwrap();
+        next_wakeups(&mut woken, &mut drawn_at).await.unwrap();
+        let drawn = Instant::now();
+        tokio::time::sleep(Duration::from_millis(4)).await;
+        wake.send(tab(1)).unwrap();
+        wake.send(tab(2)).unwrap();
+        let woke = next_wakeups(&mut woken, &mut drawn_at).await.unwrap();
+        assert_eq!(woke, vec![tab(1), tab(2)]);
+        assert_eq!(drawn.elapsed(), FRAME);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_closed_channel_ends_the_redraws() {
+        let (wake, mut woken) = mpsc::unbounded_channel::<Tab>();
+        drop(wake);
+        assert!(next_wakeups(&mut woken, &mut None).await.is_none());
+    }
 }

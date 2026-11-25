@@ -85,6 +85,12 @@ impl Output {
             self.latest = Some(frame);
         }
     }
+    /// `frame` written as far as `writer` takes it now: a frame that waited
+    /// for the next poll would show a key's echo a poll late.
+    fn send(&mut self, frame: String, writer: &mut impl Write) -> io::Result<()> {
+        self.replace(frame);
+        self.flush(writer)
+    }
     fn flush(&mut self, writer: &mut impl Write) -> io::Result<()> {
         loop {
             while self.sent < self.current.len() {
@@ -216,6 +222,10 @@ impl Kitty {
                 "confirm_os_window_close=0",
             ])
             .args(["-o", "cursor_shape_unfocused=unchanged"])
+            // kitty batches its program's output for 3 ms and repaints at
+            // most every 10 ms; a frame here comes whole and only when the
+            // screen changed, so the waits only hold a key's echo back.
+            .args(["-o", "input_delay=0", "-o", "repaint_delay=2"])
             .arg(program)
             .arg("__kitty_display")
             .arg(&socket)
@@ -265,10 +275,17 @@ impl Kitty {
     pub(super) fn feed(&mut self, screen: &tsumugi_term::Screen, focused: bool) {
         // Atomic painting avoids showing cleared rows between complete frames.
         let frame = super::frame(screen, focused);
-        self.output.replace(format!(
+        let frame = format!(
             "\x1b[?2026h\x1b]11;{}\x1b\\{frame}\x1b[?2026l",
             screen.background.hex()
-        ));
+        );
+        match &mut self.stream {
+            // A failure shows again as `poll` writes, which ends the display.
+            Some(stream) => {
+                let _ = self.output.send(frame, stream);
+            }
+            None => self.output.replace(frame),
+        }
     }
     pub(super) fn poll(&mut self) -> Result<Option<Size>, String> {
         if self.child.try_wait().map_err(|e| e.to_string())?.is_some() {
