@@ -43,6 +43,7 @@ pub(crate) fn diff(state: &mut ViewState, row: &Item) -> Vec<Effect> {
             worktree,
             spot: Spot::Files(rev),
             neovim: false,
+            line: None,
         },
     )
 }

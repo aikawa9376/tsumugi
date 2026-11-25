@@ -383,10 +383,12 @@ pub(crate) fn run_menu(state: &mut ViewState, target: Target, action: Action) ->
         ),
         Target::Row(item) | Target::Start(item) => (Msg::TreeSelect(Some(item)), Area::Sidebar),
         Target::Tab(tab) => (Msg::TabReveal(tab), Area::Console),
-        Target::Link { at, .. } | Target::Pinned { at, .. } | Target::Commit { at } => {
-            (Msg::DetailsSelect(at), Area::Details)
-        }
-        Target::Panel => (Msg::Focus(Area::Details), Area::Details),
+        Target::Link { at, .. }
+        | Target::Pinned { at, .. }
+        | Target::Commit { at }
+        | Target::Change { at } => (Msg::DetailsSelect(at), Area::Details),
+        Target::Panel | Target::Code => (Msg::Focus(Area::Details), Area::Details),
+        Target::Lines(tab) => (Msg::TabReveal(tab), Area::Console),
     };
     effects.extend(step(state, at));
     effects.extend(step(state, Msg::Focus(area)));

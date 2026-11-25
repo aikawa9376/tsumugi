@@ -649,6 +649,7 @@ async fn start_terminal(watched: &Watched, start: TerminalStart) -> Result<Answe
             env: daemon::terminal_env(),
             file: start.file,
             diff: start.diff,
+            line: start.line,
             command: start
                 .script
                 .map(|script| {

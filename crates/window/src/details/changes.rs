@@ -10,6 +10,8 @@ use super::log::LogRows;
 use crate::bridge::AppCtx;
 use crate::components::{Breadcrumbs, ListRow};
 use crate::details::{Drill, Listing, View};
+use crate::shell::overlays::menu_opener;
+use tsumugi_core::overlay::context_menu::Target;
 
 fn diff_class(kind: DiffKind) -> &'static str {
     match kind {
@@ -97,6 +99,7 @@ pub(super) fn Repository(
                             kind: "mono",
                             selected: selected == Some(i),
                             onclick: move |_| app.dispatch(Msg::DetailsOpenRow(i)),
+                            oncontextmenu: menu_opener(app, Target::Change { at: i }),
                             FileStatus { status: f.status.clone(), conflicted: f.is_conflicted() }
                             span { class: "list-row-name", "{f.shown()}" }
                         }
@@ -124,28 +127,5 @@ pub(crate) fn DiffRows(lines: Vec<tsumugi_model::repository::DiffLine>) -> Eleme
                 } else { "{line.text}" }
             }
         }
-    } }
-}
-
-#[component]
-pub(crate) fn ReviewActions(
-    environment: tsumugi_model::EnvironmentId,
-    worktree: std::path::PathBuf,
-    spot: tsumugi_model::repository::Spot,
-    #[props(default = true)] tab: bool,
-) -> Element {
-    let app = use_context::<AppCtx>();
-    let open = move |neovim| {
-        app.dispatch(Msg::OpenDiff {
-            environment: environment.clone(),
-            worktree: worktree.clone(),
-            spot: spot.clone(),
-            neovim,
-        })
-    };
-    let open_tab = open.clone();
-    rsx! { div { class: "review-actions",
-        button { onclick: { let open = open.clone(); move |_| open(true) }, "Open in Neovim" }
-        if tab { button { onclick: move |_| open_tab(false), "Open in Tab" } }
     } }
 }

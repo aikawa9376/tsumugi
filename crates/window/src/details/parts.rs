@@ -21,6 +21,8 @@ use crate::details::{
     Component, Entry, Listing, Part, branch_pull, machine_gauges, shown_session, usage,
     working_copy,
 };
+use crate::shell::overlays::menu_opener;
+use tsumugi_core::overlay::context_menu::Target;
 use tsumugi_core::tree::nav::Item;
 
 /// The lines of a run of `runs`: the machine's meters or the agent's gauges
@@ -316,19 +318,15 @@ fn Changed(
     };
     let revision = view.as_ref().and_then(|v| v.revision.clone());
     let listing = view.map(|v| v.listing);
+    // Drawn among the rows when they are listed, so it can sit under the
+    // branch; above whatever is said in their place otherwise.
+    let among_rows = kind == Worktree::Repository
+        && matches!(&listing, Some(l) if !matches!(l, Listing::Error(_)));
     rsx! {
         div { class: "list-rows details-git",
-            if let Some(revision) = &revision {
-                div { class: "revision-description",
-                    div { class: "revision-heading",
-                        span { class: "details-label", "Description" }
-                        span { class: "commit-hash", title: "{revision.id}", "{revision.short}" }
-                    }
-                    if revision.description.is_empty() {
-                        div { class: "commit-none", "(no description)" }
-                    } else {
-                        pre { "{revision.description}" }
-                    }
+            if !among_rows {
+                if let Some(revision) = &revision {
+                    Description { revision: revision.clone() }
                 }
             }
             match (kind, listing) {
@@ -340,8 +338,14 @@ fn Changed(
                     let nothing = matches!(&listing, Listing::Files(files) if files.is_empty())
                         .then(|| nothing_changed_at(&rows));
                     let count = rows.len();
+                    let described = described_at(&rows);
                     rsx! {
                     for (i , entry) in rows.into_iter().enumerate() {
+                        if i == described {
+                            if let Some(revision) = &revision {
+                                Description { key: "description-{base}", revision: revision.clone() }
+                            }
+                        }
                         if nothing == Some(i) {
                             ListRow { key: "nothing-changed-{base}", kind: "dim", "No changes" }
                         }
@@ -353,6 +357,7 @@ fn Changed(
                                         kind: "mono",
                                         selected: selected == Some(at),
                                         onclick: move |_| app.dispatch(Msg::DetailsClick(at)),
+                                        oncontextmenu: menu_opener(app, Target::Change { at }),
                                         super::changes::FileStatus { status: f.status.clone(), conflicted: f.is_conflicted() }
                                         span { class: "list-row-name", "{f.shown()}" }
                                     }
@@ -362,6 +367,7 @@ fn Changed(
                                         kind: "mono",
                                         selected: selected == Some(at),
                                         onclick: move |_| app.dispatch(Msg::DetailsClick(at)),
+                                        oncontextmenu: menu_opener(app, Target::Change { at }),
                                         super::changes::FileStatus { status: c.change.status.clone(), conflicted: false }
                                         span { class: "list-row-name", "{c.change.shown()}" }
                                     }
@@ -430,6 +436,11 @@ fn Changed(
                             }
                         }
                     }
+                    if described == count {
+                        if let Some(revision) = &revision {
+                            Description { key: "description-{base}", revision: revision.clone() }
+                        }
+                    }
                     if nothing == Some(count) {
                         ListRow { key: "nothing-changed-{base}", kind: "dim", "No changes" }
                     }
@@ -438,6 +449,54 @@ fn Changed(
             }
         }
     }
+}
+
+/// The current change's description, folded to its first line; the rest
+/// shows once it is unfolded.
+#[component]
+fn Description(revision: tsumugi_model::repository::Revision) -> Element {
+    let mut unfolded = use_signal(|| false);
+    let (first, rest) = summed_up(&revision.description);
+    let rest = rest.map(str::to_owned);
+    rsx! {
+        div { class: "revision-description",
+            div { class: "revision-heading",
+                span { class: "details-label", "Description" }
+                span { class: "commit-hash", title: "{revision.id}", "{revision.short}" }
+            }
+            if revision.description.is_empty() {
+                div { class: "commit-none", "(no description)" }
+            } else if let Some(rest) = rest {
+                div { class: "revision-summary folds",
+                    title: if unfolded() { "Fold the description" } else { "Show the whole description" },
+                    onclick: move |_| unfolded.toggle(),
+                    crate::icons::IconView { icon: if unfolded() { crate::icons::Icon::ChevronDown } else { crate::icons::Icon::ChevronRight }, size: 12 }
+                    span { "{first}" }
+                }
+                if unfolded() {
+                    pre { "{rest}" }
+                }
+            } else {
+                div { class: "revision-summary", span { "{first}" } }
+            }
+        }
+    }
+}
+
+/// A description's first line, and what follows it past the blank lines,
+/// when anything does.
+fn summed_up(description: &str) -> (&str, Option<&str>) {
+    let (first, rest) = description.split_once('\n').unwrap_or((description, ""));
+    let rest = rest.trim();
+    (first, (!rest.is_empty()).then_some(rest))
+}
+
+/// Where Changes draws the description: under how the branch stands, which
+/// matters most, and above all else.
+fn described_at(rows: &[Entry]) -> usize {
+    rows.iter()
+        .take_while(|e| matches!(e, Entry::Branch(_)))
+        .count()
 }
 
 /// Where Changes says the working copy has nothing changed: after how the
@@ -480,5 +539,26 @@ mod tests {
         assert_eq!(nothing_changed_at(&[card()]), 1);
         assert_eq!(nothing_changed_at(&[committed]), 0);
         assert_eq!(nothing_changed_at(&[]), 0);
+    }
+
+    #[test]
+    fn the_description_is_drawn_under_how_the_branch_stands() {
+        let operation = Entry::Operation(tsumugi_core::details::OperationCard {
+            operation: tsumugi_model::repository::Operation::Merge,
+            conflicts: 0,
+        });
+        assert_eq!(described_at(&[card(), operation.clone()]), 1);
+        assert_eq!(described_at(&[operation]), 0);
+        assert_eq!(described_at(&[]), 0);
+    }
+
+    #[test]
+    fn a_description_folds_to_its_first_line() {
+        assert_eq!(
+            summed_up("fix: a\n\nwhy it is\nneeded\n"),
+            ("fix: a", Some("why it is\nneeded"))
+        );
+        assert_eq!(summed_up("fix: a\n"), ("fix: a", None));
+        assert_eq!(summed_up("fix: a\n\n  \n"), ("fix: a", None));
     }
 }

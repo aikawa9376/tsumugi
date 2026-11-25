@@ -55,9 +55,13 @@ pub(crate) fn ContextMenu() -> Element {
         Target::Agent(..) => &[Context::Global, Context::Agents],
         Target::Row(_) | Target::Start(_) => &[Context::Global, Context::Tree],
         Target::Tab(_) => &[Context::Global, Context::Console, Context::Tree],
-        Target::Link { .. } | Target::Pinned { .. } | Target::Commit { .. } | Target::Panel => {
-            &[Context::Details, Context::Tree, Context::Global]
-        }
+        Target::Link { .. }
+        | Target::Pinned { .. }
+        | Target::Commit { .. }
+        | Target::Change { .. }
+        | Target::Panel
+        | Target::Code => &[Context::Details, Context::Tree, Context::Global],
+        Target::Lines(_) => &[Context::Viewer, Context::Console, Context::Global],
     };
     let entries: Vec<(MenuEntry, Option<String>)> = listed
         .into_iter()
@@ -114,6 +118,8 @@ pub(crate) fn ContextMenu() -> Element {
 pub(crate) fn menu_opener(app: AppCtx, target: Target) -> EventHandler<MouseEvent> {
     EventHandler::new(move |e: MouseEvent| {
         e.prevent_default();
+        // The menu is of what was clicked, not of what holds it.
+        e.stop_propagation();
         let at = e.client_coordinates();
         let reach = match &target {
             Target::Row(Item::Environment(environment)) => {

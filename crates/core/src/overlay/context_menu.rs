@@ -1,5 +1,5 @@
-//! What a right click on a sidebar row, a tab or a link of the details
-//! panel's overview offers: the actions its keys would run there.
+//! What a right click on a sidebar row, a tab, a row of the details panel or
+//! a diff offers: the actions its keys would run there.
 
 use tsumugi_model::{EnvironmentId, Session};
 
@@ -31,8 +31,17 @@ pub enum Target {
     Commit {
         at: usize,
     },
+    /// Row `at` of the details panel's list, a file of a change.
+    Change {
+        at: usize,
+    },
     /// The details panel's Resources where no row is.
     Panel,
+    /// The details panel where no row is, on a tab that shows a
+    /// repository's changes or log.
+    Code,
+    /// The lines of a diff tab, where its cursor is.
+    Lines(Tab),
 }
 
 /// Where the environment of a menu's heading works, as far as its menu
@@ -96,6 +105,14 @@ pub fn entries(
     let makes = [Action::FileNew, Action::DirectoryNew].map(offer);
     let close_tab = offer(Action::TabClose);
     let stop_terminal = offer(Action::TerminalStop);
+    // A diff is opened where the cursor is, as `details.neovim` finds it.
+    let diffs = [Action::DetailsNeovim, Action::DetailsOpenDiff].map(offer);
+    let resources = [
+        Action::ResourceAdd,
+        Action::ResourceCapture,
+        Action::ResourceCaptureLater,
+    ]
+    .map(offer);
     match target {
         Target::Agent(environment, id) => {
             let mut entries = entries(
@@ -246,22 +263,25 @@ pub fn entries(
             .chain(file.then(|| offer(Action::CursorReveal)))
             .chain([offer(Action::ResourceEdit), offer(Action::ResourceRemove)])
             .collect(),
-        Target::Commit { .. } => [
-            Action::LogOpenRemote,
-            Action::LogCopyHash,
-            Action::LogExplain,
-            Action::LogBranch,
-            Action::LogWorktree,
-            Action::LogCherryPick,
-            Action::LogRevert,
-        ]
-        .map(offer)
-        .to_vec(),
-        Target::Panel => vec![
-            offer(Action::ResourceAdd),
-            offer(Action::ResourceCapture),
-            offer(Action::ResourceCaptureLater),
-        ],
+        Target::Commit { .. } => diffs
+            .into_iter()
+            .chain(
+                [
+                    Action::LogOpenRemote,
+                    Action::LogCopyHash,
+                    Action::LogExplain,
+                    Action::LogBranch,
+                    Action::LogWorktree,
+                    Action::LogCherryPick,
+                    Action::LogRevert,
+                ]
+                .map(offer),
+            )
+            .collect(),
+        Target::Change { .. } => diffs.to_vec(),
+        Target::Panel => resources.to_vec(),
+        Target::Code => diffs.into_iter().chain(resources).collect(),
+        Target::Lines(_) => vec![offer(Action::DiffNeovim)],
     }
 }
 

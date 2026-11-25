@@ -103,12 +103,6 @@ pub(crate) fn DetailsPanel(
             )
         })
     }) && shown_kind == Worktree::Repository;
-    let review_spot = details
-        .drill
-        .spot()
-        .unwrap_or(tsumugi_model::repository::Spot::Files(
-            tsumugi_model::repository::Rev::WorkingCopy,
-        ));
     rsx! {
         if tabs.len() > 1 {
             div { class: "panel-tabs",
@@ -139,7 +133,11 @@ pub(crate) fn DetailsPanel(
                 app.dispatch(Msg::MenuOpen {
                     x: p.x,
                     y: p.y,
-                    target: tsumugi_core::overlay::context_menu::Target::Panel,
+                    target: if review {
+                        tsumugi_core::overlay::context_menu::Target::Code
+                    } else {
+                        tsumugi_core::overlay::context_menu::Target::Panel
+                    },
                     reach: tsumugi_core::overlay::context_menu::Reach::Here,
                 });
             },
@@ -160,13 +158,6 @@ pub(crate) fn DetailsPanel(
                         on_kill,
                         on_menu,
                     }
-                }
-            }
-        }
-        if review {
-            if let Some(worktree) = worktree.clone() {
-                div { class: "details-foot",
-                    super::changes::ReviewActions { environment: environment.clone(), worktree, spot: review_spot }
                 }
             }
         }

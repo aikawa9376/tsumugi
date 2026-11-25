@@ -85,6 +85,8 @@ pub enum Diff {
     Viewed,
     /// Move to the next or previous line an agent's note is under.
     Note(Way),
+    /// Open the file the cursor is in in the user's Neovim, on its line.
+    Neovim,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -148,6 +150,7 @@ impl ViewerAction {
             Action::DiffStructural => V::Diff(Diff::Choose(Choice::Structural)),
             Action::DiffCompare => V::Diff(Diff::Compare),
             Action::DiffPictures => V::Diff(Diff::Choose(Choice::Pictures)),
+            Action::DiffNeovim => V::Diff(Diff::Neovim),
             Action::GithubNext => V::Github(Github::Next),
             Action::GithubPrev => V::Github(Github::Prev),
             Action::GithubComment => V::Github(Github::Comment),

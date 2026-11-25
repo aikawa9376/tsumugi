@@ -232,6 +232,8 @@ pub enum Effect {
     StartDiffEditor {
         place: crate::tree::Place,
         spot: tsumugi_model::repository::Spot,
+        /// The line of the file, on its new side, the cursor is put on.
+        line: Option<u32>,
     },
     /// Make a worktree of the repository at `repository` of `environment`
     /// that starts at the head of its pull request `number`,

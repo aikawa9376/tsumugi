@@ -23,7 +23,10 @@ fn every_entry_of_every_menu_shows_an_icon_and_has_a_row_in_the_table() {
         Target::Link { at: 0, file: true },
         Target::Pinned { at: 0, file: true },
         Target::Commit { at: 0 },
+        Target::Change { at: 0 },
         Target::Panel,
+        Target::Code,
+        Target::Lines(diff_tab()),
     ];
     for target in targets {
         for s in [None, Some(&own)] {
@@ -421,6 +424,8 @@ fn a_commit_of_the_log_offers_what_can_be_done_with_it_and_runs_it_on_that_row()
     let offered = grouped(Target::Commit { at: 3 }, None);
     let all: Vec<Action> = offered.concat();
     for action in [
+        Action::DetailsNeovim,
+        Action::DetailsOpenDiff,
         Action::LogOpenRemote,
         Action::LogCopyHash,
         Action::LogExplain,
@@ -431,7 +436,48 @@ fn a_commit_of_the_log_offers_what_can_be_done_with_it_and_runs_it_on_that_row()
     ] {
         assert!(all.contains(&action), "{action:?}");
     }
-    assert_eq!(all.len(), 7);
+    assert_eq!(all.len(), 9);
+}
+
+fn diff_tab() -> Tab {
+    Tab::Diff {
+        environment: here(),
+        worktree: "/w".into(),
+        spot: Box::new(tsumugi_model::repository::Spot::Files(
+            tsumugi_model::repository::Rev::WorkingCopy,
+        )),
+    }
+}
+
+#[test]
+fn a_changed_file_opens_its_diff_in_neovim_or_in_a_tab() {
+    assert_eq!(
+        actions(Target::Change { at: 2 }, None),
+        [Action::DetailsNeovim, Action::DetailsOpenDiff]
+    );
+}
+
+#[test]
+fn the_panel_on_a_repository_opens_the_diff_where_the_cursor_is_and_keeps_resources() {
+    assert_eq!(
+        actions(Target::Code, None),
+        [
+            Action::DetailsNeovim,
+            Action::DetailsOpenDiff,
+            Action::ResourceAdd,
+            Action::ResourceCapture,
+            Action::ResourceCaptureLater
+        ]
+    );
+}
+
+#[test]
+fn the_lines_of_a_diff_tab_open_the_file_in_neovim_and_its_tab_only_closes() {
+    assert_eq!(
+        actions(Target::Lines(diff_tab()), None),
+        [Action::DiffNeovim]
+    );
+    assert_eq!(actions(Target::Tab(diff_tab()), None), [Action::TabClose]);
 }
 
 #[test]

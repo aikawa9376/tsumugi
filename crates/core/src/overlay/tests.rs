@@ -523,6 +523,8 @@ fn a_menu_runs_its_entry_on_what_it_was_opened_on() {
         (Target::Start(Item::Environment(here())), Area::Sidebar),
         (Target::Tab(session_tab("a")), Area::Console),
         (Target::Link { at: 0, file: false }, Area::Details),
+        (Target::Change { at: 0 }, Area::Details),
+        (Target::Code, Area::Details),
     ];
     for (target, area) in cases {
         let run = window().send(menu_on(target.clone())).send(Msg::MenuRun {
@@ -537,6 +539,31 @@ fn a_menu_runs_its_entry_on_what_it_was_opened_on() {
             "{target:?}"
         );
     }
+    let spot = tsumugi_model::repository::Spot::Files(tsumugi_model::repository::Rev::WorkingCopy);
+    let diff = Tab::Diff {
+        environment: here(),
+        worktree: "/w".into(),
+        spot: Box::new(spot.clone()),
+    };
+    let lines = window()
+        .send(Msg::OpenDiff {
+            environment: here(),
+            worktree: "/w".into(),
+            spot,
+            neovim: false,
+            line: None,
+        })
+        .send(Msg::Focus(Area::Details))
+        .send(Msg::MenuRun {
+            target: Target::Lines(diff.clone()),
+            action: Action::DiffNeovim,
+        });
+    assert_eq!(lines.state().content.active(), Some(&diff));
+    assert_eq!(lines.state().content.focus, Area::Console);
+    assert_eq!(
+        lines.last_effects().last(),
+        Some(&Effect::Perform(Action::DiffNeovim))
+    );
     let row = window().send(Msg::MenuRun {
         target: Target::Row(Item::Session(here(), "b".into())),
         action: Action::SessionNew,

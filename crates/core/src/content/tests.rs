@@ -2270,6 +2270,7 @@ fn a_diff_tab_keeps_its_work_machine_and_repository_watched_without_a_prompt() {
         worktree: "/remote/repo".into(),
         spot: spot.clone(),
         neovim: false,
+        line: None,
     });
     let tab = Tab::Diff {
         environment: there(),
@@ -2317,6 +2318,7 @@ fn a_diff_tab_on_a_file_reads_the_stream_of_its_change_and_the_list_of_its_files
         worktree: "/remote/repo".into(),
         spot: spot.clone(),
         neovim: false,
+        line: None,
     });
     let read = |spot| tsumugi_protocol::RepositorySight {
         worktree: "/remote/repo".into(),
@@ -2353,7 +2355,7 @@ fn how_a_diff_is_drawn_is_kept_for_the_worktree_across_its_tabs() {
 }
 
 #[test]
-fn opening_a_diff_in_neovim_targets_the_work_machine_and_the_opened_commit_file() {
+fn opening_a_diff_in_neovim_targets_the_work_machine_the_opened_commit_file_and_its_line() {
     use tsumugi_model::repository::{Change, Rev, Spot as RepositorySpot};
     let spot = RepositorySpot::Diff(
         Rev::Commit("abc123".into()),
@@ -2368,9 +2370,10 @@ fn opening_a_diff_in_neovim_targets_the_work_machine_and_the_opened_commit_file(
         worktree: "/remote/repo".into(),
         spot: spot.clone(),
         neovim: true,
+        line: Some(12),
     });
     assert!(run.effects().iter().any(|effect| matches!(effect,
-        Effect::StartDiffEditor { place, spot: target }
+        Effect::StartDiffEditor { place, spot: target, line: Some(12) }
         if place.environment == there() && place.worktree == std::path::Path::new("/remote/repo") && target == &spot
     )));
     assert!(run.state().content.active().is_none());

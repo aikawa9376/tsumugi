@@ -5,7 +5,9 @@
 .commit { display: flex; align-items: center; gap: 6px; height: 48px; padding: 0 8px 0 4px; font-size: var(--ui-font-size); border-radius: 6px; cursor: default; }
 .revision-description { padding: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
 .revision-heading { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
-.revision-description pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; }
+.revision-summary { display: flex; gap: 4px; align-items: center; overflow-wrap: anywhere; line-height: 1.5; }
+.revision-summary.folds { cursor: pointer; }
+.revision-description pre { margin: 6px 0 0; padding-left: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.5; }
 .commit-graph { flex: none; display: flex; }
 .commit-text { flex: 1; min-width: 120px; display: grid; grid-template-columns: auto 1fr; gap: 0 8px; }
 .graph path { fill: none; stroke-width: 2; }

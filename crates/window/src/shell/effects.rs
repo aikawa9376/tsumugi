@@ -33,7 +33,7 @@ impl Ui {
             Effect::StartTerminal(ask) => self.start_terminal(ask),
             Effect::StartFloating { environment } => self.start_floating(environment),
             Effect::SavedCommand(done) => self.saved_command(done),
-            Effect::StartDiffEditor { place, spot } => self.start_terminal_review(
+            Effect::StartDiffEditor { place, spot, line } => self.start_terminal_review(
                 tsumugi_core::content::TerminalAsk {
                     place,
                     runs: tsumugi_model::TerminalProgram::Neovim,
@@ -41,7 +41,7 @@ impl Ui {
                     opening: tsumugi_core::content::Opening::Tab,
                     focus: true,
                 },
-                Some(spot),
+                Some((spot, line)),
             ),
             Effect::OpenLogin {
                 environment,

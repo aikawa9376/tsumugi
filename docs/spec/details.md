@@ -103,7 +103,8 @@ window or such a row is described.
   Claude Code, Codex, Pi and OpenCode alike, each with how long ago; opening
   one shows it whole, and copying it copies its text. What Tsumugi or the
   agent put into a turn, as a command's output, is not a prompt.
-- **changes** — the HEAD commit's full message in Git, alongside the files
+- **changes** — where the branch stands, then the first line of the HEAD
+  commit's message in Git, which unfolds to the whole message, and the files
   the worktree changes, each with what is staged of it and what is not
   ([below](#changes)).
   Opening a file shows its diff, which you can comment on ([review](review.md)).
@@ -436,9 +437,10 @@ a leaf task is in progress or completed; and not started otherwise.
 
 ## In a git repository
 
-The Code tab can open working-tree changes, or an opened commit or file,
-in a dedicated application tab or a normally configured Neovim on the work
-machine. Neovim uses the user's diffview.nvim when available, including
+The Code tab opens the diff its cursor is on, in a diff tab or in a
+normally configured Neovim on the work machine, from its keys or its
+right-click menu: the file or the commit selected, else the row opened, else
+what is not committed. A right click on a file or a commit offers that one. Neovim uses the user's diffview.nvim when available, including
 command-loaded plugins, and otherwise opens a built-in diff without installing
 plugins.
 
@@ -476,6 +478,11 @@ hunk by hunk across the files, and to the next or previous file
 ([keys](reference/keys.md)). A move that has nowhere to go says so and stays
 where it is. `/` searches the stream. Unchanged lines between hunks are
 folded, and a fold opens on request, showing its file whole.
+
+The file the cursor is in opens in your Neovim, as the Code tab opens a diff,
+with the cursor on the line it is on, from its key or the right-click menu of
+the lines; a right click first puts the cursor on the line clicked. A line
+only the old side has stands for the nearest line of the new.
 
 A file's lines are drawn in one column, removed lines above added ones, or in
 two, the old beside the new. By default the tab draws two columns where it is

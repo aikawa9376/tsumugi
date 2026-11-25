@@ -109,7 +109,7 @@ impl Ui {
     pub(crate) fn start_terminal_review(
         &self,
         ask: TerminalAsk,
-        diff: Option<tsumugi_model::repository::Spot>,
+        diff: Option<(tsumugi_model::repository::Spot, Option<u32>)>,
     ) {
         self.start_terminal_as(ask, diff, None);
     }
@@ -140,7 +140,7 @@ impl Ui {
     fn start_terminal_as(
         &self,
         ask: TerminalAsk,
-        diff: Option<tsumugi_model::repository::Spot>,
+        diff: Option<(tsumugi_model::repository::Spot, Option<u32>)>,
         command: Option<(String, String, bool)>,
     ) {
         let app = self.app;
@@ -175,7 +175,8 @@ impl Ui {
             program: runs,
             script,
             file,
-            diff,
+            line: diff.as_ref().and_then(|(_, line)| *line),
+            diff: diff.map(|(spot, _)| spot),
             floating: false,
             cols: size.cols,
             rows: size.rows,

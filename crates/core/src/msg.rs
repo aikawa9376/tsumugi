@@ -195,12 +195,14 @@ pub enum Msg {
     OpenFile(EnvironmentId, PathBuf),
     /// [`Msg::OpenFile`] where `how` says: in a tab or a split of its own.
     OpenFileIn(EnvironmentId, PathBuf, crate::content::Opening),
-    /// Review this repository spot in a dedicated tab or the user's Neovim.
+    /// Review this repository spot in a dedicated tab or the user's Neovim,
+    /// which puts its cursor on `line` of the file, on its new side.
     OpenDiff {
         environment: EnvironmentId,
         worktree: PathBuf,
         spot: tsumugi_model::repository::Spot,
         neovim: bool,
+        line: Option<u32>,
     },
     /// A key chose how the diff tabs of the worktree are drawn; kept for the
     /// worktree.

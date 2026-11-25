@@ -425,6 +425,7 @@ async fn execute(
                     file: None,
                     command,
                     diff: None,
+                    line: None,
                     opener,
                     show: !background,
                     restored_from: None,

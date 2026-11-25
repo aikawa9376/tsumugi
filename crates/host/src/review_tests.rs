@@ -241,3 +241,176 @@ fn a_file_in_conflict_and_a_branch_are_handed_to_the_plugin_as_what_they_are() {
         [format!("{since}..HEAD")]
     );
 }
+
+#[test]
+fn a_diff_tab_s_file_its_base_and_a_range_are_handed_to_the_plugin_as_what_they_are() {
+    let dir = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(["-c", "user.name=a", "-c", "user.email=a@b"])
+            .args(args)
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}");
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    git(&["init", "-q", "-b", "main"]);
+    std::fs::write(dir.path().join(".git/info/exclude"), "*.lua\n*.json\n").unwrap();
+    std::fs::write(dir.path().join("f.txt"), "one\n").unwrap();
+    git(&["add", "f.txt"]);
+    git(&["commit", "-qm", "one"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    let change = tsumugi_model::repository::Change {
+        status: " M".into(),
+        path: "f.txt".into(),
+        from: None,
+    };
+    assert_eq!(
+        plugin_args(
+            dir.path(),
+            &Spot::Lines(Rev::Base(base.clone()), change.clone())
+        ),
+        [base.clone(), "--".into(), "f.txt".into()]
+    );
+    assert_eq!(
+        plugin_args(dir.path(), &Spot::Whole(Rev::WorkingCopy, change)),
+        ["HEAD", "--", "f.txt"]
+    );
+    assert_eq!(
+        plugin_args(
+            dir.path(),
+            &Spot::Stream(Rev::Range(base.clone(), "HEAD".into()))
+        ),
+        [format!("{base}..HEAD")]
+    );
+}
+
+/// Runs the review of `f.txt`, changed on line 20 of 30, in `mode` with the
+/// cursor asked on line 20, and fails unless it stands there in the new
+/// side's window.
+fn put_on_line(mode: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .args(["-c", "user.name=a", "-c", "user.email=a@b"])
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .unwrap()
+                .status
+                .success(),
+            "git {args:?}"
+        );
+    };
+    let text = |changed: &str| {
+        (1..=30)
+            .map(|n| {
+                if n == 20 {
+                    changed.to_string()
+                } else {
+                    format!("line {n}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    };
+    git(&["init", "-q", "-b", "main"]);
+    std::fs::write(dir.path().join(".git/info/exclude"), "*.lua\n").unwrap();
+    std::fs::write(dir.path().join("f.txt"), text("old")).unwrap();
+    git(&["add", "f.txt"]);
+    git(&["commit", "-qm", "one"]);
+    std::fs::write(dir.path().join("f.txt"), text("new")).unwrap();
+    let script = dir.path().join("test.lua");
+    std::fs::write(
+        &script,
+        r#"
+if vim.env.REVIEW_MODE == 'plugin' then
+  -- Diffview draws its windows, the old left of the new, and says so.
+  package.preload.diffview = function() return { open = function()
+    vim.cmd.enew()
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.fn.readfile('f.txt'))
+    vim.cmd.diffthis()
+    vim.cmd('leftabove vnew')
+    vim.cmd.diffthis()
+    vim.api.nvim_exec_autocmds('User', { pattern = 'DiffviewDiffBufWinEnter' })
+  end } end
+end
+vim.api.nvim_create_autocmd('VimEnter', { once = true, callback = function()
+  vim.defer_fn(function()
+    local ok, err = pcall(function()
+      local win = vim.api.nvim_get_current_win()
+      local right = 0
+      for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        right = math.max(right, vim.api.nvim_win_get_position(w)[2])
+      end
+      assert(vim.api.nvim_win_get_position(win)[2] == right, 'the cursor is not on the new side')
+      local row = vim.api.nvim_win_get_cursor(win)[1]
+      assert(row == 20, 'the cursor is on line ' .. row)
+    end)
+    if not ok then io.stderr:write(tostring(err)); vim.cmd('cquit 1') else vim.cmd('qa!') end
+  end, 200)
+end })
+"#,
+    )
+    .unwrap();
+    let scope = Spot::Diff(
+        Rev::WorkingCopy,
+        tsumugi_model::repository::Change {
+            status: " M".into(),
+            path: "f.txt".into(),
+            from: None,
+        },
+    );
+    let output = std::process::Command::new(tsumugi_nvim::program())
+        .args(["--headless", "-i", "NONE", "--noplugin", "-u"])
+        .arg(&script)
+        .arg("-c")
+        .arg(format!("lua {}", include_str!("../nvim/review.lua")))
+        .current_dir(dir.path())
+        .env("REVIEW_MODE", mode)
+        .env("TSUMUGI_REVIEW", serde_json::to_string(&scope).unwrap())
+        .env("TSUMUGI_REVIEW_LINE", "20")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{mode}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn the_built_in_diff_puts_the_cursor_on_the_line_asked_of_the_new_side() {
+    put_on_line("absent");
+}
+
+#[test]
+fn diffview_puts_the_cursor_on_the_line_asked_of_the_new_side() {
+    put_on_line("plugin");
+}
+
+#[test]
+fn the_line_asked_is_handed_to_the_diff_editor() {
+    let launch = resolve_terminal(
+        &crate::settings::Settings::default(),
+        TerminalStartRequest {
+            floating: false,
+            program: TerminalProgram::Neovim,
+            cwd: "/repo".into(),
+            diff: Some(Spot::Files(Rev::WorkingCopy)),
+            line: Some(12),
+            ..Default::default()
+        },
+        "/bin/zsh",
+    );
+    assert!(
+        launch
+            .spawn
+            .env
+            .iter()
+            .any(|(key, value)| key == "TSUMUGI_REVIEW_LINE" && value == "12")
+    );
+}

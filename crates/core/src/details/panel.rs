@@ -149,6 +149,8 @@ pub enum Key {
     Resolve,
     /// Open the diff of the selected change in the user's Neovim.
     Neovim,
+    /// Open the diff of the selected change in a diff tab.
+    OpenDiff,
     /// Copy the full hash of the commit selected in the log.
     LogCopyHash,
     /// Open the commit selected in the log on GitHub.
@@ -474,6 +476,7 @@ pub(crate) fn press(details: &mut Details, work: Option<&WorkSnapshot>, key: Key
             | Key::Base
             | Key::Resolve
             | Key::Neovim
+            | Key::OpenDiff
     ) {
         return staged(details, work, key);
     }
@@ -531,6 +534,7 @@ fn moved(details: &mut Details, l: &Listing, key: Key) -> Vec<Effect> {
         | Key::Base
         | Key::Resolve
         | Key::Neovim
+        | Key::OpenDiff
         | Key::LogCopyHash
         | Key::LogOpenRemote
         | Key::LogExplain
@@ -4362,6 +4366,49 @@ pub(crate) mod tests {
                 .last_effects()
                 .iter()
                 .any(|e| matches!(e, Effect::PromptRestore { .. }))
+        );
+    }
+
+    fn diff_opened(run: &Scenario) -> Option<Spot> {
+        run.last_effects().iter().find_map(|e| match e {
+            Effect::StartDiffEditor {
+                spot, line: None, ..
+            } => Some(spot.clone()),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn the_diff_opened_is_the_file_selected_else_what_is_not_committed() {
+        let selected = changing(&[(" M", "a.rs")]).send(Msg::DetailsKey(Key::Neovim));
+        assert_eq!(
+            diff_opened(&selected),
+            Some(Spot::Diff(Rev::WorkingCopy, change_of(" M", "a.rs")))
+        );
+        let none = changing(&[]).send(Msg::DetailsKey(Key::Neovim));
+        assert_eq!(diff_opened(&none), Some(Spot::Files(Rev::WorkingCopy)));
+    }
+
+    #[test]
+    fn the_diff_selected_opens_in_a_tab_of_its_own() {
+        let run = changing(&[(" M", "a.rs")]).send(Msg::DetailsKey(Key::OpenDiff));
+        assert_eq!(
+            run.state().content.active(),
+            Some(&crate::content::Tab::Diff {
+                environment: here(),
+                worktree: "/w".into(),
+                spot: Box::new(Spot::Diff(Rev::WorkingCopy, change_of(" M", "a.rs"))),
+            })
+        );
+    }
+
+    #[test]
+    fn a_commit_selected_in_the_log_opens_as_its_files() {
+        let run =
+            on_commit(logged(three_commits(), None, true), 1).send(Msg::DetailsKey(Key::Neovim));
+        assert_eq!(
+            diff_opened(&run),
+            Some(Spot::Files(Rev::Commit(full("c2"))))
         );
     }
 

@@ -189,7 +189,8 @@ changes them ([keys](../keys.md)).
 | `details.resume` |  | in the details panel, go on with the merge, rebase, cherry-pick or revert in progress once every conflict is resolved and staged ([details](../details.md#branch-and-conflicts)) | `details`: `m` |
 | `details.base` |  | in the details panel, write the base the branch is compared with in the prompt, an empty one giving up the choice for the one Tsumugi finds; sending chooses it ([details](../details.md#branch-and-conflicts)) | `details`: `b` |
 | `details.resolve` |  | in the details panel, open a draft in the worktree whose prompt asks the agent the conflict recipe names to resolve the files in conflict, without pushing; sending it starts the session ([ai actions](../ai-actions.md)) | `details`: `I` |
-| `details.neovim` |  | in the details panel, open the diff of the selected change in your Neovim, a file in conflict in its Diffview where it has one ([details](../details.md#branch-and-conflicts)) | `details`: `E` |
+| `details.neovim` |  | in the details panel, open in your Neovim the diff the cursor is on: the file or the commit selected, else the row opened, else what is not committed; a file in conflict opens in its Diffview where it has one ([details](../details.md#in-a-git-repository)) | `details`: `E` |
+| `details.open_diff` |  | in the details panel, open in a diff tab the diff the cursor is on, as `details.neovim` chooses it ([details](../details.md#in-a-git-repository)) | `details`: `T` |
 | `log.copy_hash` |  | in the details panel, copy the full hash of the commit selected in the log, or opened from it ([details](../details.md#log)) | `details`: `Y` |
 | `log.open_remote` |  | in the details panel, open the commit selected in the log on GitHub, in the browser of the worktree; a repository that is not on GitHub says so ([details](../details.md#log)) | `details`: `O` |
 | `log.explain` |  | in the details panel, open a draft in the worktree whose prompt asks an agent to explain the commit selected in the log; sending it starts the session ([details](../details.md#log)) | `details`: `x` |
@@ -234,6 +235,7 @@ changes them ([keys](../keys.md)).
 | `diff.prev_note` |  | in a diff tab, move to the previous line an agent left a note under | `viewer`: `[ n` |
 | `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
 | `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
+| `diff.neovim` |  | in a diff tab, open the diff of the file the cursor is in in your Neovim, on the line the cursor is on; the whole change where the cursor is in no file ([details](../details.md#diff-tabs)) | `viewer`: `E` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
 | `github.prev` |  | in a pull request's or an issue's tab, select the previous card of its conversation | `github`: `N` |
 | `github.comment` |  | in a pull request's or an issue's tab, write a new comment in the prompt under it; sending the prompt posts it, and leaving the prompt gives it up | `github`: `c` |
@@ -550,6 +552,7 @@ changes them ([keys](../keys.md)).
 "b" = "details.base"
 "I" = "details.resolve"
 "E" = "details.neovim"
+"T" = "details.open_diff"
 "Y" = "log.copy_hash"
 "O" = "log.open_remote"
 "x" = "log.explain"
@@ -659,6 +662,7 @@ changes them ([keys](../keys.md)).
 "N" = "diff.search_prev"
 "z a" = "diff.unfold"
 "V" = "diff.viewed"
+"E" = "diff.neovim"
 "] n" = "diff.next_note"
 "[ n" = "diff.prev_note"
 "g x" = "cursor.browse"

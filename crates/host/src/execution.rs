@@ -98,6 +98,8 @@ pub struct TerminalStartRequest {
     pub env: Vec<(String, String)>,
     /// The repository review to open after startup.
     pub diff: Option<tsumugi_model::repository::Spot>,
+    /// The line of the review's file, on its new side, to put the cursor on.
+    pub line: Option<u32>,
     /// The file to start Neovim on; a shell is started on none.
     pub file: Option<PathBuf>,
     /// The program and its arguments a command terminal runs.
@@ -202,6 +204,9 @@ pub fn resolve_terminal(
             "TSUMUGI_REVIEW".into(),
             serde_json::to_string(&spot).expect("a repository spot serializes"),
         ));
+        if let Some(line) = request.line {
+            env.push(("TSUMUGI_REVIEW_LINE".into(), line.to_string()));
+        }
     }
     let mut tags = sessions::terminal_tags(&terminal);
     tags.extend(crate::environment::tags());

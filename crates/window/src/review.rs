@@ -71,6 +71,7 @@ struct Review_ {
     /// What was last searched for.
     sought: Signal<String>,
     onviewed: Option<EventHandler<String>>,
+    onneovim: Option<EventHandler<(Option<String>, Option<u32>)>>,
 }
 
 /// What is done with the hunk or the lines chosen.
@@ -108,6 +109,23 @@ impl Review_ {
             && let Some(onviewed) = self.onviewed
         {
             onviewed.call(reading.path_at(at).to_string());
+        }
+    }
+
+    /// Open the file the cursor is in in the user's Neovim, on the line the
+    /// cursor is on.
+    fn neovim(&self) {
+        let Some(onneovim) = self.onneovim else {
+            return;
+        };
+        let comments = self.comments.peek().clone();
+        let reading = self.reading(&comments);
+        let at = self.pane.peek().cursor(&reading);
+        if at < self.lines.len() {
+            let line = tsumugi_core::diff_view::new_line_at(&self.lines, at);
+            onneovim.call((Some(reading.path_at(at).to_string()), line));
+        } else {
+            onneovim.call((Some(self.path.clone()).filter(|p| !p.is_empty()), None));
         }
     }
 
@@ -356,6 +374,7 @@ impl Review_ {
             (_, ViewerAction::Diff(Diff::Found(way))) => self.find(way),
             (_, ViewerAction::Diff(Diff::Unfold)) => self.unfold(),
             (_, ViewerAction::Diff(Diff::Viewed)) => self.viewed(),
+            (_, ViewerAction::Diff(Diff::Neovim)) => self.neovim(),
             (_, ViewerAction::Diff(Diff::Note(way))) => go(Go::Note(way)),
             (_, ViewerAction::Diff(Diff::Unstage)) => self.stage(Staging::Unstage),
             (_, ViewerAction::Diff(Diff::Discard)) => self.stage(Staging::Discard),
@@ -461,6 +480,11 @@ fn LineCell(
                 let mut pane = pane;
                 pane.write().place(i);
             },
+            // A right click puts the cursor on the line, whose menu then opens.
+            oncontextmenu: move |_| {
+                let mut pane = pane;
+                pane.write().place(i);
+            },
             NewNumber { number, by: by.clone() }
             Words { text: line.text.clone(), marks }
             if class.contains("rv-cursor") && let Some(by) = by { span { class: "rv-by", "written by {by}" } }
@@ -534,6 +558,9 @@ pub(crate) fn ReviewRows(
     viewed: Vec<String>,
     /// Marks the file at the path given viewed, or not.
     onviewed: Option<EventHandler<String>>,
+    /// Opens the file at the path given in the user's Neovim, on the line
+    /// given of its new side.
+    onneovim: Option<EventHandler<(Option<String>, Option<u32>)>>,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let pane = use_signal(Pane::default);
@@ -557,6 +584,7 @@ pub(crate) fn ReviewRows(
         written,
         sought,
         onviewed,
+        onneovim,
     };
     // What the work host keeps is read when the diff is, so a change to the
     // code shows at once which comments no longer stand.
@@ -683,6 +711,11 @@ pub(crate) fn ReviewRows(
                                     let mut pane = pane;
                                     pane.write().place(i);
                                 },
+                                // A right click puts the cursor on the line, whose menu then opens.
+                                oncontextmenu: move |_| {
+                                    let mut pane = pane;
+                                    pane.write().place(i);
+                                },
                                 span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
                                 NewNumber { number: numbers[i].new, by: by[i].clone() }
                                 if lines[i].kind == DiffKind::Difft { "{lines[i].text}" } else { Words { text: lines[i].text.clone(), marks: marks[i].clone() } }
@@ -708,6 +741,11 @@ pub(crate) fn ReviewRows(
                                     class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()),
                                     onclick: move |_| {
                                         app.dispatch(Msg::Focus(Area::Console));
+                                        let mut pane = pane;
+                                        pane.write().place(i);
+                                    },
+                                    // A right click puts the cursor on the line, whose menu then opens.
+                                    oncontextmenu: move |_| {
                                         let mut pane = pane;
                                         pane.write().place(i);
                                     },

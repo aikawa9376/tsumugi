@@ -2,13 +2,15 @@
 
 use crate::bridge::AppCtx;
 use crate::components::InlineField;
-use crate::details::changes::{DiffRows, ReviewActions};
+use crate::details::changes::DiffRows;
 use crate::review::ReviewRows;
+use crate::shell::overlays::menu_opener;
 use dioxus::prelude::*;
 use std::path::PathBuf;
 use tsumugi_core::content::{Area, Opening, Tab, WindowId};
 use tsumugi_core::diff_view::{self, Choice, Pictures, hunk_from, hunk_starts};
 use tsumugi_core::msg::Msg;
+use tsumugi_core::overlay::context_menu::Target;
 use tsumugi_core::viewers::{Diff, FileKind, ViewerAction, is_text};
 use tsumugi_model::{
     EnvironmentId,
@@ -296,6 +298,37 @@ pub(crate) fn DiffWindow(
             })
         }
     };
+    // Opens in the user's Neovim the file at the path given, on the line
+    // given, or the whole change where no file of it is.
+    let neovim = {
+        let (environment, worktree, rev, files) = (
+            environment.clone(),
+            worktree.clone(),
+            rev.clone(),
+            files.clone(),
+        );
+        move |(path, line): (Option<String>, Option<u32>)| {
+            let file = files.iter().find(|f| Some(&f.path) == path.as_ref());
+            app.dispatch(Msg::OpenDiff {
+                environment: environment.clone(),
+                worktree: worktree.clone(),
+                spot: match file {
+                    Some(file) => Spot::Diff(rev.clone(), file.clone()),
+                    None => Spot::Files(rev.clone()),
+                },
+                neovim: true,
+                line: file.and(line),
+            })
+        }
+    };
+    // Where the stream draws no cursor, the file in sight is opened.
+    let cursorless = structural.is_some()
+        || !matches!(&stream, Some(Ok(Listing::Diff(lines))) if !lines.is_empty());
+    let tab = Tab::Diff {
+        environment: environment.clone(),
+        worktree: worktree.clone(),
+        spot: Box::new(spot.clone()),
+    };
     let class = if view.wrap {
         "diff-review wrap"
     } else {
@@ -319,6 +352,9 @@ pub(crate) fn DiffWindow(
                 command: ReadSignal::from(command),
                 next,
                 comparing,
+                cursorless,
+                current,
+                onneovim: neovim.clone(),
             }
             div { class: "diff-review-toolbar",
                 div { class: "diff-changes",
@@ -378,7 +414,6 @@ pub(crate) fn DiffWindow(
                         }
                     }
                 }
-                ReviewActions { environment: environment.clone(), worktree: worktree.clone(), spot: spot.clone(), tab: false }
             }
             div { class: "diff-body",
                 if view.files {
@@ -393,6 +428,7 @@ pub(crate) fn DiffWindow(
                     }
                 }
                 div { id, class: "diff-review-scroll",
+                    oncontextmenu: menu_opener(app, Target::Lines(tab)),
                     onresize: move |e: Event<ResizeData>| {
                         e.stop_propagation();
                         if let Ok(size) = e.data().get_content_box_size() {
@@ -424,6 +460,7 @@ pub(crate) fn DiffWindow(
                                 two: view.columns.two_at(width()),
                                 viewed: seen.iter().cloned().collect::<Vec<_>>(),
                                 onviewed: mark_viewed.clone(),
+                                onneovim: neovim.clone(),
                             }
                         },
                         _ => rsx! {},
@@ -475,41 +512,51 @@ fn DiffKeys(
     /// Where the key that shows the next change goes.
     next: Option<Spot>,
     comparing: Signal<Option<String>>,
+    /// No cursor is drawn, so the file in sight is what opens in Neovim.
+    cursorless: bool,
+    current: Signal<Option<String>>,
+    onneovim: EventHandler<(Option<String>, Option<u32>)>,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let last =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(command.peek().map_or(0, |c| c.seq))));
-    use_effect(use_reactive((&next,), move |(next,)| {
-        let Some(c) = command() else { return };
-        if last.replace(c.seq) == c.seq {
-            return;
-        }
-        match c.action {
-            ViewerAction::Diff(Diff::Choose(choice)) => app.dispatch(Msg::DiffView {
-                environment: environment.clone(),
-                worktree: worktree.clone(),
-                choice,
-            }),
-            ViewerAction::Diff(Diff::Change) => {
-                if let Some(spot) = next {
-                    app.dispatch(Msg::Show {
-                        thing: Tab::Diff {
-                            environment: environment.clone(),
-                            worktree: worktree.clone(),
-                            spot: Box::new(spot),
-                        },
-                        place: None,
-                        how: Some(Opening::InWindow(window)),
-                    });
+    use_effect(use_reactive(
+        (&next, &cursorless),
+        move |(next, cursorless)| {
+            let Some(c) = command() else { return };
+            if last.replace(c.seq) == c.seq {
+                return;
+            }
+            match c.action {
+                ViewerAction::Diff(Diff::Choose(choice)) => app.dispatch(Msg::DiffView {
+                    environment: environment.clone(),
+                    worktree: worktree.clone(),
+                    choice,
+                }),
+                ViewerAction::Diff(Diff::Change) => {
+                    if let Some(spot) = next {
+                        app.dispatch(Msg::Show {
+                            thing: Tab::Diff {
+                                environment: environment.clone(),
+                                worktree: worktree.clone(),
+                                spot: Box::new(spot),
+                            },
+                            place: None,
+                            how: Some(Opening::InWindow(window)),
+                        });
+                    }
                 }
+                ViewerAction::Diff(Diff::Compare) => {
+                    let mut comparing = comparing;
+                    comparing.set(Some(String::new()));
+                }
+                ViewerAction::Diff(Diff::Neovim) if cursorless => {
+                    onneovim.call((current.peek().clone(), None));
+                }
+                _ => {}
             }
-            ViewerAction::Diff(Diff::Compare) => {
-                let mut comparing = comparing;
-                comparing.set(Some(String::new()));
-            }
-            _ => {}
-        }
-    }));
+        },
+    ));
     rsx! {}
 }
 

@@ -303,6 +303,25 @@ pub fn word_marks(lines: &[DiffLine]) -> Vec<Vec<(usize, usize)>> {
     marks
 }
 
+/// The line of the file, on its new side, that line `at` of the diff stands
+/// for: its own number there, or for a line only the old side has, or a
+/// heading, the nearest line of the same file the new side has, after it
+/// or else before it.
+pub fn new_line_at(lines: &[DiffLine], at: usize) -> Option<u32> {
+    let numbers = review::numbered(lines);
+    let at = at.min(lines.len().checked_sub(1)?);
+    let file = |i: usize| lines[i].kind != DiffKind::File;
+    let after = (at..lines.len())
+        .take_while(|&i| i == at || file(i))
+        .find_map(|i| numbers[i].new);
+    after.or_else(|| {
+        (0..at)
+            .rev()
+            .take_while(|&i| file(i))
+            .find_map(|i| numbers[i].new)
+    })
+}
+
 /// The line `way` of `from` whose text holds `text`, going round at the
 /// ends; the case is ignored unless `text` has a capital.
 pub fn find(lines: &[DiffLine], from: usize, text: &str, way: Way) -> Option<usize> {
@@ -705,6 +724,33 @@ impl DiffViews {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_of_the_diff_stands_for_its_line_on_the_new_side_or_the_nearest_one_there() {
+        use DiffKind::*;
+        let lines: Vec<_> = [
+            (File, "a"),
+            (Hunk, "@@ -10,3 +20,3 @@"),
+            (Context, " x"),
+            (Removed, "-old"),
+            (Added, "+new"),
+            (Removed, "-gone"),
+            (File, "b"),
+            (Hunk, "@@ -1,1 +0,0 @@"),
+            (Removed, "-all"),
+        ]
+        .into_iter()
+        .map(|(k, t)| line(k, t))
+        .collect();
+        assert_eq!(new_line_at(&lines, 2), Some(20));
+        assert_eq!(new_line_at(&lines, 3), Some(21));
+        assert_eq!(new_line_at(&lines, 4), Some(21));
+        assert_eq!(new_line_at(&lines, 0), Some(20));
+        assert_eq!(new_line_at(&lines, 5), Some(21));
+        assert_eq!(new_line_at(&lines, 8), None);
+        assert_eq!(new_line_at(&lines, 99), None);
+        assert_eq!(new_line_at(&[], 0), None);
+    }
 
     #[test]
     fn two_columns_are_drawn_where_the_tab_is_wide_enough_unless_one_or_two_is_chosen() {

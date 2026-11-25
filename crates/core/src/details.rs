@@ -26,7 +26,7 @@ mod timeline;
 
 pub(crate) use commits::press as press_on_commit;
 pub use commits::selected_commit;
-pub(crate) use conflicts::open_in_neovim;
+pub(crate) use conflicts::open_diff;
 pub use environment::*;
 pub use layout::*;
 pub use panel::*;

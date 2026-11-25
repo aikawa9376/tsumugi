@@ -183,10 +183,11 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             worktree,
             spot,
             neovim,
+            line,
         } => {
             let place = crate::tree::Place::at(&environment, &worktree);
             if neovim {
-                vec![Effect::StartDiffEditor { place, spot }]
+                vec![Effect::StartDiffEditor { place, spot, line }]
             } else {
                 state.content.go_to_place(place);
                 state.content.windows.open_tab(content::Tab::Diff {
@@ -352,7 +353,8 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             None => Vec::new(),
         },
         Msg::DetailsKey(details::Key::Resolve) => crate::ai::resolve_conflicts(state),
-        Msg::DetailsKey(details::Key::Neovim) => details::open_in_neovim(state),
+        Msg::DetailsKey(details::Key::Neovim) => details::open_diff(state, true),
+        Msg::DetailsKey(details::Key::OpenDiff) => details::open_diff(state, false),
         Msg::DetailsKey(
             key @ (details::Key::LogCopyHash
             | details::Key::LogOpenRemote

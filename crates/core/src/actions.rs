@@ -192,6 +192,7 @@ pub enum Action {
     DetailsBase,
     DetailsResolve,
     DetailsNeovim,
+    DetailsOpenDiff,
     LogCopyHash,
     LogOpenRemote,
     LogExplain,
@@ -236,6 +237,7 @@ pub enum Action {
     DiffPrevNote,
     DiffFiles,
     DiffPictures,
+    DiffNeovim,
     GithubNext,
     GithubPrev,
     GithubComment,
@@ -715,7 +717,12 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::DetailsResume, "details.resume", "in the details panel, go on with the merge, rebase, cherry-pick or revert in progress once every conflict is resolved and staged ([details](details.md#branch-and-conflicts))").says("Continue the operation"),
     S::new(A::DetailsBase, "details.base", "in the details panel, write the base the branch is compared with in the prompt, an empty one giving up the choice for the one Tsumugi finds; sending chooses it ([details](details.md#branch-and-conflicts))").says("Choose the base of the branch"),
     S::new(A::DetailsResolve, "details.resolve", "in the details panel, open a draft in the worktree whose prompt asks the agent the conflict recipe names to resolve the files in conflict, without pushing; sending it starts the session ([ai actions](ai-actions.md))").says("Resolve the conflicts with an agent"),
-    S::new(A::DetailsNeovim, "details.neovim", "in the details panel, open the diff of the selected change in your Neovim, a file in conflict in its Diffview where it has one ([details](details.md#branch-and-conflicts))").says("Open the change in Neovim"),
+    S::new(A::DetailsNeovim, "details.neovim", "in the details panel, open in your Neovim the diff the cursor is on: the file or the commit selected, else the row opened, else what is not committed; a file in conflict opens in its Diffview where it has one ([details](details.md#in-a-git-repository))").says("Open the change in Neovim")
+        .icon(Icon::Code)
+        .row("Open in Neovim", Go),
+    S::new(A::DetailsOpenDiff, "details.open_diff", "in the details panel, open in a diff tab the diff the cursor is on, as `details.neovim` chooses it ([details](details.md#in-a-git-repository))").says("Open the change in a tab")
+        .icon(Icon::BrowserPlus)
+        .row("Open in Tab", Go),
     S::new(A::LogCopyHash, "log.copy_hash", "in the details panel, copy the full hash of the commit selected in the log, or opened from it ([details](details.md#log))").says("Copy the commit hash")
         .icon(Icon::Copy)
         .row("Copy commit hash", Go),
@@ -774,6 +781,9 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::DiffPrevNote, "diff.prev_note", "in a diff tab, move to the previous line an agent left a note under").says("Previous note"),
     S::new(A::DiffFiles, "diff.files", "in a diff tab, show or hide the list of files changed; kept for the worktree").says("Show or hide the files"),
     S::new(A::DiffPictures, "diff.pictures", "in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree").says("Compare pictures another way"),
+    S::new(A::DiffNeovim, "diff.neovim", "in a diff tab, open the diff of the file the cursor is in in your Neovim, on the line the cursor is on; the whole change where the cursor is in no file ([details](details.md#diff-tabs))").says("Open the file in Neovim")
+        .icon(Icon::Code)
+        .row("Open in Neovim", Go),
     S::new(A::GithubNext, "github.next", "in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](tree.md#writing-on-a-pull-request-or-an-issue))").says("Next card"),
     S::new(A::GithubPrev, "github.prev", "in a pull request's or an issue's tab, select the previous card of its conversation").says("Previous card"),
     S::new(A::GithubComment, "github.comment", "in a pull request's or an issue's tab, write a new comment in the prompt under it; sending the prompt posts it, and leaving the prompt gives it up").says("Comment on the pull request or issue"),
@@ -1141,6 +1151,7 @@ mod tests {
             DetailsBase,
             DetailsResolve,
             DetailsNeovim,
+            DetailsOpenDiff,
             LogCopyHash,
             LogOpenRemote,
             LogExplain,
@@ -1185,6 +1196,7 @@ mod tests {
             DiffPrevNote,
             DiffFiles,
             DiffPictures,
+            DiffNeovim,
             GithubNext,
             GithubPrev,
             GithubComment,

@@ -146,6 +146,7 @@ pub(crate) fn perform(
         | Action::DiffPrevNote
         | Action::DiffFiles
         | Action::DiffPictures
+        | Action::DiffNeovim
         | Action::GithubNext
         | Action::GithubPrev
         | Action::GithubComment
@@ -484,6 +485,9 @@ pub(crate) fn perform(
         Action::DetailsNeovim if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::Neovim))
         }
+        Action::DetailsOpenDiff if area == Area::Details => {
+            step(state, Msg::DetailsKey(details::Key::OpenDiff))
+        }
         Action::LogCopyHash if area == Area::Details => {
             step(state, Msg::DetailsKey(details::Key::LogCopyHash))
         }
@@ -528,7 +532,8 @@ pub(crate) fn perform(
         | Action::DetailsResume
         | Action::DetailsBase
         | Action::DetailsResolve
-        | Action::DetailsNeovim => Vec::new(),
+        | Action::DetailsNeovim
+        | Action::DetailsOpenDiff => Vec::new(),
         Action::CursorDown
         | Action::CursorUp
         | Action::CursorFirst

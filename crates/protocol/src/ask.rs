@@ -508,6 +508,10 @@ pub struct TerminalStart {
     /// A repository review opened after the user's Neovim configuration loads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diff: Option<tsumugi_model::repository::Spot>,
+    /// The line of the review's file, on its new side, Neovim puts its
+    /// cursor on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
     /// The file Neovim starts on.
     pub file: Option<PathBuf>,
     /// Start a floating terminal: a shell in the folder the work host's
