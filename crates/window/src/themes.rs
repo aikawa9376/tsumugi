@@ -37,6 +37,9 @@ pub fn window(p: &Palette) -> Window {
         ("--line-strong", line(0.38)),
         ("--focus-line", line(0.44)),
         ("--focus-border", line(0.50)),
+        // Halfway and more to the theme's magenta: the panel that has the
+        // keys stands out without the frame reading as an alert.
+        ("--focus-frame", mix(bg, p.ansi[5], 0.6).hex()),
         ("--text", fg.hex()),
         ("--text-2", toward(0.72)),
         ("--text-3", toward(0.55)),
@@ -255,6 +258,25 @@ mod tests {
                     "{name}: {pair:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn the_focused_panel_is_framed_in_the_theme_s_magenta_toned_toward_its_panels() {
+        for name in ["Nightfox", "Catppuccin Latte"] {
+            let p = preset(name);
+            let w = window(&p);
+            let frame = Rgb::parse(var(&w, "--focus-frame")).unwrap();
+            let (bg, magenta) = (p.background, p.ansi[5]);
+            let between = |a: u8, f: u8, b: u8| a.min(b) <= f && f <= a.max(b);
+            assert!(
+                between(bg.r, frame.r, magenta.r)
+                    && between(bg.g, frame.g, magenta.g)
+                    && between(bg.b, frame.b, magenta.b),
+                "{name}"
+            );
+            assert_ne!(frame, magenta, "{name}");
+            assert_ne!(frame, bg, "{name}");
         }
     }
 

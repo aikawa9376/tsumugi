@@ -1,6 +1,6 @@
 /* The floating terminal: a panel of shells over the window, drawn above the content and below the sheets that hold the keys. */
 .floating { position: fixed; right: 28px; bottom: 44px; width: min(900px, 80vw); height: min(520px, 62vh); z-index: 20; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 12px 40px var(--scrim); overflow: hidden; }
-.floating-focused { border-color: var(--focus-border); }
+.floating-focused { border-color: var(--focus-frame); }
 .floating-bar { flex: none; display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 6px; border-bottom: 1px solid var(--line); color: var(--text-2); font-size: var(--ui-font-small); }
 .floating-tab { display: inline-flex; align-items: center; justify-content: center; height: 24px; min-width: 24px; padding: 0 8px; border: none; border-radius: 6px; background: transparent; color: var(--text-2); font: var(--ui-font-caption) var(--mono); cursor: default; }
 .floating-tab:hover { background: var(--select); color: var(--text); }

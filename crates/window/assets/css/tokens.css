@@ -9,6 +9,8 @@
   --line-strong: #5d646c;
   --focus-line: #686e76;
   --focus-border: #737980;
+  /* The frame of the panel that has the keys. */
+  --focus-frame: #685794;
   /* The border of the field that takes what is typed. */
   --input-focus: var(--run);
   --text: #cdcecf;

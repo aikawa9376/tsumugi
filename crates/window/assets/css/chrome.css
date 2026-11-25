@@ -19,7 +19,7 @@
 .pane-toggle.on { color: var(--text-2); }
 [hidden] { display: none !important; }
 .app-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
-.app-panel.focused { border-color: var(--focus-line); }
+.app-panel.focused { border-color: var(--focus-frame); }
 .sidebar { flex: none; }
 .center-panel { flex: 1 1 0; min-width: 0; }
 .details { flex: none; }
