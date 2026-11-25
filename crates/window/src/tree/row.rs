@@ -36,16 +36,6 @@ fn checkpoint_at<'a>(
     work.and_then(|work| work.tree.checkpoints.iter().find(|c| c.worktree == path))
 }
 
-/// The line the worktree at `path` says, for its row, beside its status chip.
-fn checkpoint_line(
-    work: Option<&tsumugi_protocol::WorkSnapshot>,
-    path: &std::path::Path,
-) -> String {
-    checkpoint_at(work, path)
-        .map(|c| c.said().to_string())
-        .unwrap_or_default()
-}
-
 /// The status the worktree at `path` is in, for its row's chip.
 fn checkpoint_status(
     work: Option<&tsumugi_protocol::WorkSnapshot>,
@@ -352,7 +342,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
                 .workspace_of(root)
                 .map(|w| w.name.clone())
                 .unwrap_or_else(|| short(root));
-            ("head", name, checkpoint_line(work, root), None)
+            ("head", name, String::new(), None)
         }
         Item::Worktree(_, path) => {
             let node = t.worktrees().find(|w| &w.worktree.path == path);
@@ -364,7 +354,7 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             (
                 if empty { "dim mono vacant" } else { "dim mono" },
                 label,
-                checkpoint_line(work, path),
+                String::new(),
                 None,
             )
         }
@@ -796,7 +786,7 @@ mod tests {
     use crate::shell::status_bar::mode_tip;
 
     #[test]
-    fn a_worktree_row_shows_the_line_its_checkpoint_says_and_none_when_it_says_nothing() {
+    fn a_worktree_row_shows_the_status_its_checkpoint_says_and_none_when_it_says_nothing() {
         let mut work = tsumugi_protocol::WorkSnapshot::default();
         work.tree.checkpoints = vec![tsumugi_model::Checkpoint {
             worktree: "/w".into(),
@@ -805,14 +795,12 @@ mod tests {
             noted: String::new(),
             updated_ms: 1,
         }];
-        assert_eq!(checkpoint_line(Some(&work), "/w".as_ref()), "tests are red");
         assert_eq!(
             checkpoint_status(Some(&work), "/w".as_ref()),
             Some(tsumugi_model::WorktreeStatus::InProgress)
         );
         assert_eq!(checkpoint_status(Some(&work), "/other".as_ref()), None);
-        assert_eq!(checkpoint_line(Some(&work), "/other".as_ref()), "");
-        assert_eq!(checkpoint_line(None, "/w".as_ref()), "");
+        assert_eq!(checkpoint_status(None, "/w".as_ref()), None);
     }
 
     #[test]

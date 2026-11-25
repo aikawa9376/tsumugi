@@ -15,8 +15,9 @@ A worktree keeps one line of text and one status of a fixed few, which the
 agent working in it, the user or a command sets, and which the work host
 keeps with the worktree rather than with a session. While no line is set, the
 latest note an agent wrote on its timeline in the worktree stands in for it.
-Every window shows the line beside the worktree's name and can narrow the tree
-to a status.
+Every window shows the status beside the worktree's name and can narrow the
+tree to it; the line is read by asking, not drawn on the row, where a sentence
+crowds out the name and the work running there.
 
 ## Alternatives considered
 

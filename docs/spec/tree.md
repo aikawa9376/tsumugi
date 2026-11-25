@@ -307,8 +307,9 @@ and the status line says so. When deleting fails, nothing is lost.
 ## Saying how a worktree's work stands
 
 A worktree can say how its work stands by one line of text and a status: to
-do, in progress, in review or completed. The line is shown beside the
-worktree's name, after the status as a chip. The agent working in a worktree,
+do, in progress, in review or completed. The status is shown as a chip
+beside the worktree's name; the line is not shown in the tree, which keeps
+each row to its name and the work in it. The agent working in a worktree,
 or you, sets them with `tsumugi worktree set`, which takes `--comment <text>`
 and `--status <status>`, or `--clear-comment` and `--clear-status` to empty
 one, for the worktree of `--dir` or else of the directory it runs in;
@@ -319,7 +320,7 @@ menu. What is not named is left as it was. A comment is cut to its first line
 and 200 characters. While a worktree has no comment, its line is the latest
 note an agent working there wrote on its timeline. What a worktree says is kept
 on the work machine with the worktree, not with a session, so it stays when the
-session that set it ends, and every window shows it.
+session that set it ends, and every window shows the status.
 
 The tree's filter takes `status:<status>`, as `status:in-review`, to keep the
 worktrees in that status with all they hold; the words left narrow by name as
