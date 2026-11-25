@@ -719,8 +719,10 @@ fn recording_agent(dir: &Path, runs: &Path) -> PathBuf {
 
 fn runs_of(runs: &Path, at_least: usize) -> Vec<String> {
     for _ in 0..300 {
-        let lines: Vec<String> = std::fs::read_to_string(runs)
-            .unwrap_or_default()
+        let text = std::fs::read_to_string(runs).unwrap_or_default();
+        // A line the agent is still writing is not yet a run.
+        let written = text.rfind('\n').map_or("", |end| &text[..end]);
+        let lines: Vec<String> = written
             .lines()
             // Tsumugi also runs the agent to ask what it offers; a session
             // is started with Tsumugi's plugin.
