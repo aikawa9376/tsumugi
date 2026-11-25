@@ -182,6 +182,16 @@ pub enum Ask {
         worktree: PathBuf,
         change: Box<tsumugi_model::review::Change>,
     },
+    /// The files of a worktree's changes marked viewed.
+    Viewed {
+        worktree: PathBuf,
+    },
+    /// Mark the file of `mark` viewed, or not; answered as `Viewed` is.
+    MarkViewed {
+        worktree: PathBuf,
+        mark: tsumugi_model::review::Viewed,
+        viewed: bool,
+    },
     /// Keep what a window changed of what is written in the prompts.
     KeepDrafts(Box<DraftChanges>),
     ConsumeDraft {
@@ -627,6 +637,10 @@ pub enum Answer {
     /// The image asked for, or none when it cannot be read or shown.
     Picture {
         url: Option<String>,
+    },
+    /// The files of a worktree's changes marked viewed.
+    Viewed {
+        marks: Vec<tsumugi_model::review::Viewed>,
     },
     /// The commits two revisions compared name, by their full ids.
     Compared {

@@ -68,6 +68,7 @@ struct Review_ {
     searching: Signal<Option<String>>,
     /// What was last searched for.
     sought: Signal<String>,
+    onviewed: Option<EventHandler<String>>,
 }
 
 /// What is done with the hunk or the lines chosen.
@@ -93,6 +94,18 @@ impl Review_ {
             Some(at) => pane.write().place(at),
             None if sought.is_empty() => pane.write().notice = Some("Search with /".into()),
             None => pane.write().notice = Some(format!("Not found: {sought}")),
+        }
+    }
+
+    /// Mark the file the cursor is in viewed, or not.
+    fn viewed(&self) {
+        let comments = self.comments.peek().clone();
+        let reading = self.reading(&comments);
+        let at = self.pane.peek().cursor(&reading);
+        if at < self.lines.len()
+            && let Some(onviewed) = self.onviewed
+        {
+            onviewed.call(reading.path_at(at).to_string());
         }
     }
 
@@ -324,6 +337,7 @@ impl Review_ {
             }
             (_, ViewerAction::Diff(Diff::Found(way))) => self.find(way),
             (_, ViewerAction::Diff(Diff::Unfold)) => self.unfold(),
+            (_, ViewerAction::Diff(Diff::Viewed)) => self.viewed(),
             (_, ViewerAction::Diff(Diff::Unstage)) => self.stage(Staging::Unstage),
             (_, ViewerAction::Diff(Diff::Discard)) => self.stage(Staging::Discard),
             (_, ViewerAction::ScrollTop) => go(Go::Top),
@@ -475,6 +489,11 @@ pub(crate) fn ReviewRows(
     /// The old is drawn beside the new.
     #[props(default)]
     two: bool,
+    /// The files marked viewed, folded to their headings.
+    #[props(default)]
+    viewed: Vec<String>,
+    /// Marks the file at the path given viewed, or not.
+    onviewed: Option<EventHandler<String>>,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let pane = use_signal(Pane::default);
@@ -494,6 +513,7 @@ pub(crate) fn ReviewRows(
         armed,
         searching,
         sought,
+        onviewed,
     };
     // What the work host keeps is read when the diff is, so a change to the
     // code shows at once which comments no longer stand.
@@ -607,6 +627,9 @@ pub(crate) fn ReviewRows(
                                 span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
                                 span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
                                 if lines[i].kind == DiffKind::Difft { "{lines[i].text}" } else { Words { text: lines[i].text.clone(), marks: marks[i].clone() } }
+                                if lines[i].kind == DiffKind::File && viewed.contains(&lines[i].text) {
+                                    span { class: "rv-viewed", title: "Viewed: folded until its diff changes (V)", "✓ viewed" }
+                                }
                             }
                         },
                         Row::Pair(old, new) if two => rsx! {

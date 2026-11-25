@@ -81,6 +81,8 @@ pub enum Diff {
     Found(Way),
     /// Show the file the cursor is in whole, or as its hunks again.
     Unfold,
+    /// Mark the file the cursor is in viewed, or not.
+    Viewed,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -136,6 +138,7 @@ impl ViewerAction {
             Action::DiffSearchNext => V::Diff(Diff::Found(Way::Next)),
             Action::DiffSearchPrev => V::Diff(Diff::Found(Way::Prev)),
             Action::DiffUnfold => V::Diff(Diff::Unfold),
+            Action::DiffViewed => V::Diff(Diff::Viewed),
             Action::DiffUnstage => V::Diff(Diff::Unstage),
             Action::DiffDiscard => V::Diff(Diff::Discard),
             Action::DiffStructural => V::Diff(Diff::Choose(Choice::Structural)),

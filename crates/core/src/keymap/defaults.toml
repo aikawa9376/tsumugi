@@ -362,6 +362,7 @@
 "n" = "diff.search_next"
 "N" = "diff.search_prev"
 "z a" = "diff.unfold"
+"V" = "diff.viewed"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

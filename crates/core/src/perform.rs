@@ -141,6 +141,7 @@ pub(crate) fn perform(
         | Action::DiffSearchNext
         | Action::DiffSearchPrev
         | Action::DiffUnfold
+        | Action::DiffViewed
         | Action::DiffFiles
         | Action::DiffPictures
         | Action::GithubNext

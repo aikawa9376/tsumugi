@@ -226,6 +226,7 @@ changes them ([keys](../keys.md)).
 | `diff.search_next` |  | in a diff tab, bring the cursor to the next line holding what was searched for, going round at the end | `viewer`: `n` |
 | `diff.search_prev` |  | in a diff tab, bring the cursor to the previous line holding what was searched for, going round at the start | `viewer`: `N` |
 | `diff.unfold` |  | in a diff tab, show the file the cursor is in whole, its unchanged lines unfolded, or as its hunks again ([details](../details.md#diff-tabs)) | `viewer`: `z a` |
+| `diff.viewed` |  | in a diff tab, mark the file the cursor is in viewed, which folds it and checks it off in the list until its diff changes, or not viewed ([review](../review.md#viewed-files)) | `viewer`: `V` |
 | `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
 | `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
@@ -650,6 +651,7 @@ changes them ([keys](../keys.md)).
 "n" = "diff.search_next"
 "N" = "diff.search_prev"
 "z a" = "diff.unfold"
+"V" = "diff.viewed"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

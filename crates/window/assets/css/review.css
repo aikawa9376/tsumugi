@@ -43,3 +43,4 @@
 .diff-del .rv-word { background:rgba(248,81,73,.40); }
 .rv-fold { padding:2px 12px; color:var(--text-3); font-size:var(--ui-font-small); cursor:pointer; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); }
 .rv-fold:hover { background:var(--select); color:var(--text); }
+.rv-viewed { margin-left:12px; color:var(--done); font-size:var(--ui-font-small); }

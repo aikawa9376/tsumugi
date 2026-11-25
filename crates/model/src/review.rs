@@ -314,9 +314,53 @@ pub fn prompt(comments: &[Judged]) -> String {
     text
 }
 
+/// A file of a change marked viewed, with what its diff was when it was:
+/// it stands viewed only while its diff still reads so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Viewed {
+    pub rev: Rev,
+    pub path: String,
+    /// The [`digest`] of the file's lines when it was marked.
+    pub digest: String,
+}
+
+/// What a file's lines in a diff come to, short enough to keep and the same
+/// whichever process reads them.
+pub fn digest(lines: &[DiffLine]) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for line in lines {
+        feed(format!("{:?}", line.kind).as_bytes());
+        feed(b"\0");
+        feed(line.text.as_bytes());
+        feed(b"\n");
+    }
+    format!("{hash:016x}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_files_digest_changes_with_any_of_its_lines_and_only_with_them() {
+        let line = |kind, text: &str| DiffLine {
+            kind,
+            text: text.into(),
+        };
+        let a = [line(DiffKind::File, "a"), line(DiffKind::Added, "+x")];
+        assert_eq!(digest(&a), digest(&a.clone()));
+        assert_eq!(digest(&a).len(), 16);
+        let edited = [line(DiffKind::File, "a"), line(DiffKind::Added, "+y")];
+        let other_kind = [line(DiffKind::File, "a"), line(DiffKind::Context, "+x")];
+        assert_ne!(digest(&a), digest(&edited));
+        assert_ne!(digest(&a), digest(&other_kind));
+    }
 
     fn line(kind: DiffKind, text: &str) -> DiffLine {
         DiffLine {

@@ -120,3 +120,5 @@
 .board-card-foot { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: var(--ui-font-small); }
 .board-card-where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-card-age { flex: none; font-variant-numeric: tabular-nums; }
+.diff-files-count { padding:4px 8px; color:var(--text-3); font-size:var(--ui-font-small); border-bottom:1px solid var(--line); }
+.diff-file-viewed { margin-left:auto; color:var(--done); }

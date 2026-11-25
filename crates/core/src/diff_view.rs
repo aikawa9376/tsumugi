@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use tsumugi_model::EnvironmentId;
 use tsumugi_model::repository::{Change, DiffKind, DiffLine, Rev};
+use tsumugi_model::review;
 
 /// Which way a key moves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -366,6 +367,55 @@ fn old_side(heading: &str) -> Option<(u32, u32)> {
     let start = parts.next()?.parse().ok()?;
     let count = parts.next().map_or(Some(1), |c| c.parse().ok())?;
     Some((start, count))
+}
+
+/// Each file of a stream, by its path, with where its lines are.
+pub fn parts(lines: &[DiffLine]) -> Vec<(String, std::ops::Range<usize>)> {
+    let heads: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.kind == DiffKind::File)
+        .map(|(i, _)| i)
+        .collect();
+    heads
+        .iter()
+        .enumerate()
+        .map(|(k, &h)| {
+            let end = heads.get(k + 1).copied().unwrap_or(lines.len());
+            (lines[h].text.clone(), h..end)
+        })
+        .collect()
+}
+
+/// The files of the stream `lines` of `rev` that stand viewed: those whose
+/// lines still come to the digest they were marked with.
+pub fn viewed(lines: &[DiffLine], rev: &Rev, marks: &[review::Viewed]) -> BTreeSet<String> {
+    parts(lines)
+        .into_iter()
+        .filter(|(path, range)| {
+            let digest = review::digest(&lines[range.clone()]);
+            marks
+                .iter()
+                .any(|m| &m.rev == rev && &m.path == path && m.digest == digest)
+        })
+        .map(|(path, _)| path)
+        .collect()
+}
+
+/// The stream `lines` with each file of `viewed` folded to its heading.
+pub fn fold_viewed(lines: &[DiffLine], viewed: &BTreeSet<String>) -> Vec<DiffLine> {
+    let mut out = Vec::with_capacity(lines.len());
+    for (path, range) in parts(lines) {
+        if viewed.contains(&path) {
+            out.push(lines[range.start].clone());
+        } else {
+            out.extend_from_slice(&lines[range]);
+        }
+    }
+    if out.is_empty() {
+        return lines.to_vec();
+    }
+    out
 }
 
 /// Why a patch cannot be made of the lines chosen.
@@ -782,6 +832,32 @@ mod tests {
         assert!(views.unfolded(&here, Path::new("/other")).is_empty());
         views.unfold(&here, Path::new("/w"), "a.rs");
         assert!(views.unfolded(&here, Path::new("/w")).is_empty());
+    }
+
+    #[test]
+    fn a_file_stands_viewed_while_its_lines_read_as_they_did_and_folds_to_its_heading() {
+        use DiffKind::*;
+        let lines: Vec<_> = [(File, "a"), (Added, "+x"), (File, "b"), (Added, "+y")]
+            .into_iter()
+            .map(|(k, t)| line(k, t))
+            .collect();
+        let mark = |path: &str, of: std::ops::Range<usize>| review::Viewed {
+            rev: Rev::WorkingCopy,
+            path: path.into(),
+            digest: review::digest(&lines[of]),
+        };
+        let marks = [mark("a", 0..2), mark("b", 0..2)];
+        let seen = viewed(&lines, &Rev::WorkingCopy, &marks);
+        assert_eq!(
+            seen.into_iter().collect::<Vec<_>>(),
+            ["a"],
+            "b's lines changed"
+        );
+        assert!(viewed(&lines, &Rev::Commit("c".into()), &marks).is_empty());
+        let only_a = BTreeSet::from(["a".to_string()]);
+        let folded = fold_viewed(&lines, &only_a);
+        let texts: Vec<_> = folded.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(texts, ["a", "b", "+y"]);
     }
 
     #[test]

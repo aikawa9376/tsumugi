@@ -301,6 +301,22 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 Err(text) => Err(text),
             }
         }
+        Ask::Viewed { worktree } => {
+            let dir = crate::paths::instance_state();
+            blocking(move || crate::viewed_files::load(&dir, &worktree))
+                .await
+                .map(|marks| Answer::Viewed { marks })
+        }
+        Ask::MarkViewed {
+            worktree,
+            mark,
+            viewed,
+        } => {
+            let dir = crate::paths::instance_state();
+            blocking(move || crate::viewed_files::set(&dir, &worktree, mark, viewed))
+                .await
+                .map(|marks| Answer::Viewed { marks })
+        }
         Ask::ChangeReview { worktree, change } => {
             let (dir, kept) = (crate::paths::instance_state(), worktree.clone());
             match blocking(move || crate::review_comments::change(&dir, &kept, *change)).await {

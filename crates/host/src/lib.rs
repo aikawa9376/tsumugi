@@ -71,6 +71,7 @@ pub mod terminals;
 #[cfg(test)]
 mod testing;
 pub mod themes;
+pub mod viewed_files;
 pub mod watch;
 pub mod work;
 pub mod work_host;

@@ -148,6 +148,67 @@ pub(crate) fn DiffWindow(
             other => other,
         })
     });
+    // The files marked viewed, as the work host keeps them.
+    let mut marks = use_signal(Vec::<tsumugi_model::review::Viewed>::new);
+    use_effect(use_reactive(
+        (&environment, &worktree),
+        move |(environment, worktree)| {
+            spawn(async move {
+                let ask = tsumugi_protocol::Ask::Viewed { worktree };
+                if let tsumugi_protocol::Answer::Viewed { marks: kept } =
+                    app.ask_in(&environment, ask).await
+                {
+                    marks.set(kept);
+                }
+            });
+        },
+    ));
+    let full = match &stream {
+        Some(Ok(Listing::Diff(lines))) => lines.clone(),
+        _ => Vec::new(),
+    };
+    let seen = diff_view::viewed(&full, &rev, &marks.read());
+    let stream = stream.map(|read| {
+        read.map(|listing| match listing {
+            Listing::Diff(lines) => Listing::Diff(diff_view::fold_viewed(&lines, &seen)),
+            other => other,
+        })
+    });
+    let mark_viewed = {
+        let (environment, worktree, rev, full, seen) = (
+            environment.clone(),
+            worktree.clone(),
+            rev.clone(),
+            full.clone(),
+            seen.clone(),
+        );
+        move |path: String| {
+            let Some((_, range)) = diff_view::parts(&full)
+                .into_iter()
+                .find(|(p, _)| *p == path)
+            else {
+                return;
+            };
+            let mark = tsumugi_model::review::Viewed {
+                rev: rev.clone(),
+                path: path.clone(),
+                digest: tsumugi_model::review::digest(&full[range]),
+            };
+            let ask = tsumugi_protocol::Ask::MarkViewed {
+                worktree: worktree.clone(),
+                mark,
+                viewed: !seen.contains(&path),
+            };
+            let environment = environment.clone();
+            spawn(async move {
+                if let tsumugi_protocol::Answer::Viewed { marks: kept } =
+                    app.ask_in(&environment, ask).await
+                {
+                    marks.set(kept);
+                }
+            });
+        }
+    };
     let merge_base = app
         .hosts
         .read()
@@ -325,6 +386,7 @@ pub(crate) fn DiffWindow(
                         current: current.read().clone(),
                         files: files.clone(),
                         window,
+                        viewed: seen.iter().cloned().collect::<Vec<_>>(),
                     }
                 }
                 div { id, class: "diff-review-scroll",
@@ -356,6 +418,8 @@ pub(crate) fn DiffWindow(
                                 pictures,
                                 how: view.pictures,
                                 two: view.columns.two_at(width()),
+                                viewed: seen.iter().cloned().collect::<Vec<_>>(),
+                                onviewed: mark_viewed.clone(),
                             }
                         },
                         _ => rsx! {},
@@ -377,11 +441,14 @@ fn FileList(
     current: Option<String>,
     files: Vec<Change>,
     window: WindowId,
+    viewed: Vec<String>,
 ) -> Element {
     let app = use_context::<AppCtx>();
+    let counted = files.iter().filter(|f| viewed.contains(&f.path)).count();
     rsx! {
         div { class: "diff-files",
             if files.is_empty() { div { class: "diff-files-empty", "No changes" } }
+            else { div { class: "diff-files-count", "{counted} of {files.len()} viewed" } }
             for file in files {
                 button {
                     key: "{file.path}",
@@ -399,6 +466,7 @@ fn FileList(
                     },
                     span { class: "details-file-status", "{file.status}" }
                     span { class: "diff-file-name", "{file.shown()}" }
+                    if viewed.contains(&file.path) { span { class: "diff-file-viewed", title: "Viewed", "✓" } }
                 }
             }
         }
