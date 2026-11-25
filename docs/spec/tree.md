@@ -329,14 +329,10 @@ takes the word away.
 
 ## A branch against its base
 
-A worktree's row, and a workspace's row standing for its main checkout, says
-how its branch stands against its base ([the base](details.md#branch-and-conflicts)):
-how many commits it is ahead and behind, and the lines it added and took out
-since the two parted, what is only edited in the worktree included. A branch
-that cannot be compared shows nothing there. The numbers follow the disk and
-the base's last fetch.
-
-From the row, or its right-click menu ([keys](reference/keys.md#actions)):
+How a worktree's branch stands against its base is told in the details
+panel ([branch](details.md#branch-and-conflicts)), not on its row. From a
+worktree's row, or a workspace's row standing for its main checkout, or its
+right-click menu ([keys](reference/keys.md#actions)):
 
 - the branch's change opens in a diff tab: the worktree against its base, or
   what is not committed where the branch cannot be compared
