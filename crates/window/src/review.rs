@@ -686,77 +686,81 @@ pub(crate) fn ReviewRows(
                     }
                 }
             }
-            if let Mode::Writing { target , text } = &state.mode {
-                div { class: "rv-composer",
-                    span { class: "rv-label",
-                        match target {
-                            Target::Add { anchor , .. } => format!("Comment, {}", said(anchor)),
-                            Target::Edit { .. } => "Edit the comment".to_string(),
+            // One foot, so what is written, previewed or sought stacks above
+            // the bar instead of each sticking to the same bottom edge.
+            div { class: "rv-foot",
+                if let Mode::Writing { target , text } = &state.mode {
+                    div { class: "rv-composer",
+                        span { class: "rv-label",
+                            match target {
+                                Target::Add { anchor , .. } => format!("Comment, {}", said(anchor)),
+                                Target::Edit { .. } => "Edit the comment".to_string(),
+                            }
+                        }
+                        InlineField {
+                            class: "rv-input",
+                            value: text.clone(),
+                            placeholder: "What should change? Enter keeps it, Escape gives it up".to_string(),
+                            focus: true,
+                            contained: true,
+                            oninput: { let mut pane = pane; move |text: String| pane.write().typed(text) },
+                            onenter: { let this = this.clone(); let mut pane = pane; move |()| {
+                                if let Some(change) = pane.write().finish(&this.rev) { this.apply(change); }
+                            } },
+                            onescape: { let mut pane = pane; move |()| pane.write().cancel() },
                         }
                     }
-                    InlineField {
-                        class: "rv-input",
-                        value: text.clone(),
-                        placeholder: "What should change? Enter keeps it, Escape gives it up".to_string(),
-                        focus: true,
-                        contained: true,
-                        oninput: { let mut pane = pane; move |text: String| pane.write().typed(text) },
-                        onenter: { let this = this.clone(); let mut pane = pane; move |()| {
-                            if let Some(change) = pane.write().finish(&this.rev) { this.apply(change); }
-                        } },
-                        onescape: { let mut pane = pane; move |()| pane.write().cancel() },
-                    }
                 }
-            }
-            if let Mode::Previewing(preview) = &state.mode {
-                div { class: "rv-preview",
-                    div { class: "rv-label", "Send to" }
-                    if choices.is_empty() {
-                        div { class: "rv-dim", "No session runs in this worktree: S prepares a new one" }
-                    }
-                    for (k , choice) in choices.iter().enumerate() {
-                        div { key: "{choice.id}", class: if k == preview.choice.min(choices.len() - 1) { "rv-choice selected" } else { "rv-choice" },
-                            "{choice.name}"
-                            if choice.waiting { span { class: "rv-badge", "waiting on you" } }
+                if let Mode::Previewing(preview) = &state.mode {
+                    div { class: "rv-preview",
+                        div { class: "rv-label", "Send to" }
+                        if choices.is_empty() {
+                            div { class: "rv-dim", "No session runs in this worktree: S prepares a new one" }
+                        }
+                        for (k , choice) in choices.iter().enumerate() {
+                            div { key: "{choice.id}", class: if k == preview.choice.min(choices.len() - 1) { "rv-choice selected" } else { "rv-choice" },
+                                "{choice.name}"
+                                if choice.waiting { span { class: "rv-badge", "waiting on you" } }
+                            }
+                        }
+                        pre { class: "rv-prompt", "{preview.text}" }
+                        if let Some(error) = &preview.error { div { class: "git-error", "{error}" } }
+                        div { class: "rv-hint",
+                            if preview.busy { "Sending…" } else { "s send · S new session · j/k choose · q close" }
                         }
                     }
-                    pre { class: "rv-prompt", "{preview.text}" }
-                    if let Some(error) = &preview.error { div { class: "git-error", "{error}" } }
-                    div { class: "rv-hint",
-                        if preview.busy { "Sending…" } else { "s send · S new session · j/k choose · q close" }
+                }
+                if let Some(text) = searching() {
+                    div { class: "rv-composer",
+                        span { class: "rv-label", "/" }
+                        InlineField {
+                            class: "rv-input",
+                            value: text,
+                            placeholder: "Find in the diff; Enter goes to it, Escape gives up".to_string(),
+                            focus: true,
+                            contained: true,
+                            oninput: move |text: String| searching.set(Some(text)),
+                            onenter: { let this = this.clone(); move |()| {
+                                sought.set(searching.peek().clone().unwrap_or_default());
+                                searching.set(None);
+                                this.find(tsumugi_core::diff_view::Way::Next);
+                            } },
+                            onescape: move |()| searching.set(None),
+                        }
                     }
                 }
-            }
-            if let Some(text) = searching() {
-                div { class: "rv-composer",
-                    span { class: "rv-label", "/" }
-                    InlineField {
-                        class: "rv-input",
-                        value: text,
-                        placeholder: "Find in the diff; Enter goes to it, Escape gives up".to_string(),
-                        focus: true,
-                        contained: true,
-                        oninput: move |text: String| searching.set(Some(text)),
-                        onenter: { let this = this.clone(); move |()| {
-                            sought.set(searching.peek().clone().unwrap_or_default());
-                            searching.set(None);
-                            this.find(tsumugi_core::diff_view::Way::Next);
-                        } },
-                        onescape: move |()| searching.set(None),
+                div { class: "rv-bar",
+                    if let Some(notice) = &state.notice { span { class: "rv-notice", "{notice}" } }
+                    else { span { class: "rv-dim", "c comment · v mark lines · Enter edit · dd delete · r resolve · s send" } }
+                    if all.iter().any(|j| j.comment.is_note()) {
+                        button { class: if hide_notes() { "rv-notes" } else { "rv-notes on" },
+                            title: "Show or hide the notes agents left",
+                            onclick: move |_| { let now = !hide_notes(); hide_notes.set(now); },
+                            if hide_notes() { "Notes hidden" } else { "Notes shown" }
+                        }
                     }
+                    span { class: "rv-count", "{open} open · {all.len() - open} resolved" }
                 }
-            }
-            div { class: "rv-bar",
-                if let Some(notice) = &state.notice { span { class: "rv-notice", "{notice}" } }
-                else { span { class: "rv-dim", "c comment · v mark lines · Enter edit · dd delete · r resolve · s send" } }
-                if all.iter().any(|j| j.comment.is_note()) {
-                    button { class: if hide_notes() { "rv-notes" } else { "rv-notes on" },
-                        title: "Show or hide the notes agents left",
-                        onclick: move |_| { let now = !hide_notes(); hide_notes.set(now); },
-                        if hide_notes() { "Notes hidden" } else { "Notes shown" }
-                    }
-                }
-                span { class: "rv-count", "{open} open · {all.len() - open} resolved" }
             }
         }
     }

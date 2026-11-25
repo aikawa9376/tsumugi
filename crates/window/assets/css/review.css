@@ -20,10 +20,11 @@
 .rv-text { margin:4px 0 0; font:inherit; white-space:pre-wrap; }
 .rv-dim { color:var(--text-3); }
 .rv-outdated-title { margin:12px 0 4px; color:var(--fail); font-size:var(--ui-font-small); }
-.rv-composer, .rv-preview, .rv-bar { position:sticky; bottom:0; background:var(--raised); border-top:1px solid var(--line); padding:8px 12px; }
+.rv-foot { position:sticky; bottom:0; z-index:2; display:flex; flex-direction:column; }
+.rv-composer, .rv-preview, .rv-bar { background:var(--raised); border-top:1px solid var(--line); padding:8px 12px; }
 .rv-composer { display:flex; flex-direction:column; gap:6px; }
 .rv-input { width:100%; padding:5px 8px; border:1px solid var(--line-strong); border-radius:5px; background:var(--bg, transparent); color:var(--text); font:inherit; }
-.rv-preview { max-height:60%; overflow:auto; }
+.rv-preview { max-height:50vh; overflow:auto; }
 .rv-label { color:var(--text-2); font-size:var(--ui-font-small); }
 .rv-choice { padding:3px 8px; border-radius:4px; }
 .rv-choice.selected { background:#3989ff; color:#fff; }
