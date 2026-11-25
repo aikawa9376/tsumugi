@@ -328,12 +328,23 @@ pub(crate) fn reveal_current(state: &mut ViewState) -> Vec<Effect> {
     if !shown {
         return nothing(state);
     }
+    revealed(state, &environment, &tree, worktree)
+}
+
+/// The tree shown with the keys once a row of `worktree` is revealed,
+/// that worktree shown again where a filter left it out.
+fn revealed(
+    state: &mut ViewState,
+    environment: &EnvironmentId,
+    tree: &Tree,
+    worktree: Option<PathBuf>,
+) -> Vec<Effect> {
     let mut effects = Vec::new();
     if let Some(path) = worktree
         && state
             .tree
             .organize
-            .hidden(&environment, &tree)
+            .hidden(environment, tree)
             .contains(&path)
     {
         state.tree.organize.hide = Hide::default();
@@ -343,7 +354,66 @@ pub(crate) fn reveal_current(state: &mut ViewState) -> Vec<Effect> {
     effects
 }
 
-/// The tree `environment`'s host lists.
+/// Move the tree's cursor to the session after (or before) the current
+/// one, going round every environment's sessions those that need the user
+/// first, and show it as moving the cursor does, the keys in the tree.
+pub(crate) fn go_round(state: &mut ViewState, forward: bool) -> Vec<Effect> {
+    use super::nav::Need;
+    let current = match crate::sidebar::selected(state).as_ref().map(Item::own) {
+        Some(Item::Waiting(environment, id) | Item::Session(environment, id)) => {
+            Some((environment.clone(), id.clone()))
+        }
+        _ => match state.content.active() {
+            Some(Tab::Session(environment, id)) => Some((environment.clone(), id.clone())),
+            _ => None,
+        },
+    };
+    let view = &state.tree;
+    let mut sessions = Vec::new();
+    for (environment, host) in state.hosts.each() {
+        let mut tree = tree::listed(host.work.as_ref()).clone();
+        view.organize.order(environment, &mut tree);
+        for node in tree.worktrees() {
+            for s in &node.sessions {
+                let mut need = if matches!(s.state, State::Waiting(_)) {
+                    Need::Waiting
+                } else if view.completions.unread(s) {
+                    Need::Unread
+                } else {
+                    Need::Nothing
+                };
+                // The one the round reached keeps its turn, though seen
+                // once shown.
+                if let Some((e, id, was)) = &view.round
+                    && e == environment
+                    && *id == s.id
+                {
+                    need = need.min(*was);
+                }
+                sessions.push((environment.clone(), s.id.clone(), need));
+            }
+        }
+    }
+    let at = current.as_ref().map(|(e, id)| (e, id.as_str()));
+    let Some((environment, id)) = tree::nav::next_needing(&sessions, at, forward) else {
+        return Vec::new();
+    };
+    let need = sessions
+        .iter()
+        .find(|(e, i, _)| *e == environment && *i == id)
+        .map_or(Need::Nothing, |(_, _, need)| *need);
+    let tree = listed(state, &environment);
+    if !tree::reveal_session(&mut state.tree, &environment, &tree, &id) {
+        return Vec::new();
+    }
+    let worktree = tree.find(&id).map(|(_, w, _)| w.worktree.path.clone());
+    let mut effects = revealed(state, &environment, &tree, worktree);
+    let row = Item::Session(environment.clone(), id.clone());
+    state.tree.round = Some((environment, id, need));
+    effects.extend(crate::content::preview_row(state, &row));
+    effects
+}
+
 fn listed(state: &ViewState, environment: &EnvironmentId) -> Tree {
     super::listed(state.hosts.work(environment)).clone()
 }

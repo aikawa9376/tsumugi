@@ -94,7 +94,7 @@ Nothing opened takes the place of what a window shows, but for a document
 switched between its viewer and its Neovim ([viewers](#viewers)). Opening
 something moves the focus to a window of any tab of its worktree already showing it; when no
 window shows it, it opens in a new tab after the one shown. Going to the next
-or previous session, workspace or waiting session opens it so too.
+or previous session or workspace opens it so too.
 
 From the tree, the key says how a row opens and the row says what: opened,
 in a new window split below or beside the focused one, or in a new

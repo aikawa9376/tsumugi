@@ -1,9 +1,9 @@
-//! Going from one row, waiting session, session or workspace to the next.
+//! Going from one row, session or workspace to the next.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use tsumugi_model::{EnvironmentId, InboxItem, Session, Tree};
+use tsumugi_model::{EnvironmentId, Session, Tree};
 
 use super::Item;
 use crate::content::Tab;
@@ -21,29 +21,44 @@ pub fn step(items: &[Item], current: Option<&Item>, delta: isize) -> Option<Item
     Some(items[next].clone())
 }
 
-/// The next (or previous) waiting session after `current`, wrapping around,
-/// each by its environment and its id there.
-pub fn next_waiting(
-    inbox: &[(EnvironmentId, InboxItem)],
+/// What a session needs of the user, the most first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Need {
+    /// It waits on an answer.
+    Waiting,
+    /// It finished, or was marked unread, and is not seen yet.
+    Unread,
+    Nothing,
+}
+
+/// The session after (or before) `current` going round `sessions`, given in
+/// the tree's order with what each needs: those that need the user more
+/// come first, and those that need it alike keep the tree's order. With
+/// nothing current, the first is next and the last one before.
+pub fn next_needing(
+    sessions: &[(EnvironmentId, String, Need)],
     current: Option<(&EnvironmentId, &str)>,
     forward: bool,
 ) -> Option<(EnvironmentId, String)> {
-    if inbox.is_empty() {
+    let mut round: Vec<_> = sessions.iter().collect();
+    // A stable sort keeps the tree's order among those that need alike.
+    round.sort_by_key(|(_, _, need)| *need);
+    let n = round.len();
+    if n == 0 {
         return None;
     }
-    let n = inbox.len();
     let at = current.and_then(|(environment, id)| {
-        inbox
+        round
             .iter()
-            .position(|(e, i)| e == environment && i.session.id == id)
+            .position(|(e, i, _)| e == environment && i == id)
     });
     let i = match (at, forward) {
         (Some(i), _) => cursor::wrap(i, if forward { 1 } else { -1 }, n),
         (None, true) => 0,
         (None, false) => n - 1,
     };
-    let (environment, it) = &inbox[i];
-    Some((environment.clone(), it.session.id.clone()))
+    let (environment, id, _) = round[i];
+    Some((environment.clone(), id.clone()))
 }
 
 /// The session after (or before) the one `shown`, over every session in the

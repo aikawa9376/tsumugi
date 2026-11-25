@@ -855,33 +855,51 @@ fn stepping_clamps_at_both_ends() {
     assert_eq!(step(&[], None, 1), None);
 }
 
-#[test]
-fn the_next_waiting_session_wraps_around() {
-    let t = tree();
-    let ib: Vec<_> = inbox(&t).into_iter().map(|i| (here(), i)).collect();
-    let next = |current: Option<&str>, forward| {
-        next_waiting(&ib, current.map(|id| (&ib[0].0, id)), forward).map(|(_, id)| id)
-    };
-    assert_eq!(next(None, true).as_deref(), Some("b"));
-    assert_eq!(next(Some("b"), true).as_deref(), Some("z"));
-    assert_eq!(next(Some("z"), true).as_deref(), Some("b"));
-    assert_eq!(next(Some("b"), false).as_deref(), Some("z"));
+/// Sessions of `here` in the tree's order, each with what it needs.
+fn needing(list: &[(&str, Need)]) -> Vec<(EnvironmentId, String, Need)> {
+    list.iter()
+        .map(|(id, need)| (here(), (*id).to_owned(), *need))
+        .collect()
 }
 
 #[test]
-fn the_same_session_id_waiting_in_two_environments_is_two_stops() {
-    let t = tree();
+fn going_round_the_sessions_takes_those_waiting_then_those_unread_then_the_rest() {
+    let all = needing(&[
+        ("r1", Need::Nothing),
+        ("u1", Need::Unread),
+        ("w1", Need::Waiting),
+        ("r2", Need::Nothing),
+        ("u2", Need::Unread),
+        ("w2", Need::Waiting),
+    ]);
+    let next = |current: Option<&str>, forward| {
+        next_needing(&all, current.map(|id| (&all[0].0, id)), forward).map(|(_, id)| id)
+    };
+    let mut at = None;
+    let mut went = Vec::new();
+    for _ in 0..7 {
+        at = next(at.as_deref(), true);
+        went.extend(at.clone());
+    }
+    assert_eq!(went, ["w1", "w2", "u1", "u2", "r1", "r2", "w1"]);
+    assert_eq!(next(Some("w1"), false).as_deref(), Some("r2"));
+    assert_eq!(next(None, false).as_deref(), Some("r2"));
+    assert_eq!(next_needing(&[], None, true), None);
+}
+
+#[test]
+fn the_same_session_id_in_two_environments_is_two_stops() {
     let there = EnvironmentId::new("there");
-    let ib: Vec<_> = [here(), there.clone()]
-        .into_iter()
-        .flat_map(|e| inbox(&t).into_iter().map(move |i| (e.clone(), i)))
-        .collect();
+    let all = vec![
+        (here(), "z".to_owned(), Need::Waiting),
+        (there.clone(), "z".to_owned(), Need::Waiting),
+    ];
     assert_eq!(
-        next_waiting(&ib, Some((&here(), "z")), true),
-        Some((there.clone(), "b".into()))
+        next_needing(&all, Some((&here(), "z")), true),
+        Some((there.clone(), "z".into()))
     );
     assert_eq!(
-        next_waiting(&ib, Some((&there, "b")), false),
+        next_needing(&all, Some((&there, "z")), true),
         Some((here(), "z".into()))
     );
 }

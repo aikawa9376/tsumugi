@@ -947,24 +947,79 @@ fn the_sessions_waiting_on_the_user_are_counted_by_environment() {
     assert_eq!(view.waiting_in(&EnvironmentId::new("elsewhere")), 0);
 }
 
-#[test]
-fn the_next_waiting_session_can_be_another_environment_s() {
+fn go_round(run: Scenario, action: Action) -> Scenario {
     use crate::console::Probe;
-    let next = |run: Scenario| {
-        run.send(Msg::Perform {
-            action: Action::WaitingNext,
-            key: None,
-            probe: Box::new(Probe::default()),
-        })
-    };
-    let run = next(both_waiting().send(Msg::TreeSelect(Some(Item::Waiting(here(), "a".into())))));
-    assert_eq!(selected(&run), Some(Item::Waiting(there(), "b".into())));
+    run.send(Msg::Perform {
+        action,
+        key: None,
+        probe: Box::new(Probe::default()),
+    })
+}
+
+#[test]
+fn going_round_moves_the_tree_cursor_to_a_session_of_any_environment_keeping_the_keys_there() {
+    use crate::content::Area;
+    let run = both_waiting()
+        .send(Msg::Focus(Area::Console))
+        .send(Msg::TreeSelect(Some(Item::Waiting(here(), "a".into()))));
+    let run = go_round(run, Action::WaitingNext);
+    assert_eq!(selected(&run), Some(Item::Session(there(), "b".into())));
     assert_eq!(
         run.state().content.active(),
         Some(&Tab::Session(there(), "b".into()))
     );
-    let back = next(run);
-    assert_eq!(selected(&back), Some(Item::Waiting(here(), "a".into())));
+    assert_eq!(run.state().content.focus, Area::Sidebar);
+    assert_eq!(run.state().sidebar.panel, crate::sidebar::Panel::Tree);
+    let back = go_round(run, Action::WaitingPrev);
+    assert_eq!(selected(&back), Some(Item::Session(here(), "a".into())));
+}
+
+#[test]
+fn going_round_takes_the_sessions_waiting_then_those_unread_then_the_rest() {
+    let run = Scenario::new().event(listing([
+        session("r").cwd("/r").started_ms(100),
+        session("u1").cwd("/r").started_ms(200).state(State::Done),
+        session("w").cwd("/r").started_ms(300).waiting(Wait::Input),
+        session("u2").cwd("/r").started_ms(400).state(State::Done),
+    ]));
+    let tree_order: Vec<String> = rows(&run)
+        .into_iter()
+        .filter_map(|row| match row {
+            Item::Session(_, id) => Some(id),
+            _ => None,
+        })
+        .collect();
+    let unread: Vec<&str> = tree_order
+        .iter()
+        .map(String::as_str)
+        .filter(|id| id.starts_with('u'))
+        .collect();
+    let mut run = run;
+    let mut went = Vec::new();
+    for _ in 0..4 {
+        run = go_round(run, Action::WaitingNext);
+        match selected(&run) {
+            Some(Item::Session(_, id)) => went.push(id),
+            other => panic!("{other:?}"),
+        }
+    }
+    // Each unread one is seen once shown, and still keeps its turn.
+    assert_eq!(went, ["w", unread[0], unread[1], "r"]);
+}
+
+#[test]
+fn going_round_unfolds_the_way_to_the_session_and_clears_the_filter() {
+    let ws = Item::Workspace(there(), "/r".into());
+    let run = both_waiting()
+        .send(Msg::TreeFold {
+            row: ws,
+            open: false,
+        })
+        .send(Msg::TreeFilter("zzz".into()))
+        .send(Msg::TreeSelect(Some(Item::Waiting(here(), "a".into()))));
+    let run = go_round(run, Action::WaitingNext);
+    assert_eq!(run.state().tree.filter, "");
+    assert!(rows(&run).contains(&Item::Session(there(), "b".into())));
 }
 
 #[test]

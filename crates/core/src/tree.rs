@@ -8,7 +8,7 @@ mod organize;
 mod place;
 
 pub(crate) use organize::{
-    Filter, hide as hide_worktrees, pin, reveal_current, sort as sort_worktrees,
+    Filter, go_round, hide as hide_worktrees, pin, reveal_current, sort as sort_worktrees,
 };
 pub use organize::{Hide, Organize, Sort};
 pub use place::*;
@@ -49,6 +49,9 @@ pub struct TreeView {
     pub completions: Completions,
     /// When the window saw each session's state last change.
     pub changes: Changes,
+    /// The session going round the sessions last reached, with what it
+    /// needed of the user then.
+    pub(crate) round: Option<(EnvironmentId, String, nav::Need)>,
     /// The worktrees being made, each with a row under its workspace.
     pub making: Vec<crate::worktree::Pending>,
     /// The number the next worktree being made takes.

@@ -649,22 +649,7 @@ pub(crate) fn perform(
         // Only the overview's files are revealed.
         Action::CursorReveal => Vec::new(),
         Action::WaitingNext | Action::WaitingPrev => {
-            let current = match cur.as_ref().map(Item::own) {
-                Some(Item::Waiting(environment, id) | Item::Session(environment, id)) => {
-                    Some((environment, id.as_str()))
-                }
-                _ => None,
-            };
-            let forward = action == Action::WaitingNext;
-            let Some((environment, id)) = nav::next_waiting(state.tree.waiting(), current, forward)
-            else {
-                return Vec::new();
-            };
-            let waiting = Item::Waiting(environment, id);
-            let mut effects = open(state, waiting, Some(Opening::Existing), false);
-            // It waits on an answer, given in the console.
-            effects.extend(step(state, Msg::Focus(Area::Console)));
-            effects
+            crate::tree::go_round(state, action == Action::WaitingNext)
         }
         Action::SessionPick => step(state, Msg::PickerOpen),
         Action::WorkspaceAdd => step(state, Msg::PickerAddOpen),

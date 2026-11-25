@@ -467,8 +467,8 @@ Selecting a heading shows its environment in the details: how its connection
 stands, what went wrong, a way to try again at once or to pair with its work
 machine again, the address and key of its work machine, its agents, the
 drafts and changes waiting for it, and a way to its settings. The
-sessions waiting on you are gathered from every environment, and going to the
-next waiting session reaches each of them. A session, a shell or a Neovim
+sessions waiting on you are gathered from every environment, and going round
+the sessions reaches each of them. A session, a shell or a Neovim
 started from a row, or beside a tab, starts in the environment of that row or
 tab. From a heading, a new session opens the picker on that environment, and a
 shell or a Neovim starts in its host's home directory, once a host on a work
@@ -569,6 +569,13 @@ where it was opened and can be changed before queuing the request.
 `n` on a row starts a session in that row's worktree or directory without the
 picker. `Ctrl+q }` and `Ctrl+q {` open a session of the next and the
 previous workspace without asking, the one last shown there.
+
+`Mod+j` goes round every session of every environment, those that need you
+first: the sessions waiting on you, then those finished unseen, then the rest
+in the tree's order; `Mod+k` goes round the other way. It moves the tree's
+cursor to the session's own row, unfolding the way to it and showing its
+worktree again where a filter left it out, and shows the session as moving
+the cursor does, the keys staying in the tree to go on or to open it.
 
 ## Searching more than sessions and directories
 
