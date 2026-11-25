@@ -27,6 +27,8 @@ use crate::{menu_bar, settings_window, themes};
 /// Open the window.
 pub fn launch(build: crate::Build) {
     crate::build::settle(build);
+    #[cfg(target_os = "linux")]
+    crate::native_terminal::choose_backend();
     use dioxus::desktop::{Config as Desktop, LogicalSize, WindowBuilder};
     let cfg = Desktop::new()
         // Attach the menu before replacing the Linux decorations, so its

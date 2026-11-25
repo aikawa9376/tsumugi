@@ -41,14 +41,17 @@ window that does not say.
 
 Console settings choose the display of the focused console on this computer.
 On Linux, kitty itself can draw agent session consoles and terminal tabs inside
-an X11/XWayland Tsumugi window. GTK3 VTE can draw terminal tabs, also in native
-Wayland windows. Switching displays keeps the running program and scrollback.
+an X11/XWayland Tsumugi window; with kitty chosen, a window that starts where an
+X server is reachable opens through it, even in a Wayland desktop. Choosing
+kitty in a window already open on Wayland takes effect once Tsumugi starts
+again. GTK3 VTE can draw terminal tabs, also in native Wayland windows. Switching displays keeps the running program and scrollback.
 All displays use Tsumugi's input routing. The built-in display and VTE use
 Tsumugi's console font and theme; kitty reads its own font configuration and
 draws the screen with the colours supplied by Tsumugi.
 
 The built-in display remains available when the selected display cannot
-start or the platform does not support it. It also draws terminal images and
+start or the platform does not support it, and the window says why it fell
+back. It also draws terminal images and
 terminals using Neovim's GUI. Conversation views, the prompt, the console reader
 and unfocused splits keep their existing displays.
 

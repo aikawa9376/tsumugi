@@ -213,8 +213,8 @@ impl BrowserSettings {
 #[serde(default, deny_unknown_fields)]
 pub struct ConsoleSettings {
     /// Console display: `builtin`, `vte` for Linux terminal tabs with GTK3 VTE,
-    /// or `kitty` for Linux session and terminal consoles with kitty and an
-    /// X11/XWayland window.
+    /// or `kitty` for Linux session and terminal consoles with kitty, the
+    /// window then opening through X11/XWayland when it starts.
     /// The built-in display is used when the chosen display is unavailable,
     /// while images are shown, and for Neovim GUI terminals.
     pub renderer: TerminalRenderer,

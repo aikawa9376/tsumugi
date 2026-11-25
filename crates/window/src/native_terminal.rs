@@ -40,6 +40,35 @@ pub(crate) fn kitty_available() -> Result<(), String> {
     Err("Embedded kitty is available on Linux with X11/XWayland only".into())
 }
 
+/// The GDK backends a window whose consoles `renderer` draws opens with, given
+/// the X server `display` names: kitty's window is embedded through X11,
+/// which a Wayland window cannot hold. Without an X server, opening through
+/// X11 would leave no window at all.
+#[cfg(any(target_os = "linux", test))]
+fn backends(
+    renderer: tsumugi_core::settings::TerminalRenderer,
+    display: Option<&std::ffi::OsStr>,
+) -> Option<&'static str> {
+    let reachable = display.is_some_and(|d| !d.is_empty());
+    (renderer == tsumugi_core::settings::TerminalRenderer::Kitty && reachable).then_some("x11")
+}
+
+/// Opens this window through X11 when kitty is to draw its consoles. GDK
+/// reads this once, as the window opens, so it must come first.
+#[cfg(target_os = "linux")]
+pub(crate) fn choose_backend() {
+    let Some(preferences) = crate::client_settings::chosen() else {
+        return;
+    };
+    if let Some(chosen) = backends(
+        preferences.console.renderer,
+        std::env::var_os("DISPLAY").as_deref(),
+    ) {
+        // Only this process: the work it starts keeps the user's backend.
+        gtk::gdk::set_allowed_backends(chosen);
+    }
+}
+
 #[cfg(any(target_os = "linux", test))]
 fn presents(renderer: tsumugi_core::settings::TerminalRenderer, tab: Option<&Tab>) -> bool {
     use tsumugi_core::settings::TerminalRenderer::{Kitty, Vte};
@@ -117,6 +146,26 @@ fn frame(screen: &tsumugi_term::Screen, focused: bool) -> String {
 mod tests {
     use super::*;
     use tsumugi_term::{Cursor, CursorShape, Line, Palette, Run, Screen, Style};
+
+    #[test]
+    fn a_window_drawing_with_kitty_opens_through_x11_when_an_x_server_is_there() {
+        use std::ffi::OsStr;
+        use tsumugi_core::settings::TerminalRenderer::{Builtin, Kitty, Vte};
+        let display = Some(OsStr::new(":0"));
+        assert_eq!(backends(Kitty, display), Some("x11"));
+        assert_eq!(
+            backends(Kitty, None),
+            None,
+            "without an X server it stays where GDK puts it"
+        );
+        assert_eq!(backends(Kitty, Some(OsStr::new(""))), None);
+        assert_eq!(backends(Builtin, display), None);
+        assert_eq!(
+            backends(Vte, display),
+            None,
+            "VTE also draws in a Wayland window"
+        );
+    }
 
     #[test]
     fn kitty_presents_agent_sessions_and_terminals_without_covering_other_content() {

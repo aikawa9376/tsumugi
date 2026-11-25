@@ -9,6 +9,7 @@ use std::ffi::{CString, c_char, c_void};
 use std::rc::Rc;
 use std::time::Duration;
 use tsumugi_core::content::{Area, Tab};
+use tsumugi_core::msg::Msg;
 use tsumugi_core::settings::TerminalRenderer;
 use tsumugi_term::{Palette, Rgb, Size};
 
@@ -454,6 +455,9 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
                 Ok(display) => native = Some(display),
                 Err(error) => {
                     tracing::warn!(%error);
+                    // The window's log goes nowhere a user sees once it is
+                    // started from a launcher.
+                    app.dispatch(Msg::Notice(error));
                     failed = true;
                     continue;
                 }
@@ -492,6 +496,7 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
             Ok(None) => continue,
             Err(error) => {
                 tracing::warn!(%error);
+                app.dispatch(Msg::Notice(error));
                 native = None;
                 shown_size.set(None);
                 failed = true;

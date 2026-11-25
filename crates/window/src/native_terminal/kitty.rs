@@ -39,7 +39,7 @@ unsafe extern "C" {
 pub(crate) fn available() -> Result<(), String> {
     let display = gtk::gdk::Display::default().ok_or("No desktop display")?;
     if display.type_().name() != "GdkX11Display" {
-        return Err("kitty needs an X11/XWayland Tsumugi window (GDK_BACKEND=x11); using the built-in display".into());
+        return Err("kitty draws only in an X11/XWayland window; restart Tsumugi to open one. Using the built-in display".into());
     }
     let env: Vec<_> = std::env::vars().collect();
     if !tsumugi_sys::path::runnable("kitty", Path::new("/"), &env) {

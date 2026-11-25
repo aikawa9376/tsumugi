@@ -30,7 +30,7 @@ pub(crate) struct Preferences {
     notify_usage: bool,
     #[serde(default = "on")]
     usage_left: bool,
-    console: ConsoleSettings,
+    pub(crate) console: ConsoleSettings,
     #[serde(default)]
     browser: BrowserSettings,
     appearance: Appearance,
