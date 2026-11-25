@@ -435,6 +435,19 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
                 (rect, cover)
             }
         };
+        let font = {
+            let config = app.config.peek();
+            let s = &config.settings;
+            (s.font_family.clone(), s.font_size * zoom, s.font_weight)
+        };
+        // kitty takes its font only as it starts.
+        if matches!(native, Some(Display::Kitty(_))) && last_font.as_ref() != Some(&font) {
+            native = None;
+            last_font = None;
+            last_frame = None;
+            shown = Shown::default();
+            continue;
+        }
         if native.is_none() {
             if layer.is_none() {
                 match Layer::install(&desktop) {
@@ -448,9 +461,8 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
             let layer = layer.as_ref().expect("installed").clone();
             let started = match renderer {
                 TerminalRenderer::Vte => api().map(|api| Display::Vte(Native::new(api, layer))),
-                TerminalRenderer::Kitty => {
-                    super::kitty::Kitty::new(layer).map(|k| Display::Kitty(Box::new(k)))
-                }
+                TerminalRenderer::Kitty => super::kitty::Kitty::new(layer, &font.0, font.1)
+                    .map(|k| Display::Kitty(Box::new(k))),
                 TerminalRenderer::Builtin => unreachable!(),
             };
             match started {
@@ -466,11 +478,6 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
             }
         }
         let display = native.as_mut().expect("created above");
-        let font = {
-            let config = app.config.peek();
-            let s = &config.settings;
-            (s.font_family.clone(), s.font_size * zoom, s.font_weight)
-        };
         if last_font.as_ref() != Some(&font) {
             display.font(&font.0, font.1, font.2);
             last_font = Some(font);

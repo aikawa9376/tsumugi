@@ -32,6 +32,7 @@ unsafe extern "C" {
     ) -> c_int;
     fn XFetchName(display: *mut c_void, window: c_ulong, name: *mut *mut c_char) -> c_int;
     fn XFree(data: *mut c_void) -> c_int;
+    fn XResourceManagerString(display: *mut c_void) -> *mut c_char;
     fn XMapWindow(display: *mut c_void, window: c_ulong) -> c_int;
     fn XSync(display: *mut c_void, discard: c_int) -> c_int;
     fn XGetWindowAttributes(
@@ -166,6 +167,46 @@ fn geometry(message: &str) -> Option<Size> {
     })
 }
 
+/// The console's font as kitty options. kitty sizes a font in points at
+/// Xft.dpi, so the size is turned back into the device pixels the built-in
+/// display draws with.
+fn font_options(family: &str, pixels: f64, scale: i32, dpi: f64) -> [String; 4] {
+    let family = if family.is_empty() {
+        "JetBrainsMono Nerd Font Mono"
+    } else {
+        family
+    };
+    let points = pixels * f64::from(scale.max(1)) * 72.0 / dpi;
+    let points = (points * 100.0).round() / 100.0;
+    [
+        "-o".into(),
+        format!("font_family={family}"),
+        "-o".into(),
+        format!("font_size={points}"),
+    ]
+}
+
+/// Xft.dpi from the X resource database, which kitty's GLFW reads in place
+/// of the monitor's own DPI.
+fn xft_dpi(resources: &str) -> Option<f64> {
+    resources.lines().find_map(|line| {
+        let value = line.strip_prefix("Xft.dpi:")?.trim().parse::<f64>().ok()?;
+        (value.is_finite() && value > 0.0).then_some(value)
+    })
+}
+
+/// The DPI kitty sizes its fonts at on `display`: Xft.dpi, else 96.
+fn display_dpi(display: &gtk::gdk::Display) -> f64 {
+    // SAFETY: available() established an X11 display; the string belongs to
+    // Xlib and is only read here.
+    let resources = unsafe {
+        let x = gdk_x11_display_get_xdisplay(display.to_glib_none().0);
+        let resources = XResourceManagerString(x);
+        (!resources.is_null()).then(|| CStr::from_ptr(resources).to_string_lossy().into_owned())
+    };
+    resources.as_deref().and_then(xft_dpi).unwrap_or(96.0)
+}
+
 fn uncovered([width, height]: [f64; 2], cover: Option<[f64; 4]>) -> gtk::cairo::Region {
     let region = gtk::cairo::Region::create_rectangle(&gtk::cairo::RectangleInt::new(
         0,
@@ -204,11 +245,29 @@ pub(super) struct Kitty {
     _layer: Rc<Layer>,
 }
 impl Kitty {
-    pub(super) fn new(layer: Rc<Layer>) -> Result<Self, String> {
-        Self::with_program(layer, &std::env::current_exe().map_err(|e| e.to_string())?)
+    /// kitty drawing in `family` at `pixels`, the console font's size in
+    /// the window's pixels.
+    pub(super) fn new(layer: Rc<Layer>, family: &str, pixels: f64) -> Result<Self, String> {
+        Self::with_program(
+            layer,
+            &std::env::current_exe().map_err(|e| e.to_string())?,
+            family,
+            pixels,
+        )
     }
-    fn with_program(layer: Rc<Layer>, program: &Path) -> Result<Self, String> {
+    fn with_program(
+        layer: Rc<Layer>,
+        program: &Path,
+        family: &str,
+        pixels: f64,
+    ) -> Result<Self, String> {
         available()?;
+        let font = font_options(
+            family,
+            pixels,
+            layer.fixed.scale_factor(),
+            display_dpi(&layer.fixed.display()),
+        );
         let directory = Directory::new().map_err(|e| e.to_string())?;
         let socket = directory.0.join("screen.sock");
         let listener = UnixListener::bind(&socket).map_err(|e| e.to_string())?;
@@ -257,6 +316,9 @@ impl Kitty {
                 "-o",
                 "confirm_os_window_close=0",
             ])
+            // kitty.conf's own font would draw at another size than the
+            // console Tsumugi lays out.
+            .args(&font)
             .args(["-o", "cursor_shape_unfocused=unchanged"])
             // kitty batches its program's output for 3 ms and repaints at
             // most every 10 ms; a frame here comes whole and only when the

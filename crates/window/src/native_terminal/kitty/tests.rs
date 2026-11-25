@@ -225,7 +225,7 @@ async fn kitty_draws_the_managed_terminal_without_taking_its_input_or_ending_its
     parent.pack_start(&page, true, true, 0);
     window.add(&parent);
     let layer = Rc::new(Layer::wrap(&page).unwrap());
-    let mut kitty = Kitty::with_program(layer.clone(), &program).unwrap();
+    let mut kitty = Kitty::with_program(layer.clone(), &program, "", 15.0).unwrap();
     kitty.rect([0.0, 0.0, 640.0, 360.0]);
     window.show_all();
     page.grab_focus();
@@ -303,7 +303,7 @@ async fn kitty_draws_the_managed_terminal_without_taking_its_input_or_ending_its
     drop(kitty);
     // SAFETY: signal zero only checks that Drop reaped our display process.
     assert_eq!(unsafe { libc::kill(display_pid as i32, 0) }, -1);
-    let mut kitty = Kitty::with_program(layer, &program).unwrap();
+    let mut kitty = Kitty::with_program(layer, &program, "", 15.0).unwrap();
     kitty.rect([0.0, 0.0, 320.0, 220.0]);
     kitty.widget.show();
     let after = wait_display(&mut kitty, |size| {
@@ -348,4 +348,33 @@ async fn kitty_draws_the_managed_terminal_without_taking_its_input_or_ending_its
         "KITTY_NATIVE_OK input=true pointer=true recreate=true retained=true resize={}x{}->{}x{}",
         before.cols, before.rows, after.cols, after.rows
     );
+}
+
+#[test]
+fn kitty_draws_in_the_console_font_at_the_size_the_built_in_display_uses() {
+    // kitty sizes fonts in points at Xft.dpi, 96 when unset.
+    assert_eq!(
+        font_options("Liga Plemol Console NF", 14.0, 1, 96.0),
+        [
+            "-o",
+            "font_family=Liga Plemol Console NF",
+            "-o",
+            "font_size=10.5"
+        ]
+    );
+    assert_eq!(
+        font_options("", 16.0, 2, 192.0)[1],
+        "font_family=JetBrainsMono Nerd Font Mono"
+    );
+    assert_eq!(font_options("", 16.0, 2, 192.0)[3], "font_size=12");
+    assert_eq!(font_options("Mono", 14.0, 1, 120.0)[3], "font_size=8.4");
+}
+
+#[test]
+fn xft_dpi_is_read_from_the_resource_database_as_kitty_reads_it() {
+    assert_eq!(xft_dpi("Xft.antialias:\t1\nXft.dpi:\t144\n"), Some(144.0));
+    assert_eq!(xft_dpi("Xft.dpi: 120.5"), Some(120.5));
+    assert_eq!(xft_dpi("Xcursor.size:\t24\n"), None);
+    assert_eq!(xft_dpi("Xft.dpi:\tlarge\n"), None);
+    assert_eq!(xft_dpi("Xft.dpi:\t0\n"), None);
 }

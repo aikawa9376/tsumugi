@@ -46,8 +46,9 @@ X server is reachable opens through it, even in a Wayland desktop. Choosing
 kitty in a window already open on Wayland takes effect once Tsumugi starts
 again. GTK3 VTE can draw terminal tabs, also in native Wayland windows. Switching displays keeps the running program and scrollback.
 All displays use Tsumugi's input routing. The built-in display and VTE use
-Tsumugi's console font and theme; kitty reads its own font configuration and
-draws the screen with the colours supplied by Tsumugi.
+Tsumugi's console font and theme; kitty draws in the console's font family at
+its size and with the colours supplied by Tsumugi, and reads the rest of its
+font configuration, such as fallbacks and symbol maps, from its own.
 
 The built-in display remains available when the selected display cannot
 start or the platform does not support it, and the window says why it fell
