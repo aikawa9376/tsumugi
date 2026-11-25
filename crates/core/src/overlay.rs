@@ -59,6 +59,8 @@ pub struct Overlays {
     pub resources: Option<ResourceSheet>,
     /// A session's images looked at one at a time.
     pub lightbox: Option<Lightbox>,
+    /// The screen being captured for a project's resources.
+    pub capture: Option<crate::capture::Capture>,
     /// The tabs listed while the keys that opened the switcher are held.
     pub switcher: Option<Switcher>,
     pub banner: Banner,
@@ -150,6 +152,7 @@ pub enum Holder {
     Adding,
     Confirm,
     Lightbox,
+    Capture,
     Switcher,
 }
 
@@ -168,6 +171,10 @@ pub fn holding(overlays: &Overlays, picker: &PickerView, chrome: &Chrome) -> Vec
         (overlays.resources.is_some(), Holder::Resources),
         (overlays.confirm.is_some(), Holder::Confirm),
         (overlays.lightbox.is_some(), Holder::Lightbox),
+        (
+            overlays.capture.as_ref().is_some_and(|c| c.choosing()),
+            Holder::Capture,
+        ),
         (overlays.switcher.is_some(), Holder::Switcher),
     ]
     .into_iter()
@@ -207,6 +214,7 @@ pub fn holds_menu_bar(held: &[Holder]) -> bool {
                 | Holder::Resources
                 | Holder::Confirm
                 | Holder::Lightbox
+                | Holder::Capture
                 | Holder::Switcher
         )
     })
@@ -226,7 +234,8 @@ pub fn contexts_of(holder: Holder) -> &'static [Context] {
         | Holder::Cleanup
         | Holder::Adding
         | Holder::LocalIssues
-        | Holder::Resources => &[Context::Overlay],
+        | Holder::Resources
+        | Holder::Capture => &[Context::Overlay],
     }
 }
 
@@ -291,6 +300,7 @@ pub(crate) fn press(state: &mut ViewState, key: Key) -> Vec<Effect> {
             }
             _ => Vec::new(),
         },
+        Holder::Capture => crate::capture::act(state, action),
         Holder::Resources => match action {
             Some(Action::OverlayClose) => {
                 state.overlays.resources = None;

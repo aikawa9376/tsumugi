@@ -556,6 +556,20 @@ pub enum Msg {
         target: Target,
         action: Action,
     },
+    /// The screens asked for were captured, each a still of this size in
+    /// pixels.
+    CaptureTaken(Vec<[u32; 2]>),
+    /// The screens asked for could not be captured, for this reason.
+    CaptureFailed(String),
+    /// The stills of the screens captured are put away, keeping none.
+    CaptureCancel,
+    /// A drag over the still of the screen shown, from `from` to `to` in its
+    /// pixels; `done` once it is let go.
+    CaptureDrag {
+        from: [f64; 2],
+        to: [f64; 2],
+        done: bool,
+    },
     /// Look at the image `Tab` in the lightbox over the window, holding the
     /// keys until it closes.
     LightboxOpen(Tab),

@@ -44,6 +44,8 @@ objc2.workspace = true
 objc2-app-kit.workspace = true
 objc2-foundation = { workspace = true, features = ["NSProcessInfo"] }
 objc2-pdf-kit.workspace = true
+# The files `screencapture` writes the screens to.
+tempfile.workspace = true
 
 [dev-dependencies]
 tsumugi-model = { workspace = true, features = ["testing"] }

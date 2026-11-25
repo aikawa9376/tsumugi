@@ -1,7 +1,6 @@
 //! Keeping the resources of the project the details panel shows: the sheet
 //! that takes one, and what the panel's rows do to the ones it lists.
 
-use crate::content::Tab;
 use crate::details::{self, Entry, Source};
 use crate::effect::Effect;
 use crate::overlay::ResourceSheet;
@@ -61,21 +60,6 @@ pub(crate) fn keep(state: &mut ViewState) -> Vec<Effect> {
         target,
         label,
     }]
-}
-
-/// Ask for a screenshot of the browser page shown.
-pub(crate) fn screenshot(state: &mut ViewState) -> Vec<Effect> {
-    let shown = state.content.active().cloned();
-    let window = state.content.windows.focused_window();
-    match (shown, window) {
-        (Some(Tab::Browser { .. }), Some(window)) => {
-            state.overlays.menu = None;
-            vec![Effect::Screenshot(window)]
-        }
-        _ => vec![Effect::Notice(
-            "Show a browser page to take a screenshot of it".into(),
-        )],
-    }
 }
 
 fn chosen(state: &ViewState) -> Option<Entry> {

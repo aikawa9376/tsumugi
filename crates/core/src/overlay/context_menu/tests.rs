@@ -68,7 +68,11 @@ fn a_pinned_resource_opens_where_a_file_does_and_is_copied_edited_and_removed() 
 fn the_panel_itself_offers_to_keep_a_resource() {
     assert_eq!(
         actions(Target::Panel, None),
-        [Action::ResourceAdd, Action::ResourceScreenshot]
+        [
+            Action::ResourceAdd,
+            Action::ResourceCapture,
+            Action::ResourceCaptureLater
+        ]
     );
 }
 

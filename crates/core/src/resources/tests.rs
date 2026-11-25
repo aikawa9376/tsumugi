@@ -1,5 +1,5 @@
 use crate::actions::Action;
-use crate::content::{Area, Tab};
+use crate::content::Area;
 use crate::details::Key;
 use crate::details::panel::tests::{PINNED_TAB, pinned_in, resource};
 use crate::effect::Effect;
@@ -144,25 +144,4 @@ fn escape_puts_the_sheet_away() {
     .send(Msg::HeldKey(tsumugi_model::Key::new("Escape")));
 
     assert!(run.state().overlays.resources.is_none());
-}
-
-#[test]
-fn a_screenshot_is_asked_of_the_browser_page_shown() {
-    let run = perform(
-        Scenario::new().send(Msg::Window(Action::BrowserOpen)),
-        Action::ResourceScreenshot,
-    );
-
-    assert!(matches!(
-        run.state().content.active(),
-        Some(Tab::Browser { .. })
-    ));
-    assert!(matches!(asks(&run)[..], [Effect::Screenshot(_)]));
-}
-
-#[test]
-fn nothing_but_a_browser_page_has_a_screenshot_to_keep() {
-    let run = perform(Scenario::new(), Action::ResourceScreenshot);
-
-    assert!(matches!(asks(&run)[..], [Effect::Notice(_)]));
 }

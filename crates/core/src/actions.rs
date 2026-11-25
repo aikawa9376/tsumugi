@@ -115,7 +115,8 @@ pub enum Action {
     ResourceEdit,
     ResourceRemove,
     ResourceKeep,
-    ResourceScreenshot,
+    ResourceCapture,
+    ResourceCaptureLater,
     WorkspaceRemove,
     WorktreeClose,
     WorktreeNew,
@@ -580,9 +581,12 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::ResourceKeep, "resource.keep", "keep the address, file or image the details panel's cursor is on in the project's resources, unless it keeps it already ([details](resources.md#keeping-and-opening-them))")
         .icon(Icon::SquarePlus)
         .row("Keep as resource", Go),
-    S::new(A::ResourceScreenshot, "resource.screenshot", "take a screenshot of the visible part of the browser page shown and keep the picture, with the page's address as its note, among the project's resources ([details](resources.md#keeping-and-opening-them))")
+    S::new(A::ResourceCapture, "resource.capture", "capture the screen now, Tsumugi's window and other applications alike, then keep the part of it dragged over among the project's resources ([details](resources.md#keeping-and-opening-them))")
         .icon(Icon::Photo)
-        .row("Screenshot of the page", Start),
+        .row("Capture the screen", Start),
+    S::new(A::ResourceCaptureLater, "resource.capture_later", "capture the screen as `resource.capture` does, once the seconds of the `details.capture_delay_seconds` setting have gone by ([details](resources.md#keeping-and-opening-them))")
+        .icon(Icon::Photo)
+        .row("Capture the screen later", Start),
     S::new(A::WorkspaceRemove, "workspace.remove", "take the workspace selected in the tree out of it, which lists it while nothing runs there too; where something runs, ask first and end every session and terminal running there. Starting anything there lists it again ([details](tree.md#workspaces-and-worktrees))")
         .icon(Icon::SquareMinus)
         .row("Remove from tree…", End),
@@ -1060,7 +1064,8 @@ mod tests {
             ResourceEdit,
             ResourceRemove,
             ResourceKeep,
-            ResourceScreenshot,
+            ResourceCapture,
+            ResourceCaptureLater,
             WorkspaceRemove,
             WorktreeClose,
             WorktreeNew,

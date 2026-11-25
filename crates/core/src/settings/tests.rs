@@ -446,6 +446,7 @@ fn settings_written_read_back_the_same() {
             diff_lines: 300,
             links_kept: 20,
             links_shown: 3,
+            capture_delay_seconds: 10,
         },
         panel: crate::details::DetailsLayout {
             environment: Some(crate::details::Surface {
@@ -1110,7 +1111,7 @@ fn a_launch_kept_as_json_before_profiles_reads_as_the_profiles_built_from_it() {
         "sessions":{"model":"opus","permission_mode":"","disallowed_tools":[],"confirm_channel_warning":false},
         "scratch_dir":"","picker":{"ghq":true,"roots":[]},
         "console":{"option_as_alt":"both","cursor_blink":false},
-        "details":{"log_commits":50,"diff_lines":2000,"links_kept":100,"links_shown":5},
+        "details":{"log_commits":50,"diff_lines":2000,"links_kept":100,"links_shown":5,"capture_delay_seconds":5},
         "usage":{"cpu":true,"gpu":true,"memory":true,"storage":true}}"#;
     let s: Settings = serde_json::from_str(kept).unwrap();
     assert_eq!(s.default_agent(), Agent::Codex);

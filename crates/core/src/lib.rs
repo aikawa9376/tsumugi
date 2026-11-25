@@ -8,6 +8,7 @@ pub mod ai;
 pub mod attention;
 pub mod board;
 pub mod browser;
+pub mod capture;
 pub mod chrome;
 pub mod complete;
 pub mod completion;

@@ -63,9 +63,22 @@ pub enum Effect {
         target: String,
         label: Option<String>,
     },
-    /// Take a screenshot of the page of the browser the window by this id
-    /// shows, and keep it in the project of the worktree the page hangs under.
-    Screenshot(WindowId),
+    /// Capture every screen of the window's machine once `delay` has gone
+    /// by, keeping a still of each, and tell what was taken with
+    /// [`crate::msg::Msg::CaptureTaken`], or why nothing was with
+    /// [`crate::msg::Msg::CaptureFailed`].
+    CaptureScreen { delay: std::time::Duration },
+    /// Ask the work host of `environment` to keep `part` of the still of
+    /// screen `screen`, its left, top, width and height in pixels, among the
+    /// resources of the project holding `dir`, and let the stills go.
+    KeepCapture {
+        environment: EnvironmentId,
+        dir: PathBuf,
+        screen: usize,
+        part: [u32; 4],
+    },
+    /// Let the stills of the screens captured go, keeping none.
+    DropCapture,
     /// Open the search bar of the browser page the window by this id shows.
     FindInPage(WindowId),
     /// Open again the page of the browser of `environment` closed last

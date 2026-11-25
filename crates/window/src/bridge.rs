@@ -1435,7 +1435,14 @@ impl AppCtx {
                     }
                 });
             }
-            Effect::Screenshot(window) => crate::browser::ask_screenshot(window),
+            Effect::CaptureScreen { delay } => crate::screen_capture::take(*self, delay),
+            Effect::KeepCapture {
+                environment,
+                dir,
+                screen,
+                part,
+            } => crate::screen_capture::keep(*self, environment, dir, screen, part),
+            Effect::DropCapture => crate::screen_capture::drop_stills(),
             Effect::DropResource { environment, id } => {
                 let app = *self;
                 let dropped = app.ask_in(&environment, Ask::DropResource { id });

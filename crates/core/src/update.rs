@@ -483,6 +483,12 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
         ),
         Msg::MenuClose => overlay::close_menu(state),
         Msg::MenuRun { target, action } => overlay::run_menu(state, target, action),
+        Msg::CaptureTaken(screens) => crate::capture::taken(state, screens),
+        Msg::CaptureFailed(text) => crate::capture::failed(state, text),
+        Msg::CaptureCancel => {
+            crate::capture::act(state, Some(crate::actions::Action::OverlayClose))
+        }
+        Msg::CaptureDrag { from, to, done } => crate::capture::drag(state, from, to, done),
         Msg::LightboxOpen(thing) => overlay::lightbox::open(state, thing),
         Msg::LightboxAction(action) => overlay::lightbox::act(state, action),
         Msg::LightboxPan { dx, dy } => overlay::lightbox::pan(state, dx, dy),

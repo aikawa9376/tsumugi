@@ -117,6 +117,9 @@ pub struct DetailsSettings {
     /// The links of each kind the overview shows before a row that shows them
     /// all.
     pub links_shown: usize,
+    /// The seconds Capture the screen later waits before it captures, from
+    /// 1 to 60.
+    pub capture_delay_seconds: u32,
 }
 
 impl Default for DetailsSettings {
@@ -126,7 +129,15 @@ impl Default for DetailsSettings {
             diff_lines: 2000,
             links_kept: 100,
             links_shown: 5,
+            capture_delay_seconds: 5,
         }
+    }
+}
+
+impl DetailsSettings {
+    /// How long Capture the screen later waits before it captures.
+    pub fn capture_delay(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(u64::from(self.capture_delay_seconds.clamp(1, 60)))
     }
 }
 

@@ -14,8 +14,8 @@ material is collected, and to read a resource in Tsumugi itself.
 The details panel keeps, describes and removes a project's resources on the
 work host, where agents already find them. Opening a resource shows it in the
 content as anything else opened does: a path as the file tree opens it, an
-address in the browser. A screenshot of a browser page is kept as a file on
-the work machine, and as a resource pointing at it.
+address in the browser. A screenshot is kept as a file on the work machine,
+and as a resource pointing at it.
 
 ## Alternatives considered
 

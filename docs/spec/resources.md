@@ -24,11 +24,18 @@ You keep a resource from the details panel as well as by asking an agent:
 - **Keep as resource** (`resource.keep`) on a link, a file or an image file
   the session came across keeps that. It says so when the project keeps it
   already.
-- **Screenshot of the page** (`resource.screenshot`) keeps a picture of the
-  visible part of the browser page shown, with the page's address as its note.
-  The picture is a file on the work machine, which nothing removes, and the
-  resource points at it. It works where the browser can capture a page
-  ([content](content.md#browsing)).
+- **Capture the screen** (`resource.capture`) keeps a picture of a part of
+  what the screen shows, Tsumugi's window and other applications alike.
+  **Capture the screen later** (`resource.capture_later`) waits a few seconds
+  first, to bring forward what the picture should show
+  ([reference](reference/settings.md#details)). Once it is taken, Tsumugi's
+  window comes forward with a still of the screen: drag over the part to keep
+  and let go, press Enter to keep the whole screen, or Escape to keep nothing.
+  Where the system captures each screen apart, Tab shows the next one. The
+  picture is a file on the work machine, which nothing removes, and the
+  resource points at it. It needs the system to let Tsumugi capture the
+  screen: on macOS, the screen recording permission; on Wayland, a desktop
+  portal that takes screenshots, or grim.
 - **Edit label and note…** and **Remove from resources** are on a pinned row's
   right-click menu. Removing leaves what the resource points at as it is.
 

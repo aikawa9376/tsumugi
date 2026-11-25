@@ -660,7 +660,11 @@ pub(crate) fn perform(
         Action::ResourceEdit => crate::resources::edit(state),
         Action::ResourceRemove => crate::resources::remove(state),
         Action::ResourceKeep => crate::resources::keep(state),
-        Action::ResourceScreenshot => crate::resources::screenshot(state),
+        Action::ResourceCapture => crate::capture::start(state, std::time::Duration::ZERO),
+        Action::ResourceCaptureLater => {
+            let delay = state.details.shown.settings.capture_delay();
+            crate::capture::start(state, delay)
+        }
         // An environment holds no directory to start in: where the session
         // works is picked in that environment.
         Action::SessionNew if on_list && matches!(cur, Some(Item::Environment(_))) => {

@@ -61,6 +61,7 @@ pub mod rename;
 mod review;
 use tsumugi_core::settings;
 mod scaling;
+mod screen_capture;
 mod serving_pane;
 mod settings_window;
 mod shell;

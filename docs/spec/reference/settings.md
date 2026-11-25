@@ -129,6 +129,7 @@ How much the details panel reads and shows.
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
+| `details.capture_delay_seconds` | integer | `5` | The seconds Capture the screen later waits before it captures, from 1 to 60. |
 | `details.diff_lines` | integer | `2000` | The lines of a diff shown before it is cut. |
 | `details.links_kept` | integer | `100` | The links of each kind the overview keeps, the newest, up to 1000. |
 | `details.links_shown` | integer | `5` | The links of each kind the overview shows before a row that shows them all. |

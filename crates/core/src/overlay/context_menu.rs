@@ -259,7 +259,8 @@ pub fn entries(
         .to_vec(),
         Target::Panel => vec![
             offer(Action::ResourceAdd),
-            offer(Action::ResourceScreenshot),
+            offer(Action::ResourceCapture),
+            offer(Action::ResourceCaptureLater),
         ],
     }
 }

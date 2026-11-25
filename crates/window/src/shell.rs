@@ -4,6 +4,7 @@
 
 mod app;
 mod body;
+mod capture;
 mod cleanup;
 mod composer;
 mod effects;
