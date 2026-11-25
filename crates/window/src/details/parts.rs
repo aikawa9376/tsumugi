@@ -336,9 +336,15 @@ fn Changed(
                 (Worktree::OutsideGit, _) => rsx! { ListRow { kind: "dim", "Not a Git repository" } },
                 (_, None) => rsx! { ListRow { kind: "dim", "Reading…" } },
                 (_, Some(Listing::Error(e))) => rsx! { div { class: "git-error", "{e}" } },
-                (_, Some(Listing::Files(files))) if files.is_empty() => rsx! { ListRow { kind: "dim", "No changes" } },
-                _ => rsx! {
+                (_, Some(listing)) => {
+                    let nothing = matches!(&listing, Listing::Files(files) if files.is_empty())
+                        .then(|| nothing_changed_at(&rows));
+                    let count = rows.len();
+                    rsx! {
                     for (i , entry) in rows.into_iter().enumerate() {
+                        if nothing == Some(i) {
+                            ListRow { key: "nothing-changed-{base}", kind: "dim", "No changes" }
+                        }
                         {
                             let at = base + i;
                             match entry {
@@ -424,8 +430,55 @@ fn Changed(
                             }
                         }
                     }
-                },
+                    if nothing == Some(count) {
+                        ListRow { key: "nothing-changed-{base}", kind: "dim", "No changes" }
+                    }
+                    }
+                }
             }
         }
+    }
+}
+
+/// Where Changes says the working copy has nothing changed: after how the
+/// branch stands and what Git has not finished, and before what the branch
+/// committed, which stays listed when nothing is left uncommitted.
+fn nothing_changed_at(rows: &[Entry]) -> usize {
+    rows.iter()
+        .take_while(|e| matches!(e, Entry::Branch(_) | Entry::Operation(_)))
+        .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tsumugi_core::details::{BranchCard, Compared};
+    use tsumugi_model::repository::Change;
+
+    fn card() -> Entry {
+        Entry::Branch(BranchCard {
+            head: "topic".into(),
+            detached: false,
+            base: Some("main".into()),
+            ahead: 1,
+            behind: 0,
+            added: 2,
+            removed: 0,
+            note: None,
+        })
+    }
+
+    #[test]
+    fn nothing_changed_is_said_under_the_branch_and_above_what_it_committed() {
+        let change = Change {
+            status: "M".into(),
+            path: "a".into(),
+            from: None,
+        };
+        let committed = Entry::Compared(Compared::new("m".into(), change));
+        assert_eq!(nothing_changed_at(&[card(), committed.clone()]), 1);
+        assert_eq!(nothing_changed_at(&[card()]), 1);
+        assert_eq!(nothing_changed_at(&[committed]), 0);
+        assert_eq!(nothing_changed_at(&[]), 0);
     }
 }
