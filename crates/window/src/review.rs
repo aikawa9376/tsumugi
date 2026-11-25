@@ -486,6 +486,10 @@ pub(crate) fn ReviewRows(
     lines: Vec<DiffLine>,
     command: ReadSignal<Option<Command>>,
     #[props(default)] start: Option<String>,
+    /// How many times a file was opened from the list, so opening `start`
+    /// again brings the cursor back to it.
+    #[props(default)]
+    jumps: u64,
     current: Option<Signal<Option<String>>>,
     #[props(default)] pictures: Vec<tsumugi_model::repository::Change>,
     #[props(default)] how: tsumugi_core::diff_view::Pictures,
@@ -545,14 +549,25 @@ pub(crate) fn ReviewRows(
     }));
     // Opening a file of the list, or the tab on a file, brings the cursor
     // to its heading.
-    use_effect(use_reactive((&start, &lines), move |(start, lines)| {
-        let Some(start) = start else { return };
-        if let Some(at) = lines
-            .iter()
-            .position(|l| l.kind == DiffKind::File && l.text == start)
-        {
-            let mut pane = pane;
-            pane.write().place(at);
+    let id = format!("review-{window}");
+    use_effect(use_reactive((&start, &jumps, &lines), {
+        let id = id.clone();
+        move |(start, jumps, lines)| {
+            let Some(start) = start else { return };
+            if let Some(at) = lines
+                .iter()
+                .position(|l| l.kind == DiffKind::File && l.text == start)
+            {
+                let mut pane = pane;
+                pane.write().place(at);
+                // Opened from the list, the file's heading goes to the top,
+                // as a move to the nearest edge would leave it at the bottom.
+                if jumps > 0 {
+                    document::eval(&format!(
+                        "requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector('#{id} .rv-cursor')?.scrollIntoView({{block:'start'}})))"
+                    ));
+                }
+            }
         }
     }));
     use_effect(use_reactive((&lines, &path), move |(lines, path)| {
@@ -565,7 +580,6 @@ pub(crate) fn ReviewRows(
             current.set(here);
         }
     }));
-    let id = format!("review-{window}");
     use_effect({
         let id = id.clone();
         move || {

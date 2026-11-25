@@ -227,6 +227,9 @@ pub(crate) fn DiffWindow(
     let mut notice = use_signal(|| None::<String>);
     // The file the cursor is in, which the list marks.
     let current = use_signal(|| opened.clone());
+    // The file last opened from the list, and how many times one was, so
+    // opening the same file again brings the stream back to it.
+    let mut jump = use_signal(|| (None::<String>, 0_u64));
     let next = {
         let at = choices.iter().position(|c| *c == rev).unwrap_or(0);
         let to = choices[(at + 1) % choices.len()].clone();
@@ -380,13 +383,13 @@ pub(crate) fn DiffWindow(
             div { class: "diff-body",
                 if view.files {
                     FileList {
-                        environment: environment.clone(),
-                        worktree: worktree.clone(),
-                        rev: rev.clone(),
                         current: current.read().clone(),
                         files: files.clone(),
-                        window,
                         viewed: seen.iter().cloned().collect::<Vec<_>>(),
+                        onopen: move |path: String| {
+                            let times = jump.peek().1 + 1;
+                            jump.set((Some(path), times));
+                        },
                     }
                 }
                 div { id, class: "diff-review-scroll",
@@ -413,7 +416,8 @@ pub(crate) fn DiffWindow(
                                 rev: rev.clone(),
                                 lines,
                                 command: ReadSignal::from(command),
-                                start: opened.clone(),
+                                start: jump().0.or(opened.clone()),
+                                jumps: jump().1,
                                 current,
                                 pictures,
                                 how: view.pictures,
@@ -432,18 +436,14 @@ pub(crate) fn DiffWindow(
 }
 
 /// The files of the change, beside the stream of them; opening one brings
-/// the stream to it.
+/// the stream to it in the same tab rather than opening another.
 #[component]
 fn FileList(
-    environment: EnvironmentId,
-    worktree: PathBuf,
-    rev: Rev,
     current: Option<String>,
     files: Vec<Change>,
-    window: WindowId,
     viewed: Vec<String>,
+    onopen: EventHandler<String>,
 ) -> Element {
-    let app = use_context::<AppCtx>();
     let counted = files.iter().filter(|f| viewed.contains(&f.path)).count();
     rsx! {
         div { class: "diff-files",
@@ -454,16 +454,7 @@ fn FileList(
                     key: "{file.path}",
                     class: if current.as_deref() == Some(file.path.as_str()) { "diff-file-row selected" } else { "diff-file-row" },
                     title: "{file.shown()}",
-                    onclick: {
-                        let (environment, worktree, rev, file) = (environment.clone(), worktree.clone(), rev.clone(), file.clone());
-                        move |_| {
-                            app.dispatch(Msg::Show {
-                                thing: Tab::Diff { environment: environment.clone(), worktree: worktree.clone(), spot: Box::new(Spot::Lines(rev.clone(), file.clone())) },
-                                place: None,
-                                how: Some(Opening::InWindow(window)),
-                            })
-                        }
-                    },
+                    onclick: { let path = file.path.clone(); move |_| onopen.call(path.clone()) },
                     span { class: "details-file-status", "{file.status}" }
                     span { class: "diff-file-name", "{file.shown()}" }
                     if viewed.contains(&file.path) { span { class: "diff-file-viewed", title: "Viewed", "✓" } }
