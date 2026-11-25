@@ -209,6 +209,13 @@ pub enum Msg {
         worktree: PathBuf,
         choice: crate::diff_view::Choice,
     },
+    /// The file `path` of the worktree's diff tabs is shown whole, or as
+    /// its hunks again.
+    DiffUnfold {
+        environment: EnvironmentId,
+        worktree: PathBuf,
+        path: String,
+    },
     /// A row was clicked: it opens as `cursor.go` opens it.
     RowClicked(Item),
     /// A key or a menu asked the content to do this.

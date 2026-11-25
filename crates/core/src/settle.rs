@@ -422,6 +422,24 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
                 ],
                 other => vec![other.clone()],
             };
+            // The files shown whole are read whole beside the stream.
+            let mut reads = reads;
+            if let Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) = spot.as_ref() {
+                let files = state
+                    .hosts
+                    .work(e)
+                    .and_then(|w| w.details.repository(worktree, &Spot::Files(rev.clone())))
+                    .and_then(|r| match &r.listing {
+                        Ok(tsumugi_model::repository::Listing::Files(files)) => Some(files.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                for path in state.content.diff_views.unfolded(e, worktree) {
+                    if let Some(change) = files.iter().find(|f| f.path == path) {
+                        reads.push(Spot::Whole(rev.clone(), change.clone()));
+                    }
+                }
+            }
             for spot in reads {
                 let read = tsumugi_protocol::RepositorySight {
                     worktree: worktree.clone(),

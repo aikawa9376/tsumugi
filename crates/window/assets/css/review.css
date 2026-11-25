@@ -41,3 +41,5 @@
 .rv-word { border-radius:2px; }
 .diff-add .rv-word { background:rgba(46,160,67,.40); }
 .diff-del .rv-word { background:rgba(248,81,73,.40); }
+.rv-fold { padding:2px 12px; color:var(--text-3); font-size:var(--ui-font-small); cursor:pointer; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); }
+.rv-fold:hover { background:var(--select); color:var(--text); }

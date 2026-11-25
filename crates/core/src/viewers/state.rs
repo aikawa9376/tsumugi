@@ -71,6 +71,16 @@ pub enum Diff {
     Change,
     /// Write two revisions to compare.
     Compare,
+    /// Stage, unstage or discard the hunk or lines chosen.
+    Stage,
+    Unstage,
+    Discard,
+    /// Write what to find.
+    Search,
+    /// Go to the next or previous line holding what was searched for.
+    Found(Way),
+    /// Show the file the cursor is in whole, or as its hunks again.
+    Unfold,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -121,6 +131,13 @@ impl ViewerAction {
             Action::DiffFiles => V::Diff(Diff::Choose(Choice::Files)),
             Action::DiffChange => V::Diff(Diff::Change),
             Action::DiffColumns => V::Diff(Diff::Choose(Choice::Columns)),
+            Action::DiffStage => V::Diff(Diff::Stage),
+            Action::DiffSearch => V::Diff(Diff::Search),
+            Action::DiffSearchNext => V::Diff(Diff::Found(Way::Next)),
+            Action::DiffSearchPrev => V::Diff(Diff::Found(Way::Prev)),
+            Action::DiffUnfold => V::Diff(Diff::Unfold),
+            Action::DiffUnstage => V::Diff(Diff::Unstage),
+            Action::DiffDiscard => V::Diff(Diff::Discard),
             Action::DiffStructural => V::Diff(Diff::Choose(Choice::Structural)),
             Action::DiffCompare => V::Diff(Diff::Compare),
             Action::DiffPictures => V::Diff(Diff::Choose(Choice::Pictures)),

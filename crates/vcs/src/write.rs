@@ -84,6 +84,39 @@ pub async fn stage(path: &Path, changes: &[Change]) -> Result<(), Error> {
     make(path, &args).await.map(drop)
 }
 
+/// Apply `patch`, a unified diff of one file, to the index when `index`,
+/// else to the worktree; `reverse` applies it backwards.
+pub async fn apply_patch(
+    path: &Path,
+    patch: &str,
+    index: bool,
+    reverse: bool,
+) -> Result<(), Error> {
+    let file = tempfile::NamedTempFile::new().map_err(|source| Error::Spawn {
+        program: "git".into(),
+        source,
+    })?;
+    std::fs::write(file.path(), patch).map_err(|source| Error::Spawn {
+        program: "git".into(),
+        source,
+    })?;
+    let patch_path = file.path().to_string_lossy().into_owned();
+    let mut args = vec!["apply", "--whitespace=nowarn"];
+    if index {
+        args.push("--cached");
+    }
+    if reverse {
+        args.push("--reverse");
+    }
+    args.push(&patch_path);
+    let all = {
+        let mut all = vec!["-C", git_dir(path)?];
+        all.extend(args);
+        all
+    };
+    run("git", &all, None).await.map(drop)
+}
+
 /// Stage everything the worktree changes, untracked files too.
 pub async fn stage_all(path: &Path) -> Result<(), Error> {
     make(path, &["add", "--all"]).await.map(drop)
@@ -490,6 +523,42 @@ mod tests {
         let file = dir.join(name);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(file, text).unwrap();
+    }
+
+    const SOME_LINES: &str = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,2 @@\n one\n-two\n three\n";
+
+    #[tokio::test]
+    async fn a_patch_stages_and_unstages_only_its_lines_and_discards_them_from_the_worktree() {
+        let dir = repo();
+        committed(dir.path(), &[("a.txt", "one\ntwo\nthree\n")]);
+        write(dir.path(), "a.txt", "one\nTWO\nTHREE\n");
+        let staged = || {
+            let out = std::process::Command::new("git")
+                .args(["show", ":a.txt"])
+                .current_dir(dir.path())
+                .output()
+                .unwrap();
+            String::from_utf8(out.stdout).unwrap()
+        };
+        apply_patch(dir.path(), SOME_LINES, true, false)
+            .await
+            .unwrap();
+        assert_eq!(staged(), "one\nthree\n");
+        apply_patch(dir.path(), SOME_LINES, true, true)
+            .await
+            .unwrap();
+        assert_eq!(staged(), "one\ntwo\nthree\n");
+        assert!(
+            apply_patch(dir.path(), "not a patch", true, false)
+                .await
+                .is_err()
+        );
+        let gone = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,2 @@\n one\n-TWO\n THREE\n";
+        apply_patch(dir.path(), gone, false, false).await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "one\nTHREE\n"
+        );
     }
 
     async fn statuses(dir: &Path) -> Vec<(String, String)> {

@@ -253,6 +253,21 @@ pub async fn file_diff(
     change: &Change,
     lines: usize,
 ) -> Result<Vec<DiffLine>, Error> {
+    file_diff_with(path, rev, change, lines, false).await
+}
+
+/// The unchanged lines a diff of a file shown whole keeps around each
+/// change: more than a file shown has.
+const WHOLE: &str = "-U1000000";
+
+/// As [`file_diff`], with every line of the file when `whole`.
+pub async fn file_diff_with(
+    path: &Path,
+    rev: Option<&str>,
+    change: &Change,
+    lines: usize,
+    whole: bool,
+) -> Result<Vec<DiffLine>, Error> {
     let dir = git_dir(path)?;
     if rev.is_none() && change.status == "??" {
         let content =
@@ -266,6 +281,9 @@ pub async fn file_diff(
     match rev {
         Some(rev) => args.extend(["show", "--format=", rev]),
         None => args.extend(["diff", "HEAD"]),
+    }
+    if whole {
+        args.push(WHOLE);
     }
     args.extend(["--no-color", "--no-ext-diff", "--no-textconv", "--"]);
     args.extend(change.paths());
@@ -338,8 +356,22 @@ async fn compared_diff(
     change: &Change,
     lines: usize,
 ) -> Result<Vec<DiffLine>, Error> {
+    compared_diff_with(path, revs, change, lines, false).await
+}
+
+/// As [`compared_diff`], with every line of the file when `whole`.
+pub async fn compared_diff_with(
+    path: &Path,
+    revs: &[&str],
+    change: &Change,
+    lines: usize,
+    whole: bool,
+) -> Result<Vec<DiffLine>, Error> {
     let dir = git_dir(path)?;
     let mut args = vec!["-C", dir, "-c", UNQUOTED, "diff", "-M"];
+    if whole {
+        args.push(WHOLE);
+    }
     args.extend(["--no-color", "--no-ext-diff", "--no-textconv"]);
     args.extend(revs);
     args.push("--");
@@ -788,6 +820,28 @@ mod tests {
         for wrong in ["nothing-here", "--all", "HEAD:a.txt", ""] {
             assert!(commit_id(&dir, wrong).await.is_err(), "{wrong:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn a_file_shown_whole_keeps_every_unchanged_line() {
+        let dir = repo("whole");
+        let text: String = (1..=20).map(|n| format!("{n}\n")).collect();
+        std::fs::write(dir.join("a.txt"), &text).unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-q", "-m", "first"]);
+        std::fs::write(dir.join("a.txt"), text.replace("10\n", "ten\n")).unwrap();
+        let a = change(" M", "a.txt", None);
+        let folded = file_diff(&dir, None, &a, DIFF_LINES).await.unwrap();
+        let whole = file_diff_with(&dir, None, &a, DIFF_LINES, true)
+            .await
+            .unwrap();
+        assert!(!folded.iter().any(|l| l.text == " 1"));
+        assert!(whole.iter().any(|l| l.text == " 1"));
+        assert!(whole.iter().any(|l| l.text == " 20"));
+        let compared = compared_diff_with(&dir, &["HEAD"], &a, DIFF_LINES, true)
+            .await
+            .unwrap();
+        assert!(compared.iter().any(|l| l.text == " 20"));
     }
 
     #[tokio::test]

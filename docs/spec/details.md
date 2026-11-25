@@ -472,7 +472,7 @@ Without leaving the keyboard you can move to the next or previous change,
 hunk by hunk across the files, and to the next or previous file
 ([keys](reference/keys.md)). A move that has nowhere to go says so and stays
 where it is. `/` searches the stream. Unchanged lines between hunks are
-folded, and each fold opens on request.
+folded, and a fold opens on request, showing its file whole.
 
 A file's lines are drawn in one column, removed lines above added ones, or in
 two, the old beside the new. By default the tab draws two columns where it is
@@ -487,9 +487,10 @@ side. A file that is binary, renamed, deleted or too large to show says so in
 its place, and breaks nothing: the other files, their comments and the keys
 stay as they were.
 
-In a change that holds the worktree, a hunk or the lines marked in it can be
-staged, unstaged or discarded from the stream, as a file can from
-[Changes](#changes); discarding asks first.
+In what is not committed, a hunk or the lines marked in it can be staged,
+unstaged or discarded from the stream, as a file can from
+[Changes](#changes); discarding asks first, by its key pressed again. A file
+added, deleted, renamed or binary is staged whole from Changes.
 
 How a worktree's diffs are drawn — whether the files are listed, how many
 columns, whether lines wrap and how pictures are compared — is chosen in any

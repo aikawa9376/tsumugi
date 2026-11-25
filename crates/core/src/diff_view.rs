@@ -2,7 +2,7 @@
 //! the files to move between, how long lines and pictures are drawn, and
 //! what a worktree's tabs keep of those choices.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use tsumugi_model::EnvironmentId;
@@ -302,6 +302,178 @@ pub fn word_marks(lines: &[DiffLine]) -> Vec<Vec<(usize, usize)>> {
     marks
 }
 
+/// The line `way` of `from` whose text holds `text`, going round at the
+/// ends; the case is ignored unless `text` has a capital.
+pub fn find(lines: &[DiffLine], from: usize, text: &str, way: Way) -> Option<usize> {
+    if text.is_empty() || lines.is_empty() {
+        return None;
+    }
+    let careful = text.chars().any(char::is_uppercase);
+    let wanted = if careful {
+        text.to_string()
+    } else {
+        text.to_lowercase()
+    };
+    let holds = |i: usize| {
+        let line = &lines[i].text;
+        if careful {
+            line.contains(&wanted)
+        } else {
+            line.to_lowercase().contains(&wanted)
+        }
+    };
+    let n = lines.len();
+    (1..=n)
+        .map(|k| match way {
+            Way::Next => (from + k) % n,
+            Way::Prev => (from + n * 2 - k) % n,
+        })
+        .find(|&i| holds(i))
+}
+
+/// The unchanged lines folded away before each hunk: by the index of its
+/// heading, how many lines of the file come between it and the hunk before,
+/// or the file's start.
+pub fn folds(lines: &[DiffLine]) -> Vec<(usize, u32)> {
+    let mut out = Vec::new();
+    let mut after = 0u32;
+    for (i, line) in lines.iter().enumerate() {
+        match line.kind {
+            DiffKind::File => after = 0,
+            DiffKind::Hunk => {
+                let Some((start, count)) = old_side(&line.text) else {
+                    continue;
+                };
+                let hidden = start.saturating_sub(after + 1);
+                if hidden > 0 && start > 0 {
+                    out.push((i, hidden));
+                }
+                after = start + count.saturating_sub(1);
+                if count == 0 {
+                    after = start;
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Where a hunk heading's old side starts, and how many lines it holds.
+fn old_side(heading: &str) -> Option<(u32, u32)> {
+    let word = heading.strip_prefix("@@ ")?.split_whitespace().next()?;
+    let mut parts = word.strip_prefix('-')?.split(',');
+    let start = parts.next()?.parse().ok()?;
+    let count = parts.next().map_or(Some(1), |c| c.parse().ok())?;
+    Some((start, count))
+}
+
+/// Why a patch cannot be made of the lines chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unpatchable {
+    /// The lines are not in one hunk.
+    NotOneHunk,
+    /// A file added, deleted, renamed or binary is staged whole.
+    WholeFile,
+    /// Nothing chosen changes anything.
+    NoChange,
+}
+
+impl Unpatchable {
+    pub fn words(self) -> &'static str {
+        match self {
+            Unpatchable::NotOneHunk => "Choose lines of one hunk",
+            Unpatchable::WholeFile => {
+                "A file added, deleted, renamed or binary is staged whole, from Changes"
+            }
+            Unpatchable::NoChange => "No change here",
+        }
+    }
+}
+
+/// The patch that makes the change of the lines `first..=last` of `lines`,
+/// or of the whole hunk when they are its heading; `reverse` makes the one
+/// that takes the change back out, as unstaging and discarding apply. The
+/// lines not chosen are left as they are on the side the patch applies to.
+pub fn patch(
+    lines: &[DiffLine],
+    first: usize,
+    last: usize,
+    reverse: bool,
+) -> Result<String, Unpatchable> {
+    let (first, last) = (first.min(last), first.max(last));
+    let heading = lines[..=first.min(lines.len().saturating_sub(1))]
+        .iter()
+        .rposition(|l| l.kind == DiffKind::Hunk)
+        .ok_or(Unpatchable::NotOneHunk)?;
+    let file = lines[..heading]
+        .iter()
+        .rposition(|l| l.kind == DiffKind::File)
+        .ok_or(Unpatchable::NotOneHunk)?;
+    let end = lines[heading + 1..]
+        .iter()
+        .position(|l| matches!(l.kind, DiffKind::Hunk | DiffKind::File))
+        .map_or(lines.len(), |k| heading + 1 + k);
+    if last >= end {
+        return Err(Unpatchable::NotOneHunk);
+    }
+    // A note between the file's heading and its hunk says it is renamed or
+    // binary; a hunk from or to nothing adds or deletes the file.
+    let (old_start, new_start) =
+        review_starts(&lines[heading].text).ok_or(Unpatchable::NotOneHunk)?;
+    if heading != file + 1 || old_start == 0 || new_start == 0 {
+        return Err(Unpatchable::WholeFile);
+    }
+    let whole = first == heading;
+    let chosen = |i: usize| whole || (first..=last).contains(&i);
+    let path = &lines[file].text;
+    let (mut body, mut old, mut new, mut changes) = (String::new(), 0, 0, 0);
+    for (i, line) in lines.iter().enumerate().take(end).skip(heading + 1) {
+        let rest = line.text.get(1..).unwrap_or_default();
+        // Read forwards the change goes from old to new; backwards a removed
+        // line is what the patch adds back.
+        let (adds, takes) = match (line.kind, reverse) {
+            (DiffKind::Added, false) | (DiffKind::Removed, true) => (true, false),
+            (DiffKind::Removed, false) | (DiffKind::Added, true) => (false, true),
+            _ => (false, false),
+        };
+        if line.text.starts_with('\\') {
+            body.push_str(&line.text);
+            body.push('\n');
+        } else if adds && chosen(i) {
+            body.push_str(&format!("+{rest}\n"));
+            new += 1;
+            changes += 1;
+        } else if takes && chosen(i) {
+            body.push_str(&format!("-{rest}\n"));
+            old += 1;
+            changes += 1;
+        } else if adds {
+            // Not chosen: not there on the side the patch applies to.
+        } else {
+            body.push_str(&format!(" {rest}\n"));
+            old += 1;
+            new += 1;
+        }
+    }
+    if changes == 0 {
+        return Err(Unpatchable::NoChange);
+    }
+    let start = if reverse { new_start } else { old_start };
+    Ok(format!(
+        "diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -{start},{old} +{start},{new} @@\n{body}"
+    ))
+}
+
+/// Where a hunk heading, `@@ -a,b +c,d @@`, says its two sides start.
+fn review_starts(heading: &str) -> Option<(u32, u32)> {
+    let mut words = heading.strip_prefix("@@ ")?.split_whitespace();
+    let start = |word: Option<&str>, sign: char| -> Option<u32> {
+        word?.strip_prefix(sign)?.split(',').next()?.parse().ok()
+    };
+    Some((start(words.next(), '-')?, start(words.next(), '+')?))
+}
+
 /// `text` cut where `ranges`, in order, begin and end, each piece with
 /// whether it is one of them.
 pub fn pieces<'a>(text: &'a str, ranges: &[(usize, usize)]) -> Vec<(&'a str, bool)> {
@@ -325,6 +497,9 @@ pub fn pieces<'a>(text: &'a str, ranges: &[(usize, usize)]) -> Vec<(&'a str, boo
     }
     out
 }
+
+/// Byte ranges of a line's text, in order.
+pub type Spans = Vec<(usize, usize)>;
 
 /// Words, the spaces between them and each other character alone.
 fn tokens(text: &str) -> Vec<(usize, usize)> {
@@ -359,7 +534,7 @@ fn tokens(text: &str) -> Vec<(usize, usize)> {
 /// The byte ranges of `old` and of `new` that the other does not share,
 /// word by word; none where the two have nothing in common, as a line
 /// rewritten whole is marked whole by its colour already.
-pub fn changed_words(old: &str, new: &str) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+pub fn changed_words(old: &str, new: &str) -> (Spans, Spans) {
     const MOST: usize = 400;
     let (a, b) = (tokens(old), tokens(new));
     if a.len() > MOST || b.len() > MOST {
@@ -424,11 +599,37 @@ pub enum Choice {
     Structural,
 }
 
-/// The choices of each worktree, for as long as the window runs.
+/// The choices of each worktree, for as long as the window runs, and the
+/// files of it shown whole rather than as their hunks.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct DiffViews(HashMap<(EnvironmentId, PathBuf), DiffView>);
+pub struct DiffViews(
+    HashMap<Worktree, DiffView>,
+    HashMap<Worktree, BTreeSet<String>>,
+);
+
+/// A worktree, by its environment and its path.
+type Worktree = (EnvironmentId, PathBuf);
 
 impl DiffViews {
+    /// The files of the worktree shown whole.
+    pub fn unfolded(&self, environment: &EnvironmentId, worktree: &Path) -> Vec<String> {
+        self.1
+            .get(&(environment.clone(), worktree.to_path_buf()))
+            .map(|files| files.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Show the file `path` of the worktree whole, or as its hunks again.
+    pub fn unfold(&mut self, environment: &EnvironmentId, worktree: &Path, path: &str) {
+        let files = self
+            .1
+            .entry((environment.clone(), worktree.to_path_buf()))
+            .or_default();
+        if !files.remove(path) {
+            files.insert(path.to_string());
+        }
+    }
+
     pub fn of(&self, environment: &EnvironmentId, worktree: &Path) -> DiffView {
         self.0
             .get(&(environment.clone(), worktree.to_path_buf()))
@@ -512,6 +713,121 @@ mod tests {
         assert_eq!(&lines[1].text[5..6], "2");
         assert_eq!(marks[1], [(5, 6)]);
         assert!(marks[2].is_empty(), "an added line beside nothing");
+    }
+
+    fn hunk() -> Vec<DiffLine> {
+        use DiffKind::*;
+        [
+            (File, "a.txt"),
+            (Hunk, "@@ -1,3 +1,3 @@"),
+            (Context, " one"),
+            (Removed, "-two"),
+            (Removed, "-three"),
+            (Added, "+TWO"),
+            (Added, "+THREE"),
+        ]
+        .into_iter()
+        .map(|(k, t)| line(k, t))
+        .collect()
+    }
+
+    #[test]
+    fn a_search_finds_the_next_or_previous_line_holding_the_text_going_round() {
+        use DiffKind::*;
+        let lines: Vec<_> = [(Context, " Alpha"), (Added, "+beta"), (Removed, "-alpha")]
+            .into_iter()
+            .map(|(k, t)| line(k, t))
+            .collect();
+        assert_eq!(find(&lines, 0, "alpha", Way::Next), Some(2));
+        assert_eq!(find(&lines, 2, "alpha", Way::Next), Some(0));
+        assert_eq!(find(&lines, 0, "alpha", Way::Prev), Some(2));
+        assert_eq!(
+            find(&lines, 2, "Alpha", Way::Next),
+            Some(0),
+            "a capital is kept"
+        );
+        assert_eq!(
+            find(&lines, 0, "Alpha", Way::Next),
+            Some(0),
+            "the line itself last"
+        );
+        assert_eq!(find(&lines, 0, "gamma", Way::Next), None);
+        assert_eq!(find(&lines, 0, "", Way::Next), None);
+    }
+
+    #[test]
+    fn the_unchanged_lines_between_hunks_are_counted_for_their_folds() {
+        use DiffKind::*;
+        let lines: Vec<_> = [
+            (File, "a"),
+            (Hunk, "@@ -1,3 +1,3 @@"),
+            (Hunk, "@@ -10,2 +10,3 @@"),
+            (File, "b"),
+            (Hunk, "@@ -5 +5 @@"),
+            (File, "new"),
+            (Hunk, "@@ -0,0 +1 @@"),
+        ]
+        .into_iter()
+        .map(|(k, t)| line(k, t))
+        .collect();
+        assert_eq!(folds(&lines), [(2, 6), (4, 4)]);
+    }
+
+    #[test]
+    fn a_file_is_shown_whole_and_then_as_its_hunks_again() {
+        let mut views = DiffViews::default();
+        let here = EnvironmentId::default();
+        views.unfold(&here, Path::new("/w"), "a.rs");
+        assert_eq!(views.unfolded(&here, Path::new("/w")), ["a.rs"]);
+        assert!(views.unfolded(&here, Path::new("/other")).is_empty());
+        views.unfold(&here, Path::new("/w"), "a.rs");
+        assert!(views.unfolded(&here, Path::new("/w")).is_empty());
+    }
+
+    #[test]
+    fn a_whole_hunk_is_patched_from_its_heading() {
+        assert_eq!(
+            patch(&hunk(), 1, 1, false).unwrap(),
+            "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,3 @@\n one\n-two\n-three\n+TWO\n+THREE\n"
+        );
+    }
+
+    #[test]
+    fn lines_not_chosen_stay_as_they_are_on_the_side_the_patch_applies_to() {
+        // Staging "-two" and "+TWO" leaves "three" in place and "+THREE" out.
+        assert_eq!(
+            patch(&hunk(), 3, 3, false).unwrap(),
+            "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,2 @@\n one\n-two\n three\n"
+        );
+        // Taken back out, an added line not chosen is there to keep, and a
+        // removed one not chosen is not.
+        assert_eq!(
+            patch(&hunk(), 5, 5, true).unwrap(),
+            "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,2 @@\n one\n-TWO\n THREE\n"
+        );
+    }
+
+    #[test]
+    fn a_patch_is_refused_across_hunks_for_whole_files_and_where_nothing_changes() {
+        let mut lines = hunk();
+        lines.push(line(DiffKind::Hunk, "@@ -9 +9 @@"));
+        lines.push(line(DiffKind::Added, "+x"));
+        assert_eq!(patch(&lines, 3, 8, false), Err(Unpatchable::NotOneHunk));
+        assert_eq!(patch(&lines, 0, 0, false), Err(Unpatchable::NotOneHunk));
+        assert_eq!(patch(&lines, 2, 2, false), Err(Unpatchable::NoChange));
+        let added = [
+            line(DiffKind::File, "new.txt"),
+            line(DiffKind::Hunk, "@@ -0,0 +1 @@"),
+            line(DiffKind::Added, "+fresh"),
+        ];
+        assert_eq!(patch(&added, 2, 2, false), Err(Unpatchable::WholeFile));
+        let renamed = [
+            line(DiffKind::File, "b.txt"),
+            line(DiffKind::Context, "Renamed from a.txt"),
+            line(DiffKind::Hunk, "@@ -1 +1 @@"),
+            line(DiffKind::Added, "+x"),
+        ];
+        assert_eq!(patch(&renamed, 3, 3, false), Err(Unpatchable::WholeFile));
     }
 
     #[test]

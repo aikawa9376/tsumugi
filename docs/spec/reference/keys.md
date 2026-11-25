@@ -219,6 +219,13 @@ changes them ([keys](../keys.md)).
 | `diff.compare` |  | in a diff tab, write two revisions of the repository, as `main..HEAD`, and show the later against the earlier; a name that is not of a commit is refused ([details](../details.md#diff-tabs)) | `viewer`: `C` |
 | `diff.columns` |  | in a diff tab, draw the lines in two columns where the tab is wide enough, always in one, or always in two, the old beside the new; kept for the worktree ([details](../details.md#diff-tabs)) | `viewer`: `\|` |
 | `diff.structural` |  | in a diff tab, show the file opened as difftastic reads it, or its lines again; nothing can be commented on in difftastic's view ([details](../details.md#diff-tabs)) | `viewer`: `D` |
+| `diff.stage` |  | in a diff tab on what is not committed, stage the hunk whose heading the cursor is on, or the lines the cursor or the mark span inside one hunk ([details](../details.md#diff-tabs)) | `viewer`: `a` |
+| `diff.unstage` |  | in a diff tab on what is not committed, take the hunk or the lines chosen out of the index ([details](../details.md#diff-tabs)) | `viewer`: `u` |
+| `diff.discard` |  | in a diff tab on what is not committed, discard the hunk or the lines chosen from the worktree, once the key is pressed again to say so ([details](../details.md#diff-tabs)) | `viewer`: `X` |
+| `diff.search` |  | in a diff tab, write what to find and bring the cursor to the next line holding it; the case is ignored unless what is written has a capital ([details](../details.md#diff-tabs)) | `viewer`: `/` |
+| `diff.search_next` |  | in a diff tab, bring the cursor to the next line holding what was searched for, going round at the end | `viewer`: `n` |
+| `diff.search_prev` |  | in a diff tab, bring the cursor to the previous line holding what was searched for, going round at the start | `viewer`: `N` |
+| `diff.unfold` |  | in a diff tab, show the file the cursor is in whole, its unchanged lines unfolded, or as its hunks again ([details](../details.md#diff-tabs)) | `viewer`: `z a` |
 | `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
 | `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
@@ -636,6 +643,13 @@ changes them ([keys](../keys.md)).
 "C" = "diff.compare"
 "|" = "diff.columns"
 "D" = "diff.structural"
+"a" = "diff.stage"
+"u" = "diff.unstage"
+"X" = "diff.discard"
+"/" = "diff.search"
+"n" = "diff.search_next"
+"N" = "diff.search_prev"
+"z a" = "diff.unfold"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

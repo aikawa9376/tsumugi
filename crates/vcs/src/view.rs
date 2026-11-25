@@ -39,6 +39,35 @@ async fn lines(
     change: &Change,
     max: usize,
 ) -> Result<Vec<DiffLine>, Error> {
+    lines_with(worktree, rev, change, max, false).await
+}
+
+/// As [`lines`], with every line of the file when `whole`.
+async fn lines_with(
+    worktree: &std::path::Path,
+    rev: &Rev,
+    change: &Change,
+    max: usize,
+    whole: bool,
+) -> Result<Vec<DiffLine>, Error> {
+    if whole {
+        return match rev {
+            Rev::WorkingCopy => git::file_diff_with(worktree, None, change, max, true).await,
+            Rev::Commit(id) => git::file_diff_with(worktree, Some(id), change, max, true).await,
+            Rev::Branch(since) => {
+                git::compared_diff_with(worktree, &[since, "HEAD"], change, max, true).await
+            }
+            Rev::Base(_) if change.status == "??" => {
+                git::file_diff_with(worktree, None, change, max, true).await
+            }
+            Rev::Base(since) => {
+                git::compared_diff_with(worktree, &[since], change, max, true).await
+            }
+            Rev::Range(from, to) => {
+                git::compared_diff_with(worktree, &[from, to], change, max, true).await
+            }
+        };
+    }
     match rev {
         Rev::WorkingCopy => git::file_diff(worktree, None, change, max).await,
         Rev::Commit(id) => git::file_diff(worktree, Some(id), change, max).await,
@@ -94,6 +123,9 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
                 .map(Listing::Diff)
         }
         Spot::Lines(rev, change) => lines(worktree, rev, change, limits.diff_lines)
+            .await
+            .map(Listing::Diff),
+        Spot::Whole(rev, change) => lines_with(worktree, rev, change, limits.diff_lines, true)
             .await
             .map(Listing::Diff),
         Spot::Log => git::history(worktree, limits.log_commits)

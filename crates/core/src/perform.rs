@@ -134,6 +134,13 @@ pub(crate) fn perform(
         | Action::DiffCompare
         | Action::DiffColumns
         | Action::DiffStructural
+        | Action::DiffStage
+        | Action::DiffUnstage
+        | Action::DiffDiscard
+        | Action::DiffSearch
+        | Action::DiffSearchNext
+        | Action::DiffSearchPrev
+        | Action::DiffUnfold
         | Action::DiffFiles
         | Action::DiffPictures
         | Action::GithubNext

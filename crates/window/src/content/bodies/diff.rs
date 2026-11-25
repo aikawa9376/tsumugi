@@ -33,6 +33,48 @@ fn files_of(
         .unwrap_or_default()
 }
 
+/// `lines`, a stream, with each file of `unfolded` whose whole diff has been
+/// read put in place of its hunks.
+fn spliced(
+    app: AppCtx,
+    environment: &EnvironmentId,
+    worktree: &std::path::Path,
+    rev: &Rev,
+    files: &[Change],
+    unfolded: &[String],
+    lines: Vec<DiffLine>,
+) -> Vec<DiffLine> {
+    let mut lines = lines;
+    for path in unfolded {
+        let Some(change) = files.iter().find(|f| &f.path == path) else {
+            continue;
+        };
+        let whole = app
+            .hosts
+            .read()
+            .work(environment)
+            .and_then(|w| {
+                w.details
+                    .repository(worktree, &Spot::Whole(rev.clone(), change.clone()))
+            })
+            .and_then(|r| match &r.listing {
+                Ok(Listing::Diff(whole)) => Some(whole.clone()),
+                _ => None,
+            });
+        let Some(whole) = whole else { continue };
+        let heading = |l: &DiffLine| l.kind == tsumugi_model::repository::DiffKind::File;
+        let Some(start) = lines.iter().position(|l| heading(l) && &l.text == path) else {
+            continue;
+        };
+        let end = lines[start + 1..]
+            .iter()
+            .position(heading)
+            .map_or(lines.len(), |k| start + 1 + k);
+        lines.splice(start..end, whole);
+    }
+    lines
+}
+
 /// Whether a diff of the file is drawn as two pictures rather than lines.
 fn is_picture(change: &Change) -> bool {
     FileKind::of(&change.path) == FileKind::Image && !is_text(&change.path)
@@ -50,9 +92,11 @@ pub(crate) fn DiffWindow(
     let id = format!("diff-{window}");
     let command = use_memo(move || commands().filter(|(w, _)| *w == window).map(|(_, c)| c));
     let rev = match &spot {
-        Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) | Spot::Stream(rev) => {
-            rev.clone()
-        }
+        Spot::Files(rev)
+        | Spot::Diff(rev, _)
+        | Spot::Lines(rev, _)
+        | Spot::Stream(rev)
+        | Spot::Whole(rev, _) => rev.clone(),
         Spot::Log | Spot::Branch => Rev::WorkingCopy,
     };
     // The file the tab was opened on, which the stream is brought to.
@@ -67,6 +111,11 @@ pub(crate) fn DiffWindow(
         .and_then(|w| w.details.repository(&worktree, &Spot::Stream(rev.clone())))
         .map(|r| r.listing.clone());
     let view = app.content.read().diff_views.of(&environment, &worktree);
+    let unfolded = app
+        .content
+        .read()
+        .diff_views
+        .unfolded(&environment, &worktree);
     // Difftastic's view of the file opened, while it is asked for and read.
     let structural = match (&spot, view.structural) {
         (Spot::Diff(rev, change) | Spot::Lines(rev, change), true) => app
@@ -84,6 +133,21 @@ pub(crate) fn DiffWindow(
         _ => None,
     };
     let files = files_of(app, &environment, &worktree, &rev);
+    // A file shown whole takes the place of its hunks in the stream.
+    let stream = stream.map(|read| {
+        read.map(|listing| match listing {
+            Listing::Diff(lines) => Listing::Diff(spliced(
+                app,
+                &environment,
+                &worktree,
+                &rev,
+                &files,
+                &unfolded,
+                lines,
+            )),
+            other => other,
+        })
+    });
     let merge_base = app
         .hosts
         .read()

@@ -133,6 +133,8 @@ pub enum Spot {
     /// Every file of a change, one after another, each as its line diff
     /// under its heading.
     Stream(Rev),
+    /// A file's line diff with every line of it, none folded away.
+    Whole(Rev, Change),
     Log,
     /// Where the branch stands: what it is checked out as, what is
     /// unfinished in it, and how it compares with its base.

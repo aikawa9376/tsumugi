@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use tsumugi_core::content::{Area, WindowId};
-use tsumugi_core::diff_view::{Row, pieces, rows, word_marks};
+use tsumugi_core::diff_view::{Row, folds, pieces, rows, word_marks};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::review::{Go, Mode, Pane, Reading, Target};
 use tsumugi_core::viewers::{Diff, Review, ViewerAction};
@@ -62,9 +62,111 @@ struct Review_ {
     lines: Vec<DiffLine>,
     pane: Signal<Pane>,
     comments: Signal<Vec<Judged>>,
+    /// The discard key was pressed once, and waits to be pressed again.
+    armed: Signal<bool>,
+    /// What is being written to search for, while it is.
+    searching: Signal<Option<String>>,
+    /// What was last searched for.
+    sought: Signal<String>,
+}
+
+/// What is done with the hunk or the lines chosen.
+#[derive(Clone, Copy, PartialEq)]
+enum Staging {
+    Stage,
+    Unstage,
+    Discard,
 }
 
 impl Review_ {
+    /// Bring the cursor to the line `way` of it holding what was sought.
+    fn find(&self, way: tsumugi_core::diff_view::Way) {
+        let mut pane = self.pane;
+        let comments = self.comments.peek().clone();
+        let reading = self.reading(&comments);
+        let here = pane
+            .peek()
+            .cursor(&reading)
+            .min(self.lines.len().saturating_sub(1));
+        let sought = self.sought.peek().clone();
+        match tsumugi_core::diff_view::find(&self.lines, here, &sought, way) {
+            Some(at) => pane.write().place(at),
+            None if sought.is_empty() => pane.write().notice = Some("Search with /".into()),
+            None => pane.write().notice = Some(format!("Not found: {sought}")),
+        }
+    }
+
+    /// Show the file the cursor is in whole, or as its hunks again.
+    fn unfold(&self) {
+        let comments = self.comments.peek().clone();
+        let reading = self.reading(&comments);
+        let at = self.pane.peek().cursor(&reading);
+        if at >= self.lines.len() {
+            return;
+        }
+        self.app.dispatch(Msg::DiffUnfold {
+            environment: self.environment.clone(),
+            worktree: self.worktree.clone(),
+            path: reading.path_at(at).to_string(),
+        });
+    }
+
+    /// Stage, unstage or discard the hunk or the lines chosen, discarding
+    /// only once its key is pressed twice.
+    fn stage(&self, how: Staging) {
+        let mut pane = self.pane;
+        let mut armed = self.armed;
+        if self.rev != Rev::WorkingCopy {
+            pane.write().notice = Some("Stage from what is not committed: t shows it".into());
+            return;
+        }
+        let comments = self.comments.peek().clone();
+        let reading = self.reading(&comments);
+        let (first, last) = pane.peek().span(&reading);
+        if pane.peek().cursor(&reading) >= self.lines.len() {
+            pane.write().notice = Some("Choose lines of the diff".into());
+            return;
+        }
+        if how == Staging::Discard && !*armed.peek() {
+            armed.set(true);
+            pane.write().notice = Some(
+                "Press X again to discard these lines from the worktree; it cannot be undone"
+                    .into(),
+            );
+            return;
+        }
+        armed.set(false);
+        let reverse = how != Staging::Stage;
+        let patch = match tsumugi_core::diff_view::patch(&self.lines, first, last, reverse) {
+            Ok(patch) => patch,
+            Err(why) => {
+                pane.write().notice = Some(why.words().into());
+                return;
+            }
+        };
+        let this = self.clone();
+        spawn(async move {
+            let ask = Ask::Git {
+                worktree: this.worktree.clone(),
+                op: tsumugi_protocol::GitOp::Apply {
+                    patch,
+                    index: how != Staging::Discard,
+                    reverse,
+                },
+            };
+            let said = match this.app.ask_in(&this.environment, ask).await {
+                Answer::Done => match how {
+                    Staging::Stage => "Staged".to_string(),
+                    Staging::Unstage => "Unstaged".to_string(),
+                    Staging::Discard => "Discarded".to_string(),
+                },
+                Answer::Failed { text } => text,
+                _ => "The work host did not answer".to_string(),
+            };
+            pane.write().notice = Some(said);
+        });
+    }
+
     fn reading<'a>(&'a self, comments: &'a [Judged]) -> Reading<'a> {
         Reading::new(&self.lines, &self.path, &self.rev, comments)
     }
@@ -180,6 +282,10 @@ impl Review_ {
 
     /// Do what the key `action` asks.
     fn run(&self, action: ViewerAction, window: WindowId) {
+        if action != ViewerAction::Diff(Diff::Discard) {
+            let mut armed = self.armed;
+            armed.set(false);
+        }
         let comments = self.comments.peek().clone();
         let reading = self.reading(&comments);
         let mut pane = self.pane;
@@ -211,6 +317,15 @@ impl Review_ {
             (_, ViewerAction::ScrollHalfUp) => go(Go::By(-12)),
             (_, ViewerAction::Diff(Diff::Hunk(way))) => go(Go::Hunk(way)),
             (_, ViewerAction::Diff(Diff::File(way))) => go(Go::File(way)),
+            (_, ViewerAction::Diff(Diff::Stage)) => self.stage(Staging::Stage),
+            (_, ViewerAction::Diff(Diff::Search)) => {
+                let mut searching = self.searching;
+                searching.set(Some(String::new()));
+            }
+            (_, ViewerAction::Diff(Diff::Found(way))) => self.find(way),
+            (_, ViewerAction::Diff(Diff::Unfold)) => self.unfold(),
+            (_, ViewerAction::Diff(Diff::Unstage)) => self.stage(Staging::Unstage),
+            (_, ViewerAction::Diff(Diff::Discard)) => self.stage(Staging::Discard),
             (_, ViewerAction::ScrollTop) => go(Go::Top),
             (_, ViewerAction::ScrollBottom) => go(Go::Bottom),
             (_, ViewerAction::Review(Review::Select)) => pane.write().select(&reading),
@@ -364,6 +479,9 @@ pub(crate) fn ReviewRows(
     let app = use_context::<AppCtx>();
     let pane = use_signal(Pane::default);
     let comments = use_signal(Vec::<Judged>::new);
+    let armed = use_signal(|| false);
+    let mut searching = use_signal(|| None::<String>);
+    let mut sought = use_signal(String::new);
     let this = Review_ {
         app,
         environment: environment.clone(),
@@ -373,6 +491,9 @@ pub(crate) fn ReviewRows(
         lines: lines.clone(),
         pane,
         comments,
+        armed,
+        searching,
+        sought,
     };
     // What the work host keeps is read when the diff is, so a change to the
     // code shows at once which comments no longer stand.
@@ -448,10 +569,26 @@ pub(crate) fn ReviewRows(
         (0..lines.len()).map(Row::Whole).collect()
     };
     let marks = word_marks(&lines);
+    let folded = folds(&lines);
     rsx! {
         div { id: "{id}", class: "review",
             div { class: if two { "rv-lines two" } else { "rv-lines" },
                 for (k , row) in drawn.iter().enumerate() {
+                    if let Row::Whole(i) = *row
+                        && let Some(&(_, hidden)) = folded.iter().find(|(h, _)| *h == i)
+                    {
+                        div { key: "fold-{i}", class: "rv-fold",
+                            title: "Show the whole file (z a)",
+                            onclick: { let this = this.clone(); move |_| {
+                                this.app.dispatch(Msg::DiffUnfold {
+                                    environment: this.environment.clone(),
+                                    worktree: this.worktree.clone(),
+                                    path: Reading::new(&this.lines, &this.path, &this.rev, &[]).path_at(i).to_string(),
+                                });
+                            } },
+                            "⋯ {hidden} unchanged lines"
+                        }
+                    }
                     match *row {
                         Row::Whole(i) if two && lines[i].kind == DiffKind::Context && numbers[i].old.is_some() => rsx! {
                             div { key: "{k}", class: "rv-row2",
@@ -560,6 +697,25 @@ pub(crate) fn ReviewRows(
                     if let Some(error) = &preview.error { div { class: "git-error", "{error}" } }
                     div { class: "rv-hint",
                         if preview.busy { "Sending…" } else { "s send · S new session · j/k choose · q close" }
+                    }
+                }
+            }
+            if let Some(text) = searching() {
+                div { class: "rv-composer",
+                    span { class: "rv-label", "/" }
+                    InlineField {
+                        class: "rv-input",
+                        value: text,
+                        placeholder: "Find in the diff; Enter goes to it, Escape gives up".to_string(),
+                        focus: true,
+                        contained: true,
+                        oninput: move |text: String| searching.set(Some(text)),
+                        onenter: { let this = this.clone(); move |()| {
+                            sought.set(searching.peek().clone().unwrap_or_default());
+                            searching.set(None);
+                            this.find(tsumugi_core::diff_view::Way::Next);
+                        } },
+                        onescape: move |()| searching.set(None),
                     }
                 }
             }

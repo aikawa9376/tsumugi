@@ -787,6 +787,13 @@ async fn git_op(worktree: &std::path::Path, op: GitOp) -> Result<Answer, tsumugi
             .await
             .map(|()| Answer::Done),
         GitOp::StageAll => write::stage_all(worktree).await.map(|()| Answer::Done),
+        GitOp::Apply {
+            patch,
+            index,
+            reverse,
+        } => write::apply_patch(worktree, &patch, index, reverse)
+            .await
+            .map(|()| Answer::Done),
         GitOp::Commit { message, amend } => {
             write::commit(worktree, &message, amend).await.map(told)
         }

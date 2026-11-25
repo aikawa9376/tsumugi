@@ -157,6 +157,6 @@ mod tests {
 
     #[test]
     fn an_unbound_key_does_nothing() {
-        assert_eq!(resolve(&[], "z"), Resolved::Nothing);
+        assert_eq!(resolve(&[], "Q"), Resolved::Nothing);
     }
 }

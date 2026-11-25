@@ -398,6 +398,13 @@ pub enum GitOp {
     },
     /// Put every change of the worktree in the index.
     StageAll,
+    /// Apply `patch`, a unified diff of one file's lines, to the index when
+    /// `index`, else to the worktree; backwards when `reverse`.
+    Apply {
+        patch: String,
+        index: bool,
+        reverse: bool,
+    },
     /// Commit what is staged, or with `amend` replace the last commit.
     Commit { message: String, amend: bool },
     /// Push the branch, overwriting the remote's only if it has not moved
