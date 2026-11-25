@@ -33,7 +33,7 @@ tab, while the window runs.
 
 ## Consequences
 
-- A large change is read and drawn file by file as it comes into sight.
+- Each file of a large change is cut to the lines a diff may show.
 - The file list marks where the stream is, and opening a file moves the
   stream to it.
 - Choices about drawing are lost when the window closes.

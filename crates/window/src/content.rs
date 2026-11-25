@@ -2,7 +2,7 @@
 //! shown tab with the borders between them, and what each kind of window
 //! shows, read from the content slice and what the work host listed.
 
-mod bodies;
+pub(crate) mod bodies;
 mod tabs_bar;
 mod view;
 mod window;

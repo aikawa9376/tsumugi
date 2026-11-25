@@ -30,9 +30,13 @@ pub fn thing_name(tree: &Tree, terminals: &[TerminalSession], thing: &Tab) -> St
         Tab::Draft { .. } => "new session".into(),
         Tab::Diff { worktree, spot, .. } => {
             use tsumugi_model::repository::{Rev, Spot};
+            // The tab shows a whole change, whichever of its files is in
+            // sight, so it is named by the change.
             let name = match spot.as_ref() {
-                Spot::Diff(_, change) => change.shown(),
-                Spot::Files(Rev::Commit(id)) => id.chars().take(8).collect(),
+                Spot::Files(Rev::Commit(id))
+                | Spot::Diff(Rev::Commit(id), _)
+                | Spot::Lines(Rev::Commit(id), _)
+                | Spot::Stream(Rev::Commit(id)) => id.chars().take(8).collect(),
                 _ => file_name(worktree),
             };
             format!("Diff: {name}")

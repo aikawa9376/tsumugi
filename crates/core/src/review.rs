@@ -4,27 +4,83 @@
 //! window asks it, and this holds what the keys have decided.
 
 use crate::diff_view::Way;
-use tsumugi_model::repository::{DiffLine, Rev};
+use tsumugi_model::repository::{DiffKind, DiffLine, Rev};
 use tsumugi_model::review::{self, Anchor, Change, Comment, Freshness, Judged, NewComment, Side};
 
-/// What a pane is reading: the file's diff, and the comments of the worktree.
-#[derive(Clone, Copy)]
+/// What a pane is reading: the diff of a file, or of every file of a change
+/// one after another under their headings, and the comments of the worktree.
+#[derive(Clone)]
 pub struct Reading<'a> {
     pub lines: &'a [DiffLine],
+    /// The file of the lines above the first heading.
     pub path: &'a str,
     pub rev: &'a Rev,
     pub comments: &'a [Judged],
+    numbers: Vec<review::Numbers>,
+    /// Where each file's heading is.
+    heads: Vec<usize>,
 }
 
 impl<'a> Reading<'a> {
-    fn here(&self) -> impl Iterator<Item = &'a Judged> + use<'a> {
-        let (path, rev) = (self.path.to_owned(), self.rev.clone());
-        self.comments
+    pub fn new(
+        lines: &'a [DiffLine],
+        path: &'a str,
+        rev: &'a Rev,
+        comments: &'a [Judged],
+    ) -> Reading<'a> {
+        let heads = lines
             .iter()
-            .filter(move |j| j.comment.anchor.path == path && j.comment.rev == rev)
+            .enumerate()
+            .filter(|(_, l)| l.kind == DiffKind::File)
+            .map(|(i, _)| i)
+            .collect();
+        Reading {
+            lines,
+            path,
+            rev,
+            comments,
+            numbers: review::numbered(lines),
+            heads,
+        }
     }
 
-    /// The comments of this file whose lines no longer read as they did,
+    /// Where each file of the diff begins: its heading, or the first line
+    /// when there is none.
+    pub fn file_starts(&self) -> Vec<usize> {
+        if self.heads.first() == Some(&0) || self.lines.is_empty() {
+            self.heads.clone()
+        } else {
+            std::iter::once(0)
+                .chain(self.heads.iter().copied())
+                .collect()
+        }
+    }
+
+    /// The file the line `line` is of.
+    pub fn path_at(&self, line: usize) -> &'a str {
+        let before = self.heads.partition_point(|&h| h <= line);
+        match before.checked_sub(1) {
+            Some(k) => self.lines[self.heads[k]].text.as_str(),
+            None => self.path,
+        }
+    }
+
+    /// Whether the file `path` is one this diff shows.
+    fn shows(&self, path: &str) -> bool {
+        if self.heads.is_empty() {
+            return path == self.path;
+        }
+        self.heads.iter().any(|&h| self.lines[h].text == path)
+            || (self.heads.first() != Some(&0) && path == self.path)
+    }
+
+    fn here(&self) -> impl Iterator<Item = &'a Judged> + use<'a, '_> {
+        self.comments
+            .iter()
+            .filter(move |j| j.comment.rev == *self.rev && self.shows(&j.comment.anchor.path))
+    }
+
+    /// The comments of these files whose lines no longer read as they did,
     /// listed after the diff, where the cursor can reach them.
     pub fn outdated(&self) -> Vec<&'a Judged> {
         self.here()
@@ -38,13 +94,20 @@ impl<'a> Reading<'a> {
         self.lines.len() + self.outdated().len()
     }
 
-    fn covers(&self, comment: &Comment, line: usize) -> bool {
-        let n = review::numbered(self.lines)[line];
-        let number = match comment.anchor.side {
+    /// The number the line `line` has on the side `side`, in its file.
+    fn number(&self, line: usize, side: Side) -> Option<u32> {
+        let n = self.numbers[line];
+        match side {
             Side::Old => n.old,
             Side::New => n.new,
-        };
-        number.is_some_and(|n| (comment.anchor.start..=comment.anchor.end).contains(&n))
+        }
+    }
+
+    fn covers(&self, comment: &Comment, line: usize) -> bool {
+        comment.anchor.path == self.path_at(line)
+            && self
+                .number(line, comment.anchor.side)
+                .is_some_and(|n| (comment.anchor.start..=comment.anchor.end).contains(&n))
     }
 
     /// The comments that stand on the line `line`, those ending there
@@ -58,15 +121,13 @@ impl<'a> Reading<'a> {
     /// The comments whose thread is drawn under the line `line`: those whose
     /// last line it is.
     pub fn ending_at(&self, line: usize) -> Vec<&'a Judged> {
-        let n = review::numbered(self.lines)[line];
+        let path = self.path_at(line);
         self.here()
             .filter(|j| {
                 let a = &j.comment.anchor;
                 j.freshness == Freshness::Current
-                    && match a.side {
-                        Side::Old => n.old,
-                        Side::New => n.new,
-                    } == Some(a.end)
+                    && a.path == path
+                    && self.number(line, a.side) == Some(a.end)
             })
             .collect()
     }
@@ -169,6 +230,22 @@ impl Pane {
             Go::By(n) => here.saturating_add_signed(n).min(last),
             Go::Top => 0,
             Go::Bottom => last,
+            Go::File(way) => {
+                let starts = reading.file_starts();
+                match crate::diff_view::hunk_from(&starts, Some(here), way) {
+                    Some(at) => at,
+                    None => {
+                        self.notice = Some(
+                            match way {
+                                Way::Next => "No later file",
+                                Way::Prev => "No earlier file",
+                            }
+                            .into(),
+                        );
+                        here
+                    }
+                }
+            }
             Go::Hunk(way) => {
                 let starts = crate::diff_view::hunk_starts(reading.lines);
                 match crate::diff_view::hunk_from(&starts, Some(here), way) {
@@ -211,7 +288,7 @@ impl Pane {
             self.notice = Some("Comment on lines of the diff".into());
             return;
         }
-        match review::anchor_of(reading.lines, reading.path, first, last) {
+        match review::anchor_of(reading.lines, reading.path_at(first), first, last) {
             Ok((anchor, quoted)) => {
                 self.mark = None;
                 self.mode = Mode::Writing {
@@ -357,12 +434,13 @@ pub enum Go {
     Top,
     Bottom,
     Hunk(Way),
+    /// To the heading of the next or previous file.
+    File(Way),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tsumugi_model::repository::DiffKind;
 
     fn line(kind: DiffKind, text: &str) -> DiffLine {
         DiffLine {
@@ -403,12 +481,78 @@ mod tests {
     }
 
     fn reading<'a>(lines: &'a [DiffLine], comments: &'a [Judged]) -> Reading<'a> {
-        Reading {
-            lines,
-            path: "src/メモ.rs",
-            rev: &Rev::WorkingCopy,
-            comments,
-        }
+        Reading::new(lines, "src/メモ.rs", &Rev::WorkingCopy, comments)
+    }
+
+    fn stream() -> Vec<DiffLine> {
+        use DiffKind::*;
+        vec![
+            line(File, "a.rs"),
+            line(Hunk, "@@ -1 +1 @@"),
+            line(Added, "+one"),
+            line(File, "b.rs"),
+            line(Hunk, "@@ -1 +1 @@"),
+            line(Added, "+one"),
+        ]
+    }
+
+    #[test]
+    fn each_line_of_a_stream_is_of_the_file_whose_heading_is_above_it() {
+        let lines = stream();
+        let r = reading(&lines, &[]);
+        assert_eq!(r.path_at(0), "a.rs");
+        assert_eq!(r.path_at(2), "a.rs");
+        assert_eq!(r.path_at(3), "b.rs");
+        assert_eq!(r.path_at(5), "b.rs");
+        assert_eq!(r.file_starts(), [0, 3]);
+    }
+
+    #[test]
+    fn a_comment_in_a_stream_stands_only_on_its_own_file_and_is_written_for_it() {
+        let lines = stream();
+        let mut on_b = stored(1, Side::New, 1, "one", Freshness::Current);
+        on_b.comment.anchor.path = "b.rs".into();
+        let mut gone = stored(2, Side::New, 7, "x", Freshness::Outdated);
+        gone.comment.anchor.path = "a.rs".into();
+        let comments = [on_b, gone];
+        let r = reading(&lines, &comments);
+        assert!(r.standing_on(2).is_empty());
+        assert_eq!(r.standing_on(5).len(), 1);
+        assert_eq!(r.ending_at(5).len(), 1);
+        assert_eq!(
+            r.outdated().len(),
+            1,
+            "outdated ones of every file are listed"
+        );
+        let mut pane = Pane::default();
+        pane.place(5);
+        pane.comment(&r);
+        let Mode::Writing {
+            target: Target::Add { anchor, .. },
+            ..
+        } = &pane.mode
+        else {
+            panic!("not writing: {:?}", pane.mode);
+        };
+        assert_eq!(anchor.path, "b.rs");
+    }
+
+    #[test]
+    fn the_cursor_moves_to_the_next_and_previous_file_of_a_stream() {
+        let lines = stream();
+        let r = reading(&lines, &[]);
+        let mut pane = Pane::default();
+        pane.place(1);
+        pane.go(&r, Go::File(Way::Next));
+        assert_eq!(pane.cursor(&r), 3);
+        pane.go(&r, Go::File(Way::Next));
+        assert_eq!(pane.cursor(&r), 3);
+        assert!(pane.notice.is_some());
+        pane.go(&r, Go::File(Way::Prev));
+        assert_eq!(pane.cursor(&r), 0);
+        pane.go(&r, Go::Hunk(Way::Next));
+        pane.go(&r, Go::Hunk(Way::Next));
+        assert_eq!(pane.cursor(&r), 4, "a hunk move crosses into the next file");
     }
 
     #[test]

@@ -8,6 +8,7 @@
 .rv-line.rv-cursor { border-left-color:#3989ff; background:var(--select); }
 .rv-line.rv-marked { background:rgba(57,137,255,.18); }
 .rv-line.rv-commented { border-left-color:#d9a400; }
+.rv-line.diff-file { position:sticky; top:0; z-index:1; margin-top:0; padding:4px 0; background:var(--panel); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .rv-no { flex:none; width:3.5ch; text-align:right; color:var(--text-3); user-select:none; }
 .rv-thread { margin:4px 0 8px 9ch; padding:6px 10px; border:1px solid var(--line); border-left:3px solid #d9a400; border-radius:5px; background:var(--raised); font-family:inherit; }
 .rv-thread.rv-cursor { border-color:#3989ff; }

@@ -51,8 +51,6 @@
 .diff-review { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .diff-review-toolbar { display: flex; align-items: center; flex-shrink: 0; border-bottom: 1px solid var(--line); }
 .diff-review-scroll { flex: 1; overflow: auto; padding: 12px; }
-.diff-review-file { display: flex; width: 100%; gap: 10px; padding: 5px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; font: inherit; }
-.diff-review-file:hover { background: var(--select); }
 .check-log-name { padding: 0 9px; font-weight: 600; }
 .check-log-for { color: var(--text-3); font-size: var(--ui-font-small); margin-right: auto; }
 .check-log-scroll { padding: 8px 12px; }

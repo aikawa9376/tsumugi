@@ -66,16 +66,6 @@ pub fn hunk_from(starts: &[usize], at: Option<usize>, way: Way) -> Option<usize>
     }
 }
 
-/// The file `way` of the one with path `current` in `files`; the listing
-/// ends where it ends, it is not gone round.
-pub fn file_beside<'a>(files: &'a [Change], current: &str, way: Way) -> Option<&'a Change> {
-    let at = files.iter().position(|f| f.path == current)?;
-    match way {
-        Way::Next => files.get(at + 1),
-        Way::Prev => at.checked_sub(1).and_then(|i| files.get(i)),
-    }
-}
-
 /// How the two versions of a picture are drawn against each other.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Pictures {
@@ -256,21 +246,6 @@ mod tests {
         assert_eq!(hunk_from(&starts, Some(1), Way::Prev), None);
         assert_eq!(hunk_from(&starts, None, Way::Prev), None);
         assert_eq!(hunk_from(&[], Some(0), Way::Next), None);
-    }
-
-    #[test]
-    fn the_files_are_walked_in_order_and_not_gone_round() {
-        let files = [
-            change(" M", "a", None),
-            change("R ", "c", Some("b")),
-            change("??", "d", None),
-        ];
-        assert_eq!(file_beside(&files, "a", Way::Next), Some(&files[1]));
-        assert_eq!(file_beside(&files, "c", Way::Next), Some(&files[2]));
-        assert_eq!(file_beside(&files, "c", Way::Prev), Some(&files[0]));
-        assert_eq!(file_beside(&files, "a", Way::Prev), None);
-        assert_eq!(file_beside(&files, "d", Way::Next), None);
-        assert_eq!(file_beside(&files, "gone", Way::Next), None);
     }
 
     #[test]

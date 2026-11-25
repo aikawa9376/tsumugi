@@ -125,6 +125,9 @@ pub enum Spot {
     /// A file's diff as lines of the line diff, which review comments are
     /// pinned to.
     Lines(Rev, Change),
+    /// Every file of a change, one after another, each as its line diff
+    /// under its heading.
+    Stream(Rev),
     Log,
     /// Where the branch stands: what it is checked out as, what is
     /// unfinished in it, and how it compares with its base.

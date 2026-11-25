@@ -65,12 +65,7 @@ struct Review_ {
 
 impl Review_ {
     fn reading<'a>(&'a self, comments: &'a [Judged]) -> Reading<'a> {
-        Reading {
-            lines: &self.lines,
-            path: &self.path,
-            rev: &self.rev,
-            comments,
-        }
+        Reading::new(&self.lines, &self.path, &self.rev, comments)
     }
 
     /// Read what the work host keeps again, and say why when it cannot.
@@ -214,6 +209,7 @@ impl Review_ {
             (_, ViewerAction::ScrollHalfDown) => go(Go::By(12)),
             (_, ViewerAction::ScrollHalfUp) => go(Go::By(-12)),
             (_, ViewerAction::Diff(Diff::Hunk(way))) => go(Go::Hunk(way)),
+            (_, ViewerAction::Diff(Diff::File(way))) => go(Go::File(way)),
             (_, ViewerAction::ScrollTop) => go(Go::Top),
             (_, ViewerAction::ScrollBottom) => go(Go::Bottom),
             (_, ViewerAction::Review(Review::Select)) => pane.write().select(&reading),
@@ -299,7 +295,10 @@ fn Thread(judged: Judged, at: bool, outdated: bool) -> Element {
     } }
 }
 
-/// A file's line diff, reviewed: `command` is what the keys ask of it.
+/// A change's line diff, every file under its heading, reviewed: `command`
+/// is what the keys ask of it. The cursor is brought to the file `start`
+/// whenever it changes, and `current` is told the file the cursor is in.
+/// The files of `pictures` are drawn as pictures under their headings.
 #[component]
 pub(crate) fn ReviewRows(
     window: WindowId,
@@ -309,6 +308,10 @@ pub(crate) fn ReviewRows(
     rev: Rev,
     lines: Vec<DiffLine>,
     command: ReadSignal<Option<Command>>,
+    #[props(default)] start: Option<String>,
+    current: Option<Signal<Option<String>>>,
+    #[props(default)] pictures: Vec<tsumugi_model::repository::Change>,
+    #[props(default)] how: tsumugi_core::diff_view::Pictures,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let pane = use_signal(Pane::default);
@@ -347,6 +350,28 @@ pub(crate) fn ReviewRows(
             this.run(c.action, window);
         }
     }));
+    // Opening a file of the list, or the tab on a file, brings the cursor
+    // to its heading.
+    use_effect(use_reactive((&start, &lines), move |(start, lines)| {
+        let Some(start) = start else { return };
+        if let Some(at) = lines
+            .iter()
+            .position(|l| l.kind == DiffKind::File && l.text == start)
+        {
+            let mut pane = pane;
+            pane.write().place(at);
+        }
+    }));
+    use_effect(use_reactive((&lines, &path), move |(lines, path)| {
+        let Some(mut current) = current else { return };
+        let comments = comments.read();
+        let reading = Reading::new(&lines, &path, &Rev::WorkingCopy, &comments);
+        let at = pane.read().cursor(&reading);
+        let here = (at < lines.len()).then(|| reading.path_at(at).to_string());
+        if here.is_some() && *current.peek() != here {
+            current.set(here);
+        }
+    }));
     let id = format!("review-{window}");
     use_effect({
         let id = id.clone();
@@ -381,6 +406,17 @@ pub(crate) fn ReviewRows(
                         span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
                         span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
                         if line.kind == DiffKind::Difft { "{line.text}" } else { span { class: "rv-text-line", "{line.text}" } }
+                    }
+                    if line.kind == DiffKind::File {
+                        if let Some(change) = pictures.iter().find(|c| c.path == line.text) {
+                            crate::content::bodies::PictureDiff {
+                                environment: environment.clone(),
+                                worktree: worktree.clone(),
+                                rev: rev.clone(),
+                                change: change.clone(),
+                                how,
+                            }
+                        }
                     }
                     for judged in reading.ending_at(i) {
                         Thread { key: "{judged.comment.id}", judged: judged.clone(), at: reading.comment_at(cursor).is_some_and(|c| c.comment.id == judged.comment.id), outdated: false }
@@ -443,24 +479,9 @@ pub(crate) fn ReviewRows(
     }
 }
 
-/// Whether a diff's lines are a line diff comments can be pinned to.
-pub(crate) fn commentable(lines: &[DiffLine]) -> bool {
-    !lines.iter().any(|l| l.kind == DiffKind::Difft)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn only_a_line_diff_can_be_commented_on() {
-        let line = |kind| DiffLine {
-            kind,
-            text: String::new(),
-        };
-        assert!(commentable(&[line(DiffKind::Hunk), line(DiffKind::Added)]));
-        assert!(!commentable(&[line(DiffKind::Difft)]));
-    }
 
     #[test]
     fn a_range_is_said_with_its_side() {

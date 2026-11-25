@@ -2284,13 +2284,14 @@ fn a_diff_tab_keeps_its_work_machine_and_repository_watched_without_a_prompt() {
             .worktree,
         PathBuf::from("/remote/repo")
     );
-    assert_eq!(
-        crate::settle::sight(run.state(), &there()).repositories,
-        [tsumugi_protocol::RepositorySight {
+    let read = crate::settle::sight(run.state(), &there()).repositories;
+    assert_eq!(read.len(), 2);
+    for spot in [RepositorySpot::Stream(Rev::WorkingCopy), spot] {
+        assert!(read.contains(&tsumugi_protocol::RepositorySight {
             worktree: "/remote/repo".into(),
             spot
-        }]
-    );
+        }));
+    }
     assert!(
         crate::settle::sight(run.state(), &here())
             .repositories
@@ -2299,7 +2300,7 @@ fn a_diff_tab_keeps_its_work_machine_and_repository_watched_without_a_prompt() {
 }
 
 #[test]
-fn a_diff_tab_on_a_file_keeps_the_list_of_files_beside_it_read() {
+fn a_diff_tab_on_a_file_reads_the_stream_of_its_change_and_the_list_of_its_files() {
     use tsumugi_model::repository::{Change, Rev, Spot as RepositorySpot};
     let change = Change {
         status: " M".into(),
@@ -2319,11 +2320,12 @@ fn a_diff_tab_on_a_file_keeps_the_list_of_files_beside_it_read() {
     };
     let read_now = crate::settle::sight(run.state(), &there()).repositories;
     for wanted in [
-        read(spot),
+        read(RepositorySpot::Stream(Rev::Commit("abc".into()))),
         read(RepositorySpot::Files(Rev::Commit("abc".into()))),
     ] {
         assert_eq!(read_now.iter().filter(|r| **r == wanted).count(), 1);
     }
+    assert!(!read_now.contains(&read(spot)), "the stream holds the file");
 }
 
 #[test]

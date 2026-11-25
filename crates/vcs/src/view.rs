@@ -2,6 +2,7 @@
 //! one file's diff in it, or the history.
 
 use crate::{Error, Listing, Repo, Rev, Revision, Spot, git};
+use tsumugi_model::repository::{Change, DiffKind, DiffLine};
 
 /// How much is read for a spot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,22 +20,65 @@ pub struct View {
     pub revision: Option<Revision>,
 }
 
+/// The files the change `rev` touches.
+async fn files(worktree: &std::path::Path, rev: &Rev) -> Result<Vec<Change>, Error> {
+    match rev {
+        Rev::WorkingCopy => git::changes(worktree).await,
+        Rev::Commit(id) => git::commit_files(worktree, id).await,
+        Rev::Branch(since) => git::since_files(worktree, since).await,
+    }
+}
+
+/// The line diff of what `change` does in `rev`, which review comments are
+/// pinned to; only the line diff has line numbers, never difftastic's text.
+async fn lines(
+    worktree: &std::path::Path,
+    rev: &Rev,
+    change: &Change,
+    max: usize,
+) -> Result<Vec<DiffLine>, Error> {
+    match rev {
+        Rev::WorkingCopy => git::file_diff(worktree, None, change, max).await,
+        Rev::Commit(id) => git::file_diff(worktree, Some(id), change, max).await,
+        Rev::Branch(since) => git::since_diff(worktree, since, change, max).await,
+    }
+}
+
+/// Every file of `rev` one after another, each under its heading even when
+/// Git has no line to say of it.
+async fn stream(worktree: &std::path::Path, rev: &Rev, max: usize) -> Result<Vec<DiffLine>, Error> {
+    let mut all = Vec::new();
+    for change in files(worktree, rev).await? {
+        let mut part = lines(worktree, rev, &change, max).await?;
+        if part.first().is_none_or(|l| l.kind != DiffKind::File) {
+            part.insert(
+                0,
+                DiffLine {
+                    kind: DiffKind::File,
+                    text: change.path.clone(),
+                },
+            );
+        }
+        all.extend(part);
+    }
+    Ok(all)
+}
+
 pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
     let worktree = repo.path();
     let read = match spot {
-        Spot::Files(Rev::WorkingCopy) => git::changes(worktree).await.map(Listing::Files),
-        Spot::Files(Rev::Commit(id)) => git::commit_files(worktree, id).await.map(Listing::Files),
-        Spot::Files(Rev::Branch(since)) => {
-            git::since_files(worktree, since).await.map(Listing::Files)
-        }
-        Spot::Diff(Rev::Branch(since), change) | Spot::Lines(Rev::Branch(since), change) => {
+        Spot::Files(rev) => files(worktree, rev).await.map(Listing::Files),
+        Spot::Stream(rev) => stream(worktree, rev, limits.diff_lines)
+            .await
+            .map(Listing::Diff),
+        Spot::Branch => crate::branch::branch(worktree)
+            .await
+            .map(|b| Listing::Branch(Box::new(b))),
+        Spot::Diff(Rev::Branch(since), change) => {
             git::since_diff(worktree, since, change, limits.diff_lines)
                 .await
                 .map(Listing::Diff)
         }
-        Spot::Branch => crate::branch::branch(worktree)
-            .await
-            .map(|b| Listing::Branch(Box::new(b))),
         Spot::Diff(rev, change) => {
             let revision = match rev {
                 Rev::WorkingCopy => None,
@@ -45,18 +89,9 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
                 .await
                 .map(Listing::Diff)
         }
-        // Review comments are pinned to line numbers, which only the line
-        // diff has, never difftastic's text.
-        Spot::Lines(rev, change) => {
-            let revision = match rev {
-                Rev::WorkingCopy => None,
-                Rev::Commit(id) => Some(id.as_str()),
-                Rev::Branch(_) => unreachable!("a branch diff is read above"),
-            };
-            git::file_diff(worktree, revision, change, limits.diff_lines)
-                .await
-                .map(Listing::Diff)
-        }
+        Spot::Lines(rev, change) => lines(worktree, rev, change, limits.diff_lines)
+            .await
+            .map(Listing::Diff),
         Spot::Log => git::history(worktree, limits.log_commits)
             .await
             .map(Listing::Log),
@@ -191,5 +226,49 @@ mod tests {
         assert!(kinds.contains(&tsumugi_model::repository::DiffKind::Hunk));
         assert!(lines.iter().any(|l| l.text == "+TWO"));
         assert!(!kinds.contains(&tsumugi_model::repository::DiffKind::Difft));
+    }
+
+    #[tokio::test]
+    async fn a_stream_is_every_file_of_the_change_one_after_another_each_under_its_heading() {
+        let dir = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(dir.path())
+                    .env("GIT_AUTHOR_NAME", "Test")
+                    .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+                    .env("GIT_COMMITTER_NAME", "Test")
+                    .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+                    .status()
+                    .unwrap()
+                    .success()
+            )
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.path().join("a.txt"), "one\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "first"]);
+        std::fs::write(dir.path().join("a.txt"), "ONE\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "new\n").unwrap();
+        let view = Repo::open(dir.path())
+            .load(&Spot::Stream(Rev::WorkingCopy), LIMITS)
+            .await;
+        let Ok(Listing::Diff(lines)) = view.listing else {
+            panic!("no stream: {:?}", view.listing);
+        };
+        let headings: Vec<_> = lines
+            .iter()
+            .filter(|l| l.kind == tsumugi_model::repository::DiffKind::File)
+            .map(|l| l.text.as_str())
+            .collect();
+        assert_eq!(headings, ["a.txt", "b.txt"]);
+        assert!(lines.iter().any(|l| l.text == "+ONE"));
+        assert!(lines.iter().any(|l| l.text == "+new"));
+        assert!(
+            !lines
+                .iter()
+                .any(|l| l.kind == tsumugi_model::repository::DiffKind::Difft)
+        );
     }
 }

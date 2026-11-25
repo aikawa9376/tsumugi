@@ -403,24 +403,22 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
         } = tab
             && e == environment
         {
-            let read = tsumugi_protocol::RepositorySight {
-                worktree: worktree.clone(),
-                spot: spot.as_ref().clone(),
+            use tsumugi_model::repository::Spot;
+            // A tab on a change, or on a file of it, shows the stream of
+            // every file of the change beside the list of them.
+            let reads = match spot.as_ref() {
+                Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) => {
+                    vec![Spot::Stream(rev.clone()), Spot::Files(rev.clone())]
+                }
+                other => vec![other.clone()],
             };
-            if !shown_part.repositories.contains(&read) {
-                shown_part.repositories.push(read);
-            }
-            // The list of files beside a file's diff is of the revision the
-            // diff was read from.
-            if let tsumugi_model::repository::Spot::Diff(rev, _)
-            | tsumugi_model::repository::Spot::Lines(rev, _) = spot.as_ref()
-            {
-                let files = tsumugi_protocol::RepositorySight {
+            for spot in reads {
+                let read = tsumugi_protocol::RepositorySight {
                     worktree: worktree.clone(),
-                    spot: tsumugi_model::repository::Spot::Files(rev.clone()),
+                    spot,
                 };
-                if !shown_part.repositories.contains(&files) {
-                    shown_part.repositories.push(files);
+                if !shown_part.repositories.contains(&read) {
+                    shown_part.repositories.push(read);
                 }
             }
         }

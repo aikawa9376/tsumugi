@@ -1,12 +1,12 @@
 //! Repository reviews use the same host reads as the details panel.
 
 use crate::bridge::AppCtx;
-use crate::details::changes::{DiffRows, ReviewActions};
-use crate::review::{ReviewRows, commentable};
+use crate::details::changes::ReviewActions;
+use crate::review::ReviewRows;
 use dioxus::prelude::*;
 use std::path::PathBuf;
 use tsumugi_core::content::{Area, Opening, Tab, WindowId};
-use tsumugi_core::diff_view::{Choice, Pictures, Way, file_beside, hunk_from, hunk_starts};
+use tsumugi_core::diff_view::{Choice, Pictures, hunk_from, hunk_starts};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::viewers::{Diff, FileKind, ViewerAction, is_text};
 use tsumugi_model::{
@@ -48,34 +48,27 @@ pub(crate) fn DiffWindow(
     let app = use_context::<AppCtx>();
     let id = format!("diff-{window}");
     let command = use_memo(move || commands().filter(|(w, _)| *w == window).map(|(_, c)| c));
-    let listing = app
+    let rev = match &spot {
+        Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) | Spot::Stream(rev) => {
+            rev.clone()
+        }
+        Spot::Log | Spot::Branch => Rev::WorkingCopy,
+    };
+    // The file the tab was opened on, which the stream is brought to.
+    let opened = match &spot {
+        Spot::Diff(_, change) | Spot::Lines(_, change) => Some(change.path.clone()),
+        _ => None,
+    };
+    let stream = app
         .hosts
         .read()
         .work(&environment)
-        .and_then(|w| w.details.repository(&worktree, &spot))
+        .and_then(|w| w.details.repository(&worktree, &Spot::Stream(rev.clone())))
         .map(|r| r.listing.clone());
-    let rev = match &spot {
-        Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) => rev.clone(),
-        Spot::Log | Spot::Branch => Rev::WorkingCopy,
-    };
     let view = app.content.read().diff_views.of(&environment, &worktree);
     let files = files_of(app, &environment, &worktree, &rev);
-    let on_a_file = matches!(spot, Spot::Diff(..) | Spot::Lines(..));
-    let navigate = {
-        let (environment, worktree) = (environment.clone(), worktree.clone());
-        move |spot| {
-            app.dispatch(Msg::Show {
-                thing: Tab::Diff {
-                    environment: environment.clone(),
-                    worktree: worktree.clone(),
-                    spot: Box::new(spot),
-                },
-                place: None,
-                how: Some(Opening::InWindow(window)),
-            })
-        }
-    };
-    let back = rev.clone();
+    // The file the cursor is in, which the list marks.
+    let current = use_signal(|| opened.clone());
     let choose = {
         let (environment, worktree) = (environment.clone(), worktree.clone());
         move |choice| {
@@ -91,10 +84,14 @@ pub(crate) fn DiffWindow(
     } else {
         "diff-review"
     };
-    let picture = match &spot {
-        Spot::Diff(_, change) | Spot::Lines(_, change) => is_picture(change),
-        _ => false,
-    };
+    let picture = files
+        .iter()
+        .any(|f| current.read().as_deref() == Some(f.path.as_str()) && is_picture(f));
+    let pictures = files
+        .iter()
+        .filter(|f| is_picture(f))
+        .cloned()
+        .collect::<Vec<_>>();
     rsx! {
         div { class,
             onmousedown: move |_| app.dispatch(Msg::Focus(Area::Console)),
@@ -102,88 +99,54 @@ pub(crate) fn DiffWindow(
                 window,
                 environment: environment.clone(),
                 worktree: worktree.clone(),
-                spot: spot.clone(),
-                files: files.clone(),
                 command: ReadSignal::from(command),
             }
             div { class: "diff-review-toolbar",
-                if on_a_file {
-                    button { class: if view.files { "on" } else { "" }, title: "Show or hide the files (f)",
-                        onclick: { let choose = choose.clone(); move |_| choose(Choice::Files) }, "Files" }
-                    button { onclick: { let navigate = navigate.clone(); move |_| navigate(Spot::Files(back.clone())) }, "Back to files" }
-                    if picture {
-                        button { title: "Compare the pictures another way (m)",
-                            onclick: { let choose = choose.clone(); move |_| choose(Choice::Pictures) },
-                            match view.pictures {
-                                Pictures::SideBySide => "Side by side",
-                                Pictures::Swipe => "Swipe",
-                                Pictures::Onion => "Onion skin",
-                            }
+                button { class: if view.files { "on" } else { "" }, title: "Show or hide the files (f)",
+                    onclick: { let choose = choose.clone(); move |_| choose(Choice::Files) }, "Files" }
+                button { class: if view.wrap { "on" } else { "" }, title: "Wrap long lines (w)",
+                    onclick: { let choose = choose.clone(); move |_| choose(Choice::Wrap) }, "Wrap" }
+                if picture {
+                    button { title: "Compare the pictures another way (m)",
+                        onclick: { let choose = choose.clone(); move |_| choose(Choice::Pictures) },
+                        match view.pictures {
+                            Pictures::SideBySide => "Side by side",
+                            Pictures::Swipe => "Swipe",
+                            Pictures::Onion => "Onion skin",
                         }
-                    } else {
-                        button { class: if view.wrap { "on" } else { "" }, title: "Wrap long lines (w)",
-                            onclick: { let choose = choose.clone(); move |_| choose(Choice::Wrap) }, "Wrap" }
                     }
                 }
                 ReviewActions { environment: environment.clone(), worktree: worktree.clone(), spot: spot.clone(), tab: false }
             }
             div { class: "diff-body",
-                if on_a_file && view.files {
+                if view.files {
                     FileList {
                         environment: environment.clone(),
                         worktree: worktree.clone(),
                         rev: rev.clone(),
-                        spot: spot.clone(),
+                        current: current.read().clone(),
                         files: files.clone(),
                         window,
                     }
                 }
                 div { id, class: "diff-review-scroll",
-                    match listing {
+                    match stream {
                         None => rsx! { p { "Reading…" } },
                         Some(Err(error)) => rsx! { Scrolling { window, id: id.clone(), command: ReadSignal::from(command) } div { class: "git-error", "{error}" } },
-                        Some(Ok(Listing::Diff(lines))) => match &spot {
-                            Spot::Diff(rev, change) | Spot::Lines(rev, change) if is_picture(change) => rsx! {
-                                Scrolling { window, id: id.clone(), command: ReadSignal::from(command) }
-                                PictureDiff {
-                                    environment: environment.clone(),
-                                    worktree: worktree.clone(),
-                                    rev: rev.clone(),
-                                    change: change.clone(),
-                                    how: view.pictures,
-                                }
-                            },
-                            Spot::Diff(rev, change) | Spot::Lines(rev, change) if commentable(&lines) => rsx! {
-                                ReviewRows {
-                                    window,
-                                    environment: environment.clone(),
-                                    worktree: worktree.clone(),
-                                    path: change.path.clone(),
-                                    rev: rev.clone(),
-                                    lines,
-                                    command: ReadSignal::from(command),
-                                }
-                            },
-                            _ => rsx! {
-                                Scrolling { window, id: id.clone(), command: ReadSignal::from(command), lines: lines.clone() }
-                                if let Spot::Diff(rev, change) = &spot {
-                                    button { class: "diff-review-file",
-                                        onclick: { let (navigate, rev, change) = (navigate.clone(), rev.clone(), change.clone()); move |_| navigate(Spot::Lines(rev.clone(), change.clone())) },
-                                        "Comment on the lines of this change"
-                                    }
-                                }
-                                DiffRows { lines }
-                            },
-                        },
-                        Some(Ok(Listing::Files(files))) if files.is_empty() => rsx! { Scrolling { window, id: id.clone(), command: ReadSignal::from(command) } p { "No changes" } },
-                        Some(Ok(Listing::Files(files))) => rsx! {
-                            Scrolling { window, id: id.clone(), command: ReadSignal::from(command) }
-                            for file in files {
-                                button { class: "diff-review-file",
-                                    onclick: { let (navigate, rev, file) = (navigate.clone(), rev.clone(), file.clone()); move |_| navigate(Spot::Diff(rev.clone(), file.clone())) },
-                                    span { class: "details-file-status", "{file.status}" }
-                                    "{file.shown()}"
-                                }
+                        Some(Ok(Listing::Diff(lines))) if lines.is_empty() => rsx! { Scrolling { window, id: id.clone(), command: ReadSignal::from(command) } p { "No changes" } },
+                        Some(Ok(Listing::Diff(lines))) => rsx! {
+                            ReviewRows {
+                                window,
+                                environment: environment.clone(),
+                                worktree: worktree.clone(),
+                                path: opened.clone().unwrap_or_default(),
+                                rev: rev.clone(),
+                                lines,
+                                command: ReadSignal::from(command),
+                                start: opened.clone(),
+                                current,
+                                pictures,
+                                how: view.pictures,
                             }
                         },
                         _ => rsx! {},
@@ -194,22 +157,18 @@ pub(crate) fn DiffWindow(
     }
 }
 
-/// The files of the change, beside the diff of one of them.
+/// The files of the change, beside the stream of them; opening one brings
+/// the stream to it.
 #[component]
 fn FileList(
     environment: EnvironmentId,
     worktree: PathBuf,
     rev: Rev,
-    spot: Spot,
+    current: Option<String>,
     files: Vec<Change>,
     window: WindowId,
 ) -> Element {
     let app = use_context::<AppCtx>();
-    let current = match &spot {
-        Spot::Diff(_, change) | Spot::Lines(_, change) => Some(change.path.clone()),
-        _ => None,
-    };
-    let lines = matches!(spot, Spot::Lines(..));
     rsx! {
         div { class: "diff-files",
             if files.is_empty() { div { class: "diff-files-empty", "No changes" } }
@@ -221,9 +180,8 @@ fn FileList(
                     onclick: {
                         let (environment, worktree, rev, file) = (environment.clone(), worktree.clone(), rev.clone(), file.clone());
                         move |_| {
-                            let spot = if lines { Spot::Lines(rev.clone(), file.clone()) } else { Spot::Diff(rev.clone(), file.clone()) };
                             app.dispatch(Msg::Show {
-                                thing: Tab::Diff { environment: environment.clone(), worktree: worktree.clone(), spot: Box::new(spot) },
+                                thing: Tab::Diff { environment: environment.clone(), worktree: worktree.clone(), spot: Box::new(Spot::Lines(rev.clone(), file.clone())) },
                                 place: None,
                                 how: Some(Opening::InWindow(window)),
                             })
@@ -237,61 +195,32 @@ fn FileList(
     }
 }
 
-/// What the keys that choose how the diff is drawn, or that move between
-/// its files, do.
+/// What the keys that choose how the diff is drawn do; the stream's own
+/// keys move over it.
 #[component]
 fn DiffKeys(
     window: WindowId,
     environment: EnvironmentId,
     worktree: PathBuf,
-    spot: Spot,
-    files: Vec<Change>,
     command: ReadSignal<Option<crate::viewers::Command>>,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let last =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(command.peek().map_or(0, |c| c.seq))));
-    use_effect(use_reactive((&spot, &files), move |(spot, files)| {
+    use_effect(move || {
         let Some(c) = command() else { return };
         if last.replace(c.seq) == c.seq {
             return;
         }
-        let ViewerAction::Diff(action) = c.action else {
-            return;
-        };
-        match action {
-            Diff::Choose(choice) => app.dispatch(Msg::DiffView {
+        if let ViewerAction::Diff(Diff::Choose(choice)) = c.action {
+            app.dispatch(Msg::DiffView {
                 environment: environment.clone(),
                 worktree: worktree.clone(),
                 choice,
-            }),
-            Diff::File(way) => {
-                let (rev, to) = match &spot {
-                    Spot::Files(rev) => (rev, (way == Way::Next).then(|| files.first()).flatten()),
-                    Spot::Diff(rev, change) | Spot::Lines(rev, change) => {
-                        (rev, file_beside(&files, &change.path, way))
-                    }
-                    Spot::Log | Spot::Branch => return,
-                };
-                let Some(to) = to else { return };
-                let spot = match &spot {
-                    Spot::Lines(..) => Spot::Lines(rev.clone(), to.clone()),
-                    _ => Spot::Diff(rev.clone(), to.clone()),
-                };
-                app.dispatch(Msg::Show {
-                    thing: Tab::Diff {
-                        environment: environment.clone(),
-                        worktree: worktree.clone(),
-                        spot: Box::new(spot),
-                    },
-                    place: None,
-                    how: Some(Opening::InWindow(window)),
-                });
-            }
-            // The lines of the diff take these.
-            Diff::Hunk(_) => {}
+            });
         }
-    }));
+        let _ = window;
+    });
     rsx! {}
 }
 
@@ -345,7 +274,7 @@ fn Scrolling(
 
 /// The two versions of a picture a change makes, compared.
 #[component]
-fn PictureDiff(
+pub(crate) fn PictureDiff(
     environment: EnvironmentId,
     worktree: PathBuf,
     rev: Rev,
