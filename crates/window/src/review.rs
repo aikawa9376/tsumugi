@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use tsumugi_core::content::{Area, WindowId};
+use tsumugi_core::diff_view::{Row, pieces, rows, word_marks};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::review::{Go, Mode, Pane, Reading, Target};
 use tsumugi_core::viewers::{Diff, Review, ViewerAction};
@@ -271,6 +272,50 @@ fn said(anchor: &notes::Anchor) -> String {
     }
 }
 
+/// The lines a row draws.
+fn row_lines(row: Row) -> Vec<usize> {
+    match row {
+        Row::Whole(i) => vec![i],
+        Row::Pair(old, new) => old.into_iter().chain(new).collect(),
+    }
+}
+
+/// A line's text with the words it changed marked.
+#[component]
+fn Words(text: String, marks: Vec<(usize, usize)>) -> Element {
+    rsx! {
+        span { class: "rv-text-line",
+            for (k , (piece , marked)) in pieces(&text, &marks).into_iter().enumerate() {
+                if marked { span { key: "{k}", class: "rv-word", "{piece}" } } else { "{piece}" }
+            }
+        }
+    }
+}
+
+/// One side of a row of two columns: a line with its number on that side.
+#[component]
+fn LineCell(
+    i: usize,
+    line: DiffLine,
+    number: Option<u32>,
+    marks: Vec<(usize, usize)>,
+    class: String,
+    pane: Signal<Pane>,
+) -> Element {
+    let app = use_context::<AppCtx>();
+    rsx! {
+        div { class: "{class} rv-cell",
+            onclick: move |_| {
+                app.dispatch(Msg::Focus(Area::Console));
+                let mut pane = pane;
+                pane.write().place(i);
+            },
+            span { class: "rv-no", "{number.map(|n| n.to_string()).unwrap_or_default()}" }
+            Words { text: line.text.clone(), marks }
+        }
+    }
+}
+
 #[component]
 fn Thread(judged: Judged, at: bool, outdated: bool) -> Element {
     let comment = judged.comment;
@@ -312,6 +357,9 @@ pub(crate) fn ReviewRows(
     current: Option<Signal<Option<String>>>,
     #[props(default)] pictures: Vec<tsumugi_model::repository::Change>,
     #[props(default)] how: tsumugi_core::diff_view::Pictures,
+    /// The old is drawn beside the new.
+    #[props(default)]
+    two: bool,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let pane = use_signal(Pane::default);
@@ -392,34 +440,79 @@ pub(crate) fn ReviewRows(
     let outdated = reading.outdated();
     let open = all.iter().filter(|j| !j.comment.resolved).count();
     let choices = destinations(app, &environment, &worktree);
+    // In one column every line is a row; a removed and an added line are
+    // still compared, to mark the words each does not share.
+    let drawn = if two {
+        rows(&lines)
+    } else {
+        (0..lines.len()).map(Row::Whole).collect()
+    };
+    let marks = word_marks(&lines);
     rsx! {
         div { id: "{id}", class: "review",
-            div { class: "rv-lines",
-                for (i , line) in lines.iter().enumerate() {
-                    div { key: "{i}",
-                        class: line_class(line.kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()),
-                        onclick: move |_| {
-                            app.dispatch(Msg::Focus(Area::Console));
-                            let mut pane = pane;
-                            pane.write().place(i);
+            div { class: if two { "rv-lines two" } else { "rv-lines" },
+                for (k , row) in drawn.iter().enumerate() {
+                    match *row {
+                        Row::Whole(i) if two && lines[i].kind == DiffKind::Context && numbers[i].old.is_some() => rsx! {
+                            div { key: "{k}", class: "rv-row2",
+                                LineCell { i, line: lines[i].clone(), number: numbers[i].old, marks: Vec::new(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
+                                LineCell { i, line: lines[i].clone(), number: numbers[i].new, marks: Vec::new(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
+                            }
                         },
-                        span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
-                        span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
-                        if line.kind == DiffKind::Difft { "{line.text}" } else { span { class: "rv-text-line", "{line.text}" } }
+                        Row::Whole(i) => rsx! {
+                            div { key: "{k}",
+                                class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()),
+                                onclick: move |_| {
+                                    app.dispatch(Msg::Focus(Area::Console));
+                                    let mut pane = pane;
+                                    pane.write().place(i);
+                                },
+                                span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
+                                span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
+                                if lines[i].kind == DiffKind::Difft { "{lines[i].text}" } else { Words { text: lines[i].text.clone(), marks: marks[i].clone() } }
+                            }
+                        },
+                        Row::Pair(old, new) if two => rsx! {
+                            div { key: "{k}", class: "rv-row2",
+                                if let Some(i) = old {
+                                    LineCell { i, line: lines[i].clone(), number: numbers[i].old, marks: marks[i].clone(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
+                                } else { div { class: "rv-line rv-empty" } }
+                                if let Some(i) = new {
+                                    LineCell { i, line: lines[i].clone(), number: numbers[i].new, marks: marks[i].clone(), class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()), pane }
+                                } else { div { class: "rv-line rv-empty" } }
+                            }
+                        },
+                        Row::Pair(old, new) => rsx! {
+                            for i in old.into_iter().chain(new) {
+                                div { key: "{k}-{i}",
+                                    class: line_class(lines[i].kind, i == cursor, marking && (first..=last_marked).contains(&i), !reading.standing_on(i).is_empty()),
+                                    onclick: move |_| {
+                                        app.dispatch(Msg::Focus(Area::Console));
+                                        let mut pane = pane;
+                                        pane.write().place(i);
+                                    },
+                                    span { class: "rv-no", "{numbers[i].old.map(|n| n.to_string()).unwrap_or_default()}" }
+                                    span { class: "rv-no", "{numbers[i].new.map(|n| n.to_string()).unwrap_or_default()}" }
+                                    Words { text: lines[i].text.clone(), marks: marks[i].clone() }
+                                }
+                            }
+                        },
                     }
-                    if line.kind == DiffKind::File {
-                        if let Some(change) = pictures.iter().find(|c| c.path == line.text) {
-                            crate::content::bodies::PictureDiff {
-                                environment: environment.clone(),
-                                worktree: worktree.clone(),
-                                rev: rev.clone(),
-                                change: change.clone(),
-                                how,
+                    for i in row_lines(*row) {
+                        if lines[i].kind == DiffKind::File {
+                            if let Some(change) = pictures.iter().find(|c| c.path == lines[i].text) {
+                                crate::content::bodies::PictureDiff {
+                                    environment: environment.clone(),
+                                    worktree: worktree.clone(),
+                                    rev: rev.clone(),
+                                    change: change.clone(),
+                                    how,
+                                }
                             }
                         }
-                    }
-                    for judged in reading.ending_at(i) {
-                        Thread { key: "{judged.comment.id}", judged: judged.clone(), at: reading.comment_at(cursor).is_some_and(|c| c.comment.id == judged.comment.id), outdated: false }
+                        for judged in reading.ending_at(i) {
+                            Thread { key: "{judged.comment.id}", judged: judged.clone(), at: reading.comment_at(cursor).is_some_and(|c| c.comment.id == judged.comment.id), outdated: false }
+                        }
                     }
                 }
                 if !outdated.is_empty() {

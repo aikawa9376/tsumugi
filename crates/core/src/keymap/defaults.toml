@@ -353,6 +353,8 @@
 "m" = "diff.pictures"
 "t" = "diff.change"
 "C" = "diff.compare"
+"|" = "diff.columns"
+"D" = "diff.structural"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

@@ -172,6 +172,40 @@ pub fn versions(rev: &Rev, change: &Change) -> (Option<Source>, Option<Source>) 
     (old, new)
 }
 
+/// How many columns a file's lines are drawn in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Columns {
+    /// Two where the tab is wide enough for them, one where it is not.
+    #[default]
+    Auto,
+    /// Removed lines above added ones.
+    One,
+    /// The old beside the new.
+    Two,
+}
+
+impl Columns {
+    pub fn next(self) -> Columns {
+        match self {
+            Columns::Auto => Columns::One,
+            Columns::One => Columns::Two,
+            Columns::Two => Columns::Auto,
+        }
+    }
+
+    /// The narrowest tab, in pixels, that draws two columns by itself.
+    pub const TWO_FROM: f64 = 1100.0;
+
+    /// Whether a tab `width` pixels wide draws two columns.
+    pub fn two_at(self, width: f64) -> bool {
+        match self {
+            Columns::Auto => width >= Self::TWO_FROM,
+            Columns::One => false,
+            Columns::Two => true,
+        }
+    }
+}
+
 /// What a worktree's diff tabs keep between one and the next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DiffView {
@@ -180,6 +214,9 @@ pub struct DiffView {
     /// The list of the files changed is beside the diff.
     pub files: bool,
     pub pictures: Pictures,
+    pub columns: Columns,
+    /// The file opened is shown as difftastic reads it, not as lines.
+    pub structural: bool,
 }
 
 impl Default for DiffView {
@@ -188,8 +225,193 @@ impl Default for DiffView {
             wrap: false,
             files: true,
             pictures: Pictures::default(),
+            columns: Columns::default(),
+            structural: false,
         }
     }
+}
+
+/// One row of a file's lines drawn in two columns: a line both sides share
+/// or that belongs to neither, or a removed line beside the added one that
+/// took its place, either missing where the other side has more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Row {
+    Whole(usize),
+    Pair(Option<usize>, Option<usize>),
+}
+
+/// The rows `lines` are drawn in two columns: each run of removed lines is
+/// set beside the run of added lines right after it, line by line.
+pub fn rows(lines: &[DiffLine]) -> Vec<Row> {
+    let mut rows = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let removed = lines[i..]
+            .iter()
+            .take_while(|l| l.kind == DiffKind::Removed)
+            .count();
+        let added = lines[i + removed..]
+            .iter()
+            .take_while(|l| l.kind == DiffKind::Added)
+            .count();
+        if removed + added == 0 {
+            rows.push(Row::Whole(i));
+            i += 1;
+            continue;
+        }
+        for k in 0..removed.max(added) {
+            rows.push(Row::Pair(
+                (k < removed).then_some(i + k),
+                (k < added).then_some(i + removed + k),
+            ));
+        }
+        i += removed + added;
+    }
+    rows
+}
+
+/// The line each removed or added line of `lines` is compared with to mark
+/// the words that changed: the one beside it in two columns.
+pub fn partners(lines: &[DiffLine]) -> Vec<Option<usize>> {
+    let mut partner = vec![None; lines.len()];
+    for row in rows(lines) {
+        if let Row::Pair(Some(old), Some(new)) = row {
+            partner[old] = Some(new);
+            partner[new] = Some(old);
+        }
+    }
+    partner
+}
+
+/// The words to mark of each line of `lines`, as byte ranges of its text:
+/// those a removed or added line does not share with the line beside it in
+/// two columns, its sign left out.
+pub fn word_marks(lines: &[DiffLine]) -> Vec<Vec<(usize, usize)>> {
+    let mut marks = vec![Vec::new(); lines.len()];
+    for row in rows(lines) {
+        let Row::Pair(Some(old), Some(new)) = row else {
+            continue;
+        };
+        let body = |i: usize| lines[i].text.get(1..).unwrap_or_default();
+        let (a, b) = changed_words(body(old), body(new));
+        let shift =
+            |ranges: Vec<(usize, usize)>| ranges.into_iter().map(|(s, e)| (s + 1, e + 1)).collect();
+        marks[old] = shift(a);
+        marks[new] = shift(b);
+    }
+    marks
+}
+
+/// `text` cut where `ranges`, in order, begin and end, each piece with
+/// whether it is one of them.
+pub fn pieces<'a>(text: &'a str, ranges: &[(usize, usize)]) -> Vec<(&'a str, bool)> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    for &(start, end) in ranges {
+        let (start, end) = (start.min(text.len()), end.min(text.len()));
+        if start < at || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+            continue;
+        }
+        if start > at {
+            out.push((&text[at..start], false));
+        }
+        if end > start {
+            out.push((&text[start..end], true));
+        }
+        at = end;
+    }
+    if at < text.len() {
+        out.push((&text[at..], false));
+    }
+    out
+}
+
+/// Words, the spaces between them and each other character alone.
+fn tokens(text: &str) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut chars = text.char_indices().peekable();
+    while let Some((start, c)) = chars.next() {
+        let class = |c: char| {
+            if c.is_alphanumeric() || c == '_' {
+                0
+            } else if c.is_whitespace() {
+                1
+            } else {
+                2
+            }
+        };
+        let kind = class(c);
+        let mut end = start + c.len_utf8();
+        if kind != 2 {
+            while let Some(&(at, next)) = chars.peek() {
+                if class(next) != kind {
+                    break;
+                }
+                end = at + next.len_utf8();
+                chars.next();
+            }
+        }
+        out.push((start, end));
+    }
+    out
+}
+
+/// The byte ranges of `old` and of `new` that the other does not share,
+/// word by word; none where the two have nothing in common, as a line
+/// rewritten whole is marked whole by its colour already.
+pub fn changed_words(old: &str, new: &str) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+    const MOST: usize = 400;
+    let (a, b) = (tokens(old), tokens(new));
+    if a.len() > MOST || b.len() > MOST {
+        return (Vec::new(), Vec::new());
+    }
+    let word = |text: &str, (s, e): (usize, usize)| text[s..e].to_string();
+    let (aw, bw): (Vec<String>, Vec<String>) = (
+        a.iter().map(|t| word(old, *t)).collect(),
+        b.iter().map(|t| word(new, *t)).collect(),
+    );
+    // The longest run they share, in order.
+    let mut table = vec![vec![0u16; bw.len() + 1]; aw.len() + 1];
+    for i in (0..aw.len()).rev() {
+        for j in (0..bw.len()).rev() {
+            table[i][j] = if aw[i] == bw[j] {
+                table[i + 1][j + 1] + 1
+            } else {
+                table[i + 1][j].max(table[i][j + 1])
+            };
+        }
+    }
+    if table[0][0] == 0 {
+        return (Vec::new(), Vec::new());
+    }
+    let (mut kept_a, mut kept_b) = (vec![false; aw.len()], vec![false; bw.len()]);
+    let (mut i, mut j) = (0, 0);
+    while i < aw.len() && j < bw.len() {
+        if aw[i] == bw[j] {
+            kept_a[i] = true;
+            kept_b[j] = true;
+            i += 1;
+            j += 1;
+        } else if table[i + 1][j] >= table[i][j + 1] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    let ranges = |tokens: &[(usize, usize)], kept: &[bool]| {
+        let mut out: Vec<(usize, usize)> = Vec::new();
+        for (t, keep) in tokens.iter().zip(kept) {
+            if *keep {
+                continue;
+            }
+            match out.last_mut() {
+                Some(last) if last.1 == t.0 => last.1 = t.1,
+                _ => out.push(*t),
+            }
+        }
+        out
+    };
+    (ranges(&a, &kept_a), ranges(&b, &kept_b))
 }
 
 /// A choice a key makes about how a diff is shown.
@@ -198,6 +420,8 @@ pub enum Choice {
     Wrap,
     Files,
     Pictures,
+    Columns,
+    Structural,
 }
 
 /// The choices of each worktree, for as long as the window runs.
@@ -221,6 +445,8 @@ impl DiffViews {
             Choice::Wrap => view.wrap = !view.wrap,
             Choice::Files => view.files = !view.files,
             Choice::Pictures => view.pictures = view.pictures.next(),
+            Choice::Columns => view.columns = view.columns.next(),
+            Choice::Structural => view.structural = !view.structural,
         }
     }
 }
@@ -228,6 +454,96 @@ impl DiffViews {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn two_columns_are_drawn_where_the_tab_is_wide_enough_unless_one_or_two_is_chosen() {
+        assert!(!Columns::Auto.two_at(Columns::TWO_FROM - 1.0));
+        assert!(Columns::Auto.two_at(Columns::TWO_FROM));
+        assert!(!Columns::One.two_at(4000.0));
+        assert!(Columns::Two.two_at(200.0));
+        assert_eq!(Columns::Auto.next().next().next(), Columns::Auto);
+    }
+
+    #[test]
+    fn removed_lines_are_set_beside_the_added_lines_that_follow_them() {
+        use DiffKind::*;
+        let lines: Vec<_> = [
+            (File, "a"),
+            (Hunk, "@@"),
+            (Context, " x"),
+            (Removed, "-a"),
+            (Removed, "-b"),
+            (Added, "+A"),
+            (Context, " y"),
+            (Added, "+new"),
+        ]
+        .into_iter()
+        .map(|(k, t)| line(k, t))
+        .collect();
+        assert_eq!(
+            rows(&lines),
+            [
+                Row::Whole(0),
+                Row::Whole(1),
+                Row::Whole(2),
+                Row::Pair(Some(3), Some(5)),
+                Row::Pair(Some(4), None),
+                Row::Whole(6),
+                Row::Pair(None, Some(7)),
+            ]
+        );
+        let partner = partners(&lines);
+        assert_eq!(
+            (partner[3], partner[5], partner[4]),
+            (Some(5), Some(3), None)
+        );
+    }
+
+    #[test]
+    fn the_words_of_a_line_are_marked_against_the_line_beside_it_past_its_sign() {
+        use DiffKind::*;
+        let lines = [
+            line(Removed, "-a = 1"),
+            line(Added, "+a = 2"),
+            line(Added, "+b"),
+        ];
+        let marks = word_marks(&lines);
+        assert_eq!(marks[0], [(5, 6)]);
+        assert_eq!(&lines[1].text[5..6], "2");
+        assert_eq!(marks[1], [(5, 6)]);
+        assert!(marks[2].is_empty(), "an added line beside nothing");
+    }
+
+    #[test]
+    fn a_line_is_cut_into_the_words_marked_and_those_between_them() {
+        assert_eq!(
+            pieces("let sum = a", &[(4, 7), (10, 11)]),
+            [("let ", false), ("sum", true), (" = ", false), ("a", true)]
+        );
+        assert_eq!(pieces("ab", &[]), [("ab", false)]);
+        assert_eq!(pieces("", &[]), [] as [(&str, bool); 0]);
+    }
+
+    #[test]
+    fn the_words_that_changed_inside_a_line_are_marked_on_each_side() {
+        let (old, new) = changed_words("let total = a + b;", "let sum = a + b + c;");
+        let said = |text: &str, ranges: &[(usize, usize)]| {
+            ranges
+                .iter()
+                .map(|&(s, e)| text[s..e].to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(said("let total = a + b;", &old), ["total"]);
+        assert_eq!(said("let sum = a + b + c;", &new), ["sum", " + c"]);
+        let (old, new) = changed_words("名前 = 古い", "名前 = 新しい");
+        assert_eq!(said("名前 = 新しい", &new), ["新しい"]);
+        assert_eq!(said("名前 = 古い", &old), ["古い"]);
+        assert_eq!(
+            changed_words("abc", "xyz"),
+            (vec![], vec![]),
+            "nothing shared"
+        );
+    }
 
     fn line(kind: DiffKind, text: &str) -> DiffLine {
         DiffLine {

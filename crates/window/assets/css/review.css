@@ -32,3 +32,12 @@
 .rv-bar { display:flex; justify-content:space-between; gap:12px; padding:4px 12px; font-size:var(--ui-font-small); }
 .rv-notice { color:var(--fail); }
 .rv-count { color:var(--text-3); white-space:nowrap; }
+.rv-lines.two { min-width:0; }
+.rv-row2 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.rv-row2 > .rv-cell, .rv-row2 > .rv-empty { min-width:0; overflow:hidden; }
+.diff-review.wrap .rv-row2 > .rv-cell { overflow:visible; }
+.rv-row2 > .rv-cell + .rv-cell, .rv-row2 > .rv-empty + .rv-cell, .rv-row2 > .rv-cell + .rv-empty { border-left-width:3px; box-shadow:inset 1px 0 0 var(--line); }
+.rv-empty { background:repeating-linear-gradient(135deg, transparent 0 6px, var(--line) 6px 7px); opacity:.5; }
+.rv-word { border-radius:2px; }
+.diff-add .rv-word { background:rgba(46,160,67,.40); }
+.diff-del .rv-word { background:rgba(248,81,73,.40); }

@@ -217,6 +217,8 @@ changes them ([keys](../keys.md)).
 | `diff.wrap` |  | in a diff tab, break long lines to the width of the tab, or scroll across them again; kept for the worktree | `viewer`: `w` |
 | `diff.change` |  | in a diff tab on a worktree, show the next of the branch's changes: the worktree against the branch's base, what is not committed, then what the branch committed ([details](../details.md#diff-tabs)) | `viewer`: `t` |
 | `diff.compare` |  | in a diff tab, write two revisions of the repository, as `main..HEAD`, and show the later against the earlier; a name that is not of a commit is refused ([details](../details.md#diff-tabs)) | `viewer`: `C` |
+| `diff.columns` |  | in a diff tab, draw the lines in two columns where the tab is wide enough, always in one, or always in two, the old beside the new; kept for the worktree ([details](../details.md#diff-tabs)) | `viewer`: `\|` |
+| `diff.structural` |  | in a diff tab, show the file opened as difftastic reads it, or its lines again; nothing can be commented on in difftastic's view ([details](../details.md#diff-tabs)) | `viewer`: `D` |
 | `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
 | `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
@@ -632,6 +634,8 @@ changes them ([keys](../keys.md)).
 "m" = "diff.pictures"
 "t" = "diff.change"
 "C" = "diff.compare"
+"|" = "diff.columns"
+"D" = "diff.structural"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

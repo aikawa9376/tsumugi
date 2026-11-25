@@ -2,7 +2,7 @@
 
 use crate::bridge::AppCtx;
 use crate::components::InlineField;
-use crate::details::changes::ReviewActions;
+use crate::details::changes::{DiffRows, ReviewActions};
 use crate::review::ReviewRows;
 use dioxus::prelude::*;
 use std::path::PathBuf;
@@ -67,6 +67,22 @@ pub(crate) fn DiffWindow(
         .and_then(|w| w.details.repository(&worktree, &Spot::Stream(rev.clone())))
         .map(|r| r.listing.clone());
     let view = app.content.read().diff_views.of(&environment, &worktree);
+    // Difftastic's view of the file opened, while it is asked for and read.
+    let structural = match (&spot, view.structural) {
+        (Spot::Diff(rev, change) | Spot::Lines(rev, change), true) => app
+            .hosts
+            .read()
+            .work(&environment)
+            .and_then(|w| {
+                w.details
+                    .repository(&worktree, &Spot::Diff(rev.clone(), change.clone()))
+            })
+            .and_then(|r| match &r.listing {
+                Ok(Listing::Diff(lines)) => Some(lines.clone()),
+                _ => None,
+            }),
+        _ => None,
+    };
     let files = files_of(app, &environment, &worktree, &rev);
     let merge_base = app
         .hosts
@@ -82,6 +98,7 @@ pub(crate) fn DiffWindow(
         choices.push(rev.clone());
     }
     let mut comparing = use_signal(|| None::<String>);
+    let mut width = use_signal(|| 0.0_f64);
     let mut notice = use_signal(|| None::<String>);
     // The file the cursor is in, which the list marks.
     let current = use_signal(|| opened.clone());
@@ -209,6 +226,18 @@ pub(crate) fn DiffWindow(
                 }
                 button { class: if view.files { "on" } else { "" }, title: "Show or hide the files (f)",
                     onclick: { let choose = choose.clone(); move |_| choose(Choice::Files) }, "Files" }
+                button { title: "Draw the lines in two columns where there is room, in one, or in two (|)",
+                    onclick: { let choose = choose.clone(); move |_| choose(Choice::Columns) },
+                    match view.columns {
+                        diff_view::Columns::Auto => "Columns: auto",
+                        diff_view::Columns::One => "One column",
+                        diff_view::Columns::Two => "Two columns",
+                    }
+                }
+                if opened.is_some() {
+                    button { class: if view.structural { "on" } else { "" }, title: "Show this file as difftastic reads it (D)",
+                        onclick: { let choose = choose.clone(); move |_| choose(Choice::Structural) }, "Difftastic" }
+                }
                 button { class: if view.wrap { "on" } else { "" }, title: "Wrap long lines (w)",
                     onclick: { let choose = choose.clone(); move |_| choose(Choice::Wrap) }, "Wrap" }
                 if picture {
@@ -235,6 +264,16 @@ pub(crate) fn DiffWindow(
                     }
                 }
                 div { id, class: "diff-review-scroll",
+                    onresize: move |e: Event<ResizeData>| {
+                        e.stop_propagation();
+                        if let Ok(size) = e.data().get_content_box_size() {
+                            width.set(size.width);
+                        }
+                    },
+                    if let Some(lines) = structural {
+                        Scrolling { window, id: id.clone(), command: ReadSignal::from(command), lines: lines.clone() }
+                        DiffRows { lines }
+                    } else {
                     match stream {
                         None => rsx! { p { "Reading…" } },
                         Some(Err(error)) => rsx! { Scrolling { window, id: id.clone(), command: ReadSignal::from(command) } div { class: "git-error", "{error}" } },
@@ -252,9 +291,11 @@ pub(crate) fn DiffWindow(
                                 current,
                                 pictures,
                                 how: view.pictures,
+                                two: view.columns.two_at(width()),
                             }
                         },
                         _ => rsx! {},
+                    }
                     }
                 }
             }

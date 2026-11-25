@@ -407,7 +407,14 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
             // A tab on a change, or on a file of it, shows the stream of
             // every file of the change beside the list of them, and offers
             // the changes of the branch, which its comparison names.
+            let structural = state.content.diff_views.of(e, worktree).structural;
             let reads = match spot.as_ref() {
+                // Difftastic's view of the file opened is read on request.
+                Spot::Diff(rev, change) | Spot::Lines(rev, change) if structural => vec![
+                    Spot::Diff(rev.clone(), change.clone()),
+                    Spot::Files(rev.clone()),
+                    Spot::Branch,
+                ],
                 Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) => vec![
                     Spot::Stream(rev.clone()),
                     Spot::Files(rev.clone()),

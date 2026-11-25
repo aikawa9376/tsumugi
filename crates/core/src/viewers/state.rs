@@ -120,6 +120,8 @@ impl ViewerAction {
             Action::DiffWrap => V::Diff(Diff::Choose(Choice::Wrap)),
             Action::DiffFiles => V::Diff(Diff::Choose(Choice::Files)),
             Action::DiffChange => V::Diff(Diff::Change),
+            Action::DiffColumns => V::Diff(Diff::Choose(Choice::Columns)),
+            Action::DiffStructural => V::Diff(Diff::Choose(Choice::Structural)),
             Action::DiffCompare => V::Diff(Diff::Compare),
             Action::DiffPictures => V::Diff(Diff::Choose(Choice::Pictures)),
             Action::GithubNext => V::Github(Github::Next),
