@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tsumugi_model::files::Entry;
 use tsumugi_model::github::{self, Listing};
-use tsumugi_model::repository::Marks;
+use tsumugi_model::repository::{Marks, Standing};
 use tsumugi_model::{Interrupted, Session, TerminalSession, Tree};
 
 /// What the tree shows that the host keeps read while it is shown. The
@@ -54,6 +54,10 @@ pub struct TreeWork {
     pub failing: Option<String>,
     /// By the worktree.
     pub marks: BTreeMap<PathBuf, Marks>,
+    /// How each worktree listed stands against its branch's base, by its
+    /// path; one whose branch cannot be compared is left out.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub standings: BTreeMap<PathBuf, Standing>,
     /// By the directory.
     pub entries: BTreeMap<PathBuf, Vec<Entry>>,
     /// What GitHub holds open of each repository on it, by its root.
@@ -131,6 +135,10 @@ pub enum TreeChange {
     Notices {
         notices: Vec<tsumugi_model::Notice>,
     },
+    /// How each worktree listed stands against its branch's base.
+    Standings {
+        standings: BTreeMap<PathBuf, Standing>,
+    },
     Listed {
         listed: Box<Listed>,
     },
@@ -173,6 +181,7 @@ impl TreeWork {
             TreeChange::Checkpoints { checkpoints } => set(&mut self.checkpoints, checkpoints),
             TreeChange::Schedules { schedules } => set(&mut self.schedules, schedules),
             TreeChange::Notices { notices } => set(&mut self.notices, notices),
+            TreeChange::Standings { standings } => set(&mut self.standings, standings),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),
             TreeChange::Failing { error } => set(&mut self.failing, error),
             TreeChange::Marks { worktree, marks } => {

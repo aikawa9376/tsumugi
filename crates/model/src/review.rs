@@ -290,6 +290,11 @@ pub fn prompt(comments: &[Judged]) -> String {
                 "the branch since {}",
                 id.chars().take(7).collect::<String>()
             ),
+            Rev::Base(id) => format!(
+                "the worktree against {}",
+                id.chars().take(7).collect::<String>()
+            ),
+            Rev::Range(from, to) => format!("{to} against {from}"),
         };
         if j.freshness == Freshness::Outdated {
             from.push_str(", outdated: the code changed since this comment was made");

@@ -2,6 +2,7 @@
 //! for a new one, the rows of those being made, and the question asked
 //! before one is deleted.
 
+mod branch;
 mod cleanup;
 pub(crate) mod composer;
 mod delete;
@@ -14,6 +15,7 @@ pub use cleanup::{Cleanup, Doomed, Row, size as cleanup_size};
 pub use composer::{Composer, Field, Starts};
 pub use pending::{PIPELINE, Pending, Progress, Step};
 
+pub(crate) use branch::{diff as branch_diff, draft as branch_draft};
 pub(crate) use cleanup::{
     deletions, key as cleanup_key, open as cleanup_open, read as cleanup_read,
     toggle as cleanup_toggle,

@@ -464,9 +464,9 @@ is one of these:
 - any two revisions you name, the later read against the earlier.
 
 The tab says which change it shows and against what. From the tab you can
-switch to another change, and you can name the two revisions in the prompt.
-A revision that is not a commit of the repository is refused, and the tab
-keeps what it showed.
+switch to another change, or write two revisions to compare. A revision that
+is not a commit of the repository is refused, and the tab keeps what it
+showed.
 
 Without leaving the keyboard you can move to the next or previous change,
 hunk by hunk across the files, and to the next or previous file

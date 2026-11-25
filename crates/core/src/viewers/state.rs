@@ -67,6 +67,10 @@ pub enum Diff {
     File(Way),
     /// Change how the tab is drawn, as kept for its worktree.
     Choose(Choice),
+    /// Show the next of the branch's changes.
+    Change,
+    /// Write two revisions to compare.
+    Compare,
 }
 
 /// What a key does in a diff of lines to its comments.
@@ -115,6 +119,8 @@ impl ViewerAction {
             Action::DiffPrevFile => V::Diff(Diff::File(Way::Prev)),
             Action::DiffWrap => V::Diff(Diff::Choose(Choice::Wrap)),
             Action::DiffFiles => V::Diff(Diff::Choose(Choice::Files)),
+            Action::DiffChange => V::Diff(Diff::Change),
+            Action::DiffCompare => V::Diff(Diff::Compare),
             Action::DiffPictures => V::Diff(Diff::Choose(Choice::Pictures)),
             Action::GithubNext => V::Github(Github::Next),
             Action::GithubPrev => V::Github(Github::Prev),

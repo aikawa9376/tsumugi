@@ -66,6 +66,54 @@ pub fn hunk_from(starts: &[usize], at: Option<usize>, way: Way) -> Option<usize>
     }
 }
 
+/// The changes a diff tab on a worktree switches between: the worktree
+/// against its base first, where the branch can be compared, then what is
+/// not committed, then what the branch committed.
+pub fn changes(merge_base: Option<&str>) -> Vec<Rev> {
+    match merge_base {
+        Some(base) => vec![
+            Rev::Base(base.to_string()),
+            Rev::WorkingCopy,
+            Rev::Branch(base.to_string()),
+        ],
+        None => vec![Rev::WorkingCopy],
+    }
+}
+
+fn short(id: &str) -> String {
+    id.chars().take(7).collect()
+}
+
+/// What a diff tab calls the change `rev`.
+pub fn called(rev: &Rev) -> String {
+    match rev {
+        Rev::Base(_) => "Branch".into(),
+        Rev::WorkingCopy => "Uncommitted".into(),
+        Rev::Branch(_) => "Committed".into(),
+        Rev::Commit(id) => short(id),
+        Rev::Range(from, to) => format!("{}..{}", short(from), short(to)),
+    }
+}
+
+/// The two revisions written to compare, `from..to` or `from to`; one
+/// alone, or more than two, compares nothing.
+pub fn compared(text: &str) -> Option<(String, String)> {
+    let text = text.trim();
+    let (from, to) = match text.split_once("..") {
+        Some((from, to)) => (from.trim(), to.trim().trim_start_matches('.')),
+        None => {
+            let mut words = text.split_whitespace();
+            let pair = (words.next()?, words.next()?);
+            if words.next().is_some() {
+                return None;
+            }
+            pair
+        }
+    };
+    (!from.is_empty() && !to.is_empty() && !to.contains(char::is_whitespace))
+        .then(|| (from.to_string(), to.to_string()))
+}
+
 /// How the two versions of a picture are drawn against each other.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Pictures {
@@ -111,12 +159,15 @@ pub fn versions(rev: &Rev, change: &Change) -> (Option<Source>, Option<Source>) 
     let old = (!added).then(|| match rev {
         Rev::WorkingCopy => source(Some("HEAD".into()), old_path),
         Rev::Commit(id) => source(Some(format!("{id}^")), old_path),
-        Rev::Branch(since) => source(Some(since.clone()), old_path),
+        Rev::Branch(since) | Rev::Base(since) => source(Some(since.clone()), old_path),
+        Rev::Range(from, _) => source(Some(from.clone()), old_path),
     });
     let new = (!deleted).then(|| match rev {
         Rev::WorkingCopy => source(None, &change.path),
         Rev::Commit(id) => source(Some(id.clone()), &change.path),
         Rev::Branch(_) => source(Some("HEAD".into()), &change.path),
+        Rev::Base(_) => source(None, &change.path),
+        Rev::Range(_, to) => source(Some(to.clone()), &change.path),
     });
     (old, new)
 }
@@ -276,7 +327,37 @@ mod tests {
     }
 
     #[test]
-    fn a_worktrees_picture_is_read_against_head_and_a_commits_against_its_parent() {
+    fn a_comparable_branch_switches_from_its_base_to_what_is_uncommitted_and_what_it_committed() {
+        assert_eq!(
+            changes(Some("m")),
+            [
+                Rev::Base("m".into()),
+                Rev::WorkingCopy,
+                Rev::Branch("m".into())
+            ]
+        );
+        assert_eq!(changes(None), [Rev::WorkingCopy]);
+        assert_eq!(called(&Rev::Base("m".into())), "Branch");
+        assert_eq!(
+            called(&Rev::Range("0123456789".into(), "abcdefghij".into())),
+            "0123456..abcdefg"
+        );
+    }
+
+    #[test]
+    fn two_revisions_are_written_with_two_dots_or_a_space_between_them() {
+        let pair = |a: &str, b: &str| Some((a.to_string(), b.to_string()));
+        assert_eq!(compared("main..HEAD"), pair("main", "HEAD"));
+        assert_eq!(compared(" v1 .. v2 "), pair("v1", "v2"));
+        assert_eq!(compared("main...topic"), pair("main", "topic"));
+        assert_eq!(compared("v1 v2"), pair("v1", "v2"));
+        for nothing in ["", "main", "main..", "..main", "a b c", "a..b c"] {
+            assert_eq!(compared(nothing), None, "{nothing:?}");
+        }
+    }
+
+    #[test]
+    fn a_picture_is_read_on_each_side_of_the_change_it_is_in() {
         let edit = change(" M", "a.png", None);
         assert_eq!(
             versions(&Rev::WorkingCopy, &edit),
@@ -289,6 +370,14 @@ mod tests {
         assert_eq!(
             versions(&Rev::Branch("base".into()), &edit),
             (at(Some("base"), "a.png"), at(Some("HEAD"), "a.png"))
+        );
+        assert_eq!(
+            versions(&Rev::Base("base".into()), &edit),
+            (at(Some("base"), "a.png"), at(None, "a.png"))
+        );
+        assert_eq!(
+            versions(&Rev::Range("v1".into(), "v2".into()), &edit),
+            (at(Some("v1"), "a.png"), at(Some("v2"), "a.png"))
         );
     }
 

@@ -36,6 +36,7 @@ impl Ask {
                 | Self::Review { .. }
                 | Self::Picture { .. }
                 | Self::DiffPicture { .. }
+                | Self::Compare { .. }
                 | Self::LoginStanding { .. }
                 | Self::Cloned { .. }
                 | Self::Apply { .. }

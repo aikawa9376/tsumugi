@@ -26,6 +26,8 @@ async fn files(worktree: &std::path::Path, rev: &Rev) -> Result<Vec<Change>, Err
         Rev::WorkingCopy => git::changes(worktree).await,
         Rev::Commit(id) => git::commit_files(worktree, id).await,
         Rev::Branch(since) => git::since_files(worktree, since).await,
+        Rev::Base(since) => git::base_files(worktree, since).await,
+        Rev::Range(from, to) => git::range_files(worktree, from, to).await,
     }
 }
 
@@ -41,6 +43,8 @@ async fn lines(
         Rev::WorkingCopy => git::file_diff(worktree, None, change, max).await,
         Rev::Commit(id) => git::file_diff(worktree, Some(id), change, max).await,
         Rev::Branch(since) => git::since_diff(worktree, since, change, max).await,
+        Rev::Base(since) => git::base_diff(worktree, since, change, max).await,
+        Rev::Range(from, to) => git::range_diff(worktree, from, to, change, max).await,
     }
 }
 
@@ -74,8 +78,8 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
         Spot::Branch => crate::branch::branch(worktree)
             .await
             .map(|b| Listing::Branch(Box::new(b))),
-        Spot::Diff(Rev::Branch(since), change) => {
-            git::since_diff(worktree, since, change, limits.diff_lines)
+        Spot::Diff(rev @ (Rev::Branch(_) | Rev::Base(_) | Rev::Range(..)), change) => {
+            lines(worktree, rev, change, limits.diff_lines)
                 .await
                 .map(Listing::Diff)
         }
@@ -83,7 +87,7 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
             let revision = match rev {
                 Rev::WorkingCopy => None,
                 Rev::Commit(id) => Some(id.as_str()),
-                Rev::Branch(_) => unreachable!("a branch diff is read above"),
+                _ => unreachable!("a comparison's diff is read above"),
             };
             crate::review::file_diff(worktree, revision, change, limits.diff_lines)
                 .await
@@ -102,7 +106,8 @@ pub(crate) async fn load(repo: &Repo, spot: &Spot, limits: Limits) -> View {
                 let target = match rev {
                     Rev::WorkingCopy => "HEAD",
                     Rev::Commit(id) => id,
-                    Rev::Branch(_) => "HEAD",
+                    Rev::Branch(_) | Rev::Base(_) => "HEAD",
+                    Rev::Range(_, to) => to,
                 };
                 git::revision(worktree, target).await.ok()
             }
@@ -270,5 +275,78 @@ mod tests {
                 .iter()
                 .any(|l| l.kind == tsumugi_model::repository::DiffKind::Difft)
         );
+    }
+
+    /// A repository with a commit `base` of `a.txt` and a branch commit on
+    /// top of it changing `a.txt` and adding `b.txt`.
+    fn branched() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .env("GIT_AUTHOR_NAME", "Test")
+                .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+                .env("GIT_COMMITTER_NAME", "Test")
+                .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "{args:?}");
+            String::from_utf8(out.stdout).unwrap().trim().to_string()
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.path().join("a.txt"), "one\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "base"]);
+        let base = git(&["rev-parse", "HEAD"]);
+        std::fs::write(dir.path().join("a.txt"), "ONE\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "bee\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "branch"]);
+        (dir, base)
+    }
+
+    fn headings(lines: &[DiffLine]) -> Vec<&str> {
+        lines
+            .iter()
+            .filter(|l| l.kind == DiffKind::File)
+            .map(|l| l.text.as_str())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn the_worktree_against_its_base_holds_what_was_committed_and_what_was_not() {
+        let (dir, base) = branched();
+        std::fs::write(dir.path().join("b.txt"), "BEE\n").unwrap();
+        std::fs::write(dir.path().join("c.txt"), "sea\n").unwrap();
+        let repo = Repo::open(dir.path());
+        let rev = Rev::Base(base);
+        let Ok(Listing::Diff(lines)) = repo.load(&Spot::Stream(rev.clone()), LIMITS).await.listing
+        else {
+            panic!("no stream");
+        };
+        assert_eq!(headings(&lines), ["a.txt", "b.txt", "c.txt"]);
+        for wanted in ["+ONE", "+BEE", "+sea"] {
+            assert!(lines.iter().any(|l| l.text == wanted), "{wanted}");
+        }
+        let Ok(Listing::Files(files)) = repo.load(&Spot::Files(rev), LIMITS).await.listing else {
+            panic!("no files");
+        };
+        let paths: Vec<_> = files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, ["a.txt", "b.txt", "c.txt"]);
+    }
+
+    #[tokio::test]
+    async fn two_revisions_are_read_the_later_against_the_earlier_whatever_the_worktree_holds() {
+        let (dir, base) = branched();
+        std::fs::write(dir.path().join("a.txt"), "uncommitted\n").unwrap();
+        let repo = Repo::open(dir.path());
+        let rev = Rev::Range(base, "HEAD".into());
+        let Ok(Listing::Diff(lines)) = repo.load(&Spot::Stream(rev), LIMITS).await.listing else {
+            panic!("no stream");
+        };
+        assert_eq!(headings(&lines), ["a.txt", "b.txt"]);
+        assert!(lines.iter().any(|l| l.text == "+ONE"));
+        assert!(!lines.iter().any(|l| l.text == "+uncommitted"));
     }
 }

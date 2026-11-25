@@ -2,6 +2,7 @@
 .list-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 6px; cursor: default; white-space: nowrap; overflow: hidden; }
 .list-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .list-row-meta { color: var(--text-3); font-size: var(--ui-font-small); }
+.branch-standing { flex: none; color: var(--text-3); font-size: var(--ui-font-small); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .agent-badge { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-2); font-size: var(--ui-font-tiny); line-height: 18px; }
 .list-row.selected { background: var(--select); }
 .list-row.shown { box-shadow: inset 3px 0 0 var(--run); background: var(--run-tint-soft); border-top-left-radius: 0; border-bottom-left-radius: 0; }

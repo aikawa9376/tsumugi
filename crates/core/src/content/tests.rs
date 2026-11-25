@@ -2285,8 +2285,12 @@ fn a_diff_tab_keeps_its_work_machine_and_repository_watched_without_a_prompt() {
         PathBuf::from("/remote/repo")
     );
     let read = crate::settle::sight(run.state(), &there()).repositories;
-    assert_eq!(read.len(), 2);
-    for spot in [RepositorySpot::Stream(Rev::WorkingCopy), spot] {
+    assert_eq!(read.len(), 3);
+    for spot in [
+        RepositorySpot::Stream(Rev::WorkingCopy),
+        RepositorySpot::Branch,
+        spot,
+    ] {
         assert!(read.contains(&tsumugi_protocol::RepositorySight {
             worktree: "/remote/repo".into(),
             spot

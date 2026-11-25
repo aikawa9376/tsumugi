@@ -322,6 +322,20 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             rev,
             path,
         } => Ok(diff_picture(&worktree, rev.as_deref(), path).await),
+        Ask::Compare { worktree, from, to } => {
+            let id = |rev: String| {
+                let worktree = worktree.clone();
+                async move {
+                    tsumugi_vcs::git::commit_id(&worktree, rev.trim())
+                        .await
+                        .map_err(|e| e.to_string())
+                }
+            };
+            match (id(from).await, id(to).await) {
+                (Ok(from), Ok(to)) => Ok(Answer::Compared { from, to }),
+                (Err(text), _) | (_, Err(text)) => Err(text),
+            }
+        }
         Ask::Run { args, cwd, input } => Ok(match args.split_first() {
             Some((command, rest)) if command == "issue" => {
                 crate::issue_cli::run(watched, rest, &cwd, input)

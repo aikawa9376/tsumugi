@@ -1,12 +1,13 @@
 //! Repository reviews use the same host reads as the details panel.
 
 use crate::bridge::AppCtx;
+use crate::components::InlineField;
 use crate::details::changes::ReviewActions;
 use crate::review::ReviewRows;
 use dioxus::prelude::*;
 use std::path::PathBuf;
 use tsumugi_core::content::{Area, Opening, Tab, WindowId};
-use tsumugi_core::diff_view::{Choice, Pictures, hunk_from, hunk_starts};
+use tsumugi_core::diff_view::{self, Choice, Pictures, hunk_from, hunk_starts};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::viewers::{Diff, FileKind, ViewerAction, is_text};
 use tsumugi_model::{
@@ -67,8 +68,79 @@ pub(crate) fn DiffWindow(
         .map(|r| r.listing.clone());
     let view = app.content.read().diff_views.of(&environment, &worktree);
     let files = files_of(app, &environment, &worktree, &rev);
+    let merge_base = app
+        .hosts
+        .read()
+        .work(&environment)
+        .and_then(|w| w.details.repository(&worktree, &Spot::Branch))
+        .and_then(|r| match &r.listing {
+            Ok(Listing::Branch(b)) => b.comparison.merge_base.clone(),
+            _ => None,
+        });
+    let mut choices = diff_view::changes(merge_base.as_deref());
+    if !choices.contains(&rev) {
+        choices.push(rev.clone());
+    }
+    let mut comparing = use_signal(|| None::<String>);
+    let mut notice = use_signal(|| None::<String>);
     // The file the cursor is in, which the list marks.
     let current = use_signal(|| opened.clone());
+    let next = {
+        let at = choices.iter().position(|c| *c == rev).unwrap_or(0);
+        let to = choices[(at + 1) % choices.len()].clone();
+        let here = current.peek().clone();
+        let file = files.iter().find(|f| Some(&f.path) == here.as_ref());
+        (to != rev).then(|| match file {
+            Some(file) => Spot::Lines(to, file.clone()),
+            None => Spot::Files(to),
+        })
+    };
+    // Switching to another change keeps the file in sight where the other
+    // change has it too.
+    let switch = {
+        let (environment, worktree, files) = (environment.clone(), worktree.clone(), files.clone());
+        move |to: Rev| {
+            let here = current.peek().clone();
+            let file = files.iter().find(|f| Some(&f.path) == here.as_ref());
+            let spot = match file {
+                Some(file) => Spot::Lines(to, file.clone()),
+                None => Spot::Files(to),
+            };
+            app.dispatch(Msg::Show {
+                thing: Tab::Diff {
+                    environment: environment.clone(),
+                    worktree: worktree.clone(),
+                    spot: Box::new(spot),
+                },
+                place: None,
+                how: Some(Opening::InWindow(window)),
+            })
+        }
+    };
+    let compare = {
+        let (environment, worktree, switch) =
+            (environment.clone(), worktree.clone(), switch.clone());
+        move |text: String| {
+            let Some((from, to)) = diff_view::compared(&text) else {
+                notice.set(Some("Write two revisions, as main..HEAD".into()));
+                return;
+            };
+            let (environment, worktree, switch) =
+                (environment.clone(), worktree.clone(), switch.clone());
+            spawn(async move {
+                let ask = tsumugi_protocol::Ask::Compare { worktree, from, to };
+                match app.ask_in(&environment, ask).await {
+                    tsumugi_protocol::Answer::Compared { from, to } => {
+                        comparing.set(None);
+                        notice.set(None);
+                        switch(Rev::Range(from, to));
+                    }
+                    tsumugi_protocol::Answer::Failed { text } => notice.set(Some(text)),
+                    _ => notice.set(Some("The work host did not answer".into())),
+                }
+            });
+        }
+    };
     let choose = {
         let (environment, worktree) = (environment.clone(), worktree.clone());
         move |choice| {
@@ -100,8 +172,41 @@ pub(crate) fn DiffWindow(
                 environment: environment.clone(),
                 worktree: worktree.clone(),
                 command: ReadSignal::from(command),
+                next,
+                comparing,
             }
             div { class: "diff-review-toolbar",
+                div { class: "diff-changes",
+                    for choice in choices {
+                        button { key: "{diff_view::called(&choice)}",
+                            class: if choice == rev { "on" } else { "" },
+                            title: match &choice {
+                                Rev::Base(_) => "The worktree against the branch's base, committed or not",
+                                Rev::WorkingCopy => "What is not committed",
+                                Rev::Branch(_) => "What the branch committed",
+                                _ => "",
+                            },
+                            onclick: { let (switch, choice) = (switch.clone(), choice.clone()); move |_| switch(choice.clone()) },
+                            "{diff_view::called(&choice)}"
+                        }
+                    }
+                    if let Some(text) = comparing() {
+                        InlineField {
+                            class: "diff-compare",
+                            value: text,
+                            placeholder: "main..HEAD — Enter compares, Escape gives up".to_string(),
+                            focus: true,
+                            contained: true,
+                            oninput: move |text: String| comparing.set(Some(text)),
+                            onenter: { let mut compare = compare.clone(); move |()| compare(comparing.peek().clone().unwrap_or_default()) },
+                            onescape: move |()| { comparing.set(None); notice.set(None); },
+                        }
+                    } else {
+                        button { title: "Compare two revisions",
+                            onclick: move |_| comparing.set(Some(String::new())), "Compare…" }
+                    }
+                    if let Some(text) = notice() { span { class: "git-error", "{text}" } }
+                }
                 button { class: if view.files { "on" } else { "" }, title: "Show or hide the files (f)",
                     onclick: { let choose = choose.clone(); move |_| choose(Choice::Files) }, "Files" }
                 button { class: if view.wrap { "on" } else { "" }, title: "Wrap long lines (w)",
@@ -203,24 +308,44 @@ fn DiffKeys(
     environment: EnvironmentId,
     worktree: PathBuf,
     command: ReadSignal<Option<crate::viewers::Command>>,
+    /// Where the key that shows the next change goes.
+    next: Option<Spot>,
+    comparing: Signal<Option<String>>,
 ) -> Element {
     let app = use_context::<AppCtx>();
     let last =
         use_hook(|| std::rc::Rc::new(std::cell::Cell::new(command.peek().map_or(0, |c| c.seq))));
-    use_effect(move || {
+    use_effect(use_reactive((&next,), move |(next,)| {
         let Some(c) = command() else { return };
         if last.replace(c.seq) == c.seq {
             return;
         }
-        if let ViewerAction::Diff(Diff::Choose(choice)) = c.action {
-            app.dispatch(Msg::DiffView {
+        match c.action {
+            ViewerAction::Diff(Diff::Choose(choice)) => app.dispatch(Msg::DiffView {
                 environment: environment.clone(),
                 worktree: worktree.clone(),
                 choice,
-            });
+            }),
+            ViewerAction::Diff(Diff::Change) => {
+                if let Some(spot) = next {
+                    app.dispatch(Msg::Show {
+                        thing: Tab::Diff {
+                            environment: environment.clone(),
+                            worktree: worktree.clone(),
+                            spot: Box::new(spot),
+                        },
+                        place: None,
+                        how: Some(Opening::InWindow(window)),
+                    });
+                }
+            }
+            ViewerAction::Diff(Diff::Compare) => {
+                let mut comparing = comparing;
+                comparing.set(Some(String::new()));
+            }
+            _ => {}
         }
-        let _ = window;
-    });
+    }));
     rsx! {}
 }
 

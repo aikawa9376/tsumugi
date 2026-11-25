@@ -119,6 +119,9 @@ changes them ([keys](../keys.md)).
 | `worktree.merge` |  | merge the branch of the worktree selected in the tree into the main checkout with a merge commit, after asking and saying what it brings; a merge that would conflict is never begun there, and uncommitted changes in the main checkout are stashed or committed only as the question says; afterwards the local issue its session was started for is closed and the worktree is offered for deleting ([details](../tree.md#merging-a-worktree-into-main)) | `tree`: `I` |
 | `worktree.delete` |  | delete the worktree selected in the tree, its directory and, as the question says, its branch, after asking and saying what is lost: files changed, commits not pushed, commits not merged, and the sessions and terminals that end with it; it is never deleted while it has changes unless the question is answered to discard them ([details](../tree.md#making-and-deleting-worktrees)) | `tree`: `D` |
 | `worktree.cleanup` |  | list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](../tree.md#cleaning-up-worktrees)) | `tree`: `C` |
+| `worktree.diff` |  | open in a diff tab the change of the branch of the worktree or workspace selected in the tree: the worktree against the branch's base, committed or not, or what is not committed where the branch cannot be compared ([details](../tree.md#a-branch-against-its-base)) | `tree`: `d` |
+| `worktree.review` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to review the branch's change against its base; sending the draft starts the session ([details](../tree.md#a-branch-against-its-base)) | `tree`: `g r` |
+| `worktree.explain` |  | open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to explain the branch's change against its base; sending the draft starts the session ([details](../tree.md#a-branch-against-its-base)) | `tree`: `g e` |
 | `worktree.sleep` |  | put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](../tree.md#putting-a-worktree-to-sleep)) | `tree`: `Z` |
 | `worktree.wake` |  | wake the worktree selected in the tree: its sleeping sessions are brought back with their conversations ([details](../tree.md#putting-a-worktree-to-sleep)) |  |
 | `worktree.status_todo` |  | mark the worktree selected in the tree as to do, which its row shows and the tree's filter finds by `status:todo` ([details](../tree.md#saying-how-a-worktrees-work-stands)) |  |
@@ -212,6 +215,8 @@ changes them ([keys](../keys.md)).
 | `diff.next_file` |  | in a diff tab, open the next file of the list of files changed | `viewer`: `] f` |
 | `diff.prev_file` |  | in a diff tab, open the previous file of the list of files changed | `viewer`: `[ f` |
 | `diff.wrap` |  | in a diff tab, break long lines to the width of the tab, or scroll across them again; kept for the worktree | `viewer`: `w` |
+| `diff.change` |  | in a diff tab on a worktree, show the next of the branch's changes: the worktree against the branch's base, what is not committed, then what the branch committed ([details](../details.md#diff-tabs)) | `viewer`: `t` |
+| `diff.compare` |  | in a diff tab, write two revisions of the repository, as `main..HEAD`, and show the later against the earlier; a name that is not of a commit is refused ([details](../details.md#diff-tabs)) | `viewer`: `C` |
 | `diff.files` |  | in a diff tab, show or hide the list of files changed; kept for the worktree | `viewer`: `f` |
 | `diff.pictures` |  | in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree | `viewer`: `m` |
 | `github.next` |  | in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](../tree.md#writing-on-a-pull-request-or-an-issue)) | `github`: `n` |
@@ -427,6 +432,9 @@ changes them ([keys](../keys.md)).
 "I" = "worktree.merge"
 "D" = "worktree.delete"
 "C" = "worktree.cleanup"
+"d" = "worktree.diff"
+"g r" = "worktree.review"
+"g e" = "worktree.explain"
 "p" = "workspace.pin"
 "S" = "tree.sort"
 "g h s" = "tree.hide_sleeping"
@@ -622,6 +630,8 @@ changes them ([keys](../keys.md)).
 "w" = "diff.wrap"
 "f" = "diff.files"
 "m" = "diff.pictures"
+"t" = "diff.change"
+"C" = "diff.compare"
 "g x" = "cursor.browse"
 "e" = "window.edit"
 "q" = "window.quit"

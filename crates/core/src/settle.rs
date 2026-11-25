@@ -405,11 +405,14 @@ pub(crate) fn sight(state: &ViewState, environment: &EnvironmentId) -> Sight {
         {
             use tsumugi_model::repository::Spot;
             // A tab on a change, or on a file of it, shows the stream of
-            // every file of the change beside the list of them.
+            // every file of the change beside the list of them, and offers
+            // the changes of the branch, which its comparison names.
             let reads = match spot.as_ref() {
-                Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) => {
-                    vec![Spot::Stream(rev.clone()), Spot::Files(rev.clone())]
-                }
+                Spot::Files(rev) | Spot::Diff(rev, _) | Spot::Lines(rev, _) => vec![
+                    Spot::Stream(rev.clone()),
+                    Spot::Files(rev.clone()),
+                    Spot::Branch,
+                ],
                 other => vec![other.clone()],
             };
             for spot in reads {

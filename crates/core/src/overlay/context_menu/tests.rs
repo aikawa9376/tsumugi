@@ -171,6 +171,9 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
             &[
                 Action::WorkspacePin,
                 Action::WorktreeNew,
+                Action::WorktreeDiff,
+                Action::WorktreeReview,
+                Action::WorktreeExplain,
                 Action::WorktreeCleanup,
                 Action::WorkspaceRemove
             ]
@@ -191,6 +194,9 @@ fn a_workspace_or_worktree_starts_sessions_and_shells_in_it() {
                 Action::WorktreeStatusInReview,
                 Action::WorktreeStatusCompleted,
                 Action::WorktreeStatusClear,
+                Action::WorktreeDiff,
+                Action::WorktreeReview,
+                Action::WorktreeExplain,
                 Action::WorktreeMerge,
                 Action::WorktreeClose,
                 Action::WorktreeDelete,

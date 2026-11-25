@@ -339,13 +339,11 @@ the base's last fetch.
 From the row, or its right-click menu ([keys](reference/keys.md#actions)):
 
 - the branch's change opens in a diff tab: the worktree against its base, or
-  only what the branch committed ([diff tabs](details.md#diff-tabs));
-- two revisions of the repository, named in the prompt, open in a diff tab
-  against each other;
-- a draft in the worktree asks an agent to review the branch's change, to
-  explain it, or to leave notes on it for your review
-  ([review](review.md#notes-from-agents)); sending the draft starts the
-  session, as with the [AI actions](ai-actions.md).
+  what is not committed where the branch cannot be compared
+  ([diff tabs](details.md#diff-tabs));
+- a draft in the worktree asks an agent to review the branch's change or to
+  explain it; sending the draft starts the session, as with the
+  [AI actions](ai-actions.md).
 
 ## Merging a worktree into main
 

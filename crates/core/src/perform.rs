@@ -130,6 +130,8 @@ pub(crate) fn perform(
         | Action::DiffNextFile
         | Action::DiffPrevFile
         | Action::DiffWrap
+        | Action::DiffChange
+        | Action::DiffCompare
         | Action::DiffFiles
         | Action::DiffPictures
         | Action::GithubNext
@@ -829,6 +831,14 @@ pub(crate) fn perform(
                 _ => Vec::new(),
             }
         }
+        Action::WorktreeDiff => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::branch_diff(state, &row),
+            None => Vec::new(),
+        },
+        Action::WorktreeReview | Action::WorktreeExplain => match cur.filter(|_| on_list) {
+            Some(row) => crate::worktree::branch_draft(state, &row, &action),
+            None => Vec::new(),
+        },
         Action::WorktreeCleanup => match cur.filter(|_| on_list) {
             Some(row) => crate::worktree::cleanup_open(state, &row),
             None => Vec::new(),

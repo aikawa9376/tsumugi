@@ -54,6 +54,26 @@ fn checkpoint_status(
     checkpoint_at(work, path).and_then(|c| c.status)
 }
 
+/// How the worktree at `path` stands against its branch's base, for its
+/// row: the commits ahead and behind and the lines added and taken out,
+/// each left out while it is none; nothing where it cannot be compared.
+fn standing_text(work: Option<&tsumugi_protocol::WorkSnapshot>, path: &std::path::Path) -> String {
+    let Some(s) = work.and_then(|w| w.tree.standings.get(path)) else {
+        return String::new();
+    };
+    [
+        (s.ahead, "↑"),
+        (s.behind, "↓"),
+        (s.added, "+"),
+        (s.removed, "−"),
+    ]
+    .into_iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, sign)| format!("{sign}{n}"))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
 /// What a sidebar row is, told when the pointer rests on it.
 pub(crate) fn row_tip(item: &Item) -> &'static str {
     match item {
@@ -591,6 +611,10 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
         kind
     };
     let target = Target::Row(it.clone());
+    let standing = match &own {
+        Item::Workspace(_, path) | Item::Worktree(_, path) => standing_text(work, path),
+        _ => String::new(),
+    };
     let status = match &own {
         Item::Workspace(_, path) | Item::Worktree(_, path) => checkpoint_status(work, path),
         _ => None,
@@ -677,6 +701,9 @@ pub(crate) fn TreeRow(item: Item, context: RowContext, on: RowEvents) -> Element
             }
             if let Some(summary) = summary {
                 WorkSummary { summary }
+            }
+            if !standing.is_empty() {
+                span { class: "branch-standing", title: "Against the branch's base: commits ahead and behind, lines added and taken out, what is only edited included", "{standing}" }
             }
             if let Some(status) = status {
                 span {
@@ -813,6 +840,28 @@ mod tests {
         assert_eq!(checkpoint_status(Some(&work), "/other".as_ref()), None);
         assert_eq!(checkpoint_line(Some(&work), "/other".as_ref()), "");
         assert_eq!(checkpoint_line(None, "/w".as_ref()), "");
+    }
+
+    #[test]
+    fn a_worktree_row_says_how_its_branch_stands_leaving_out_what_is_none() {
+        let mut work = tsumugi_protocol::WorkSnapshot::default();
+        work.tree.standings.insert(
+            "/w".into(),
+            tsumugi_model::repository::Standing {
+                merge_base: "m".into(),
+                ahead: 2,
+                behind: 0,
+                added: 10,
+                removed: 3,
+            },
+        );
+        work.tree
+            .standings
+            .insert("/even".into(), Default::default());
+        assert_eq!(standing_text(Some(&work), "/w".as_ref()), "↑2 +10 −3");
+        assert_eq!(standing_text(Some(&work), "/even".as_ref()), "");
+        assert_eq!(standing_text(Some(&work), "/other".as_ref()), "");
+        assert_eq!(standing_text(None, "/w".as_ref()), "");
     }
 
     #[test]

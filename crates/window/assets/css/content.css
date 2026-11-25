@@ -50,6 +50,8 @@
 .review-actions button, .diff-review-toolbar button { cursor: pointer; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; }
 .diff-review { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .diff-review-toolbar { display: flex; align-items: center; flex-shrink: 0; border-bottom: 1px solid var(--line); }
+.diff-changes { display: flex; align-items: center; gap: 4px; margin-right: 8px; }
+.diff-compare { min-width: 14em; }
 .diff-review-scroll { flex: 1; overflow: auto; padding: 12px; }
 .check-log-name { padding: 0 9px; font-weight: 600; }
 .check-log-for { color: var(--text-3); font-size: var(--ui-font-small); margin-right: auto; }

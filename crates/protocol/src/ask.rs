@@ -203,6 +203,14 @@ pub enum Ask {
         rev: Option<String>,
         path: String,
     },
+    /// The commits the revisions `from` and `to` name in `worktree`'s
+    /// repository, to compare the later against the earlier; a name that is
+    /// not of a commit is refused.
+    Compare {
+        worktree: PathBuf,
+        from: String,
+        to: String,
+    },
     /// Whether the profile `profile` is logged in, as the CLI it starts says
     /// where it runs it, asked once the terminal `after`, when one is named,
     /// has ended.
@@ -612,6 +620,11 @@ pub enum Answer {
     /// The image asked for, or none when it cannot be read or shown.
     Picture {
         url: Option<String>,
+    },
+    /// The commits two revisions compared name, by their full ids.
+    Compared {
+        from: String,
+        to: String,
     },
     /// What the command wrote, and its exit status.
     Ran {

@@ -122,6 +122,9 @@ pub enum Action {
     WorktreeMerge,
     WorktreeDelete,
     WorktreeCleanup,
+    WorktreeDiff,
+    WorktreeReview,
+    WorktreeExplain,
     WorktreeSleep,
     WorktreeWake,
     WorktreeStatusTodo,
@@ -214,6 +217,8 @@ pub enum Action {
     DiffNextFile,
     DiffPrevFile,
     DiffWrap,
+    DiffChange,
+    DiffCompare,
     DiffFiles,
     DiffPictures,
     GithubNext,
@@ -582,6 +587,15 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::WorktreeCleanup, "worktree.cleanup", "list the worktrees of the repository of the workspace or worktree selected in the tree with what is weighed before deleting each: the branch, files changed, commits not pushed, whether the branch is merged into the base branch, the state of its pull request, its size and its last commit; those whose pull request is merged or closed and that lose nothing are chosen beforehand, and the chosen ones are deleted together, after a question that names what each loses wherever it loses anything ([details](tree.md#cleaning-up-worktrees))")
         .icon(Icon::Trash)
         .row("Clean Up Worktrees…", End),
+    S::new(A::WorktreeDiff, "worktree.diff", "open in a diff tab the change of the branch of the worktree or workspace selected in the tree: the worktree against the branch's base, committed or not, or what is not committed where the branch cannot be compared ([details](tree.md#a-branch-against-its-base))")
+        .icon(Icon::GitBranch)
+        .row("Open branch diff", Go),
+    S::new(A::WorktreeReview, "worktree.review", "open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to review the branch's change against its base; sending the draft starts the session ([details](tree.md#a-branch-against-its-base))")
+        .icon(Icon::GitBranch)
+        .row("Review branch with AI…", Start),
+    S::new(A::WorktreeExplain, "worktree.explain", "open a draft in the worktree or workspace selected in the tree whose prompt asks an agent to explain the branch's change against its base; sending the draft starts the session ([details](tree.md#a-branch-against-its-base))")
+        .icon(Icon::GitBranch)
+        .row("Explain branch with AI…", Start),
     S::new(A::WorktreeSleep, "worktree.sleep", "put the worktree selected in the tree to sleep: its sessions' programs stop and its terminals end, while its files, its branch and its sessions' rows and tabs stay; one question names what is cut short where a session is working or a terminal runs, and a session that cannot be woken again keeps running ([details](tree.md#putting-a-worktree-to-sleep))")
         .icon(Icon::SunMoon)
         .row("Sleep worktree…", End),
@@ -719,6 +733,8 @@ pub static ACTIONS: &[ActionSpec] = &[
     S::new(A::DiffNextFile, "diff.next_file", "in a diff tab, open the next file of the list of files changed").says("Next file"),
     S::new(A::DiffPrevFile, "diff.prev_file", "in a diff tab, open the previous file of the list of files changed").says("Previous file"),
     S::new(A::DiffWrap, "diff.wrap", "in a diff tab, break long lines to the width of the tab, or scroll across them again; kept for the worktree").says("Wrap lines"),
+    S::new(A::DiffChange, "diff.change", "in a diff tab on a worktree, show the next of the branch's changes: the worktree against the branch's base, what is not committed, then what the branch committed ([details](details.md#diff-tabs))").says("Show the next change"),
+    S::new(A::DiffCompare, "diff.compare", "in a diff tab, write two revisions of the repository, as `main..HEAD`, and show the later against the earlier; a name that is not of a commit is refused ([details](details.md#diff-tabs))").says("Compare two revisions"),
     S::new(A::DiffFiles, "diff.files", "in a diff tab, show or hide the list of files changed; kept for the worktree").says("Show or hide the files"),
     S::new(A::DiffPictures, "diff.pictures", "in a diff tab on a picture, compare its versions side by side, with a divider swiped across them, or faded over each other; kept for the worktree").says("Compare pictures another way"),
     S::new(A::GithubNext, "github.next", "in a pull request's or an issue's tab, select the next card of its conversation, which `github.reply`, `github.resolve` and `github.react` act on ([tree](tree.md#writing-on-a-pull-request-or-an-issue))").says("Next card"),
@@ -1018,6 +1034,9 @@ mod tests {
             WorktreeMerge,
             WorktreeDelete,
             WorktreeCleanup,
+            WorktreeDiff,
+            WorktreeReview,
+            WorktreeExplain,
             WorktreeSleep,
             WorktreeWake,
             WorktreeStatusTodo,
@@ -1110,6 +1129,8 @@ mod tests {
             DiffNextFile,
             DiffPrevFile,
             DiffWrap,
+            DiffChange,
+            DiffCompare,
             DiffFiles,
             DiffPictures,
             GithubNext,

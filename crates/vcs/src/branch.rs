@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use tsumugi_model::repository::{Branch, Compared, Comparison, Head, Operation};
+use tsumugi_model::repository::{Branch, Compared, Comparison, Head, Operation, Standing};
 
 use crate::Error;
 use crate::git::{UNQUOTED, git, parse_name_status};
@@ -231,6 +231,35 @@ async fn read(path: &Path, base: &str, merge_base: &str) -> Result<Comparison, E
     })
 }
 
+/// How the worktree stands against its branch's base, or nothing where the
+/// branch cannot be compared.
+pub async fn standing(path: &Path) -> Option<Standing> {
+    let branch = branch(path).await.ok()?;
+    let comparison = branch.comparison;
+    let merge_base = comparison.merge_base?;
+    let numstat = git(
+        path,
+        &[
+            "diff",
+            "--numstat",
+            "-M",
+            "--no-ext-diff",
+            &merge_base,
+            "--",
+        ],
+    )
+    .await
+    .ok()?;
+    let (added, removed) = totals(&numstat);
+    Some(Standing {
+        merge_base,
+        ahead: comparison.ahead,
+        behind: comparison.behind,
+        added,
+        removed,
+    })
+}
+
 /// Where the branch of the worktree stands.
 pub async fn branch(path: &Path) -> Result<Branch, Error> {
     let head = head(path).await?;
@@ -321,6 +350,29 @@ mod tests {
         let found = compare(dir.path(), None).await;
         assert_eq!(found.files.len(), 2);
         assert_eq!(found.added, 4);
+    }
+
+    #[tokio::test]
+    async fn a_worktree_stands_against_its_base_with_what_is_only_edited_counted() {
+        let dir = diverged();
+        std::fs::write(dir.path().join("a.txt"), "1\n2\n3\n4\n").unwrap();
+        let stood = standing(dir.path()).await.unwrap();
+        let parted = git(dir.path(), &["rev-parse", "main~1"]).await.unwrap();
+        assert_eq!(
+            stood,
+            Standing {
+                merge_base: parted.trim().to_string(),
+                ahead: 2,
+                behind: 1,
+                added: 5,
+                removed: 0
+            }
+        );
+        let lone = repo();
+        commit(lone.path(), "a.txt", "x\n");
+        git_in(lone.path(), &["switch", "-q", "--orphan", "other"]);
+        commit(lone.path(), "b.txt", "y\n");
+        assert_eq!(standing(lone.path()).await, None, "no commit shared");
     }
 
     #[tokio::test]

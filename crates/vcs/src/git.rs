@@ -282,40 +282,134 @@ pub async fn since_diff(
     change: &Change,
     lines: usize,
 ) -> Result<Vec<DiffLine>, Error> {
+    compared_diff(path, &[since, "HEAD"], change, lines).await
+}
+
+/// The files the commits made since `since` changed.
+pub async fn since_files(path: &Path, since: &str) -> Result<Vec<Change>, Error> {
+    compared_files(path, &[since, "HEAD"]).await
+}
+
+/// What `change` does to its file in the worktree against `since`,
+/// committed or not, up to `lines` lines; an untracked file is all added.
+pub async fn base_diff(
+    path: &Path,
+    since: &str,
+    change: &Change,
+    lines: usize,
+) -> Result<Vec<DiffLine>, Error> {
+    if change.status == "??" {
+        return file_diff(path, None, change, lines).await;
+    }
+    compared_diff(path, &[since], change, lines).await
+}
+
+/// The files the worktree changes against `since`, committed or not, and
+/// every untracked one.
+pub async fn base_files(path: &Path, since: &str) -> Result<Vec<Change>, Error> {
+    let mut files = compared_files(path, &[since]).await?;
+    let untracked = git(
+        path,
+        &[
+            "-c",
+            UNQUOTED,
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
+    )
+    .await?;
+    files.extend(nul_paths(&untracked).into_iter().map(|path| Change {
+        status: "??".into(),
+        path,
+        from: None,
+    }));
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    files.truncate(FILES);
+    Ok(files)
+}
+
+/// The line diff of `change` between `revs`: two revisions, or one against
+/// the worktree.
+async fn compared_diff(
+    path: &Path,
+    revs: &[&str],
+    change: &Change,
+    lines: usize,
+) -> Result<Vec<DiffLine>, Error> {
     let dir = git_dir(path)?;
     let mut args = vec!["-C", dir, "-c", UNQUOTED, "diff", "-M"];
-    args.extend([
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        since,
-        "HEAD",
-        "--",
-    ]);
+    args.extend(["--no-color", "--no-ext-diff", "--no-textconv"]);
+    args.extend(revs);
+    args.push("--");
     args.extend(change.paths());
     let out = run_head("git", &args, None, lines, DIFF_BYTES).await?;
     Ok(parse_diff(&out, lines))
 }
 
-/// The files the commits made since `since` changed.
-pub async fn since_files(path: &Path, since: &str) -> Result<Vec<Change>, Error> {
+/// The files that differ between `revs`: two revisions, or one against the
+/// worktree.
+async fn compared_files(path: &Path, revs: &[&str]) -> Result<Vec<Change>, Error> {
+    let mut args = vec![
+        "-c",
+        UNQUOTED,
+        "diff",
+        "--name-status",
+        "-z",
+        "-M",
+        "--no-ext-diff",
+    ];
+    args.extend(revs);
+    args.push("--");
+    let out = git(path, &args).await?;
+    Ok(parse_name_status(&out))
+}
+
+/// The full id of the commit `rev` names; a name that is not of a commit is
+/// refused.
+pub async fn commit_id(path: &Path, rev: &str) -> Result<String, Error> {
+    let refused = || Error::Failed {
+        program: "git".into(),
+        stderr: format!("{rev} is not a commit of the repository"),
+    };
+    if rev.trim().is_empty() {
+        return Err(refused());
+    }
+    let named = format!("{rev}^{{commit}}");
     let out = git(
         path,
         &[
-            "-c",
-            UNQUOTED,
-            "diff",
-            "--name-status",
-            "-z",
-            "-M",
-            "--no-ext-diff",
-            since,
-            "HEAD",
-            "--",
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            &named,
         ],
     )
-    .await?;
-    Ok(parse_name_status(&out))
+    .await
+    .map_err(|_| refused())?;
+    let id = out.trim();
+    if id.is_empty() {
+        return Err(refused());
+    }
+    Ok(id.to_string())
+}
+
+/// The line diff of `change` from `from` to `to`.
+pub async fn range_diff(
+    path: &Path,
+    from: &str,
+    to: &str,
+    change: &Change,
+    lines: usize,
+) -> Result<Vec<DiffLine>, Error> {
+    compared_diff(path, &[from, to], change, lines).await
+}
+
+/// The files that differ from `from` to `to`.
+pub async fn range_files(path: &Path, from: &str, to: &str) -> Result<Vec<Change>, Error> {
+    compared_files(path, &[from, to]).await
 }
 
 /// At most `max` bytes from the start of a file.
@@ -679,6 +773,21 @@ mod tests {
         assert_eq!(a, ["a.txt", "@@ -1 +1 @@", "-old", "+new"]);
         let b = texts(file_diff(&dir, None, &listed[1], DIFF_LINES).await.unwrap());
         assert_eq!(b, ["sub/b.txt", "@@ -0,0 +1 @@", "+fresh"]);
+    }
+
+    #[tokio::test]
+    async fn a_revision_compared_is_the_commit_it_names_and_anything_else_is_refused() {
+        let dir = repo("commit-id");
+        std::fs::write(dir.join("a.txt"), "one\n").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-q", "-m", "first"]);
+        git(&dir, &["tag", "v1"]);
+        let id = commit_id(&dir, "v1").await.unwrap();
+        assert_eq!(id.len(), 40);
+        assert_eq!(commit_id(&dir, "HEAD").await.unwrap(), id);
+        for wrong in ["nothing-here", "--all", "HEAD:a.txt", ""] {
+            assert!(commit_id(&dir, wrong).await.is_err(), "{wrong:?}");
+        }
     }
 
     #[tokio::test]

@@ -115,6 +115,11 @@ pub enum Rev {
     /// What the branch committed since the commit named: the merge base the
     /// branch is compared from.
     Branch(String),
+    /// The worktree, committed or not, untracked files too, against the
+    /// commit named: the merge base the branch is compared from.
+    Base(String),
+    /// The second revision read against the first, as named.
+    Range(String, String),
 }
 
 /// What a level of a sheet shows.
@@ -208,6 +213,19 @@ pub struct Comparison {
     pub removed: usize,
     /// The files it changed since they parted.
     pub files: Vec<Change>,
+}
+
+/// How a worktree's branch stands against its base, as its row says it:
+/// the commits each has that the other lacks, and the lines the worktree
+/// added and took out since they parted, what is only edited included.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Standing {
+    /// The commit they parted at, which the branch's change is read from.
+    pub merge_base: String,
+    pub ahead: usize,
+    pub behind: usize,
+    pub added: usize,
+    pub removed: usize,
 }
 
 /// Where a worktree's branch stands.

@@ -145,6 +145,9 @@ pub fn entries(
                 offer(Action::WorktreeStatusInReview),
                 offer(Action::WorktreeStatusCompleted),
                 offer(Action::WorktreeStatusClear),
+                offer(Action::WorktreeDiff),
+                offer(Action::WorktreeReview),
+                offer(Action::WorktreeExplain),
                 offer(Action::WorktreeMerge),
                 offer(Action::WorktreeClose),
                 offer(Action::WorktreeDelete),
@@ -159,6 +162,9 @@ pub fn entries(
             .chain([
                 offer(Action::WorkspacePin),
                 offer(Action::WorktreeNew),
+                offer(Action::WorktreeDiff),
+                offer(Action::WorktreeReview),
+                offer(Action::WorktreeExplain),
                 offer(Action::WorktreeCleanup),
                 offer(Action::WorkspaceRemove),
             ])
