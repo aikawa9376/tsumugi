@@ -96,9 +96,11 @@ mod tests {
             format!("#!/bin/sh\nprintf '%s' '{out}'\nexit {code}\n"),
         )
         .unwrap();
-        tsumugi_sys::fs::set_mode(&script, 0o755).unwrap();
         let mut context = AgentContext::builtin(agent);
-        context.launch.command = vec![script.display().to_string()];
+        // Read by sh rather than run itself: a file just written may still
+        // be open in a child another test is forking, and running it would
+        // then fail with "text file busy".
+        context.launch.command = vec!["sh".into(), script.display().to_string()];
         context
     }
 
