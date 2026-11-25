@@ -297,8 +297,9 @@ impl ContentView {
         }
     }
 
-    /// The worktree the details describe and the header names: the one in
-    /// the middle, while a window shows something there.
+    /// The worktree the header names: the one in the middle, while a window
+    /// shows something there. The details describe the middle's worktree
+    /// whatever shows.
     pub fn described(&self) -> Option<&Place> {
         self.place.as_ref().filter(|_| self.active().is_some())
     }

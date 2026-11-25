@@ -1606,7 +1606,7 @@ fn a_window_pressed_and_let_go_without_moving_stays() {
 }
 
 #[test]
-fn the_details_describe_the_focused_window_s_worktree_and_nothing_while_nothing_is_open() {
+fn the_header_names_the_focused_window_s_worktree_and_nothing_while_nothing_is_open() {
     let run = Scenario::new().send(Msg::Show {
         thing: Tab::Session(here(), "s".into()),
         place: place("/w"),

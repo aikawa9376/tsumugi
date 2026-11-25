@@ -154,12 +154,14 @@ fn DetailsSide(focused: bool, shown: bool) -> Element {
     let app = ui.app;
     // Read, so the last input shown follows a pane started.
     let _ = (ui.local.attached)();
-    let current = app.content.read().described().cloned();
+    // The middle's worktree, which the panel describes even with no window
+    // open in it.
+    let current = app.content.read().place.clone();
     let active = app.content.read().active().cloned();
     let outside_git = {
+        let environment = app.shown_environment();
         let hosts = app.hosts.read();
-        let work = hosts.work(hosts.environment_of(active.as_ref()));
-        let tree = tsumugi_core::tree::listed(work);
+        let tree = tsumugi_core::tree::listed(hosts.work(&environment));
         let workspace = current
             .as_ref()
             .and_then(|p| tree.workspace_of(&p.worktree));

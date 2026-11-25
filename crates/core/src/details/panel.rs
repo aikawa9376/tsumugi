@@ -49,14 +49,19 @@ pub struct Shown {
     pub selected: Option<Item>,
     /// What the panel is made of.
     pub layout: DetailsLayout,
+    /// Whether the middle is at a worktree or shows a session, which the
+    /// window is described by; with neither, the environment is.
+    pub described: bool,
 }
 
 impl Shown {
-    /// What the panel describes.
+    /// What the panel describes: the row selected, or else what the window
+    /// shows, or else, with nothing of it to tell, the environment shown.
     pub fn subject(&self) -> Subject {
         match &self.selected {
             Some(Item::Environment(_)) => Subject::Environment,
             Some(Item::GitHubItem(..)) => Subject::Github,
+            _ if !self.described => Subject::Environment,
             _ => Subject::Session,
         }
     }
@@ -309,8 +314,14 @@ pub(crate) fn follow_selected(details: &mut Details, selected: Option<&Item>) {
     if details.shown.selected.as_ref() == selected {
         return;
     }
+    retarget(details, |shown| shown.selected = selected.cloned());
+}
+
+/// `change` made to what is shown; should the panel come to describe
+/// another subject, it leaves the tab it was on to come back to.
+fn retarget(details: &mut Details, change: impl FnOnce(&mut Shown)) {
     let was = details.shown.subject();
-    details.shown.selected = selected.cloned();
+    change(&mut details.shown);
     let now = details.shown.subject();
     if was != now {
         details.tabs.insert(was, details.drill.tab());
@@ -336,13 +347,21 @@ pub(crate) fn follow(details: &mut Details, showing: &Showing) {
         details.drill = Drill::new(details.drill.tab());
         details.shown.worktree = worktree;
     }
-    if let Some(tab) = &showing.tab
-        && tab.environment() != &details.shown.environment
+    let environment = match (&showing.tab, &showing.place) {
+        (Some(tab), _) => Some(tab.environment()),
+        (None, place) => place.as_ref().map(|p| &p.environment),
+    };
+    if let Some(environment) = environment
+        && environment != &details.shown.environment
     {
-        details.shown.environment = tab.environment().clone();
+        details.shown.environment = environment.clone();
     }
     if session != details.shown.session {
         details.shown.session = session;
+    }
+    let described = details.shown.worktree.is_some() || details.shown.session.is_some();
+    if described != details.shown.described {
+        retarget(details, |shown| shown.described = described);
     }
 }
 
@@ -1633,6 +1652,13 @@ pub(crate) mod tests {
         Scenario::new().event(crate::config::testing::configured(CLASSIC))
     }
 
+    /// The panel of a window that shows something.
+    fn of_window() -> Details {
+        let mut details = Details::default();
+        details.shown.described = true;
+        details
+    }
+
     use crate::testing::here;
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -1796,8 +1822,6 @@ pub(crate) mod tests {
         assert_eq!(
             sights,
             [
-                // As the settings are first taken in, with nothing shown.
-                (None, true, vec![]),
                 (
                     Some("a".into()),
                     true,
@@ -1857,7 +1881,9 @@ pub(crate) mod tests {
             ),
         ];
         for (msgs, sheet) in cases {
-            let run = scenario().send_all(msgs.clone());
+            let run = scenario()
+                .send(shown(Some("a"), Some("/w")))
+                .send_all(msgs.clone());
             assert_eq!(run.state().details.drill, Drill::new(sheet), "{msgs:?}");
         }
     }
@@ -3253,7 +3279,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_account_s_usage_is_asked_only_while_one_of_its_limits_is_in_sight() {
-        let mut details = Details::default();
+        let mut details = of_window();
         details.shown.usage = Some(tsumugi_protocol::Account {
             agent: tsumugi_model::Agent::Claude,
             home: None,
@@ -3294,7 +3320,9 @@ pub(crate) mod tests {
 
     #[test]
     fn showing_a_component_shows_the_tab_shown_when_it_holds_it_or_else_the_first_that_does() {
-        let run = scenario().send(Msg::DetailsShowComponent(Component::Changes));
+        let run = scenario()
+            .send(shown(Some("a"), Some("/w")))
+            .send(Msg::DetailsShowComponent(Component::Changes));
         assert_eq!(run.state().details.drill.tab(), CHANGES);
         let laid = laid_out(
             "[[panel.session.tabs]]\ntitle = \"A\"\ncomponents = [\"files\"]\n\
@@ -3314,13 +3342,15 @@ pub(crate) mod tests {
     #[test]
     fn a_tab_the_layout_does_not_have_is_not_shown_and_one_it_no_longer_has_gives_way_to_its_last()
     {
-        let run = scenario().send(Msg::DetailsTab(TIMELINE));
+        let run = scenario()
+            .send(shown(Some("a"), Some("/w")))
+            .send(Msg::DetailsTab(TIMELINE));
         assert_eq!(run.state().details.drill.tab(), TIMELINE);
         assert_eq!(
             run.send(Msg::DetailsTab(8)).state().details.drill.tab(),
             TIMELINE
         );
-        let mut details = Details::default();
+        let mut details = of_window();
         let last = Surface::session().tabs.len() - 1;
         show_tab(&mut details, last);
         let mut layout = DetailsLayout::default();
@@ -3333,8 +3363,27 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn with_no_worktree_and_no_session_in_the_middle_the_panel_describes_the_environment() {
+        let start = scenario();
+        assert_eq!(start.state().details.shown.subject(), Subject::Environment);
+        let at_log = start
+            .send(shown(Some("a"), Some("/w")))
+            .send(Msg::DetailsTab(LOG));
+        assert_eq!(at_log.state().details.shown.subject(), Subject::Session);
+        // With every window closed the middle stays at its worktree, which is
+        // still described where it was left.
+        let closed = at_log.send(shown(None, Some("/w")));
+        assert_eq!(closed.state().details.shown.subject(), Subject::Session);
+        assert_eq!(
+            closed.state().details.shown.worktree,
+            Some(PathBuf::from("/w"))
+        );
+        assert_eq!(closed.state().details.drill.tab(), LOG);
+    }
+
+    #[test]
     fn each_thing_the_panel_describes_comes_back_to_the_tab_it_was_left_on() {
-        let mut details = Details::default();
+        let mut details = of_window();
         show_tab(&mut details, AGENTS);
         follow_selected(&mut details, Some(&Item::Environment(here())));
         assert_eq!(details.shown.subject(), Subject::Environment);

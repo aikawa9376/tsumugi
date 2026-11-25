@@ -3,10 +3,13 @@
 The details panel tells about what the content's focused window shows, and the
 worktree it is in ([content](content.md)). It follows the focus from window to
 window and from tab to tab, including tabs shown by moving the cursor in Tree
-or Agents while the keys stay in that section. With nothing open, it has
-nothing to describe. While an environment's heading is selected in the tree, it
-tells instead of that environment, and while a pull request's or an issue's
-row is selected, of that ([tree](tree.md)). A window showing an image a
+or Agents while the keys stay in that section. With nothing open in a
+worktree, it still tells of that worktree: its change, its branch's pull
+request, its changes and its log. With no worktree either, it tells of the
+environment shown, as when its heading is selected. While an environment's
+heading is selected in the tree, it tells instead of that environment, and
+while a pull request's or an issue's row is selected, of that
+([tree](tree.md)). A window showing an image a
 session's console drew is described as that session, and one showing a file
 in the worktree already described keeps the session described before.
 

@@ -255,6 +255,7 @@ fn every_details_tab_follows_the_agents_cursor_while_the_keys_stay_in_agents() {
 
     for tab in 0..5 {
         let run = family()
+            .send(crate::testing::show(Tab::Session(here(), "parent".into())))
             .send(Msg::PanelShow(Side::Details))
             .send(Msg::SidebarPanel(Panel::Agents))
             .send(Msg::SidebarSelect(key("parent")))
