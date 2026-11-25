@@ -5,10 +5,10 @@
   --panel: #192330;
   --raised: #242d3a;
   --select: #2f3843;
-  --line: #4a5666;
-  --line-strong: #5a6676;
-  --focus-line: #6a7686;
-  --focus-border: #7a8696;
+  --line: #29323e;
+  --line-strong: #38404b;
+  --focus-line: #3d4550;
+  --focus-border: #4f5660;
   /* The border of the field that takes what is typed. */
   --input-focus: var(--run);
   --text: #cdcecf;
