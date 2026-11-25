@@ -225,7 +225,7 @@ impl Drop for Native {
 
 enum Display {
     Vte(Native),
-    Kitty(super::kitty::Kitty),
+    Kitty(Box<super::kitty::Kitty>),
 }
 impl Display {
     fn widget(&self) -> &gtk::Widget {
@@ -448,7 +448,9 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
             let layer = layer.as_ref().expect("installed").clone();
             let started = match renderer {
                 TerminalRenderer::Vte => api().map(|api| Display::Vte(Native::new(api, layer))),
-                TerminalRenderer::Kitty => super::kitty::Kitty::new(layer).map(Display::Kitty),
+                TerminalRenderer::Kitty => {
+                    super::kitty::Kitty::new(layer).map(|k| Display::Kitty(Box::new(k)))
+                }
                 TerminalRenderer::Builtin => unreachable!(),
             };
             match started {

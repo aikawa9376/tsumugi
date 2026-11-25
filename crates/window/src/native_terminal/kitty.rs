@@ -34,7 +34,41 @@ unsafe extern "C" {
     fn XFree(data: *mut c_void) -> c_int;
     fn XMapWindow(display: *mut c_void, window: c_ulong) -> c_int;
     fn XSync(display: *mut c_void, discard: c_int) -> c_int;
+    fn XGetWindowAttributes(
+        display: *mut c_void,
+        window: c_ulong,
+        attributes: *mut WindowAttributes,
+    ) -> c_int;
 }
+
+/// Xlib's `XWindowAttributes`, read only for `map_state`.
+#[repr(C)]
+struct WindowAttributes {
+    x: c_int,
+    y: c_int,
+    width: c_int,
+    height: c_int,
+    border_width: c_int,
+    depth: c_int,
+    visual: *mut c_void,
+    root: c_ulong,
+    class: c_int,
+    bit_gravity: c_int,
+    win_gravity: c_int,
+    backing_store: c_int,
+    backing_planes: c_ulong,
+    backing_pixel: c_ulong,
+    save_under: c_int,
+    colormap: c_ulong,
+    map_installed: c_int,
+    map_state: c_int,
+    all_event_masks: std::ffi::c_long,
+    your_event_mask: std::ffi::c_long,
+    do_not_propagate_mask: std::ffi::c_long,
+    override_redirect: c_int,
+    screen: *mut c_void,
+}
+const IS_UNMAPPED: c_int = 0;
 
 pub(crate) fn available() -> Result<(), String> {
     let display = gtk::gdk::Display::default().ok_or("No desktop display")?;
@@ -162,6 +196,8 @@ pub(super) struct Kitty {
     incoming: Vec<u8>,
     size: Option<Size>,
     attached: bool,
+    /// kitty's X window, once attached.
+    plug: c_ulong,
     started: Instant,
     title: CString,
     _directory: Directory,
@@ -252,6 +288,7 @@ impl Kitty {
             incoming: Vec::new(),
             size: None,
             attached: false,
+            plug: 0,
             started: Instant::now(),
             title,
             _directory: directory,
@@ -293,6 +330,9 @@ impl Kitty {
         }
         if !self.attached && self.widget.is_realized() {
             self.attach();
+        }
+        if self.attached {
+            self.keep_mapped();
         }
         if self.stream.is_none() {
             match self.listener.accept() {
@@ -389,9 +429,34 @@ impl Kitty {
                     window.input_shape_combine_region(&gtk::cairo::Region::create(), 0, 0);
                 }
                 self.attached = true;
+                self.plug = window;
                 self.output.replace("\x1b[?1049h\x1b[?7l".into());
                 tracing::debug!(pid = self.child.id(), "kitty terminal display attached");
             }
+        }
+    }
+}
+impl Kitty {
+    /// Maps kitty's window again when kitty has withdrawn it. kitty started
+    /// hidden withdraws its window once it has settled, which can come after
+    /// attach mapped it, and the socket honours a plug's own unmap. GDK keeps
+    /// no state for a foreign window, so the X server is asked.
+    fn keep_mapped(&self) {
+        let display = self.widget.display();
+        // SAFETY: available() established an X11 display; kitty may destroy
+        // its window at any time, so GDK traps the requests.
+        unsafe {
+            let gdk = display.to_glib_none().0;
+            let x = gdk_x11_display_get_xdisplay(gdk);
+            gdk_x11_display_error_trap_push(gdk);
+            let mut attributes: WindowAttributes = std::mem::zeroed();
+            if XGetWindowAttributes(x, self.plug, &mut attributes) != 0
+                && attributes.map_state == IS_UNMAPPED
+            {
+                XMapWindow(x, self.plug);
+                XSync(x, 0);
+            }
+            gdk_x11_display_error_trap_pop_ignored(gdk);
         }
     }
 }

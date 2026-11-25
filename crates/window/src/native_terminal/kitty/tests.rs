@@ -111,6 +111,16 @@ fn wait_display(kitty: &mut Kitty, check: impl Fn(Size) -> bool) -> Size {
     }
 }
 
+/// Whether the X server shows kitty's window, asked of it rather than GDK.
+fn viewable(kitty: &Kitty) -> bool {
+    let out = Command::new("xdotool")
+        .args(["search", "--onlyvisible", "--name"])
+        .arg(format!("^{}$", kitty.title.to_str().unwrap()))
+        .output()
+        .unwrap();
+    !String::from_utf8_lossy(&out.stdout).trim().is_empty()
+}
+
 fn visible(kitty: &Kitty) -> String {
     control(kitty, &["get-text", "--extent", "screen"])
 }
@@ -232,6 +242,17 @@ async fn kitty_draws_the_managed_terminal_without_taking_its_input_or_ending_its
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+    // kitty started hidden withdraws its window again once it has settled,
+    // which can come after the window was embedded and mapped.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline {
+        wait_display(&mut kitty, |_| true);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        viewable(&kitty),
+        "the embedded kitty window must stay mapped"
+    );
     let colors = control(&kitty, &["get-colors"]);
     let background = colors
         .lines()
