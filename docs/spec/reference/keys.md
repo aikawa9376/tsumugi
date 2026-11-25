@@ -1,6 +1,6 @@
 # Key reference
 
-<!-- Written by `just references` from the code; edit the code, not this file. -->
+<!-- Written by `cargo xtask references` from the code; edit the code, not this file. -->
 
 Every action a binding can name, what it does, what the menu bar calls it,
 and the keys Tsumugi binds it to in each area before a file of bindings

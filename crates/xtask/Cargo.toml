@@ -1,0 +1,8 @@
+[package]
+name = "xtask"
+description = "The project's tasks, run as `cargo xtask`: the quality gate, the tests in isolation, references and bundles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false

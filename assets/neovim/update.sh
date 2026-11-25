@@ -6,7 +6,7 @@
 #   assets/neovim/update.sh [TAG]
 #
 # The tag defaults to the latest release. Run the tests in it before
-# shipping it: just test-neovim "$(assets/neovim/fetch.sh)/bin/nvim"
+# shipping it: cargo xtask test-neovim "$(assets/neovim/fetch.sh)/bin/nvim"
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)

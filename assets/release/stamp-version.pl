@@ -3,7 +3,7 @@
 # the Cargo.lock entries of the workspace's own packages (the ones without a
 # `source`), so `--locked` still holds.
 #
-# The release workflow runs this before it builds, and `just ci` runs it on a
+# The release workflow runs this before it builds, and `cargo xtask ci` runs it on a
 # copy, so a placeholder it no longer finds fails a pull request rather than a
 # release. A file with nothing to stamp is an error for the same reason.
 # Lines may end in CRLF: a Windows checkout without eol=lf has them.

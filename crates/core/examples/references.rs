@@ -1,5 +1,5 @@
-//! Writes the references in `docs/spec/reference/` from the code; `just
-//! references` runs it.
+//! Writes the references in `docs/spec/reference/` from the code; `cargo
+//! xtask references` runs it.
 
 use std::path::Path;
 

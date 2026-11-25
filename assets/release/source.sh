@@ -13,6 +13,7 @@ mkdir -p "$stage" "$dist"
 git -C "$root" archive HEAD | tar -C "$stage" -xf -
 perl "$stage/assets/release/stamp-version.pl" "$version" "$stage"
 mkdir -p "$stage/.cargo"
-(cd "$stage" && cargo vendor --locked vendor > .cargo/config.toml)
+# Beside the tasks' alias the repository keeps there.
+(cd "$stage" && cargo vendor --locked vendor >> .cargo/config.toml)
 tar -czf "$dist/$name.tar.gz" -C "$work" "$name"
 printf '%s\n' "$dist/$name.tar.gz"

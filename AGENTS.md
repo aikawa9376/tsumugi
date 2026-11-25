@@ -28,8 +28,8 @@ An Agent Workspace for people who live in Vim: drive any coding agent in its own
 
 ## Quality gate
 
-Run `just ci` before reporting a change as done. CI runs the same recipe, and
-`just ci-windows` on Windows.
+Run `cargo xtask ci` before reporting a change as done. CI runs the same
+command on every platform; it runs the checks of the platform it runs on.
 
 ## Layout
 
@@ -59,6 +59,7 @@ Run `just ci` before reporting a change as done. CI runs the same recipe, and
 | `crates/nvim/lua/` | the Lua the prompt's and the reader's Neovims run, taken in with `include_str!` |
 | `crates/vcs/` | what Tsumugi reads of and makes in Git repositories, and the repositories ghq keeps |
 | `crates/sys/` | the Unix calls on files, processes and sockets Tsumugi makes, and what stands in for them on Windows |
+| `crates/xtask/` | the project's tasks, run as `cargo xtask`: the quality gate, the tests in isolation, references and bundles |
 | `assets/logo/` | the weave logo and geometric wordmark as SVG, and `build.py` that regenerates them |
 | `assets/macos/` | the macOS app's Info.plist and the script that assembles the app |
 | `assets/file-icons/` | vim-nerdfont's and vim-glyph-palette's icon tables at a pinned revision, their licences, and `update.sh` that copies them again |
@@ -111,13 +112,14 @@ Scoped Commits:
 | `term` | `crates/term/` |
 | `vcs` | `crates/vcs/` |
 | `sys` | `crates/sys/` |
+| `xtask` | `crates/xtask/` |
 | `assets` | `assets/` |
 | `docs` | `docs/concept.md`, `README.md`, `AGENTS.md` |
 | `adr` | `docs/adr/` |
 | `spec` | `docs/spec/` |
 | `ci` | `.github/` |
 | `nix` | `flake.nix`, `flake.lock` |
-| `tooling` | `justfile`, `rust-toolchain.toml`, `Cargo.toml`, `clippy.toml`, `.envrc.sample`, `.gitattributes`, `vitro.toml` |
+| `tooling` | `.cargo/config.toml`, `rust-toolchain.toml`, `Cargo.toml`, `clippy.toml`, `.gitattributes`, `vitro.toml` |
 | `deps` | dependency updates |
 
 Add a row when a new area appears.

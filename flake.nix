@@ -80,7 +80,7 @@
             nativeBuildInputs = lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.pkg-config ];
             buildInputs =
               lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.libiconv ] ++ webviewLibraries pkgs;
-            # The tests run in CI and with `just test`.
+            # The tests run in CI and with `cargo xtask test`.
             doCheck = false;
           };
           tsumugi = craneLib.buildPackage (
@@ -102,37 +102,6 @@
         {
           inherit tsumugi;
           default = tsumugi;
-        }
-      );
-
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = pkgsFor system;
-          rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-        in
-        {
-          default = pkgs.mkShell {
-            # Say why each package beyond these is here.
-            packages = [
-              rust
-              pkgs.just
-              # The embedded prompt editor; its tests start a real Neovim.
-              pkgs.neovim
-              # The extension Pi sessions load; its tests run it in Node.
-              pkgs.nodejs
-              # Writes the licences of the crates Tsumugi is built from
-              # (just licenses).
-              pkgs.cargo-about
-            ]
-            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isDarwin [ pkgs.libiconv ]
-            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
-              pkgs.pkg-config
-              # Linux PDF viewer integration tests render actual pages.
-              pkgs.ghostscript
-            ]
-            ++ webviewLibraries pkgs;
-          };
         }
       );
 

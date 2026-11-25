@@ -96,7 +96,7 @@ uses its system webview and does not need GTK or WebKitGTK. With the
 [development tools](docs/building.md) installed, build a standalone app with:
 
 ```sh
-just build-macos
+cargo xtask build-macos
 open target/macos/Tsumugi.app
 ```
 
@@ -117,13 +117,14 @@ require their own setup.
 ## Development
 
 ```sh
-just run
-just ci
+cargo xtask run
+cargo xtask ci
 ```
 
 The [build guide](docs/building.md) lists the tools and release process.
-`just ci` checks formatting, Clippy, workspace tests with the pinned Neovim and
-the build without the desktop runtime. Keep contributions small and include a
+`cargo xtask ci` checks formatting, Clippy, workspace tests with the pinned
+Neovim and the build without the desktop runtime; `cargo xtask` lists the
+other tasks. Keep contributions small and include a
 regression test for behavior changes.
 
 ## License and credits

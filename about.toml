@@ -1,4 +1,4 @@
-# What `cargo about generate` (just licenses) accepts from the crates Tsumugi
+# What `cargo about generate` (cargo xtask licenses) accepts from the crates Tsumugi
 # is built from. A crate under any other licence fails the generation, so a
 # new licence is a decision made here rather than one that slips in.
 accepted = [

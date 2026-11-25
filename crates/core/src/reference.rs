@@ -1,6 +1,6 @@
 //! The references in `docs/spec/reference/`, written from what the code
 //! holds: every action with its default keys, and every setting with its
-//! type and default. `just references` writes them; a test fails when the
+//! type and default. `cargo xtask references` writes them; a test fails when the
 //! files checked in say otherwise.
 
 use std::fmt::Write as _;
@@ -23,7 +23,7 @@ pub fn files() -> Vec<(&'static str, String)> {
 }
 
 const GENERATED: &str =
-    "<!-- Written by `just references` from the code; edit the code, not this file. -->";
+    "<!-- Written by `cargo xtask references` from the code; edit the code, not this file. -->";
 
 /// The key reference: every action, what it does and the keys tsumugi binds
 /// it to, then the default bindings as a file of bindings writes them.

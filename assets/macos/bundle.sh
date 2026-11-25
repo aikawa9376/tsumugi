@@ -55,7 +55,7 @@ if [ -z "$identity" ]; then
     identity="Tsumugi Release"
   else
     identity="-"
-    echo "no \"Tsumugi Release\" in the keychain; signing ad hoc, so macOS will ask for its permissions again (just macos-make-identity, then just macos-import-identity)" >&2
+    echo "no \"Tsumugi Release\" in the keychain; signing ad hoc, so macOS will ask for its permissions again (cargo xtask macos-make-identity, then cargo xtask macos-import-identity)" >&2
   fi
 fi
 # The code the app carries is signed first: sealing the app does not sign

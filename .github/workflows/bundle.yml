@@ -1,7 +1,7 @@
 name: Bundle
 
 # Build Tsumugi.app for release and put it in the disk image a GitHub Release
-# carries (`just bundle`). ci.yml calls it with a placeholder version so the
+# carries (`cargo xtask bundle`). ci.yml calls it with a placeholder version so the
 # packaging is exercised before any release depends on it; release.yml calls
 # it with the tag.
 
@@ -63,16 +63,12 @@ jobs:
     timeout-minutes: 60
     env:
       VERSION: ${{ inputs.version }}
-    # Release builds use rustup, not Nix, so the executable never refers into
-    # /nix/store, and they start without caches, so nothing a pull request
-    # wrote can reach a published package.
+    # Release builds start without caches, so nothing a pull request wrote
+    # can reach a published package.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        with:
-          tool: just
       - name: Import the release signing identity
         if: inputs.sign
         run: |
@@ -81,12 +77,12 @@ jobs:
         env:
           MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
           MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
-      # The script `just ci` also runs, so a placeholder it no longer finds
+      # The script `cargo xtask ci` also runs, so a placeholder it no longer finds
       # fails a pull request rather than a release.
       - name: Stamp the version
         run: perl assets/release/stamp-version.pl "$VERSION"
       - name: Bundle
-        run: just bundle "$VERSION"
+        run: cargo xtask bundle "$VERSION"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle-macos-${{ matrix.arch }}

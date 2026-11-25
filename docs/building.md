@@ -1,32 +1,36 @@
 # Building and releases
 
 Tsumugi is developed primarily on Linux. `README.md` lists desktop libraries
-and runtime helpers. `nix develop` provides the development tools; alternatively
-install Rust, just, Neovim, Node.js and Ghostscript alongside those libraries.
-The Rust toolchain and bundled Neovim are pinned in the repository.
+and runtime helpers. Install rustup, which reads the pinned Rust toolchain
+from `rust-toolchain.toml`, and Node.js, Python 3, Perl and Ghostscript
+alongside those libraries. The bundled Neovim is pinned in the repository and
+fetched by the tests.
 
 On macOS, install the Xcode Command Line Tools (`xcode-select --install`) and
 Rust before building. The system webview replaces Linux's GTK/WebKitGTK
-libraries, and PDF rendering uses PDFKit rather than Ghostscript. The Nix
-development shell supports both `aarch64-darwin` (Apple Silicon) and
-`x86_64-darwin` (Intel). Without Nix, install just, Neovim, Node.js,
-Python 3 and cargo-about as well as Rust to run the complete quality gate.
+libraries, and PDF rendering uses PDFKit rather than Ghostscript. Install
+Node.js and cargo-about as well to run the complete quality gate.
 
-Run `just ci` before submitting a change. It builds a version without the
-desktop runtime last, so rebuild `cargo build --locked -p tsumugi` before
-launching `target/debug/tsumugi` directly. `just run` selects the desktop build.
+The project's tasks are a Rust program in the workspace: `cargo xtask` lists
+them.
+
+Run `cargo xtask ci` before submitting a change; it runs the checks of the
+platform it runs on. It builds the version without the desktop runtime in its
+own target directory, so `target/debug/tsumugi` stays the desktop build.
+`cargo xtask run` runs it.
 
 ## Packaging
 
-`just bundle-linux VERSION` builds a Linux archive with its installer, desktop
+`cargo xtask bundle-linux VERSION` builds a Linux archive with its installer, desktop
 icon, full license notices and a source-code reference. Build on the oldest
 Linux distribution you intend to support: the executable links system GTK,
 WebKitGTK and other libraries and is not a universal static binary.
 
-On macOS, `just build-macos` builds `target/macos/Tsumugi.app` and verifies its
+On macOS, `cargo xtask build-macos` builds `target/macos/Tsumugi.app` and verifies its
 signature, executable startup and bundled Neovim runtime with isolated user
-state. `just bundle VERSION` also writes the disk image. Build outside the Nix
-shell for distribution: the image rejects executables linked to `/nix/store`.
+state. `cargo xtask bundle VERSION` also writes the disk image. Build with
+rustup's toolchain for distribution, not inside a Nix shell: the image rejects
+executables linked to `/nix/store`.
 Both Apple Silicon and Intel packages are built natively in CI, with distinct
 architecture names; the app is not a universal binary. Windows remains a
 source build.

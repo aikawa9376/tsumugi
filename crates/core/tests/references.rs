@@ -15,7 +15,7 @@ fn the_references_checked_in_are_what_the_code_writes() {
                 .unwrap_or_else(|| checked_in.lines().count().min(text.lines().count()));
             panic!(
                 "{path} differs from what the code writes, from line {}; \
-                 run `just references` and check the file in",
+                 run `cargo xtask references` and check the file in",
                 line + 1
             );
         }

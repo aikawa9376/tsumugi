@@ -25,11 +25,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+      # The runner's Go fetches the toolchain pinact's module asks for.
       - name: Check that every action is pinned
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: nix shell nixpkgs#pinact -c pinact run --check
+        run: go run github.com/suzuki-shunsuke/pinact/v5/cmd/pinact@v5.0.2 run --check
 
   ci:
     strategy:
@@ -41,33 +41,35 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+      # rustup, on every runner, installs the toolchain rust-toolchain.toml
+      # pins as Cargo first runs; the window links the platform's own
+      # libraries.
+      - name: Install desktop libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # Linux PDF viewer integration tests render actual pages.
+          sudo apt-get install -y pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libssl-dev libxdo-dev ghostscript
+      # Writes the licences of the crates Tsumugi is built from, which macOS
+      # checks.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        if: runner.os == 'macOS'
         with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      # The store the development shell comes from. Only an exact match is
-      # restored, and only main saves, so pull requests cannot evict the
-      # caches each other start from.
-      - uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
-        with:
-          primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
-          save: ${{ github.ref == 'refs/heads/main' }}
-      # Load the development shell (flake.nix) into the job, so the steps
-      # below run the same commands on every OS.
-      - uses: nicknovitski/nix-develop@9be7cfb4b10451d3390a75dc18ad0465bed4932a # v1.2.1
+          # The version THIRD-PARTY-LICENSES.txt was written with, so the
+          # check compares like with like.
+          tool: cargo-about@0.9.3
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      # The same gate as local development (justfile).
-      - run: just ci
+      # The same gate as local development.
+      - run: cargo xtask ci
         env:
           CI: "1"
           # A runner has no firewall to ask, so the tests may listen on the
           # local network, which they skip by default.
           TSUMUGI_TEST_LAN: "1"
 
-  # Nix does not run on Windows, so the toolchain comes from rustup, which
-  # reads rust-toolchain.toml, and the recipes run in Git Bash.
+  # The scripts the tasks run go through Git Bash.
   windows:
     runs-on: windows-latest
     defaults:
@@ -77,13 +79,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        with:
-          tool: just
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: just ci-windows
+      - run: cargo xtask ci
         env:
           CI: "1"
           # The debug information of a Windows build fills the runner's disk

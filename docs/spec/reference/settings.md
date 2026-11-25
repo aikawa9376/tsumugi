@@ -1,6 +1,6 @@
 # Settings reference
 
-<!-- Written by `just references` from the code; edit the code, not this file. -->
+<!-- Written by `cargo xtask references` from the code; edit the code, not this file. -->
 
 Every setting `settings.toml` holds, table by table: its type, what it is
 when the file does not name it, and what it does
