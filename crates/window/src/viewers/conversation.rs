@@ -6,7 +6,7 @@ mod tools;
 use tsumugi_core::icons::Icon;
 use tsumugi_model::conversation::{Message, Role, Tool};
 
-use self::tools::{Change, Kind, Phase, Step};
+use self::tools::{Change, Kind, Phase, Question, Step};
 use super::{escape, render_post};
 
 pub fn conversation_update_script(id: &str, message: &str) -> String {
@@ -18,6 +18,7 @@ pub fn conversation_update_script(id: &str, message: &str) -> String {
 enum Part<'a> {
     Said(usize, &'a Message),
     Plan(usize, &'a Tool, Vec<(Step, String)>),
+    Asked(usize, &'a Tool, Vec<Question>),
     /// The thinking and the calls between two things said.
     Work(Vec<(usize, &'a Message)>),
 }
@@ -25,8 +26,14 @@ enum Part<'a> {
 fn parts(messages: &[Message]) -> Vec<Part<'_>> {
     let mut out: Vec<Part> = Vec::new();
     for (i, m) in messages.iter().enumerate() {
-        if let Some(steps) = m.tool.as_ref().and_then(tools::plan) {
-            out.push(Part::Plan(i, m.tool.as_ref().unwrap(), steps));
+        if let Some((tool, steps)) = m.tool.as_ref().and_then(|t| Some((t, tools::plan(t)?))) {
+            out.push(Part::Plan(i, tool, steps));
+        } else if let Some((tool, asked)) = m
+            .tool
+            .as_ref()
+            .and_then(|t| Some((t, tools::questions(t)?)))
+        {
+            out.push(Part::Asked(i, tool, asked));
         } else if m.tool.is_some() || m.thinking {
             match out.last_mut() {
                 Some(Part::Work(work)) => work.push((i, m)),
@@ -39,21 +46,60 @@ fn parts(messages: &[Message]) -> Vec<Part<'_>> {
     out
 }
 
-pub fn conversation_fragment(messages: &[Message]) -> String {
+/// The conversation as the page draws it. `working`: the session is still
+/// at its turn, whose last calls may still run and whose time is not yet
+/// known.
+pub fn conversation_fragment(messages: &[Message], working: bool) -> String {
     if messages.is_empty() {
         return "<p class=\"conversation-empty\">No conversation yet.</p>".into();
     }
     let parts = parts(messages);
     let last = parts.len().saturating_sub(1);
     let mut out = String::new();
+    // When the turn under way began and when it last said or did anything.
+    let mut turn: Option<(Option<u64>, Option<u64>)> = None;
     for (n, part) in parts.iter().enumerate() {
+        let live = n == last && working;
+        if let Part::Said(_, m) = part
+            && m.role == Role::User
+        {
+            out.push_str(&turn_end(turn.take()));
+            turn = Some((m.at_ms, None));
+        } else if let Some((_, end)) = &mut turn {
+            *end = part_at(messages, part).or(*end);
+        }
         match part {
             Part::Said(i, m) => out.push_str(&said(m, *i)),
             Part::Plan(i, tool, steps) => out.push_str(&plan(tool, steps, *i)),
-            Part::Work(work) => out.push_str(&run(work, n == last)),
+            Part::Asked(i, tool, asked) => out.push_str(&question(tool, asked, *i, live)),
+            Part::Work(work) => out.push_str(&run(work, live)),
         }
     }
+    if !working {
+        out.push_str(&turn_end(turn));
+    }
     out
+}
+
+/// When the latest of a part's messages was recorded.
+fn part_at(messages: &[Message], part: &Part) -> Option<u64> {
+    match part {
+        Part::Said(i, _) | Part::Plan(i, ..) | Part::Asked(i, ..) => messages[*i].at_ms,
+        Part::Work(work) => work.iter().filter_map(|(_, m)| m.at_ms).max(),
+    }
+}
+
+/// The line that ends a turn with how long it worked, when both its ends
+/// were recorded.
+fn turn_end(turn: Option<(Option<u64>, Option<u64>)>) -> String {
+    match turn {
+        Some((Some(start), Some(end))) if end > start => format!(
+            "<div class=\"conversation-turn-end\">{}<span>Worked for {}</span></div>",
+            icon(Icon::TimelineEvent),
+            tools::took(end - start)
+        ),
+        _ => String::new(),
+    }
 }
 
 /// `icon` as the page draws it, at the size of the text beside it.
@@ -278,6 +324,90 @@ fn diff(changes: &[Change]) -> String {
         })
         .collect();
     format!("<div class=\"conversation-diff\">{rows}</div>")
+}
+
+/// Questions the assistant asked, as a card of numbered options: while the
+/// session waits on them, a number pressed picks one there; once answered,
+/// the card keeps the answers.
+fn question(tool: &Tool, asked: &[Question], index: usize, live: bool) -> String {
+    let answers = tool
+        .output
+        .as_deref()
+        .map(tools::answers)
+        .unwrap_or_default();
+    let (state, foot) = match (&tool.output, tool.failed) {
+        (_, true) => ("dismissed", "Not answered".to_string()),
+        (Some(_), false) => ("answered", "Answered".to_string()),
+        (None, false) if live => {
+            let most = asked.first().map_or(0, |q| q.options.len()).min(9);
+            (
+                "waiting",
+                if most > 1 {
+                    format!("Press 1–{most} to answer, or answer in the console")
+                } else {
+                    "Answer in the console".to_string()
+                },
+            )
+        }
+        (None, false) => ("dismissed", "Not answered".to_string()),
+    };
+    let cards: String = asked
+        .iter()
+        .map(|q| {
+            let answer = answers
+                .iter()
+                .find(|(text, _)| *text == q.text)
+                .map(|(_, a)| a.as_str());
+            let picked = |label: &str| {
+                answer.is_some_and(|a| a == label || a.split(", ").any(|part| part == label))
+            };
+            let options: String = q
+                .options
+                .iter()
+                .enumerate()
+                .map(|(n, (label, about))| {
+                    let about = if about.is_empty() {
+                        String::new()
+                    } else {
+                        format!("<span class=\"conversation-option-about\">{}</span>", escape(about))
+                    };
+                    format!(
+                        "<li class=\"{}\"><span class=\"conversation-option-number\">{}</span>\
+                        <span class=\"conversation-option-words\"><span class=\"conversation-option-label\">{}</span>{about}</span>{}</li>",
+                        if picked(label) { "picked" } else { "" },
+                        n + 1,
+                        escape(label),
+                        if picked(label) { icon(Icon::Check) } else { String::new() },
+                    )
+                })
+                .collect();
+            // An answer that is none of the options was written by the user.
+            let own = answer
+                .filter(|a| !q.options.iter().any(|(l, _)| picked(l)) && !a.is_empty())
+                .map(|a| format!("<p class=\"conversation-question-own\">{}</p>", escape(a)))
+                .unwrap_or_default();
+            let header = if q.header.is_empty() {
+                String::new()
+            } else {
+                format!("<span class=\"conversation-question-header\">{}</span>", escape(&q.header))
+            };
+            format!(
+                "<div class=\"conversation-question-one\">{header}<p class=\"conversation-question-text\">{}</p><ol>{options}</ol>{own}</div>",
+                escape(&q.text)
+            )
+        })
+        .collect();
+    format!(
+        "<section class=\"conversation-question {state}\" data-message=\"{index}\">\
+        <header>{}<span>{}</span></header>{cards}<footer>{}</footer></section>",
+        icon(Icon::MessageQuestion),
+        if asked.len() == 1 {
+            "Question"
+        } else {
+            "Questions"
+        },
+        escape(&foot),
+    )
 }
 
 /// A plan the assistant wrote, as the checklist it is.

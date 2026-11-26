@@ -444,3 +444,76 @@ pub fn sentence(tools: &[&Tool]) -> String {
         .map(|c| c.to_uppercase().chain(chars).collect())
         .unwrap_or_default()
 }
+
+/// A question the assistant asked the user, with the options it offered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Question {
+    pub header: String,
+    pub text: String,
+    /// Each option's label and what it means.
+    pub options: Vec<(String, String)>,
+    pub multiple: bool,
+}
+
+/// The questions a call asked the user, when it asked them.
+pub fn questions(tool: &Tool) -> Option<Vec<Question>> {
+    if !tool.name.eq_ignore_ascii_case("AskUserQuestion") {
+        return None;
+    }
+    let input = parsed(tool)?;
+    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let asked: Vec<Question> = input
+        .get("questions")
+        .and_then(Value::as_array)?
+        .iter()
+        .map(|q| Question {
+            header: text(q, "header"),
+            text: text(q, "question"),
+            options: q
+                .get("options")
+                .and_then(Value::as_array)
+                .map(|o| {
+                    o.iter()
+                        .map(|o| (text(o, "label"), text(o, "description")))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            multiple: q
+                .get("multiSelect")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        })
+        .collect();
+    (!asked.is_empty()).then_some(asked)
+}
+
+/// The answers the user gave, each to its question, as Claude Code records
+/// them: `"question"="answer"`.
+pub fn answers(output: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut rest = output;
+    while let Some(start) = rest.find('"') {
+        let after = &rest[start + 1..];
+        let Some(end) = after.find("\"=\"") else {
+            break;
+        };
+        let question = &after[..end];
+        let tail = &after[end + 3..];
+        let Some(close) = tail.find('"') else {
+            break;
+        };
+        out.push((question.to_string(), tail[..close].to_string()));
+        rest = &tail[close + 1..];
+    }
+    out
+}
+
+/// How long a turn took, as a person says it.
+pub fn took(ms: u64) -> String {
+    let s = ms / 1000;
+    match s {
+        0..60 => format!("{s}s"),
+        60..3600 => format!("{}m {}s", s / 60, s % 60),
+        _ => format!("{}h {}m", s / 3600, s % 3600 / 60),
+    }
+}

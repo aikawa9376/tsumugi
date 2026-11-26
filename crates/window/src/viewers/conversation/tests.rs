@@ -1,5 +1,10 @@
 use super::*;
 
+/// The conversation of a session whose turn ended.
+fn drawn(messages: &[Message]) -> String {
+    conversation_fragment(messages, false)
+}
+
 fn said(role: Role, text: &str, thinking: bool) -> Message {
     Message {
         role,
@@ -40,7 +45,7 @@ fn tools_summary(input: &str) -> String {
 
 #[test]
 fn every_reply_addressed_to_the_user_stays_visible_and_the_user_s_words_are_bubbles() {
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         said(Role::User, "Fix it", false),
         said(Role::Assistant, "Checking", false),
         said(Role::Assistant, "Done **now**", false),
@@ -56,7 +61,7 @@ fn every_reply_addressed_to_the_user_stays_visible_and_the_user_s_words_are_bubb
 
 #[test]
 fn a_message_tells_when_it_was_said_for_the_page_to_put_in_the_reader_s_time() {
-    let html = conversation_fragment(&[Message {
+    let html = drawn(&[Message {
         at_ms: Some(1_700_000_000_000),
         ..said(Role::User, "Fix it", false)
     }]);
@@ -65,7 +70,7 @@ fn a_message_tells_when_it_was_said_for_the_page_to_put_in_the_reader_s_time() {
 
 #[test]
 fn a_lone_call_is_one_line_saying_what_it_did_to_what() {
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         said(Role::User, "Look", false),
         called(
             "Read",
@@ -83,7 +88,7 @@ fn a_lone_call_is_one_line_saying_what_it_did_to_what() {
 
 #[test]
 fn the_work_between_replies_folds_into_one_line_telling_what_it_did() {
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         said(Role::User, "Fix it", false),
         said(Role::Assistant, "Let me think", true),
         called("Read", "{\"file_path\":\"/a.rs\"}", Some("x"), false),
@@ -107,19 +112,23 @@ fn the_latest_run_says_what_it_is_doing_while_a_call_runs_and_an_old_one_does_no
         called("Read", "{\"file_path\":\"/a.rs\"}", Some("x"), false),
         called("Bash", "{\"command\":\"cargo test\"}", None, false),
     ];
-    let html = conversation_fragment(&running);
+    let html = conversation_fragment(&running, true);
     assert!(html.contains("conversation-run running"));
+    assert!(
+        !drawn(&running).contains("running"),
+        "a turn ended runs nothing"
+    );
     assert!(html.contains("Running cargo test"));
     let mut settled = running.to_vec();
     settled.push(said(Role::Assistant, "Interrupted", false));
-    let html = conversation_fragment(&settled);
+    let html = drawn(&settled);
     assert!(!html.contains("running"));
     assert!(html.contains("Read 1 file and ran 1 command"));
 }
 
 #[test]
 fn a_failed_call_is_marked_and_counted_on_its_run() {
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         called("Bash", "{\"command\":\"false\"}", Some("exit 1"), true),
         called("Grep", "{\"pattern\":\"x\"}", Some(""), false),
         said(Role::Assistant, "Hm", false),
@@ -139,7 +148,7 @@ fn an_edit_opens_to_its_diff_and_counts_its_lines() {
         "new_string": "fn a() {\n    2\n    3\n}",
     })
     .to_string();
-    let html = conversation_fragment(&[called("Edit", &input, Some("ok"), false)]);
+    let html = drawn(&[called("Edit", &input, Some("ok"), false)]);
     assert!(html.contains("<span class=\"added\">+2</span><span class=\"removed\">−1</span>"));
     assert!(
         html.contains(
@@ -160,7 +169,7 @@ fn an_edit_opens_to_its_diff_and_counts_its_lines() {
 #[test]
 fn a_codex_patch_is_read_as_a_diff_of_the_file_it_names() {
     let patch = "*** Begin Patch\n*** Update File: src/x.rs\n@@\n-old\n+new\n*** End Patch";
-    let html = conversation_fragment(&[called("apply_patch", patch, Some("Done"), false)]);
+    let html = drawn(&[called("apply_patch", patch, Some("Done"), false)]);
     assert!(html.contains(">x.rs<"));
     assert!(html.contains("<span class=\"added\">+1</span><span class=\"removed\">−1</span>"));
     assert!(
@@ -170,7 +179,7 @@ fn a_codex_patch_is_read_as_a_diff_of_the_file_it_names() {
 
 #[test]
 fn a_command_opens_to_the_whole_command_and_what_it_printed() {
-    let html = conversation_fragment(&[called(
+    let html = drawn(&[called(
         "Bash",
         "{\"command\":\"cargo test \\\\\\n  -p core\"}",
         Some("ok"),
@@ -190,7 +199,7 @@ fn a_plan_written_is_a_checklist_between_the_runs() {
         {"content": "Test <it>", "status": "pending"},
     ]})
     .to_string();
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         called("Read", "{\"file_path\":\"/a\"}", Some(""), false),
         called("TodoWrite", &input, Some("ok"), false),
         called("Read", "{\"file_path\":\"/b\"}", Some(""), false),
@@ -206,7 +215,7 @@ fn a_plan_written_is_a_checklist_between_the_runs() {
 
 #[test]
 fn what_a_call_was_given_and_returned_is_escaped_and_starts_folded() {
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         said(Role::Assistant, "Running", false),
         called(
             "Bash",
@@ -226,16 +235,15 @@ fn what_a_call_was_given_and_returned_is_escaped_and_starts_folded() {
 
 #[test]
 fn copy_preserves_markdown_and_cannot_escape_the_attribute() {
-    let html =
-        conversation_fragment(&[said(Role::User, "\" onmouseover=\"alert(1)\n`code`", false)]);
+    let html = drawn(&[said(Role::User, "\" onmouseover=\"alert(1)\n`code`", false)]);
     assert!(html.contains("data-conversation-copy=\"&quot; onmouseover=&quot;alert(1)\n`code`\""));
     assert!(!html.contains(" onmouseover=\"alert"));
-    assert!(conversation_fragment(&[]).contains("No conversation yet"));
+    assert!(drawn(&[]).contains("No conversation yet"));
 }
 
 #[test]
 fn a_line_that_says_all_its_call_was_given_opens_to_what_it_returned_alone() {
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         called("Bash", "{\"command\":\"cargo test\"}", Some("ok"), false),
         called("Read", "{\"file_path\":\"/a.rs\"}", Some("fn a"), false),
         said(Role::Assistant, "Done", false),
@@ -250,7 +258,7 @@ fn a_run_totals_the_lines_its_edits_changed_and_marks_a_failure() {
     let edit = |old: &str, new: &str| {
         serde_json::json!({"file_path": "/a.rs", "old_string": old, "new_string": new}).to_string()
     };
-    let html = conversation_fragment(&[
+    let html = drawn(&[
         called("Edit", &edit("a", "b\nc"), Some("ok"), false),
         called("Edit", &edit("d", "e"), Some("ok"), false),
         called("Bash", "{\"command\":\"false\"}", Some("1"), true),
@@ -259,4 +267,85 @@ fn a_run_totals_the_lines_its_edits_changed_and_marks_a_failure() {
     let heading = &html[..html.find("conversation-run-lines").unwrap()];
     assert!(heading.contains("<span class=\"added\">+3</span><span class=\"removed\">−2</span>"));
     assert!(heading.contains(&icon(Icon::AlertTriangle)));
+}
+
+fn at(ms: u64, m: Message) -> Message {
+    Message {
+        at_ms: Some(ms),
+        ..m
+    }
+}
+
+#[test]
+fn a_turn_that_ended_tells_how_long_it_worked() {
+    let turns = [
+        at(1_000, said(Role::User, "Fix it", false)),
+        at(
+            5_000,
+            called("Read", "{\"file_path\":\"/a\"}", Some(""), false),
+        ),
+        at(134_000, said(Role::Assistant, "Fixed", false)),
+        at(200_000, said(Role::User, "Again", false)),
+        at(209_000, said(Role::Assistant, "Done", false)),
+    ];
+    let html = drawn(&turns);
+    assert!(html.contains("Worked for 2m 13s"));
+    assert!(html.contains("Worked for 9s"));
+    assert!(html.find("Worked for 2m 13s").unwrap() < html.find("Again").unwrap());
+    let html = conversation_fragment(&turns, true);
+    assert!(html.contains("Worked for 2m 13s"));
+    assert!(
+        !html.contains("Worked for 9s"),
+        "the turn under way has no time yet"
+    );
+    let unrecorded = [
+        said(Role::User, "Fix it", false),
+        said(Role::Assistant, "Fixed", false),
+    ];
+    assert!(!drawn(&unrecorded).contains("Worked for"));
+}
+
+fn asked(output: Option<&str>, failed: bool) -> Message {
+    let input = serde_json::json!({"questions": [{
+        "header": "Approach",
+        "question": "Which way?",
+        "multiSelect": false,
+        "options": [
+            {"label": "Fast <one>", "description": "Quick but rough"},
+            {"label": "Careful", "description": "Slow and sure"},
+        ],
+    }]})
+    .to_string();
+    called("AskUserQuestion", &input, output, failed)
+}
+
+#[test]
+fn a_question_is_a_card_of_numbered_options_that_waits_for_a_number() {
+    let html = conversation_fragment(&[said(Role::User, "Go", false), asked(None, false)], true);
+    assert!(html.contains("conversation-question waiting"));
+    assert!(html.contains("Which way?"));
+    assert!(html.contains("<span class=\"conversation-option-number\">2</span>"));
+    assert!(html.contains("Fast &lt;one&gt;"));
+    assert!(html.contains("Slow and sure"));
+    assert!(html.contains("Press 1–2 to answer"));
+    assert!(!html.contains("conversation-tool"));
+}
+
+#[test]
+fn an_answered_question_keeps_the_answer_and_one_never_answered_says_so() {
+    let answered = drawn(&[asked(
+        Some("User has answered your questions: \"Which way?\"=\"Careful\". You can now continue."),
+        false,
+    )]);
+    assert!(answered.contains("conversation-question answered"));
+    assert!(
+        answered
+            .contains("<li class=\"picked\"><span class=\"conversation-option-number\">2</span>")
+    );
+    assert!(!answered.contains("Press 1"));
+    let own = drawn(&[asked(Some("\"Which way?\"=\"Neither\""), false)]);
+    assert!(own.contains("<p class=\"conversation-question-own\">Neither</p>"));
+    let dismissed = drawn(&[asked(Some("rejected"), true)]);
+    assert!(dismissed.contains("conversation-question dismissed"));
+    assert!(drawn(&[asked(None, false)]).contains("Not answered"));
 }

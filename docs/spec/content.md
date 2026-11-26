@@ -85,15 +85,19 @@ calls that failed; while the latest of them runs, the line tells what it is
 doing. Opened, it shows a line for each call, saying what it did to which
 file or command; a call opens to the edit it made as a diff, the command it
 ran, and what it returned. A plan the assistant writes shows as a checklist.
-A message can be copied as it was written, and tells when it was said. A
+A question the assistant asks shows as a card of numbered options, which
+keeps the answer given once it is answered. A message can be copied as it was
+written, and tells when it was said; a turn that ended tells how long it
+worked, when the agent recorded when it began and ended. A
 Codex session whose terminal title does not name its conversation is
 matched to the one it began in its directory, when that is unambiguous.
 
 Reading keys move through the conversation rather than reaching the hidden
 console. The keys that write in the prompt from the console write in it from
 the conversation too, and what is typed or pasted there is written in the
-prompt. Choices and approvals in the agent's interface are answered by
-switching back to the console.
+prompt. While the session waits on a numbered choice, such as a question
+or an approval, a number pressed picks that option; anything else in the
+agent's interface is answered by switching back to the console.
 
 ## Opening
 

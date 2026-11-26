@@ -230,3 +230,36 @@ fn text_typed_on_a_conversation_is_written_in_the_prompt_as_on_its_console() {
         }));
     }
 }
+
+#[test]
+fn a_number_pressed_on_a_conversation_answers_the_choice_its_session_waits_on() {
+    let conversation = |state: tsumugi_model::State| {
+        let mut run = Scenario::new()
+            .event(snapshot().listed(listed().session(session("a").state(state))))
+            .send(Msg::ShowSession(here(), "a".into()))
+            .send(Msg::SessionConversation {
+                tab: Tab::Session(here(), "a".into()),
+                shown: true,
+            })
+            .state()
+            .clone();
+        run.content.focus = Area::Console;
+        run
+    };
+    let mut waiting = conversation(tsumugi_model::State::Waiting(Wait::Input));
+    assert_eq!(
+        press(&mut waiting, Key::new("2"), probe()),
+        [Effect::PaneKey(Key::new("2"))]
+    );
+    assert!(
+        !press(&mut waiting, Key::new("j"), probe())
+            .iter()
+            .any(|e| matches!(e, Effect::PaneKey(_)))
+    );
+    let mut working = conversation(tsumugi_model::State::Working);
+    assert!(
+        !press(&mut working, Key::new("2"), probe())
+            .iter()
+            .any(|e| matches!(e, Effect::PaneKey(_)))
+    );
+}

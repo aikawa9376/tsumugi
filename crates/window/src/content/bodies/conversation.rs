@@ -46,16 +46,38 @@ pub(crate) fn ConversationScreen(
         let tab = tab.clone();
         move || tsumugi_core::content::conversation_read(&app.hosts.read(), &tab).cloned()
     });
+    // The session is still at its turn: its last calls may run and its
+    // time is not yet known.
+    let working = use_memo({
+        let tab = tab.clone();
+        move || match &tab {
+            Tab::Session(environment, id) => {
+                app.hosts
+                    .read()
+                    .session(environment, id)
+                    .is_some_and(|(_, s)| {
+                        matches!(
+                            s.state,
+                            tsumugi_model::State::Working
+                                | tsumugi_model::State::Waiting(_)
+                                | tsumugi_model::State::Starting
+                        )
+                    })
+            }
+            _ => false,
+        }
+    });
     use_effect({
         let (media_id, nonce) = (media_id.clone(), nonce.clone());
         move || {
             let read = read();
+            let working = working();
             let conversation = read.as_ref().map(|r| r.id.as_str()).unwrap_or_default();
             let messages = read
                 .as_ref()
                 .map(|r| r.messages.as_slice())
                 .unwrap_or_default();
-            let fragment = viewers::conversation_fragment(messages);
+            let fragment = viewers::conversation_fragment(messages, working);
             let libraries = Libraries::for_fragment(&fragment);
             if frame_doc.peek().is_none() {
                 frame_doc.set(Some(viewers::conversation_document(

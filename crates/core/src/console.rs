@@ -256,6 +256,17 @@ pub fn text_goes(state: &ViewState) -> Typed {
     )
 }
 
+/// A number pressed alone, which picks one of a session's numbered choices.
+fn is_choice(key: &Key) -> bool {
+    !key.ctrl
+        && !key.alt
+        && !key.meta
+        && matches!(
+            key.key.as_str(),
+            "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+        )
+}
+
 /// A key or text goes to the session shown as it is: it may type into its
 /// input.
 fn typed(state: &mut ViewState) {
@@ -289,6 +300,17 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
         return effects;
     }
     let area = state.content.focus;
+    // A conversation shows the choice its session waits on as numbered
+    // options: the number picks one in the session hidden behind it.
+    if state.content.reading_conversation()
+        && area == Area::Console
+        && state.console.pending.is_empty()
+        && waits(state)
+        && is_choice(&key)
+    {
+        typed(state);
+        return vec![Effect::PaneKey(key)];
+    }
     let pane = probe.pane && area == Area::Console;
     // Any key but one that repeats ends the repeating.
     let repeat = state.console.repeat.take();
