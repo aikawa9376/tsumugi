@@ -391,7 +391,10 @@ async fn follow(ui: Ui, mut shown_size: Signal<Option<(Tab, Size)>>) {
                const r = c.getBoundingClientRect(); const s = getComputedStyle(c);
                const l = parseFloat(s.paddingLeft), t = parseFloat(s.paddingTop);
                const rr = parseFloat(s.paddingRight), b = parseFloat(s.paddingBottom);
-               const rect = [r.x+l,r.y+t,r.width-l-rr,r.height-t-b];
+               // The prompt card floats over the screen's foot; the terminal
+               // stops above it, as the built-in display's rows do.
+               const card = parseFloat(getComputedStyle(c.parentElement).getPropertyValue('--composer')) || 0;
+               const rect = [r.x+l,r.y+t,r.width-l-rr,r.height-t-b-card];
                const banner = c.parentElement.querySelector(':scope > .direct-banner');
                const cover = banner ? banner.getBoundingClientRect() : null;
                dioxus.send([rect, cover ? [cover.x-rect[0],cover.y-rect[1],cover.width,cover.height] : null]);
