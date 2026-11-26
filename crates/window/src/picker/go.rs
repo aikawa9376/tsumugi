@@ -31,10 +31,12 @@ pub(super) fn Go(picker: GoPicker) -> Element {
     let hosts = app.hosts.read();
     let tree = app.tree.read();
     let work = hosts.work(&picker.environment);
-    let adding = picker.purpose == Purpose::Add;
-    let title = match adding {
-        true => "Add a directory to the tree",
-        false => "Search sessions, directories and more",
+    let directories_only = picker.purpose.directories_only();
+    let title = match picker.purpose {
+        Purpose::Go => "Search sessions, directories and more",
+        Purpose::Add => "Add a directory to the tree",
+        Purpose::Shell => "Open a shell in a directory",
+        Purpose::Neovim => "Open Neovim in a directory",
     };
     rsx! {
         Dialog { kind: "picker-dialog", onclose: move |_| app.dispatch(Msg::PickerClose), title: "{title}",
@@ -47,7 +49,7 @@ pub(super) fn Go(picker: GoPicker) -> Element {
                         div { class: "filter-field",
                             QueryField { query: picker.list.query.clone() }
                         }
-                        if !adding && picker.scopes.len() > 1 {
+                        if !directories_only && picker.scopes.len() > 1 {
                             div { class: "picker-scopes",
                                 for (i, scope) in picker.scopes.iter().enumerate() {
                                     button {

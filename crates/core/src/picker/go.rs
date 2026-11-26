@@ -29,6 +29,18 @@ pub enum Purpose {
     Go,
     /// Add the directory to the tree; only directories are offered.
     Add,
+    /// Open a shell in the directory; only directories are offered.
+    Shell,
+    /// Open Neovim in the directory; only directories are offered.
+    Neovim,
+}
+
+impl Purpose {
+    /// Whether the picker offers only the directories of the environment it
+    /// was opened in: it is opened to do something in one of them.
+    pub fn directories_only(self) -> bool {
+        self != Purpose::Go
+    }
 }
 
 /// What the picker holds while it is open.
@@ -75,12 +87,12 @@ impl GoPicker {
     }
 
     /// What the query asks of the picker: the scope it is in, the sources
-    /// searched and what is searched for. Adding to the tree offers only
-    /// directories, whatever the scopes say.
+    /// searched and what is searched for. A picker opened to do something in
+    /// a directory offers only directories, whatever the scopes say.
     pub fn aim(&self) -> Aim<'_> {
-        match self.purpose {
-            Purpose::Add => scopes::directories_only(&self.list.query),
-            Purpose::Go => scopes::resolve(&self.scopes, self.scope, &self.list.query),
+        match self.purpose.directories_only() {
+            true => scopes::directories_only(&self.list.query),
+            false => scopes::resolve(&self.scopes, self.scope, &self.list.query),
         }
     }
 
@@ -93,7 +105,7 @@ impl GoPicker {
     /// Go to the scope `at`; the cursor goes back to the first row, and what
     /// is typed stays, less the prefix that would put the picker back.
     pub fn set_scope(&mut self, at: usize) {
-        if self.purpose == Purpose::Add || at >= self.scopes.len() {
+        if self.purpose.directories_only() || at >= self.scopes.len() {
             return;
         }
         self.list.query = self.aim().query.to_string();

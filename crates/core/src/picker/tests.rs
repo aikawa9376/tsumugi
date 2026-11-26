@@ -577,6 +577,42 @@ fn picking_from_there() -> Scenario {
 }
 
 #[test]
+fn adding_to_the_tree_offers_only_the_directories_of_the_environment_it_was_opened_in() {
+    let both = ["/w/repo"];
+    let run = picking_from_there()
+        .send(Msg::PickerClose)
+        .send(Msg::PickerAddOpen)
+        .tell(offers(&both, &both, &[]))
+        .tell_from(there(), offers(&both, &both, &[]));
+    let rows = {
+        let view = &run.state().picker;
+        go_rows(
+            picker(&run),
+            &view.home,
+            &run.state().hosts,
+            &run.state().tree,
+        )
+    };
+    assert!(!rows.is_empty());
+    for row in &rows {
+        assert!(
+            matches!(row, Choice::Directory(c) if c.environment == there()),
+            "{row:?}"
+        );
+    }
+    let run = run.send(key("Enter"));
+    assert!(
+        run.last_effects().iter().any(|e| matches!(
+            e,
+            Effect::Host { environment, request: Request::KeepWorkspace { .. } }
+                if *environment == there()
+        )),
+        "{:?}",
+        run.last_effects()
+    );
+}
+
+#[test]
 fn the_directory_tree_browses_the_environment_of_the_tab_shown() {
     let run = picking_from_there();
     assert_eq!(picker(&run).environment, there());

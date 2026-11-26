@@ -260,9 +260,6 @@ pub(crate) fn act(state: &mut ViewState, action: Action) -> Vec<Effect> {
     }
 }
 
-/// Where something new starts: the selected row's worktree, from a side
-/// panel, or the home of the environment whose heading is selected, or else
-/// the one in the middle.
 /// A new session on the pull request or issue numbered `number` of the
 /// repository at `root`, its first prompt naming it: an issue's in the
 /// repository's checkout, a pull request's in a worktree made for it that
@@ -338,6 +335,9 @@ pub(crate) fn browser_worktree(
     .unwrap_or_default()
 }
 
+/// Where something new starts: the selected row's worktree, from a side
+/// panel, or else the one in the middle; nowhere from an environment's
+/// heading.
 fn place_here(state: &ViewState, on_list: bool) -> Option<Place> {
     if !on_list
         && let Some(Tab::Browser {
@@ -350,9 +350,8 @@ fn place_here(state: &ViewState, on_list: bool) -> Option<Place> {
     }
     let selected = crate::sidebar::selected(state);
     match selected.as_ref().filter(|_| on_list) {
-        Some(Item::Environment(environment)) => {
-            crate::picker::home_in(state, environment).map(|home| Place::at(environment, home))
-        }
+        // Where to start in an environment is picked there first.
+        Some(Item::Environment(_)) => None,
         selected => selected
             .and_then(|c| nav::place_of(tree::listed(state.hosts.work(c.environment())), c))
             .or_else(|| state.content.place.clone()),

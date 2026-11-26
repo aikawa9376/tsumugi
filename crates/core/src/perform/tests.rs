@@ -680,27 +680,47 @@ fn terminal_started_in(run: &Scenario) -> Option<(EnvironmentId, std::path::Path
 }
 
 #[test]
-fn a_shell_from_an_environment_s_heading_starts_in_its_host_s_home() {
+fn a_shell_or_neovim_from_an_environment_s_heading_picks_a_directory_of_that_environment() {
+    use crate::picker::{Picking, Purpose};
     use crate::testing::there;
+    use tsumugi_model::TerminalProgram;
 
-    let run = on_heading(there(), true).send(perform(Action::ShellOpen, None, Probe::default()));
-    assert_eq!(
-        terminal_started_in(&run),
-        Some((there(), "/home/there".into()))
-    );
-    let run = on_heading(here(), false).send(perform(Action::ShellOpen, None, Probe::default()));
-    assert_eq!(
-        terminal_started_in(&run),
-        Some((here(), "/home/here".into()))
-    );
-}
-
-#[test]
-fn a_shell_from_the_heading_of_a_work_machine_that_has_not_said_its_home_starts_nowhere_else() {
-    use crate::testing::there;
-
-    let run = on_heading(there(), false).send(perform(Action::ShellOpen, None, Probe::default()));
-    assert_eq!(terminal_started_in(&run), None);
+    for (action, purpose, runs) in [
+        (Action::ShellOpen, Purpose::Shell, TerminalProgram::Shell),
+        (Action::NeovimOpen, Purpose::Neovim, TerminalProgram::Neovim),
+    ] {
+        for heading in [here(), there()] {
+            let run = on_heading(heading.clone(), true).send(perform(
+                action.clone(),
+                None,
+                Probe::default(),
+            ));
+            assert_eq!(terminal_started_in(&run), None, "{action:?} {heading:?}");
+            assert!(
+                matches!(
+                    &run.state().picker.open,
+                    Some(Picking::Go(p))
+                        if p.environment == heading && p.purpose == purpose
+                ),
+                "{action:?} {heading:?}: {:?}",
+                run.state().picker.open
+            );
+            let run = run.send(Msg::PickerDir("/home/there/src".into()));
+            assert_eq!(run.state().picker.open, None, "{action:?} {heading:?}");
+            assert_eq!(
+                terminal_started_in(&run),
+                Some((heading.clone(), "/home/there/src".into())),
+                "{action:?} {heading:?}"
+            );
+            assert!(
+                run.last_effects()
+                    .iter()
+                    .any(|e| matches!(e, Effect::StartTerminal(ask) if ask.runs == runs)),
+                "{:?}",
+                run.last_effects()
+            );
+        }
+    }
 }
 
 #[test]

@@ -177,8 +177,20 @@ pub fn go_rows(picker: &GoPicker, home: &Path, hosts: &Hosts, tree: &TreeView) -
     let aim = picker.aim();
     let query = aim.query;
     let directories = aim.sources.contains(&PickerSource::Directories);
+    // A picker opened to do something in a directory does it in the
+    // environment it was opened in, so it offers none of another: a local
+    // environment beside the window's own lists the same paths, and the
+    // window's own would come first.
+    let offering = |environment: &EnvironmentId| {
+        !picker.purpose.directories_only() || *environment == picker.environment
+    };
+    let hosts_offering = || {
+        hosts
+            .each()
+            .filter(|(environment, _)| offering(environment))
+    };
     if directories {
-        let github = hosts.each().filter_map(|(environment, host)| {
+        let github = hosts_offering().filter_map(|(environment, host)| {
             Some(GitHubOffers {
                 environment,
                 offers: picker.offered.get(environment)?,
@@ -211,7 +223,7 @@ pub fn go_rows(picker: &GoPicker, home: &Path, hosts: &Hosts, tree: &TreeView) -
             }
             PickerSource::Directories => {
                 let mut found = Vec::new();
-                for (environment, _) in hosts.each() {
+                for (environment, _) in hosts_offering() {
                     let offered = picker.offered.get(environment).cloned().unwrap_or_default();
                     let running = picker
                         .running
@@ -226,7 +238,7 @@ pub fn go_rows(picker: &GoPicker, home: &Path, hosts: &Hosts, tree: &TreeView) -
                     ));
                 }
                 rows.extend(directory_rows(&found, query, home, cap));
-                let clones = hosts.each().filter_map(|(environment, _)| {
+                let clones = hosts_offering().filter_map(|(environment, _)| {
                     clone_offer(environment, picker.offered.get(environment)?, query)
                 });
                 let help =
@@ -248,9 +260,9 @@ pub fn go_rows(picker: &GoPicker, home: &Path, hosts: &Hosts, tree: &TreeView) -
             }
         }
     }
-    match picker.purpose {
-        Purpose::Go => rows,
-        Purpose::Add => rows
+    match picker.purpose.directories_only() {
+        false => rows,
+        true => rows
             .into_iter()
             .filter(|c| !matches!(c, Choice::Scratch | Choice::Session(_)))
             .collect(),
@@ -527,7 +539,7 @@ pub(crate) fn choose(state: &mut ViewState, at: usize) -> Vec<Effect> {
         Some(Choice::Directory(c)) => start_in_environment(state, c.environment, c.path),
         Some(Choice::Clone(offer)) => {
             let then = match &state.picker.open {
-                Some(Picking::Go(p)) if p.purpose == Purpose::Add => Then::Keep,
+                Some(Picking::Go(p)) => Then::for_purpose(p.purpose),
                 _ => Then::Start,
             };
             clone(state, offer, then)
@@ -708,14 +720,6 @@ fn home_of(state: &ViewState, environment: &EnvironmentId) -> PathBuf {
     said_home(state, environment).unwrap_or_else(|| state.picker.home.clone())
 }
 
-/// The home directory of `environment`'s host as it says, or the window's
-/// own for the window's own environment; none for another environment
-/// whose host has not said, whose home may be on another machine.
-pub(crate) fn home_in(state: &ViewState, environment: &EnvironmentId) -> Option<PathBuf> {
-    said_home(state, environment)
-        .or_else(|| (*environment == state.hosts.environment).then(|| state.picker.home.clone()))
-}
-
 fn said_home(state: &ViewState, environment: &EnvironmentId) -> Option<PathBuf> {
     state
         .hosts
@@ -734,9 +738,10 @@ fn start_in_environment(
     dir: PathBuf,
 ) -> Vec<Effect> {
     if let Some(Picking::Go(p)) = &state.picker.open
-        && p.purpose == Purpose::Add
+        && p.purpose != Purpose::Go
     {
-        return then_in(state, Then::Keep, environment, dir);
+        let then = Then::for_purpose(p.purpose);
+        return then_in(state, then, environment, dir);
     }
     close(&mut state.picker);
     content::draft(&mut state.content, environment, dir, true)
@@ -754,6 +759,16 @@ pub enum Then {
 }
 
 impl Then {
+    /// What choosing a directory does in a picker opened for `purpose`.
+    fn for_purpose(purpose: Purpose) -> Self {
+        match purpose {
+            Purpose::Go => Then::Start,
+            Purpose::Add => Then::Keep,
+            Purpose::Shell => Then::Shell,
+            Purpose::Neovim => Then::Neovim,
+        }
+    }
+
     /// Bound as `Mod+s` and `Mod+e` open a shell and Neovim elsewhere.
     fn of(key: &Key) -> Option<Self> {
         if !key.ctrl || key.alt || key.meta || key.shift {

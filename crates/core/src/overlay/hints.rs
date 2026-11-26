@@ -84,7 +84,12 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
     let hints: Vec<Option<Hint>> = match open {
         Picking::Go(p) => {
             let adding = p.purpose == Purpose::Add;
-            let choose = if adding { "add" } else { "choose" };
+            let choose = match p.purpose {
+                Purpose::Go => "choose",
+                Purpose::Add => "add",
+                Purpose::Shell => "shell",
+                Purpose::Neovim => "Neovim",
+            };
             let mut there = own(&[("Ctrl+s", "shell"), ("Ctrl+e", "Neovim")]);
             if !adding {
                 there.push(Hint::new("Ctrl+t", "add to tree"));
@@ -98,7 +103,7 @@ pub fn picker(keymap: &Keymap, open: &Picking) -> Vec<Hint> {
                 .into_iter()
                 .chain(there)
                 .chain(
-                    (!adding)
+                    (!p.purpose.directories_only())
                         .then(|| Hint::new("Ctrl+g", "next scope"))
                         .map(Some),
                 )

@@ -472,8 +472,8 @@ sessions waiting on you are gathered from every environment, and going round
 the sessions reaches each of them. A session, a shell or a Neovim
 started from a row, or beside a tab, starts in the environment of that row or
 tab. From a heading, a new session opens the picker on that environment, and a
-shell or a Neovim starts in its host's home directory, once a host on a work
-machine has said where that is. The `+` on a heading offers what starts
+shell or a Neovim opens it on that environment's directories alone, to start
+in the one chosen. The `+` on a heading offers what starts
 work in its environment: a new session, a shell, a Neovim, and Add to Tree
 for any directory. A heading's menu also opens the environment's
 settings, renames it in place, tries its work machine again at once while the

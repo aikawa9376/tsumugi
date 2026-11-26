@@ -670,10 +670,16 @@ pub(crate) fn perform(
             let delay = state.details.shown.settings.capture_delay();
             crate::capture::start(state, delay)
         }
-        // An environment holds no directory to start in: where the session
-        // works is picked in that environment.
+        // An environment holds no directory to start in: where the session,
+        // the shell or the Neovim works is picked in that environment.
         Action::SessionNew if on_list && matches!(cur, Some(Item::Environment(_))) => {
             step(state, Msg::PickerOpen)
+        }
+        Action::ShellOpen if on_list && matches!(cur, Some(Item::Environment(_))) => {
+            crate::picker::open(state, crate::picker::Purpose::Shell)
+        }
+        Action::NeovimOpen if on_list && matches!(cur, Some(Item::Environment(_))) => {
+            crate::picker::open(state, crate::picker::Purpose::Neovim)
         }
         Action::SessionScratch => {
             let mut effects = step(state, Msg::PickerClose);
