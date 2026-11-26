@@ -48,6 +48,9 @@ pub enum Context {
     GitHub,
     /// A check's log in the focused window, before the viewer's bindings.
     Check,
+    /// A session's conversation in the focused window, before the viewer's
+    /// bindings.
+    Conversation,
     /// The agent board in the focused window.
     Board,
     /// The lightbox over the window, while it is open.
@@ -68,7 +71,7 @@ pub enum Context {
 }
 
 impl Context {
-    pub const ALL: [Context; 22] = [
+    pub const ALL: [Context; 23] = [
         Context::Global,
         Context::Tree,
         Context::Agents,
@@ -80,6 +83,7 @@ impl Context {
         Context::Viewer,
         Context::GitHub,
         Context::Check,
+        Context::Conversation,
         Context::Board,
         Context::Lightbox,
         Context::Floating,
@@ -105,6 +109,7 @@ impl Context {
             Context::Viewer => "viewer",
             Context::GitHub => "github",
             Context::Check => "check",
+            Context::Conversation => "conversation",
             Context::Board => "board",
             Context::Lightbox => "lightbox",
             Context::Floating => "floating",
@@ -132,6 +137,7 @@ impl Context {
             Context::Viewer => "Viewer",
             Context::GitHub => "Pull request or issue",
             Context::Check => "Check log",
+            Context::Conversation => "Conversation",
             Context::Board => "Agent board",
             Context::Lightbox => "Lightbox",
             Context::Floating => "Floating terminal",
@@ -163,6 +169,9 @@ impl Context {
             }
             Context::Check => {
                 "Before the viewer's bindings while the log of a pull request's check is shown."
+            }
+            Context::Conversation => {
+                "Before the viewer's bindings while a session's conversation is shown."
             }
             Context::Board => "While the agent board is shown in the focused window.",
             Context::Lightbox => {

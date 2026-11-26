@@ -490,6 +490,37 @@ mod sending {
     }
 
     #[test]
+    fn a_prompt_written_below_a_conversation_goes_to_its_session() {
+        let session = session_tab("a");
+        let taken = written(session.clone(), "fix it");
+        let shown = composing(false, false)
+            .event(listed(State::Idle))
+            .send(show(session.clone()))
+            .send(Msg::SessionConversation {
+                tab: session.clone(),
+                shown: true,
+            })
+            .send(Msg::Focus(Area::Prompt))
+            .send(Msg::Perform {
+                action: crate::actions::Action::PromptSend,
+                key: None,
+                probe: Box::new(crate::console::Probe {
+                    pane: true,
+                    ..Default::default()
+                }),
+            });
+        assert_eq!(shown.last_effects(), [Effect::TakePrompt]);
+        let run = shown.send(Msg::PromptTaken(Box::new(taken.clone())));
+        assert!(
+            sends(&run)
+                .iter()
+                .any(|e| matches!(e, Effect::SendPrompt(_))),
+            "{:?}",
+            run.last_effects()
+        );
+    }
+
+    #[test]
     fn a_prompt_the_host_does_not_compose_in_time_is_put_back_with_a_word_why() {
         let session = session_tab("a");
         let taken = written(session.clone(), "fix it");

@@ -164,6 +164,7 @@ takes the keys away, so they do nothing there.
 | `viewer` | a viewer in the focused window |
 | `github` | a pull request or an issue in the focused window, before `viewer` |
 | `check` | a check's log in the focused window, before `viewer` |
+| `conversation` | a session's conversation in the focused window, before `viewer` |
 | `floating` | the floating terminal while it has the keys, before `global`; every other key goes to its shell |
 | `overlay` | what is drawn over the window: a picker, a menu, a question, the keys help, the sheet adding an environment |
 | `confirm` | a question to answer, before `overlay` |

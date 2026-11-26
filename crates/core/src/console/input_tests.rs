@@ -170,3 +170,63 @@ fn input_target_does_not_call_a_live_agent_console_a_visible_neovim() {
     };
     assert_eq!(input_target(&state, &probe), InputTarget::Gui);
 }
+
+#[test]
+fn a_conversation_s_keys_that_write_in_the_console_write_in_the_prompt() {
+    for name in ["i", "a", "I", "A", "o", "O"] {
+        let mut state = state();
+        crate::update::step(
+            &mut state,
+            Msg::SessionConversation {
+                tab: Tab::Session(here(), "a".into()),
+                shown: true,
+            },
+        );
+        state.content.focus = Area::Console;
+        let key = Key::new(name);
+        let effects = press(&mut state, key.clone(), probe());
+        let Some(Effect::PerformKey(action, _)) = effects.first() else {
+            panic!("{name}: {effects:?}");
+        };
+        let effects = crate::update::step(
+            &mut state,
+            Msg::Perform {
+                action: action.clone(),
+                key: Some(key),
+                probe: Box::new(probe()),
+            },
+        );
+        assert_eq!(state.content.focus, Area::Prompt, "{name}");
+        assert!(
+            effects.contains(&Effect::PromptKey(Key::new(name))),
+            "{name}: {effects:?}"
+        );
+    }
+}
+
+#[test]
+fn text_typed_on_a_conversation_is_written_in_the_prompt_as_on_its_console() {
+    for pasted in [false, true] {
+        let mut state = state();
+        crate::update::step(
+            &mut state,
+            Msg::SessionConversation {
+                tab: Tab::Session(here(), "a".into()),
+                shown: true,
+            },
+        );
+        state.content.focus = Area::Console;
+        let effects = crate::update::step(
+            &mut state,
+            Msg::Text {
+                text: "直して".into(),
+                pasted,
+            },
+        );
+        assert_eq!(state.content.focus, Area::Prompt);
+        assert!(effects.contains(&Effect::PromptText {
+            text: "直して".into(),
+            pasted,
+        }));
+    }
+}

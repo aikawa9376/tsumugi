@@ -394,6 +394,14 @@
 [check]
 "r" = "check.rerun"
 
+[conversation]
+"i" = "prompt.write"
+"a" = "prompt.write"
+"I" = "prompt.write"
+"A" = "prompt.write"
+"o" = "prompt.write"
+"O" = "prompt.write"
+
 [board]
 "Escape Escape" = "tree.focus"
 "] ]" = "window.next"

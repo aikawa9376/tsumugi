@@ -239,11 +239,12 @@ pub fn text_goes(state: &ViewState) -> Typed {
     if state.floating.focused {
         return Typed::Floating;
     }
+    // Typed on a conversation, text is written in the prompt, as on its
+    // console; the console hidden behind it takes none.
     if state.content.reading_conversation() {
-        return if state.content.focus == Area::Prompt {
-            Typed::Prompt
-        } else {
-            Typed::Nowhere
+        return match state.content.focus {
+            Area::Console | Area::Prompt => Typed::Prompt,
+            Area::Sidebar | Area::Details => Typed::Nowhere,
         };
     }
     let session = matches!(state.content.active(), Some(Tab::Session(_, _)));
@@ -367,7 +368,12 @@ pub(crate) fn press(state: &mut ViewState, key: Key, probe: Probe) -> Vec<Effect
     let pane = pane || (probe.pane && area == Area::Prompt);
     let passing = receiver(state, &probe) == Receiver::Program;
     let contexts = if area == Area::Console && state.content.reading_conversation() {
-        vec![Context::Viewer, Context::Console, Context::Global]
+        vec![
+            Context::Conversation,
+            Context::Viewer,
+            Context::Console,
+            Context::Global,
+        ]
     } else {
         crate::sidebar::contexts(
             state.sidebar.panel,

@@ -86,7 +86,9 @@ Codex session whose terminal title does not name its conversation is
 matched to the one it began in its directory, when that is unambiguous.
 
 Reading keys move through the conversation rather than reaching the hidden
-console. Choices and approvals in the agent's interface are answered by
+console. The keys that write in the prompt from the console write in it from
+the conversation too, and what is typed or pasted there is written in the
+prompt. Choices and approvals in the agent's interface are answered by
 switching back to the console.
 
 ## Opening

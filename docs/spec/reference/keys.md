@@ -154,7 +154,7 @@ changes them ([keys](../keys.md)).
 | `console.pass_every_key` |  | send every key as it is until `Escape`; `Ctrl+c` sends `Escape` meanwhile | `console`: `Ctrl+g i`, `Ctrl+g Ctrl+i` |
 | `console.read` |  | read the console with Vim's keys, to move, search, select and yank in it, whatever it shows: a shell or a session showing a dialog too, whose keys are otherwise all its own; from a session's prompt, read the console above it | `global`: `Ctrl+q [` |
 | `prompt.focus` | Prompt | give the prompt the keys |  |
-| `prompt.write` |  | give the prompt the keys, and the key pressed with them | `tree`: `i`, `a`<br>`agents`: `i`, `a`<br>`console`: `i`, `a`, `I`, `A`, `o`, `O` |
+| `prompt.write` |  | give the prompt the keys, and the key pressed with them | `tree`: `i`, `a`<br>`agents`: `i`, `a`<br>`console`: `i`, `a`, `I`, `A`, `o`, `O`<br>`conversation`: `i`, `a`, `I`, `A`, `o`, `O` |
 | `prompt.send` | Send Prompt | send what the prompt holds |  |
 | `prompt.images` | Select Attached Image | select an attached image | `prompt`: `Mod+i` |
 | `prompt.take_suggestion` |  | on an empty prompt, send the key pressed to the session and then bring the session's input into the prompt, so a prompt Claude Code suggests is taken to edit; an agent whose input cannot be taken back gets the key alone. On a prompt holding text or images, the key, Tab when none, is typed into Neovim |  |
@@ -689,6 +689,14 @@ changes them ([keys](../keys.md)).
 
 [check]
 "r" = "check.rerun"
+
+[conversation]
+"i" = "prompt.write"
+"a" = "prompt.write"
+"I" = "prompt.write"
+"A" = "prompt.write"
+"o" = "prompt.write"
+"O" = "prompt.write"
 
 [board]
 "Escape Escape" = "tree.focus"
