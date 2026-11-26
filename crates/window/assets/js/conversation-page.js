@@ -1,6 +1,19 @@
 (function(){
 var opened=new Set(),following=true,top=0,conversation=null;
 function bottom(){scrollTo(0,document.documentElement.scrollHeight);}
+// When each message was said, in the reader's own time: the hour alone for
+// today's, the day too for an earlier one's.
+function times(root){
+  root.querySelectorAll('time[data-at]').forEach(function(t){
+    if(t.textContent)return;
+    var at=new Date(Number(t.getAttribute('data-at')));
+    if(isNaN(at))return;
+    var today=new Date().toDateString()===at.toDateString();
+    t.textContent=today?at.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      :at.toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    t.setAttribute('title',at.toLocaleString());
+  });
+}
 addEventListener('resize',function(){if(following)bottom();});
 addEventListener('scroll',function(){
   top=scrollY;
@@ -32,7 +45,9 @@ document.addEventListener('DOMContentLoaded',function(){
   var thread=document.querySelector('.conversation-thread');
   if(!thread)return;
   conversation=thread.getAttribute('data-conversation');
+  times(thread);
   new MutationObserver(function(){
+    times(thread);
     thread.querySelectorAll('details[data-progress]').forEach(function(d){
       d.open=opened.has(d.getAttribute('data-progress'));
     });

@@ -76,12 +76,16 @@ opens at the latest reply and follows the conversation as the agent records
 it, for Claude Code, Codex, Pi and OpenCode, unless the user scrolled back to
 read earlier messages.
 
-The conversation shows the user's words and the assistant's replies, without
-injected instructions. All replies addressed to the user remain visible,
-including progress reports. Each tool call the assistant made is one folded
-line naming the tool and what it was given, marked running, done or failed;
-opening it shows its input and what it returned. Recorded thinking folds away
-and can be opened separately. A message can be copied as it was written. A
+The conversation shows the user's words, as bubbles, and the assistant's
+replies, without injected instructions. All replies addressed to the user
+remain visible, including progress reports. The thinking and tool calls
+between two replies fold into one line that tells what they did, such as the
+files read and the commands run, with the lines the edits changed and the
+calls that failed; while the latest of them runs, the line tells what it is
+doing. Opened, it shows a line for each call, saying what it did to which
+file or command; a call opens to the edit it made as a diff, the command it
+ran, and what it returned. A plan the assistant writes shows as a checklist.
+A message can be copied as it was written, and tells when it was said. A
 Codex session whose terminal title does not name its conversation is
 matched to the one it began in its directory, when that is unambiguous.
 

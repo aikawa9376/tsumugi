@@ -9,6 +9,8 @@ const sent = [];
 let redraw;
 let resized;
 let details = [];
+const said = { textContent: '', attributes: {}, getAttribute: () => String(Date.UTC(2026, 0, 2, 3, 4)), setAttribute(k, v) { this.attributes[k] = v; } };
+let times = [said];
 let scrolls = [];
 const parent = { postMessage: m => sent.push(m) };
 const context = {
@@ -20,13 +22,18 @@ const context = {
   document: {
     addEventListener: on,
     documentElement: { scrollHeight: 2000 },
-    querySelector: () => ({ getAttribute: () => 'initial', querySelectorAll: () => details }),
+    querySelector: () => ({
+      getAttribute: () => 'initial',
+      querySelectorAll: (selector) => (selector.startsWith('time') ? times : details),
+    }),
   },
   scrollTo: (x, y) => { context.scrollY = Math.min(y, 1500); scrolls.push(y); },
 };
 vm.runInNewContext(fs.readFileSync(`${__dirname}/../assets/js/conversation-page.js`, 'utf8'), context);
 fire('DOMContentLoaded');
 assert.equal(scrolls.at(-1), 2000, 'a conversation opens at the latest reply');
+assert.notEqual(said.textContent, '', 'a message says when it was said');
+assert.ok(said.attributes.title, 'and in full on hover');
 
 // What is drawn after the page loads, as code highlighted or an image read,
 // makes it taller: one following the latest reply stays at the bottom.

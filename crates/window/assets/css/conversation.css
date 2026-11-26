@@ -1,20 +1,65 @@
-.conversation-thread{max-width:880px;margin:0 auto;padding:24px;box-sizing:border-box}
-.conversation-message{margin:0 0 24px;overflow-wrap:anywhere}
-.conversation-message>header{display:flex;align-items:center;gap:12px;margin-bottom:8px;color:var(--fgColor-muted);font-size:.8125em}
-.conversation-message>header button{margin-left:auto;padding:2px 8px;color:inherit;background:transparent;border:1px solid var(--borderColor-default);border-radius:5px;cursor:pointer;font:inherit}
-.conversation-message.user{padding:16px;border-radius:8px;background:var(--bgColor-muted)}
-.conversation-text>:first-child{margin-top:0!important}
-.conversation-text>:last-child{margin-bottom:0!important}
-.conversation-progress{margin:0 0 20px;color:var(--fgColor-muted)}
-.conversation-progress>summary{cursor:pointer;font-size:.8125em;margin-bottom:12px}
-.conversation-progress .conversation-message{padding-left:16px;border-left:2px solid var(--borderColor-default)}
+.conversation-thread{max-width:820px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box;font-size:.875rem;line-height:1.6}
 .conversation-empty{color:var(--fgColor-muted);text-align:center;margin-top:48px}
-.conversation-tool{margin:0 0 12px;border:1px solid var(--borderColor-default);border-radius:6px;background:var(--bgColor-muted);font-size:.8125em}
-.conversation-tool>summary{display:flex;gap:8px;align-items:baseline;padding:6px 10px;cursor:pointer;overflow:hidden}
-.conversation-tool-name{font-weight:600;flex:none}
-.conversation-tool-summary{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fgColor-muted);font-family:ui-monospace,monospace}
-.conversation-tool-state{flex:none;color:var(--fgColor-muted)}
-.conversation-tool.failed .conversation-tool-state{color:var(--fgColor-danger,#d1242f)}
-.conversation-tool-part{padding:0 10px 8px}
-.conversation-tool-part>b{display:block;margin:4px 0;color:var(--fgColor-muted);font-weight:500}
-.conversation-tool-part>pre{margin:0;padding:8px;max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:4px;background:var(--bgColor-default)}
+.conversation-icon{display:inline-flex;flex:none;width:16px;height:16px;color:var(--fgColor-muted)}
+.conversation-icon svg{width:16px;height:16px;stroke-width:1.75}
+
+.conversation-message{margin:0 0 20px;overflow-wrap:anywhere;position:relative}
+.conversation-message.user{display:flex;flex-direction:column;align-items:flex-end}
+.conversation-bubble{max-width:80%;box-sizing:border-box;padding:10px 14px;border-radius:12px;border:1px solid var(--borderColor-default);background:var(--bgColor-muted)}
+.conversation-bubble>:first-child,.conversation-text>:first-child,.conversation-thought-text>:first-child{margin-top:0!important}
+.conversation-bubble>:last-child,.conversation-text>:last-child,.conversation-thought-text>:last-child{margin-bottom:0!important}
+.conversation-message>footer{display:flex;align-items:center;gap:8px;min-height:24px;margin-top:4px;color:var(--fgColor-muted);font-size:.75rem;opacity:0;transition:opacity .12s}
+.conversation-message:hover>footer,.conversation-message:focus-within>footer{opacity:1}
+.conversation-message>footer button{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;color:inherit;background:transparent;border:0;border-radius:6px;cursor:pointer;font:inherit}
+.conversation-message>footer button:hover{background:var(--bgColor-muted);color:var(--fgColor-default)}
+.conversation-message>footer .conversation-icon{width:14px;height:14px}
+.conversation-message>footer .conversation-icon svg{width:14px;height:14px}
+
+.conversation-run,.conversation-tool,.conversation-thought{margin:0 0 4px;font-size:.8125rem}
+.conversation-run{margin-bottom:16px}
+.conversation-run>summary,.conversation-tool>summary,.conversation-thought>summary{display:flex;align-items:center;gap:8px;min-height:26px;padding:0 6px;margin:0 -6px;border-radius:6px;cursor:pointer;list-style:none;color:var(--fgColor-muted);overflow:hidden}
+.conversation-run>summary::-webkit-details-marker,.conversation-tool>summary::-webkit-details-marker,.conversation-thought>summary::-webkit-details-marker{display:none}
+.conversation-run>summary:hover,.conversation-tool>summary:hover,.conversation-thought>summary:hover{background:var(--bgColor-muted);color:var(--fgColor-default)}
+.conversation-run>summary>.conversation-icon:last-child,.conversation-tool>summary>.conversation-icon:last-child,.conversation-thought>summary>.conversation-icon:last-child{margin-left:auto;opacity:0;transition:transform .12s,opacity .12s}
+summary:hover>.conversation-icon:last-child,details[open]>summary>.conversation-icon:last-child{opacity:1}
+details[open]>summary>.conversation-icon:last-child{transform:rotate(90deg)}
+.conversation-run-heading{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conversation-run-failed{flex:none;color:var(--fgColor-danger,#d1242f)}
+.conversation-run.done>summary>.conversation-icon:first-child{color:var(--fgColor-success,#1a7f37)}
+.conversation-run.failed>summary>.conversation-icon:first-child{color:var(--fgColor-danger,#d1242f)}
+.conversation-run-lines{margin:4px 0 0 7px;padding-left:14px;border-left:1px solid var(--borderColor-default)}
+.conversation-run-lines>details:last-child{margin-bottom:0}
+
+.conversation-tool-verb{flex:none}
+.conversation-tool-target{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fgColor-default);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem}
+.conversation-tool.failed>summary .conversation-icon:first-child,.conversation-tool.failed .conversation-tool-verb{color:var(--fgColor-danger,#d1242f)}
+.conversation-counts{flex:none;display:inline-flex;gap:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem}
+.conversation-counts .added{color:var(--fgColor-success,#1a7f37)}
+.conversation-counts .removed{color:var(--fgColor-danger,#d1242f)}
+.conversation-tool-body{margin:4px 0 8px 24px;display:flex;flex-direction:column;gap:6px}
+.conversation-tool-part>b{display:block;margin:0 0 2px;color:var(--fgColor-muted);font-weight:500;font-size:.75rem}
+.conversation-tool-part>pre,.conversation-command{margin:0;padding:8px 10px;max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--borderColor-default);border-radius:8px;background:var(--bgColor-muted);font-size:.75rem}
+.conversation-command code{background:none;padding:0;font-size:inherit}
+.conversation-thought-text{margin:4px 0 8px 24px;color:var(--fgColor-muted)}
+
+.conversation-diff{max-height:360px;overflow:auto;border:1px solid var(--borderColor-default);border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;line-height:1.5}
+.conversation-diff>div{display:flex;white-space:pre-wrap;overflow-wrap:anywhere}
+.conversation-diff .mark{flex:none;width:20px;text-align:center;user-select:none;color:var(--fgColor-muted)}
+.conversation-diff .added{background:var(--bgColor-success-muted,rgba(46,160,67,.15))}
+.conversation-diff .removed{background:var(--bgColor-danger-muted,rgba(248,81,73,.15))}
+.conversation-diff .gap{padding:2px 8px;color:var(--fgColor-muted);background:var(--bgColor-muted)}
+.conversation-diff .gap .mark{display:none}
+
+.conversation-plan{margin:0 0 16px;padding:10px 14px;border:1px solid var(--borderColor-default);border-radius:10px;font-size:.8125rem}
+.conversation-plan>header{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-weight:600}
+.conversation-plan-count{margin-left:auto;font-weight:400;color:var(--fgColor-muted);font-size:.75rem}
+.conversation-plan ul{list-style:none;margin:0;padding:0}
+.conversation-plan li{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
+.conversation-plan li .conversation-icon{margin-top:3px}
+.conversation-plan li.done{color:var(--fgColor-muted);text-decoration:line-through}
+.conversation-plan li.done .conversation-icon{color:var(--fgColor-success,#1a7f37)}
+.conversation-plan li.doing{font-weight:600}
+.conversation-plan li.doing .conversation-icon{color:var(--fgColor-accent,#0969da)}
+
+.running>summary>.conversation-icon:first-child svg{animation:conversation-spin 1s linear infinite}
+@keyframes conversation-spin{to{transform:rotate(360deg)}}
