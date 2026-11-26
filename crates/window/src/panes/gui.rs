@@ -9,16 +9,24 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
+use tsumugi_core::settings::TerminalRenderer;
 use tsumugi_model::{TerminalProgram, TerminalResourceId};
 use tsumugi_nvim::Gui;
 
 pub(crate) type Guis = Rc<RefCell<HashMap<Tab, Arc<Gui>>>>;
 
+/// Whether a file editor is drawn through its GUI rather than its terminal.
+/// A remote one has no GUI socket here, and kitty draws the terminal itself.
+fn draws_gui(renderer: TerminalRenderer, remote: bool) -> bool {
+    !remote && renderer != TerminalRenderer::Kitty
+}
+
 fn resource(app: AppCtx, tab: &Tab) -> Option<TerminalResourceId> {
     let Tab::Terminal(environment, id) = tab else {
         return None;
     };
-    if app.remote_status_of(environment).is_some() {
+    let renderer = app.config.peek().settings.console.renderer;
+    if !draws_gui(renderer, app.remote_status_of(environment).is_some()) {
         return None;
     }
     let hosts = app.hosts.peek();
@@ -105,5 +113,18 @@ impl Hub {
 impl crate::shell::Ui {
     pub(crate) fn active_gui(&self) -> Option<Arc<Gui>> {
         self.hub.gui(&self.app.active()?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_file_editors_are_drawn_through_their_gui_unless_kitty_draws_consoles() {
+        assert!(draws_gui(TerminalRenderer::Builtin, false));
+        assert!(draws_gui(TerminalRenderer::Vte, false));
+        assert!(!draws_gui(TerminalRenderer::Kitty, false));
+        assert!(!draws_gui(TerminalRenderer::Builtin, true));
     }
 }

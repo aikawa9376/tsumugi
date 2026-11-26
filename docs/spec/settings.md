@@ -52,8 +52,8 @@ font configuration, such as fallbacks and symbol maps, from its own.
 
 The built-in display remains available when the selected display cannot
 start or the platform does not support it, and the window says why it fell
-back. It also draws terminal images and
-terminals using Neovim's GUI. Conversation views, the prompt, the console reader
+back. It also draws terminal images and,
+unless kitty draws consoles, file editors through Neovim's GUI. Conversation views, the prompt, the console reader
 and unfocused splits keep their existing displays.
 
 ## settings.toml

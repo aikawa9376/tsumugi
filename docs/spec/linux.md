@@ -38,8 +38,8 @@ uses to find startup files, history and plugins. Explicit terminal launch
 settings override that environment. A named application instance separates
 workspace state without changing the shell's configuration directories.
 
-Local Neovim file tabs draw the editor's GUI in the tab and read the user's
-normal Neovim configuration. The editor stays in its terminal host after a
+Local Neovim file tabs draw the editor's GUI in the tab, or its terminal when
+kitty draws consoles, and read the user's normal Neovim configuration. The editor stays in its terminal host after a
 window closes, including unsaved buffers. A remote editor or one whose GUI
 cannot yet attach keeps its terminal display and input available. The prompt
 and console reader retain their separate configurations.
