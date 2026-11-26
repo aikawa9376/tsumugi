@@ -6,6 +6,16 @@
 use super::*;
 
 mod past;
+mod transcript;
+
+/// Where Cursor, started as `context` says, keeps its conversations.
+fn root(context: &AgentContext, home: &Path) -> PathBuf {
+    context
+        .home
+        .clone()
+        .or_else(|| context.variable("CURSOR_CONFIG_DIR"))
+        .unwrap_or_else(|| home.join(".cursor"))
+}
 
 pub struct Cursor;
 
@@ -86,12 +96,43 @@ impl AgentAdapter for Cursor {
         home: &Path,
         dir: Option<&Path>,
     ) -> Vec<tsumugi_model::Past> {
-        let root = context
-            .home
-            .clone()
-            .or_else(|| context.variable("CURSOR_CONFIG_DIR"))
-            .unwrap_or_else(|| home.join(".cursor"));
-        crate::kept_in(context, past::read(&root, dir))
+        crate::kept_in(context, past::read(&root(context, home), dir))
+    }
+
+    // Cursor's interface never names its conversation, which a new session
+    // is found by as the one it began.
+    fn discover_conversation(
+        &self,
+        context: AgentContext,
+        home: PathBuf,
+        cwd: PathBuf,
+        since_ms: u64,
+        taken: Vec<String>,
+    ) -> ConversationLookup {
+        let root = root(&context, &home);
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || past::begun(&root, &cwd, since_ms, &taken))
+                .await
+                .ok()
+                .flatten()
+        })
+    }
+
+    fn transcript(
+        &self,
+        context: &AgentContext,
+        home: &Path,
+        session: &tsumugi_model::Session,
+    ) -> Option<Box<dyn ConversationReader>> {
+        if session.session_id.is_empty() {
+            return None;
+        }
+        Some(Box::new(transcript::Transcript::open(
+            root(context, home),
+            session.session_id.clone(),
+            &session.cwd,
+            home,
+        )))
     }
 
     fn preview(&self, past: &tsumugi_model::Past) -> Option<tsumugi_model::Preview> {

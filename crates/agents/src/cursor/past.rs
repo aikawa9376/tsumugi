@@ -28,6 +28,41 @@ pub(super) fn read(root: &Path, dir: Option<&Path>) -> Vec<Past> {
         .collect()
 }
 
+/// The transcript of the conversation `id` kept under `root`.
+pub(super) fn transcript(root: &Path, id: &str) -> Option<PathBuf> {
+    transcripts(&root.join("projects"))
+        .into_iter()
+        .find_map(|(found, path)| (found == id).then_some(path))
+}
+
+/// The conversation begun in `cwd` at or after `since_ms` that none of
+/// `taken` holds, when exactly one was: with two, which is a session's
+/// cannot be told.
+pub(super) fn begun(root: &Path, cwd: &Path, since_ms: u64, taken: &[String]) -> Option<String> {
+    let chats = chats(&root.join("chats"));
+    let mut found: Option<String> = None;
+    for (id, path) in transcripts(&root.join("projects")) {
+        if taken.contains(&id) || chats.get(&id).is_none_or(|meta| meta.cwd != cwd) {
+            continue;
+        }
+        // Cursor records no time: the transcript's file tells when it began.
+        // The clock of the terminal and of the file's writer may differ a little.
+        let began = std::fs::metadata(&path)
+            .and_then(|m| m.created().or_else(|_| m.modified()))
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64);
+        if began.is_none_or(|began| began + 5_000 < since_ms) {
+            continue;
+        }
+        if found.is_some() {
+            return None;
+        }
+        found = Some(id);
+    }
+    found
+}
+
 /// What Cursor wrote of a conversation beside it.
 struct Meta {
     cwd: PathBuf,
@@ -244,6 +279,38 @@ mod tests {
         std::fs::remove_dir_all(folder.join("c1")).unwrap();
         std::fs::write(folder.join("c1.jsonl"), said("user", "hi")).unwrap();
         assert_eq!(read(root.path(), None).len(), 1);
+    }
+
+    #[test]
+    fn a_transcript_is_found_by_its_conversation() {
+        let root = tempfile::tempdir().unwrap();
+        let path = keep(root.path(), "c1", "/r", "x", &[said("user", "hi")]);
+        assert_eq!(transcript(root.path(), "c1"), Some(path));
+        assert_eq!(transcript(root.path(), "c2"), None);
+    }
+
+    #[test]
+    fn the_one_conversation_begun_in_the_directory_since_the_session_started_is_its() {
+        let root = tempfile::tempdir().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        keep(root.path(), "a", "/r", "x", &[said("user", "hi")]);
+        keep(
+            root.path(),
+            "elsewhere",
+            "/other",
+            "x",
+            &[said("user", "hi")],
+        );
+        let r = Path::new("/r");
+        assert_eq!(begun(root.path(), r, now - 60_000, &[]), Some("a".into()));
+        assert_eq!(begun(root.path(), r, now + 600_000, &[]), None, "older");
+        assert_eq!(begun(root.path(), r, 0, &["a".into()]), None, "claimed");
+        keep(root.path(), "b", "/r", "x", &[said("user", "hi")]);
+        assert_eq!(begun(root.path(), r, 0, &[]), None, "two begun");
+        assert_eq!(begun(root.path(), r, 0, &["a".into()]), Some("b".into()));
     }
 
     #[test]

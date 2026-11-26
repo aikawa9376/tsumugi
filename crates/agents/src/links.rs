@@ -89,8 +89,28 @@ impl Collector {
         );
     }
 
+    /// Take in a record another agent's events imply, in the shape of
+    /// [`Collector::said`], for what it brings up alone: the conversation
+    /// tells the call it came of already.
+    pub(crate) fn noticed(
+        &mut self,
+        role: &str,
+        timestamp: &Value,
+        content: Value,
+        exists: &dyn Fn(&Path) -> bool,
+    ) {
+        self.notice(
+            &serde_json::json!({"type": role, "timestamp": timestamp, "message": {"content": content}}),
+            exists,
+        );
+    }
+
     pub(crate) fn take(&mut self, v: &Value, exists: &dyn Fn(&Path) -> bool) {
         self.conversation.take(v);
+        self.notice(v, exists);
+    }
+
+    fn notice(&mut self, v: &Value, exists: &dyn Fn(&Path) -> bool) {
         if conversation::is_thinking(v) {
             return;
         }
@@ -179,9 +199,13 @@ impl Collector {
 
     /// The assistant called tool `name` with `input`, for an agent whose
     /// records are not in Claude Code's shape.
-    pub(crate) fn called(&mut self, id: &str, name: &str, input: &Value, timestamp: &Value) {
-        let at_ms = timestamp.as_str().and_then(crate::time::epoch_ms);
+    pub(crate) fn called(&mut self, id: &str, name: &str, input: &Value, at_ms: Option<u64>) {
         self.conversation.call(id, name, input, at_ms);
+    }
+
+    /// Call `id` is told by the calls it made instead.
+    pub(crate) fn forget(&mut self, id: &str) {
+        self.conversation.forget(id);
     }
 
     /// Call `id` returned `content`.

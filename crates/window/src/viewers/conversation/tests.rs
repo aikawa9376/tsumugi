@@ -178,6 +178,22 @@ fn a_codex_patch_is_read_as_a_diff_of_the_file_it_names() {
 }
 
 #[test]
+fn cursor_s_replacements_and_patches_are_edits_read_as_diffs() {
+    let input = serde_json::json!({
+        "path": "/r/a/lib.rs", "old_string": "1", "new_string": "2",
+    })
+    .to_string();
+    let html = drawn(&[called("StrReplace", &input, Some(""), false)]);
+    assert!(html.contains("Edited"));
+    assert!(html.contains(">lib.rs<"));
+    assert!(html.contains("<span class=\"added\">+1</span><span class=\"removed\">−1</span>"));
+    let patch = "*** Begin Patch\n*** Update File: src/x.rs\n@@\n-old\n+new\n*** End Patch";
+    let html = drawn(&[called("ApplyPatch", patch, Some(""), false)]);
+    assert!(html.contains(">x.rs<"));
+    assert!(html.contains("<span class=\"added\">+1</span><span class=\"removed\">−1</span>"));
+}
+
+#[test]
 fn a_command_opens_to_the_whole_command_and_what_it_printed() {
     let html = drawn(&[called(
         "Bash",

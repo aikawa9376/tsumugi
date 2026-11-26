@@ -119,11 +119,11 @@ impl Watcher {
                     .map_err(Error::storage)?;
                 self.starting(context, &record, native, &screen).await?;
             }
-            if record.agent == Agent::Codex {
+            if looked_up(record.agent) {
                 let current = self
                     .follow_conversation(context, &mut record, native)
                     .await?;
-                if current && record.readiness == Readiness::Ready {
+                if record.agent == Agent::Codex && current && record.readiness == Readiness::Ready {
                     self.deliver(context, &record).await?;
                 }
             } else {
@@ -403,6 +403,12 @@ fn channel_warning_keys(
             .is_some_and(|channels| channels == [CLAUDE_CHANNEL])
     };
     (agent == Agent::Claude && allowed && !answered && ours()).then_some(b"\r")
+}
+
+/// Whether `agent`'s conversation is found by its terminal's title or by
+/// the conversation it began, for nothing Tsumugi gave it tags it.
+fn looked_up(agent: Agent) -> bool {
+    matches!(agent, Agent::Codex | Agent::Cursor)
 }
 
 #[cfg(test)]

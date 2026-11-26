@@ -26,7 +26,8 @@ impl Kind {
             | "run_command" | "terminal" => Kind::Command,
             "read" | "read_file" | "view" | "notebookread" | "view_image" => Kind::Read,
             "edit" | "multiedit" | "write" | "notebookedit" | "apply_patch" | "patch"
-            | "write_file" | "edit_file" | "str_replace" => Kind::Edit,
+            | "write_file" | "edit_file" | "str_replace" | "strreplace" | "applypatch"
+            | "delete" => Kind::Edit,
             "grep" | "search" | "rg" | "codebase_search" | "grep_search" => Kind::Search,
             "glob" | "ls" | "list" | "list_dir" | "list_files" | "find" => Kind::List,
             "webfetch" | "websearch" | "web_search" | "web_fetch" | "fetch" => Kind::Web,

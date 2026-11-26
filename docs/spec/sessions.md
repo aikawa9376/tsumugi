@@ -124,8 +124,8 @@ line in OpenCode.
 Cursor CLI sessions are started in Cursor's own terminal interface and shown
 as it stands by its screen alone. Tsumugi can override its model, and a
 read-only session runs in its ask mode and sandbox. Cursor has no account usage
-to show, and its conversations are not read into the details panel. Its
-conversations are listed and resumed like the others
+to show. Its conversation's links and files are listed in the details panel,
+and its conversations are listed and resumed like the others
 ([resuming](#resuming-a-past-conversation)), but cannot be forked. A Cursor
 session starts no sessions of its own.
 

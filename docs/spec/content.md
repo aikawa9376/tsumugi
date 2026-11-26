@@ -73,8 +73,8 @@ A session can show its conversation in place of its console, with the prompt
 still available below it. The button on its tab switches between the two;
 switching keeps the session running and the message being written. The view
 opens at the latest reply and follows the conversation as the agent records
-it, for Claude Code, Codex, Pi and OpenCode, unless the user scrolled back to
-read earlier messages.
+it, for Claude Code, Codex, Pi, OpenCode and Cursor, unless the user scrolled
+back to read earlier messages.
 
 The conversation shows the user's words, as bubbles, and the assistant's
 replies, without injected instructions. All replies addressed to the user
@@ -89,8 +89,11 @@ A question the assistant asks shows as a card of numbered options, which
 keeps the answer given once it is answered. A message can be copied as it was
 written, and tells when it was said; a turn that ended tells how long it
 worked, when the agent recorded when it began and ended. A
-Codex session whose terminal title does not name its conversation is
-matched to the one it began in its directory, when that is unambiguous.
+script Codex runs shows as the commands, edits and tools it ran. A Codex
+session whose terminal title does not name its conversation, and a Cursor
+session, are matched to the one each began in its directory, when that is
+unambiguous. Cursor records neither what a call returned nor when anything
+was said, so its calls open to what they were given alone.
 
 Reading keys move through the conversation rather than reaching the hidden
 console. The keys that write in the prompt from the console write in it from

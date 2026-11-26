@@ -58,6 +58,9 @@ pub(super) struct Transcript {
     tail: Tail,
     found: Collector,
     results: HashSet<String>,
+    /// The scripts of Codex's code mode still running, by the call's id,
+    /// shown until a call they make is told.
+    scripts: Vec<String>,
     metrics: super::metrics::Collector,
 }
 
@@ -70,6 +73,7 @@ impl Transcript {
             tail: Tail::default(),
             found: Collector::new(cwd, home),
             results: HashSet::new(),
+            scripts: Vec::new(),
             metrics: super::metrics::Collector::default(),
         }
     }
@@ -94,24 +98,93 @@ impl Transcript {
         self.found.said(role, timestamp, content, &|p| p.is_file());
     }
 
+    /// What the records imply was brought up, which the conversation tells
+    /// by the call itself.
+    fn notice(&mut self, timestamp: &Value, role: &str, content: Value) {
+        self.found
+            .noticed(role, timestamp, content, &|p| p.is_file());
+    }
+
     /// The tool calls and results among the records, for the conversation.
     fn conversation_tool(&mut self, timestamp: &Value, payload: &Value) {
         let id = payload["call_id"].as_str().unwrap_or_default();
         let name = payload["name"].as_str().unwrap_or_default();
+        let at_ms = timestamp.as_str().and_then(crate::time::epoch_ms);
         match payload["type"].as_str() {
             Some("function_call") => {
                 let arguments = payload["arguments"].as_str().unwrap_or_default();
                 let input = serde_json::from_str(arguments).unwrap_or_else(|_| json!(arguments));
-                self.found.called(id, name, &input, timestamp);
+                self.found.called(id, name, &input, at_ms);
             }
             Some("custom_tool_call") => {
-                self.found.called(id, name, &payload["input"], timestamp);
+                self.found.called(id, name, &payload["input"], at_ms);
+                if name == "exec" && !id.is_empty() {
+                    self.scripts.push(id.into());
+                }
             }
             Some("function_call_output" | "custom_tool_call_output") => {
+                self.scripts.retain(|s| s != id);
                 self.found.returned(id, &payload["output"], false);
             }
             _ => {}
         }
+    }
+
+    /// A call a script of Codex's code mode made, told once it ended, for the
+    /// conversation: a script is JavaScript, read by what it ran.
+    fn conversation_item(&mut self, item: &Value, at_ms: Option<u64>) {
+        let id = item["id"].as_str().unwrap_or_default();
+        let failed = item["status"] == "failed";
+        let (name, input, output) = match item["type"].as_str() {
+            Some("CommandExecution") => {
+                let command = match item["command"].as_array().map(Vec::as_slice) {
+                    Some([_, flag, script]) if flag == "-lc" || flag == "-c" => {
+                        script.as_str().unwrap_or_default().to_string()
+                    }
+                    Some(parts) => parts
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    None => return,
+                };
+                (
+                    "exec_command".to_string(),
+                    json!({"command": command}),
+                    item["aggregated_output"].clone(),
+                )
+            }
+            Some("FileChange") => {
+                let Some(changes) = item["changes"].as_object() else {
+                    return;
+                };
+                ("apply_patch".to_string(), json!(patch(changes)), json!(""))
+            }
+            Some("McpToolCall") => (
+                format!(
+                    "mcp__{}__{}",
+                    item["server"].as_str().unwrap_or_default(),
+                    item["tool"].as_str().unwrap_or_default()
+                ),
+                item["arguments"].clone(),
+                match &item["result"]["content"] {
+                    Value::Null => item["error"].clone(),
+                    content => content.clone(),
+                },
+            ),
+            Some("ImageView") => (
+                "view_image".to_string(),
+                json!({"path": local_path(item["path"].as_str().unwrap_or_default())}),
+                json!(""),
+            ),
+            _ => return,
+        };
+        // What the script ran tells it better than its JavaScript does.
+        for script in std::mem::take(&mut self.scripts) {
+            self.found.forget(&script);
+        }
+        self.found.called(id, &name, &input, at_ms);
+        self.found.returned(id, &output, failed);
     }
 
     fn file(&mut self, timestamp: &Value, path: &str, edited: bool, cwd: &Path) {
@@ -121,13 +194,47 @@ impl Transcript {
         } else {
             cwd.join(path).to_string_lossy().into_owned()
         };
-        self.feed(
+        self.notice(
             timestamp,
             "assistant",
             json!([{"type":"tool_use",
             "name":if edited {"Edit"} else {"Read"}, "input":{"file_path":path}}]),
         );
     }
+}
+
+/// The changes a file change made, as a patch in Codex's own format.
+fn patch(changes: &serde_json::Map<String, Value>) -> String {
+    let mut out = String::from("*** Begin Patch\n");
+    for (path, change) in changes {
+        let path = local_path(path);
+        let lines = |text: &str, mark: char| -> String {
+            text.lines().map(|l| format!("{mark}{l}\n")).collect()
+        };
+        match change["type"].as_str() {
+            Some("add") => {
+                out.push_str(&format!("*** Add File: {path}\n"));
+                out.push_str(&lines(change["content"].as_str().unwrap_or_default(), '+'));
+            }
+            Some("delete") => {
+                out.push_str(&format!("*** Delete File: {path}\n"));
+                out.push_str(&lines(change["content"].as_str().unwrap_or_default(), '-'));
+            }
+            _ => {
+                out.push_str(&format!("*** Update File: {path}\n"));
+                if let Some(moved) = change["move_path"].as_str() {
+                    out.push_str(&format!("*** Move to: {}\n", local_path(moved)));
+                }
+                let diff = change["unified_diff"].as_str().unwrap_or_default();
+                out.push_str(diff);
+                if !diff.is_empty() && !diff.ends_with('\n') {
+                    out.push('\n');
+                }
+            }
+        }
+    }
+    out.push_str("*** End Patch");
+    out
 }
 
 fn local_path(path: &str) -> String {
@@ -158,6 +265,7 @@ impl Follow for Transcript {
     fn restart(&mut self) {
         self.found.clear();
         self.results.clear();
+        self.scripts.clear();
         self.metrics = super::metrics::Collector::default();
     }
 
@@ -241,7 +349,7 @@ impl Follow for Transcript {
                             .and_then(|s| serde_json::from_str::<Value>(s).ok())
                         {
                             let id = &payload["call_id"];
-                            self.feed(
+                            self.notice(
                                 timestamp,
                                 "assistant",
                                 json!([{"type":"tool_use", "id":id,
@@ -256,7 +364,7 @@ impl Follow for Transcript {
                         if let Some(id) = payload["call_id"].as_str()
                             && self.results.remove(id)
                         {
-                            self.feed(
+                            self.notice(
                                 timestamp,
                                 "user",
                                 json!([{"type":"tool_result", "tool_use_id":id,
@@ -269,6 +377,10 @@ impl Follow for Transcript {
             }
             Some("event_msg") => {
                 let event = if payload["type"] == "item_completed" {
+                    let at_ms = payload["started_at_ms"]
+                        .as_u64()
+                        .or_else(|| timestamp.as_str().and_then(crate::time::epoch_ms));
+                    self.conversation_item(&payload["item"], at_ms);
                     &payload["item"]
                 } else {
                     payload
@@ -301,7 +413,7 @@ impl Follow for Transcript {
                         }
                     }
                     Some("WebSearch") => {
-                        self.feed(
+                        self.notice(
                             timestamp,
                             "user",
                             json!([{"type":"tool_result",
@@ -455,6 +567,160 @@ mod tests {
         );
         reader.read();
         assert_eq!(reader.messages(), messages);
+    }
+
+    fn tools(reader: &Transcript) -> Vec<tsumugi_model::conversation::Tool> {
+        reader
+            .messages()
+            .into_iter()
+            .filter_map(|m| m.tool)
+            .collect()
+    }
+
+    #[test]
+    fn a_call_shows_once_and_what_is_noticed_only_for_links_is_no_call() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut reader = rollout(
+            dir.path(),
+            &[
+                record(
+                    "response_item",
+                    json!({"type":"function_call", "name":"web.run", "call_id":"web",
+                "arguments":json!({"open":[{"ref_id":"https://requested.example"}]}).to_string()}),
+                ),
+                record(
+                    "response_item",
+                    json!({"type":"function_call_output", "call_id":"web", "output":"read"}),
+                ),
+                record(
+                    "event_msg",
+                    json!({"type":"exec_command_end", "exit_code":0,
+                "cwd":dir.path(), "parsed_cmd":[{"type":"read", "path":"source.rs"}]}),
+                ),
+                record(
+                    "event_msg",
+                    json!({"type":"patch_apply_end", "success":true,
+                "changes":{"source.rs":{"type":"update"}}}),
+                ),
+            ],
+        );
+        reader.read();
+        let tools = tools(&reader);
+        assert_eq!(
+            tools
+                .iter()
+                .map(|t| (t.name.as_str(), t.output.as_deref()))
+                .collect::<Vec<_>>(),
+            [("web.run", Some("read"))]
+        );
+    }
+
+    fn item(item: Value) -> String {
+        record(
+            "event_msg",
+            json!({"type":"item_completed", "item":item, "started_at_ms":1_000_u64}),
+        )
+    }
+
+    #[test]
+    fn a_script_shows_as_the_commands_edits_and_tools_it_ran() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut reader = rollout(
+            dir.path(),
+            &[
+                message("user", "Fix it"),
+                record(
+                    "response_item",
+                    json!({"type":"custom_tool_call","name":"exec","call_id":"s1",
+                    "input":"text(await tools.exec_command({cmd:\"cargo test\"}))"}),
+                ),
+            ],
+        );
+        reader.read();
+        let running = tools(&reader);
+        assert_eq!(
+            running.len(),
+            1,
+            "a script shows while nothing it ran is told"
+        );
+        assert_eq!(
+            (running[0].name.as_str(), running[0].output.as_deref()),
+            ("exec", None)
+        );
+
+        let path = dir.path().join("rollout.jsonl");
+        append(
+            &path,
+            &[
+                item(json!({"type":"CommandExecution", "id":"exec-1",
+                    "command":["/usr/bin/zsh","-lc","cargo test"], "status":"failed",
+                    "exit_code":101, "aggregated_output":"boom"})),
+                item(
+                    json!({"type":"FileChange", "id":"exec-2", "status":"completed",
+                    "changes":{
+                        "/w/a.rs":{"type":"update","unified_diff":"@@ -1 +1 @@\n-a\n+b\n"},
+                        "/w/new.rs":{"type":"add","content":"x\n"}}}),
+                ),
+                item(json!({"type":"McpToolCall", "id":"exec-3", "server":"docs",
+                    "tool":"search", "arguments":{"query":"schema"}, "status":"completed",
+                    "result":{"content":[{"type":"text","text":"hits"}]}})),
+                item(json!({"type":"ImageView", "id":"exec-4", "path":"file:///w/shot.png"})),
+                record(
+                    "response_item",
+                    json!({"type":"custom_tool_call_output","call_id":"s1",
+                    "output":[{"type":"input_text","text":"Script completed"}]}),
+                ),
+                record(
+                    "response_item",
+                    json!({"type":"custom_tool_call","name":"exec","call_id":"s2",
+                    "input":"text(1 + 1)"}),
+                ),
+                record(
+                    "response_item",
+                    json!({"type":"custom_tool_call_output","call_id":"s2","output":"2"}),
+                ),
+            ]
+            .concat(),
+        );
+        reader.read();
+        let tools = tools(&reader);
+        let said: Vec<_> = tools
+            .iter()
+            .map(|t| (t.name.as_str(), t.summary.as_str(), t.failed))
+            .collect();
+        assert_eq!(
+            said,
+            [
+                ("exec_command", "cargo test", true),
+                ("apply_patch", "*** Begin Patch", false),
+                ("mcp__docs__search", "schema", false),
+                ("view_image", "/w/shot.png", false),
+                ("exec", "text(1 + 1)", false),
+            ]
+        );
+        assert_eq!(tools[0].output.as_deref(), Some("boom"));
+        assert!(tools[0].input.contains("\"command\": \"cargo test\""));
+        assert!(
+            tools[1]
+                .input
+                .contains("*** Update File: /w/a.rs\n@@ -1 +1 @@\n-a\n+b\n")
+        );
+        assert!(tools[1].input.contains("*** Add File: /w/new.rs\n+x\n"));
+        assert_eq!(tools[1].output.as_deref(), Some(""), "an edit told is done");
+        assert_eq!(tools[2].output.as_deref(), Some("hits"));
+        assert_eq!(
+            tools[3].output.as_deref(),
+            Some(""),
+            "an image viewed is done"
+        );
+        assert_eq!(tools[4].output.as_deref(), Some("2"));
+        let at = reader
+            .messages()
+            .iter()
+            .find(|m| m.tool.is_some())
+            .unwrap()
+            .at_ms;
+        assert_eq!(at, Some(1_000));
     }
 
     /// A reader of `records`, written as a rollout in `dir`.

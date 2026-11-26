@@ -124,6 +124,12 @@ impl Conversation {
         });
     }
 
+    /// Leave out the call `id`.
+    pub fn forget(&mut self, id: &str) {
+        self.messages
+            .retain(|m| m.tool.as_ref().is_none_or(|t| t.id != id || id.is_empty()));
+    }
+
     /// The call `id` returned `content`; a result of a call not seen is not
     /// part of the conversation.
     pub fn returned(&mut self, id: &str, content: &Value, failed: bool) {

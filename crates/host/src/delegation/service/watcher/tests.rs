@@ -19,6 +19,16 @@ async fn the_conversation_another_agent_s_session_is_tagged_with_is_recorded() {
     }
 }
 
+#[test]
+fn the_conversations_of_codex_and_cursor_are_looked_up_and_the_others_tagged() {
+    for agent in [Agent::Codex, Agent::Cursor] {
+        assert!(looked_up(agent), "{agent:?}");
+    }
+    for agent in [Agent::Claude, Agent::Pi, Agent::OpenCode] {
+        assert!(!looked_up(agent), "{agent:?}");
+    }
+}
+
 #[tokio::test]
 async fn a_session_tagged_with_no_conversation_keeps_the_recorded_one() {
     let (_dir, context, mut record, native) = watching(Agent::Claude, None, Vec::new());
