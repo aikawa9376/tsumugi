@@ -1,6 +1,7 @@
 (function(){
 var opened=new Set(),following=true,top=0,conversation=null;
 function bottom(){scrollTo(0,document.documentElement.scrollHeight);}
+addEventListener('resize',function(){if(following)bottom();});
 addEventListener('scroll',function(){
   top=scrollY;
   following=document.documentElement.scrollHeight-scrollY-innerHeight<64;
@@ -37,6 +38,11 @@ document.addEventListener('DOMContentLoaded',function(){
     });
     if(following)requestAnimationFrame(bottom);else scrollTo(0,top);
   }).observe(thread,{childList:true});
+  // What is drawn after the replies are put in, as highlighted code or an
+  // image read, makes the page taller with no change to its children.
+  if(typeof ResizeObserver==='function')new ResizeObserver(function(){
+    if(following)bottom();
+  }).observe(thread);
   requestAnimationFrame(bottom);
 });
 })();

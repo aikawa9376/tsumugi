@@ -178,7 +178,8 @@ pub(crate) fn ConversationScreen(
             }
             div { id: "{box_id}", class: "viewer-box",
                 if let Some(doc) = frame_doc() {
-                    {page_frame(media_id, box_id.clone(), zoom, 0.0, Some(theme.read().scheme), doc)}
+                    // Left where it is on load, which is the latest reply it follows.
+                    {page_frame(media_id, box_id.clone(), zoom, None, Some(theme.read().scheme), doc)}
                 }
             }
         }

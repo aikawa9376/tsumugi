@@ -72,8 +72,9 @@ area's keys before the `viewer` area's. A check's log
 A session can show its conversation in place of its console, with the prompt
 still available below it. The button on its tab switches between the two;
 switching keeps the session running and the message being written. The view
-follows the conversation as the agent records it, for Claude Code, Codex, Pi
-and OpenCode.
+opens at the latest reply and follows the conversation as the agent records
+it, for Claude Code, Codex, Pi and OpenCode, unless the user scrolled back to
+read earlier messages.
 
 The conversation shows the user's words and the assistant's replies, without
 injected instructions. All replies addressed to the user remain visible,

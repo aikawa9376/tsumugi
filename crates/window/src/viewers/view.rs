@@ -469,7 +469,7 @@ fn ViewerOf(
                 media_id.clone(),
                 box_id.clone(),
                 s.zoom.factor(),
-                0.0,
+                Some(0.0),
                 None,
                 document,
             )
@@ -483,7 +483,7 @@ fn ViewerOf(
                 media_id.clone(),
                 box_id.clone(),
                 s.zoom.factor(),
-                top.get(),
+                Some(top.get()),
                 Some(theme.read().scheme),
                 document,
             ),
@@ -615,7 +615,7 @@ async fn follow_frame(
 }
 
 /// The frame `media_id` that draws `document` apart from the window, at
-/// `zoom` and scrolled `top` down, handing the keys pressed in it to the
+/// `zoom` and, given `top`, scrolled that far down, handing the keys pressed in it to the
 /// viewer's box `box_id`. A page of the window's own `scheme`, `light` or
 /// `dark`, is framed in nothing of its own; any other is framed in white,
 /// as a browser frames a page.
@@ -623,7 +623,7 @@ pub fn page_frame(
     media_id: String,
     box_id: String,
     zoom: f64,
-    top: f64,
+    top: Option<f64>,
     scheme: Option<&'static str>,
     document: String,
 ) -> Element {
@@ -643,9 +643,10 @@ pub fn page_frame(
             "srcdoc": "{document}",
             "sandbox": "allow-scripts allow-forms",
             onload: move |_| {
+                let top = top.map(|top| format!(", \"top\": {top}")).unwrap_or_default();
                 document::eval(&frame_script(
                     &media_id,
-                    &format!("{{\"zoom\": {zoom}, \"top\": {top}}}"),
+                    &format!("{{\"zoom\": {zoom}{top}}}"),
                 ));
             },
             onmounted: move |_| {

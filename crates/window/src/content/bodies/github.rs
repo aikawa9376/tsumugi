@@ -278,7 +278,7 @@ pub(crate) fn GitHubWindow(
             media_id.clone(),
             box_id.clone(),
             zoom.factor(),
-            0.0,
+            Some(0.0),
             Some(theme.read().scheme),
             doc,
         ),

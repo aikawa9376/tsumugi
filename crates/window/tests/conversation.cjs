@@ -7,6 +7,7 @@ const on = (name, f) => events.set(name, [...(events.get(name) || []), f]);
 const fire = (name, event = {}) => (events.get(name) || []).forEach(f => f(event));
 const sent = [];
 let redraw;
+let resized;
 let details = [];
 let scrolls = [];
 const parent = { postMessage: m => sent.push(m) };
@@ -15,6 +16,7 @@ const context = {
   addEventListener: on,
   requestAnimationFrame: f => f(),
   MutationObserver: class { constructor(f) { redraw = f; } observe() {} },
+  ResizeObserver: class { constructor(f) { resized = f; } observe() {} },
   document: {
     addEventListener: on,
     documentElement: { scrollHeight: 2000 },
@@ -25,6 +27,18 @@ const context = {
 vm.runInNewContext(fs.readFileSync(`${__dirname}/../assets/js/conversation-page.js`, 'utf8'), context);
 fire('DOMContentLoaded');
 assert.equal(scrolls.at(-1), 2000, 'a conversation opens at the latest reply');
+
+// What is drawn after the page loads, as code highlighted or an image read,
+// makes it taller: one following the latest reply stays at the bottom.
+context.scrollY = 1500;
+fire('scroll');
+context.document.documentElement.scrollHeight = 2600;
+scrolls = [];
+resized();
+assert.equal(scrolls.at(-1), 2600, 'a conversation that grows keeps following the latest reply');
+fire('resize');
+assert.equal(scrolls.length, 2, 'a frame resized keeps following the latest reply');
+context.document.documentElement.scrollHeight = 2000;
 
 context.scrollY = 300;
 fire('scroll');
@@ -40,6 +54,10 @@ fire('message', { source: parent, data: { tsumugiViewer: 1, markdown: 'appended'
 context.scrollY = 0;
 redraw();
 assert.equal(scrolls.at(-1), 300, 'new replies do not move someone reading earlier messages');
+scrolls = [];
+resized();
+fire('resize');
+assert.deepEqual(scrolls, [], 'growing does not move someone reading earlier messages');
 
 const detail = { matches: () => true, getAttribute: () => '1', open: true };
 fire('toggle', { target: detail });
