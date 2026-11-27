@@ -370,7 +370,9 @@ impl Store {
                 [&issue.id],
                 |row| row.get(0),
             )?;
-            let (state, error, worked) = followed(issue.record, sessions, worked);
+            let left = self.left(issue.record)?;
+            let (state, error, worked) =
+                followed(issue.record, sessions, worked, issue.state, left);
             self.connection.execute(
                 "UPDATE local_issues SET state = ?2, error = ?3, worked = ?4 WHERE id = ?1",
                 params![issue.id, state.word(), error, worked],
@@ -378,15 +380,50 @@ impl Store {
         }
         Ok(())
     }
+
+    /// How the durable record of the session `record` says it left, should
+    /// the listing no longer show it.
+    pub(super) fn left(&self, record: Option<SessionId>) -> Result<Left> {
+        let Some(id) = record else {
+            return Ok(Left::Unrecorded);
+        };
+        Ok(match super::session(&self.connection, id)? {
+            None => Left::Unrecorded,
+            Some(session) if session.interrupted => Left::Lost,
+            Some(session) => match session.rest {
+                Some(tsumugi_model::Rest::Hibernated) => Left::Not,
+                Some(tsumugi_model::Rest::Exited) => Left::Lost,
+                None if session.ended => Left::Ended,
+                None => Left::Not,
+            },
+        })
+    }
+}
+
+/// How a session's record says it left, for one the listing does not show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Left {
+    /// No session was recorded: its start was cut short.
+    Unrecorded,
+    /// It has not left by its record: its end is not recorded yet, or it
+    /// sleeps.
+    Not,
+    /// It was ended from Tsumugi, by the user or by itself.
+    Ended,
+    /// It went with its terminal host, or its program exited on its own.
+    Lost,
 }
 
 /// How the work of the session `record` stands among `sessions`, with
 /// whether it was ever seen at work: an idle screen ends the work only once
-/// it was.
+/// it was. A session the listing no longer shows is judged by how it `left`;
+/// one whose end is not recorded yet leaves the work standing as `current`.
 pub(super) fn followed(
     record: Option<SessionId>,
     sessions: &[Session],
     worked: bool,
+    current: LocalIssueState,
+    left: Left,
 ) -> (LocalIssueState, Option<&'static str>, bool) {
     let found = record.and_then(|id| sessions.iter().find(|s| s.delegation == Some(id)));
     let working =
@@ -396,11 +433,18 @@ pub(super) fn followed(
         Some(State::Idle) if worked => LocalIssueState::Done,
         Some(State::Idle | State::Starting) => LocalIssueState::Starting,
         Some(State::Waiting(_)) => LocalIssueState::Waiting,
-        Some(State::Failed) | None => LocalIssueState::Failed,
+        Some(State::Failed) => LocalIssueState::Failed,
         Some(_) => LocalIssueState::Running,
+        // Ending a session after its work is how its work is finished: the
+        // agent asks whether to close, waiting on the user, and then closes.
+        None => match left {
+            Left::Not => current,
+            Left::Ended if worked => LocalIssueState::Done,
+            Left::Ended | Left::Lost | Left::Unrecorded => LocalIssueState::Failed,
+        },
     };
     let error = match found {
-        None => {
+        None if state == LocalIssueState::Failed => {
             Some("The session start or execution was interrupted; inspect the work before retrying")
         }
         Some(_) if state == LocalIssueState::Failed => Some("The agent reported a failure"),
@@ -1041,5 +1085,71 @@ mod tests {
             assert_eq!(error.code, Code::Refused, "{}", action.word());
         }
         assert_eq!(store.local_issues().unwrap()[0].state, State::Starting);
+    }
+
+    /// An issue claimed and worked by a session, which the listing last
+    /// showed waiting on the user, as it is when it asks whether to close.
+    fn worked_then_waiting(store: &mut Store) -> SessionId {
+        let new = issue("/project", "worked");
+        queue(store, new.clone());
+        store.claim_local_issues().unwrap();
+        let record = store
+            .register(NewSession {
+                parent: None,
+                agent: Agent::Claude,
+                profile: ProfileId::builtin(Agent::Claude),
+                home: None,
+                name: "worked".into(),
+                cwd: "/project".into(),
+                launch: Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: true,
+                code: None,
+            })
+            .unwrap()
+            .0;
+        store.attach_local_issue(&new.id, record).unwrap();
+        let mut session = tsumugi_model::testing::session("w").working().build();
+        session.delegation = Some(record);
+        store.follow_local_issues(&[session.clone()]).unwrap();
+        session.state = tsumugi_model::State::Waiting(tsumugi_model::Wait::Input);
+        store.follow_local_issues(&[session]).unwrap();
+        assert_eq!(store.local_issues().unwrap()[0].state, State::Waiting);
+        record
+    }
+
+    #[test]
+    fn a_session_ended_after_its_work_leaves_its_issue_done() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let record = worked_then_waiting(&mut store);
+        store.end(record).unwrap();
+        store.follow_local_issues(&[]).unwrap();
+        let issue = &store.local_issues().unwrap()[0];
+        assert_eq!(issue.state, State::Done);
+        assert!(issue.error.is_none());
+    }
+
+    #[test]
+    fn a_session_gone_before_its_end_is_recorded_leaves_its_issue_as_it_stood() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        worked_then_waiting(&mut store);
+        store.follow_local_issues(&[]).unwrap();
+        assert_eq!(store.local_issues().unwrap()[0].state, State::Waiting);
+    }
+
+    #[test]
+    fn a_session_interrupted_after_its_work_fails_its_issue() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&directory.path().join("state.sqlite3")).unwrap();
+        let record = worked_then_waiting(&mut store);
+        store.interrupt(record).unwrap();
+        store.follow_local_issues(&[]).unwrap();
+        let issue = &store.local_issues().unwrap()[0];
+        assert_eq!(issue.state, State::Failed);
+        assert!(issue.error.is_some());
     }
 }

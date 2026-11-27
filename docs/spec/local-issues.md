@@ -17,9 +17,11 @@ window does not discard issues or stop processing. An issue waiting for a
 permission or an answer keeps its place until its session can continue.
 
 The issue list shows progress and opens the session that works on an issue.
-An agent finishing its turn marks its issue done; this records the agent's
-completion, not a human review. A failed issue retains its request and error
-and can be retried explicitly. Queued issues can be cancelled.
+An agent finishing its turn marks its issue done, and so does ending its
+session from Tsumugi once it has worked; this records the agent's completion,
+not a human review. A session lost with the terminal host, or whose program
+exits on its own, fails its issue. A failed issue retains its request and
+error and can be retried explicitly. Queued issues can be cancelled.
 
 A schedule can queue issues on a timetable ([schedules](schedules.md)); an issue it queued is an ordinary issue that says which schedule made it.
 

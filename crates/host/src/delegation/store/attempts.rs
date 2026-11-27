@@ -135,7 +135,9 @@ impl Store {
                 params![issue, attempt.number],
                 |row| row.get(0),
             )?;
-            let (state, error, worked) = super::issues::followed(attempt.record, sessions, worked);
+            let left = self.left(attempt.record)?;
+            let (state, error, worked) =
+                super::issues::followed(attempt.record, sessions, worked, attempt.state, left);
             self.connection.execute(
                 "UPDATE issue_attempts SET state = ?3, error = ?4, worked = ?5 WHERE issue = ?1 AND number = ?2",
                 params![issue, attempt.number, state.word(), error, worked],
@@ -316,6 +318,31 @@ mod tests {
             done.attempts[1].worktree.as_deref(),
             Some(Path::new("/project-wt/two"))
         );
+    }
+
+    #[test]
+    fn an_attempt_whose_session_is_ended_after_its_work_is_done() {
+        let (_directory, mut store) = store();
+        let id = saved(&mut store, "/project", "compare");
+        store
+            .begin_attempts(&id, &tries(&["claude"]), "abc")
+            .unwrap();
+        let record = session_in(&mut store, "/project-wt/one");
+        store.attach_attempt(&id, 1, record).unwrap();
+
+        use tsumugi_model::State as Is;
+        store
+            .follow_local_issues(&[standing(record, Is::Working)])
+            .unwrap();
+        store
+            .follow_local_issues(&[standing(record, Is::Waiting(tsumugi_model::Wait::Input))])
+            .unwrap();
+        store.end(record).unwrap();
+        store.follow_local_issues(&[]).unwrap();
+
+        let issue = store.local_issue_named(&id).unwrap().1;
+        assert_eq!(issue.attempts[0].state, State::Done);
+        assert_eq!(issue.state, State::Done);
     }
 
     #[test]
