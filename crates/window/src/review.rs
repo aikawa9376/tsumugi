@@ -677,6 +677,7 @@ pub(crate) fn ReviewRows(
         .into_iter()
         .map(|by| by.map(str::to_string))
         .collect();
+    let kept = reading.written(&written_now);
     rsx! {
         div { id: "{id}", class: "review",
             div { class: if two { "rv-lines two" } else { "rv-lines" },
@@ -847,6 +848,19 @@ pub(crate) fn ReviewRows(
                 div { class: "rv-bar",
                     if let Some(notice) = &state.notice { span { class: "rv-notice", "{notice}" } }
                     else { span { class: "rv-dim", "c comment · v mark lines · Enter edit · dd delete · r resolve · s send" } }
+                    if !kept.is_empty() {
+                        button { class: "rv-export",
+                            title: "Copy, as JSON, which lines of these files agents wrote and who wrote each",
+                            onclick: { let worktree = worktree.clone(); let mut pane = pane; move |_| {
+                                let text = notes::exported(&worktree.to_string_lossy(), &kept);
+                                pane.write().notice = Some(match crate::clipboard::copy_to_clipboard(&text) {
+                                    Ok(()) => "Copied the lines agents wrote".into(),
+                                    Err(e) => format!("cannot copy: {e}"),
+                                });
+                            } },
+                            "Copy who wrote"
+                        }
+                    }
                     if all.iter().any(|j| j.comment.is_note()) {
                         button { class: if hide_notes() { "rv-notes" } else { "rv-notes on" },
                             title: "Show or hide the notes agents left",

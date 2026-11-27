@@ -5,7 +5,7 @@
 // It runs in the server OpenCode starts for the one session's interface. It
 // hands the session the messages other sessions send it, and gives the
 // commands the session runs back the folders an account of its own moved
-// OpenCode's away from.
+// OpenCode's away from, and tells tsumugi of each file its tools write.
 
 import { spawn } from "node:child_process";
 
@@ -44,6 +44,12 @@ export default {
 				delete event.env[name];
 			}
 		});
+		// Only a session tsumugi keeps a record of carries the credential its
+		// server acts with; any other OpenCode tells tsumugi nothing.
+		const delegated = Boolean(process.env.TSUMUGI_DELEGATION_TOKEN && process.env.TSUMUGI_DELEGATION_ROOT);
+		if (delegated && ctx.tool?.hook) {
+			await follow(ctx);
+		}
 		const controller = new AbortController();
 		(async () => {
 			for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
@@ -54,9 +60,7 @@ export default {
 			}
 		})().catch(() => {});
 		const timer = setInterval(() => hand(ctx, state), RETRY_MS);
-		// Only a session tsumugi keeps a record of carries the credential its
-		// server acts with; any other OpenCode hears nothing.
-		if (process.env.TSUMUGI_DELEGATION_TOKEN && process.env.TSUMUGI_DELEGATION_ROOT) {
+		if (delegated) {
 			listen(ctx, state);
 		}
 		return () => {
@@ -67,6 +71,71 @@ export default {
 		};
 	},
 };
+
+/** How long tsumugi is waited for before the tool goes on without it. */
+const WRITING_MS = 5000;
+
+/** How many writes have been told, which names each one's call. */
+let writes = 0;
+
+/**
+ * The files the tool `tool` writes, run with `input`: the one a tool that
+ * writes a file names, or every file a patch adds, updates, deletes or moves
+ * to; none for a tool that writes no file.
+ */
+function writtenBy(tool, input) {
+	if (tool === "patch" || tool === "apply_patch") {
+		const text = typeof input?.patchText === "string" ? input.patchText : "";
+		return [...text.matchAll(/^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/gm)].map((m) => m[1].trim());
+	}
+	if (tool === "edit" || tool === "write" || tool === "multiedit") {
+		const path = input?.path ?? input?.filePath;
+		return typeof path === "string" ? [path] : [];
+	}
+	return [];
+}
+
+/**
+ * Tells tsumugi of each file one of OpenCode's tools is about to write and
+ * has written, so the lines it changes are marked the session's. OpenCode
+ * names no call to its hooks, so a write is tied to the next one ended of
+ * the same tool.
+ */
+async function follow(ctx) {
+	const running = [];
+	await ctx.tool.hook("execute.before", async (event) => {
+		const paths = writtenBy(event.tool, event.input);
+		if (paths.length === 0) return;
+		const write = { tool: event.tool, call: `opencode-${process.pid}-${++writes}`, paths };
+		running.push(write);
+		await tell({ call: write.call, done: false, cwd: process.cwd(), paths });
+	});
+	await ctx.tool.hook("execute.after", async (event) => {
+		const at = running.findIndex((write) => write.tool === event.tool);
+		if (at < 0) return;
+		const [write] = running.splice(at, 1);
+		await tell({ call: write.call, done: true, cwd: process.cwd(), paths: write.paths });
+	});
+}
+
+/**
+ * Tells tsumugi of a write as `told` says, waiting until it has read the
+ * files, and never holding the tool longer.
+ */
+function tell(told) {
+	return new Promise((resolve) => {
+		const child = spawn(TSUMUGI, ["mcp", "writing"], { stdio: ["pipe", "ignore", "ignore"] });
+		const timer = setTimeout(() => child.kill(), WRITING_MS);
+		const end = () => {
+			clearTimeout(timer);
+			resolve();
+		};
+		child.on("error", end);
+		child.on("exit", end);
+		child.stdin.on("error", () => {});
+		child.stdin.end(JSON.stringify(told));
+	});
+}
 
 /**
  * Hands the conversation the interface shows each message heard, as the

@@ -44,8 +44,10 @@ A diff of the worktree marks, in the gutter beside the line numbers of its
 new side, every line a session's agent wrote, and names that session on the
 line under the cursor and when the mark is pointed at. A line is the agent's
 when the agent wrote it with one of its own file-writing tools, in a session
-Tsumugi started with Claude Code; whatever else changes a file, a person, a
-shell command or a formatter, leaves the lines it changed unmarked.
+Tsumugi started with Claude Code, Pi or OpenCode; whatever else changes a
+file, a person, a shell command or a formatter, leaves the lines it changed
+unmarked, as does an agent Tsumugi cannot follow without the user trusting
+hooks of its own first, such as Codex.
 
 The marks follow each file as it reads now, committed or not: a line keeps
 its mark wherever it moves, loses it once a person changes it, and gets it
@@ -53,7 +55,10 @@ back if the change is undone. A diff of commits, or of two revisions, shows
 no marks.
 
 The marks are kept on the work host, per worktree, in files of Tsumugi's
-own, and never in the repository.
+own, and never in the repository. To keep them beside the change, the diff's
+bar copies, as JSON, the marks of the files it shows: the worktree, and for
+each file its runs of lines, numbered as the file reads now, with the session
+that wrote each.
 
 ## Viewed files
 
@@ -105,4 +110,9 @@ is not marked as sent.
 - What a person changed between two writes is not taken by the second.
 - A write the file was not read before marks nothing.
 - Lines of the new side are marked only where it is the worktree.
-- The plugin tells Tsumugi of each write before and after it.
+- Claude Code's plugin tells Tsumugi of each write before and after it.
+- Pi's extension and OpenCode's plugin tell Tsumugi of each write before and
+  after it, waiting until it has read the file, and of no other tool.
+- A patch tells Tsumugi of every file it adds, updates, deletes or moves to.
+- The lines kept aside are those of the files the diff shows, as JSON of each
+  file's runs and who wrote them.

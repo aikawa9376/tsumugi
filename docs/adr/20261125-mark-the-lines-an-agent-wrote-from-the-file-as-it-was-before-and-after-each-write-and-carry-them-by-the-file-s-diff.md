@@ -9,15 +9,17 @@ lines a person wrote or that were there before. Orca marks every line it saw
 an agent write in the diff's gutter, turns a line back to the person's once a
 person edits it, and keeps that knowledge to itself rather than in Git.
 
-Tsumugi already loads hooks into the sessions it starts, and an agent runs
-them just before and just after each of its tools, naming the file a writing
-tool writes. What a tool hands its hooks differs from agent to agent and from
-release to release; the file itself reads the same whoever wrote it.
+Tsumugi already loads hooks or a plugin of its own into the sessions it
+starts, and an agent runs them just before and just after each of its tools,
+naming the file a writing tool writes. What a tool hands them differs from
+agent to agent and from release to release; the file itself reads the same
+whoever wrote it.
 
 ## Decision
 
 The work host reads a file just before and just after a session's agent
-writes it with one of its own tools, from the hooks around that tool. The
+writes it with one of its own tools, told by the hooks or the plugin Tsumugi
+loads into the agent around that tool. The
 lines the write changed or added are that session's; every other line keeps
 whoever it was before. The work host keeps, per worktree, each such file's
 lines as it last read them, with who wrote each, on the work host and never
@@ -45,12 +47,13 @@ session that wrote each.
 ## Consequences
 
 - A line is marked only when the agent's own writing tool wrote it, in a
-  session whose hooks Tsumugi loads. A shell command, a formatter or another
+  session whose agent runs the hooks or the plugin Tsumugi loads into it. A shell command, a formatter or another
   program the agent runs leaves the lines it changes the person's.
 - What changed between the two reads of a write is taken as the write's.
 - The marks follow the worktree's files as they are, committed or not; a diff
   of commits only shows none.
 - A person's edit undone brings the agent's mark back, as the line reads as
   the agent left it.
-- The hooks read the file inside the agent's turn, so the work host answers
-  at once, and a hook that cannot reach it loses only that write's marks.
+- The file is read inside the agent's turn, so the work host answers at
+  once, and a hook or plugin that cannot reach it loses only that write's
+  marks.

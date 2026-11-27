@@ -251,6 +251,103 @@ exec sleep 30"#,
         );
     }
 
+    /// A stand-in for OpenCode's server that runs the tools given as JSON on
+    /// its command line, each through the plugin's hooks around it as
+    /// OpenCode runs them, and prints after each hook what tsumugi was told
+    /// by then.
+    const TOOLS: &str = r#"
+const [, , plugin, told, tools] = process.argv;
+const { readFileSync } = await import("node:fs");
+const { default: definition } = await import(plugin);
+const hooks = {};
+const ctx = {
+    options: {},
+    shell: { hook: async () => {} },
+    tool: { hook: async (name, hook) => (hooks[name] = hook) },
+    event: { subscribe: () => ({ async *[Symbol.asyncIterator]() {} }) },
+    session: { prompt: async () => {} },
+};
+const stop = await definition.setup(ctx);
+const now = () => { try { return readFileSync(told, "utf8"); } catch { return ""; } };
+const seen = [];
+for (const [tool, input] of JSON.parse(tools)) {
+    await hooks["execute.before"]({ tool, input });
+    seen.push(now());
+    await hooks["execute.after"]({ tool, input, status: "completed", result: {} });
+    seen.push(now());
+}
+await stop();
+console.log(JSON.stringify(seen));
+process.exit(0);
+"#;
+
+    #[test]
+    #[cfg_attr(windows, ignore = "fakes tsumugi with a shell script")]
+    fn tsumugi_is_told_of_each_file_a_tool_writes_before_and_after_it_and_of_no_other() {
+        let dir = tempfile::tempdir().unwrap();
+        let told = dir.path().join("told");
+        // It answers late, so a hook that does not wait for it is caught.
+        let (_bin, tsumugi) = crate::testing::program(
+            "tsumugi",
+            &format!(
+                "[ \"$2\" = writing ] || exit 0\nsleep 0.2\n{{ cat; echo; }} >> {}",
+                told.display()
+            ),
+        );
+        let script = dir.path().join("index.mjs");
+        std::fs::write(&script, plugin(&tsumugi)).unwrap();
+        let harness = dir.path().join("tools.mjs");
+        std::fs::write(&harness, TOOLS).unwrap();
+        let patch = "*** Begin Patch\n*** Update File: src/b.rs\n*** Move to: src/c.rs\n@@\n-x\n+y\n*** Add File: d.rs\n+z\n*** End Patch";
+        let tools = serde_json::json!([
+            ["edit", {"path": "src/a.rs", "oldString": "a", "newString": "b"}],
+            ["read", {"path": "src/a.rs"}],
+            ["patch", {"patchText": patch}],
+        ]);
+        let out = std::process::Command::new("node")
+            .arg(&harness)
+            .arg(&script)
+            .arg(&told)
+            .arg(tools.to_string())
+            .current_dir(dir.path())
+            .env("TSUMUGI_DELEGATION_TOKEN", "secret")
+            .env("TSUMUGI_DELEGATION_ROOT", dir.path())
+            .output()
+            .expect("node");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let seen: Vec<String> = serde_json::from_slice(&out.stdout).unwrap();
+        let lines = |k: usize| -> Vec<serde_json::Value> {
+            seen[k]
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        };
+        let cwd = std::fs::canonicalize(dir.path()).unwrap();
+        let cwd = cwd.to_str().unwrap();
+        let first = &lines(0)[0];
+        assert_eq!(first["done"], false);
+        assert_eq!(first["cwd"], cwd);
+        assert_eq!(first["paths"], serde_json::json!(["src/a.rs"]));
+        let after = &lines(1)[1];
+        assert_eq!(
+            (&after["call"], &after["done"], &after["paths"]),
+            (&first["call"], &serde_json::json!(true), &first["paths"])
+        );
+        assert_eq!(lines(3).len(), 2, "a read was told");
+        let patched = &lines(4)[2];
+        assert_ne!(patched["call"], first["call"]);
+        assert_eq!(
+            patched["paths"],
+            serde_json::json!(["src/b.rs", "src/c.rs", "d.rs"])
+        );
+        assert_eq!(lines(5)[3]["call"], patched["call"]);
+        assert_eq!(lines(5)[3]["done"], true);
+    }
+
     #[test]
     #[cfg_attr(windows, ignore = "fakes tsumugi with a shell script")]
     fn commands_the_session_runs_get_back_the_folders_from_outside_its_login() {

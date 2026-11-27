@@ -380,6 +380,20 @@ pub struct WrittenRun {
     pub by: String,
 }
 
+/// The lines of `worktree`'s files agents wrote, as JSON to keep beside a
+/// change or hand to another tool: each file with its runs of lines and the
+/// session that wrote each, as the files read now.
+pub fn exported(worktree: &str, written: &[Written]) -> String {
+    let files: Vec<_> = written
+        .iter()
+        .map(|w| serde_json::json!({"path": w.path, "lines": w.runs}))
+        .collect();
+    let json = serde_json::json!({"worktree": worktree, "files": files});
+    let mut text = serde_json::to_string_pretty(&json).expect("the lines are JSON");
+    text.push('\n');
+    text
+}
+
 /// Who wrote line `line` of the file at `path`, numbered as it reads now.
 pub fn written_by<'a>(written: &'a [Written], path: &str, line: u32) -> Option<&'a str> {
     written
@@ -663,6 +677,30 @@ Review comments on your changes. Each comment names a file, the side of the chan
         assert!(!text.contains("line 1"), "{text}");
         assert!(text.contains("line 2 (uncommitted changes, outdated: the code changed since this comment was made)"), "{text}");
         assert!(prompt(&[]).is_empty());
+    }
+
+    #[test]
+    fn the_lines_written_are_kept_aside_as_json_of_each_file_s_runs_and_who_wrote_them() {
+        let written = [Written {
+            path: "src/メモ.rs".into(),
+            runs: vec![WrittenRun {
+                start: 2,
+                end: 4,
+                by: "s1 \"fixer\"".into(),
+            }],
+        }];
+        let text = exported("/w/tree", &written);
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "worktree": "/w/tree",
+                "files": [{"path": "src/メモ.rs", "lines": [
+                    {"start": 2, "end": 4, "by": "s1 \"fixer\""},
+                ]}],
+            })
+        );
+        assert!(text.ends_with('\n'));
     }
 
     #[test]

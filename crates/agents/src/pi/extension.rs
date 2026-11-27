@@ -312,6 +312,84 @@ exec sleep 30"#,
         assert!(!dir.path().join("ran").exists());
     }
 
+    /// A stand-in for Pi that runs the tools named on its command line,
+    /// each through the extension's handlers around it as Pi runs them, in
+    /// `/w`, and prints after each handler what tsumugi was told by then.
+    const TOOLS: &str = r#"
+const [, , extension, told, ...tools] = process.argv;
+const { readFileSync } = await import("node:fs");
+const { default: load } = await import(extension);
+const handlers = {};
+load({ registerMcpServer: () => {}, on: (event, handler) => (handlers[event] = handler) });
+const now = () => { try { return readFileSync(told, "utf8"); } catch { return ""; } };
+const seen = [];
+for (const [k, tool] of tools.entries()) {
+    const [toolName, path] = tool.split(":");
+    const event = { toolName, toolCallId: `call-${k}`, input: { path } };
+    const before = await handlers.tool_call(event, { cwd: "/w" });
+    seen.push({ before, told: now() });
+    const after = await handlers.tool_result(event, { cwd: "/w" });
+    seen.push({ after, told: now() });
+}
+console.log(JSON.stringify(seen));
+process.exit(0);
+"#;
+
+    #[test]
+    #[cfg_attr(windows, ignore = "fakes tsumugi with a shell script")]
+    fn tsumugi_is_told_of_each_write_before_and_after_it_and_of_no_other_tool() {
+        let dir = tempfile::tempdir().unwrap();
+        let told = dir.path().join("told");
+        // It answers late, so a handler that does not wait for it is caught.
+        let (_bin, tsumugi) = crate::testing::program(
+            "tsumugi",
+            &format!(
+                "sleep 0.2\n{{ printf '%s ' \"$@\"; cat; echo; }} >> {}",
+                told.display()
+            ),
+        );
+        let script = dir.path().join("tsumugi.mjs");
+        std::fs::write(&script, extension(&tsumugi, &running_in(dir.path()))).unwrap();
+        let harness = dir.path().join("tools.mjs");
+        std::fs::write(&harness, TOOLS).unwrap();
+        let out = std::process::Command::new("node")
+            .arg(&harness)
+            .arg(&script)
+            .arg(&told)
+            .args(["edit:@src/a.rs", "read:src/a.rs", "write:/elsewhere/b.rs"])
+            .env("TSUMUGI_DELEGATION_TOKEN", "secret")
+            .env("TSUMUGI_DELEGATION_ROOT", dir.path())
+            .output()
+            .expect("node");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let seen: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let lines = |k: usize| -> Vec<serde_json::Value> {
+            seen[k]["told"]
+                .as_str()
+                .unwrap()
+                .lines()
+                .map(|line| {
+                    let json = line.strip_prefix("mcp writing ").expect(line);
+                    serde_json::from_str(json).unwrap()
+                })
+                .collect()
+        };
+        let write = |call: &str, done: bool, path: &str| serde_json::json!({"call": call, "done": done, "cwd": "/w", "paths": [path]});
+        assert_eq!(lines(0), [write("call-0", false, "src/a.rs")]);
+        assert_eq!(lines(1)[1], write("call-0", true, "src/a.rs"));
+        assert_eq!(lines(3).len(), 2, "a read was told");
+        assert_eq!(lines(4)[2], write("call-2", false, "/elsewhere/b.rs"));
+        assert_eq!(lines(5)[3], write("call-2", true, "/elsewhere/b.rs"));
+        for k in 0..6 {
+            assert_eq!(seen[k].get("before"), None, "a tool was held: {seen}");
+            assert_eq!(seen[k].get("after"), None, "a result was changed: {seen}");
+        }
+    }
+
     #[test]
     fn a_session_loads_the_extension_and_tsumugi_s_skill_written_afresh() {
         let dir = tempfile::tempdir().unwrap();

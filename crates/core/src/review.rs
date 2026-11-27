@@ -62,6 +62,19 @@ impl<'a> Reading<'a> {
             .collect()
     }
 
+    /// What agents are known to have written of the files this diff shows,
+    /// as they read now; none where the new side is not the worktree.
+    pub fn written(&self, written: &[review::Written]) -> Vec<review::Written> {
+        if !matches!(self.rev, Rev::WorkingCopy | Rev::Base(_)) {
+            return Vec::new();
+        }
+        written
+            .iter()
+            .filter(|w| self.shows(&w.path))
+            .cloned()
+            .collect()
+    }
+
     /// Where each file of the diff begins: its heading, or the first line
     /// when there is none.
     pub fn file_starts(&self) -> Vec<usize> {
@@ -578,6 +591,26 @@ mod tests {
         let commit = Rev::Commit("abc".into());
         let r = Reading::new(&lines, "a.rs", &commit, &[]);
         assert!(r.written_by(&written).iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn the_lines_written_that_are_kept_aside_are_those_of_the_files_the_diff_shows() {
+        use tsumugi_model::review::{Written, WrittenRun};
+        let lines = stream();
+        let of = |path: &str| Written {
+            path: path.into(),
+            runs: vec![WrittenRun {
+                start: 1,
+                end: 1,
+                by: "s1 fixer".into(),
+            }],
+        };
+        let written = [of("a.rs"), of("elsewhere.rs"), of("b.rs")];
+        let r = Reading::new(&lines, "a.rs", &Rev::WorkingCopy, &[]);
+        assert_eq!(r.written(&written), [of("a.rs"), of("b.rs")]);
+        let commit = Rev::Commit("abc".into());
+        let r = Reading::new(&lines, "a.rs", &commit, &[]);
+        assert!(r.written(&written).is_empty());
     }
 
     #[test]

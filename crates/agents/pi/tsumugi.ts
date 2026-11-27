@@ -10,6 +10,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 
 const TSUMUGI = "@TSUMUGI@";
 const RUNNING = "@RUNNING@";
@@ -42,6 +43,16 @@ export default function (pi) {
 			args: ["mcp"],
 			exposure: "direct",
 			description: "Tsumugi's tools for starting and messaging the sessions the user watches in Tsumugi",
+		});
+	}
+	if (delegated) {
+		// Pi waits for each before its tool runs and before it goes on, so
+		// tsumugi reads the file just before and just after the write.
+		pi.on("tool_call", async (event, ctx) => {
+			await writing(event, ctx, false);
+		});
+		pi.on("tool_result", async (event, ctx) => {
+			await writing(event, ctx, true);
 		});
 	}
 	const record = join(RUNNING, `${process.pid}.json`);
@@ -78,6 +89,38 @@ function forget(path) {
 	try {
 		rmSync(path, { force: true });
 	} catch {}
+}
+
+/** The tools Pi writes a file with, each naming it `path`. */
+const WRITING = new Set(["edit", "write"]);
+
+/** How long tsumugi is waited for before the tool goes on without it. */
+const WRITING_MS = 5000;
+
+/**
+ * Tells tsumugi of the file one of Pi's writing tools is about to write, or
+ * has written when `done`, so the lines it changes are marked the session's.
+ * It waits until tsumugi has read the file, and never holds the tool longer.
+ */
+function writing(event, ctx, done) {
+	const path = event.input?.path;
+	if (!WRITING.has(event.toolName) || typeof path !== "string") return;
+	// Pi takes a path as its tools do: without a leading @, ~ for the home.
+	let named = path.replace(/^@/, "");
+	if (named === "~" || named.startsWith("~/")) named = join(homedir(), named.slice(1));
+	const told = { call: event.toolCallId, done, cwd: ctx.cwd, paths: [named] };
+	return new Promise((resolve) => {
+		const child = spawn(TSUMUGI, ["mcp", "writing"], { stdio: ["pipe", "ignore", "ignore"] });
+		const timer = setTimeout(() => child.kill(), WRITING_MS);
+		const end = () => {
+			clearTimeout(timer);
+			resolve();
+		};
+		child.on("error", end);
+		child.on("exit", end);
+		child.stdin.on("error", () => {});
+		child.stdin.end(JSON.stringify(told));
+	});
 }
 
 /**

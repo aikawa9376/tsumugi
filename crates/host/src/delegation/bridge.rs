@@ -665,6 +665,65 @@ fn writing(event: &Value, done: bool) -> Option<super::protocol::Writing> {
     })
 }
 
+/// The files an agent's plugin names as one write of its own tools: the
+/// write's `call`, whether it is `done`, and its `paths`, a relative one
+/// taken from `cwd`. None when the call or the paths are missing.
+fn writings(input: &Value) -> Vec<super::protocol::Writing> {
+    let (Some(call), Some(paths)) = (input["call"].as_str(), input["paths"].as_array()) else {
+        return Vec::new();
+    };
+    let done = input["done"].as_bool().unwrap_or(false);
+    let cwd = input["cwd"].as_str().map(Path::new);
+    paths
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|path| {
+            let path = Path::new(path);
+            match cwd {
+                Some(cwd) if path.is_relative() => cwd.join(path),
+                _ => path.to_path_buf(),
+            }
+        })
+        .map(|path| super::protocol::Writing {
+            path,
+            call: call.to_string(),
+            done,
+        })
+        .collect()
+}
+
+/// Tell the work host of each file `input` names as written, one after
+/// another, as each is read before the next is answered.
+async fn tell_writing(input: &Value, daemon: impl Daemon) {
+    for writing in writings(input) {
+        let _ = daemon.ask(Command::Writing(writing), None).await;
+    }
+}
+
+/// `tsumugi mcp writing`: tells the work host of the write the JSON on
+/// standard input names, from a plugin of an agent whose hooks are not
+/// Claude Code's. It always succeeds, as a failing plugin call would hold up
+/// the agent's tool.
+fn writing_cli() -> i32 {
+    use std::io::Read;
+    let mut input = String::new();
+    let input: Option<Value> = std::io::stdin()
+        .read_to_string(&mut input)
+        .ok()
+        .and_then(|_| serde_json::from_str(&input).ok());
+    let (Some(input), Ok(credential), Ok(root)) =
+        (input, std::env::var(TOKEN_ENV), std::env::var(ROOT_ENV))
+    else {
+        return 0;
+    };
+    crate::cli::block_on(tell_writing(
+        &input,
+        Socket::new(Path::new(&root), credential),
+    ))
+    .ok();
+    0
+}
+
 /// `tsumugi mcp hook`: answers the hook event on standard input. It always
 /// succeeds, adding nothing when it cannot answer, as a failing hook would
 /// hold up the user's prompt.
@@ -689,14 +748,15 @@ fn hook_cli() -> i32 {
     0
 }
 
-/// `tsumugi mcp [--channel | hook]`. Returns the process exit code.
+/// `tsumugi mcp [--channel | hook | writing]`. Returns the process exit code.
 pub fn cli(args: &[String]) -> i32 {
     let channel = match args {
         [] => false,
         [flag] if flag == "--channel" => true,
         [verb] if verb == "hook" => return hook_cli(),
+        [verb] if verb == "writing" => return writing_cli(),
         _ => {
-            eprintln!("usage: tsumugi mcp [--channel | hook]");
+            eprintln!("usage: tsumugi mcp [--channel | hook | writing]");
             return 2;
         }
     };
@@ -832,6 +892,29 @@ mod tests {
             Path::new("/w/b.rs")
         );
         assert!(writing(&event("Read", "/w/a.rs"), false).is_none());
+    }
+
+    #[test]
+    fn a_plugin_names_the_files_of_one_write_each_from_where_it_runs() {
+        let told = writings(&json!({"call": "c1", "done": true, "cwd": "/w",
+            "paths": ["/w/a.rs", "src/b.rs"]}));
+        let writing = |path: &str| super::super::protocol::Writing {
+            path: path.into(),
+            call: "c1".into(),
+            done: true,
+        };
+        assert_eq!(told, [writing("/w/a.rs"), writing("/w/src/b.rs")]);
+        assert!(writings(&json!({"done": false, "paths": ["/w/a"]})).is_empty());
+        assert!(writings(&json!({"call": "c1", "paths": "/w/a"})).is_empty());
+        assert!(!writings(&json!({"call": "c1", "paths": ["/w/a"]}))[0].done);
+    }
+
+    #[tokio::test]
+    async fn the_work_host_is_told_of_each_file_a_plugin_names() {
+        let daemon = Fake::new();
+        let input = json!({"call": "c1", "done": false, "paths": ["/w/a", "/w/b"]});
+        tell_writing(&input, daemon.clone()).await;
+        assert_eq!(*daemon.asked.lock().unwrap(), ["writing", "writing"]);
     }
 
     #[tokio::test]
