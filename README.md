@@ -114,6 +114,11 @@ build. Desktop interaction, input methods and permissions still need testing
 on the actual OS. Agent availability, authentication and remote machines
 require their own setup.
 
+An Android app in `android/` pairs with a work machine's gateway and shows
+the sessions that wait on you, sending a short reply to one whose turn ended
+([spec](docs/spec/android.md)). It is built with Gradle and the Android NDK
+(`./gradlew assembleDebug` in `android/`) and distributed as an APK.
+
 ## Development
 
 ```sh
