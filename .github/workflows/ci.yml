@@ -89,6 +89,31 @@ jobs:
           # before both lint and tests have built.
           CARGO_PROFILE_DEV_DEBUG: "0"
 
+  # The Android app, whose Gradle and NDK the Rust gate does not need: its
+  # Kotlin tests, and an APK built with the Rust core for every ABI it
+  # carries.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platforms;android-37.2 build-tools;37.0.0 ndk;30.0.16248370
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: rustup target add aarch64-linux-android x86_64-linux-android
+      - run: cargo install cargo-ndk@4.1.2 --locked
+      - run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        working-directory: android
+
   # The disk image a release attaches, made the way the release makes it,
   # with a placeholder version, so a release is never its first run.
   bundle:

@@ -1,0 +1,3 @@
+[bindings.kotlin]
+package_name = "io.github.aikawa9376.tsumugi.core"
+cdylib_name = "tsumugi_mobile"

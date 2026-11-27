@@ -343,7 +343,8 @@ impl Remote {
         Ok(stream)
     }
 
-    async fn open(
+    /// A connection to the work machine's `channel`, its handshake done.
+    pub async fn open(
         &self,
         channel: Channel,
     ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, Error> {

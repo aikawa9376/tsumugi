@@ -23,6 +23,7 @@ tsumugi-window = { path = "crates/window", version = "0.0.0" }
 tsumugi-connect = { path = "crates/connect", version = "0.0.0" }
 tsumugi-net = { path = "crates/net", version = "0.0.0" }
 tsumugi-sys = { path = "crates/sys", version = "0.0.0" }
+tsumugi-mobile = { path = "crates/mobile", version = "0.0.0" }
 
 felis-vt = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
 felis-grid = { git = "https://github.com/felis-terminal/felis", rev = "310c07ec7d1c63465d96395408dfa8812d184e49" }
@@ -69,4 +70,5 @@ toml_edit = "0.25.17"
 tempfile = "3.27.0"
 jiff = { version = "1.0.2", features = ["tzdb-bundle-always"] }
 uuid = { version = "1.28.0", features = ["v4"] }
+uniffi = "0.33.0"
 windows-sys = "0.61.2"

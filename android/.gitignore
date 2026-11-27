@@ -1,0 +1,6 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+# Built from crates/mobile by the build.
+app/src/main/jniLibs/

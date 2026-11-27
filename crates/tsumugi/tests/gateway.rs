@@ -386,3 +386,149 @@ fn a_gateway_starts_the_instance_s_hosts_where_none_run_and_leaves_them_running_
     assert_eq!(remote_info(&hosts)["work"]["pid"], info["work"]["pid"]);
     assert!(hosts.0.path().join("work.sock").exists());
 }
+
+/// An agent whose turn ends at once and ends again a moment after each line
+/// typed into it, which it keeps in `typed`.
+fn replying_agent(root: &std::path::Path) -> std::path::PathBuf {
+    let agent = root.join("agent.sh");
+    let typed = root.join("typed");
+    std::fs::write(
+        &agent,
+        format!(
+            "case \" $* \" in *' --plugin-dir '*) ;; *) printf '[]\\n'; exit 0;; esac\n\
+             printf '\\033]7501;state=done\\033\\\\'\n\
+             while IFS= read -r line; do\n\
+               printf '%s\\n' \"$line\" >> '{}'\n\
+               printf '\\033]7501;state=working\\033\\\\'\n\
+               sleep 1\n\
+               printf '\\033]7501;state=done\\033\\\\'\n\
+             done\n",
+            typed.display(),
+        ),
+    )
+    .unwrap();
+    let config = root.join("config/tsumugi");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(
+        config.join("settings.toml"),
+        format!(
+            "profile = \"fake\"\n[[profiles]]\nid = \"fake\"\nagent = \"claude\"\n[profiles.launch]\ncommand = [\"/bin/sh\", \"{}\"]\nvia_shell = false\n",
+            agent.display(),
+        ),
+    )
+    .unwrap();
+    typed
+}
+
+#[test]
+fn the_android_core_pairs_sees_a_session_whose_turn_ended_and_replies_to_its_wait_once() {
+    use std::io::Write;
+    use std::process::Stdio;
+    use tsumugi_mobile::reply::Outcome;
+    use tsumugi_mobile::waits::Answer;
+    let hosts = Hosts::new();
+    let root = hosts.0.path().to_path_buf();
+    let typed = replying_agent(&root);
+    let gateway = gatewayed(&hosts, false);
+
+    // The phone shows a code once the operator sees its request, and the
+    // operator types it.
+    let phone = tsumugi_net::Identity::generate().unwrap();
+    let (codes, shown) = std::sync::mpsc::channel();
+    let pairing = {
+        let (phone, address) = (phone.clone(), gateway.address.clone());
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new().unwrap().block_on(async {
+                tsumugi_mobile::pairing::pair(&phone, &address, "phone", |step| {
+                    if let tsumugi_mobile::pairing::Step::Shown { code } = step {
+                        let _ = codes.send(code);
+                    }
+                })
+                .await
+            })
+        })
+    };
+    let mut operator = isolated(&root)
+        .args(["remote", "pair"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let operator_lines = lines_of(operator.stdout.take().unwrap());
+    let code = shown.recv_timeout(Duration::from_secs(30)).unwrap();
+    line_with(&operator_lines, "Request from");
+    writeln!(operator.stdin.take().unwrap(), "{code}").unwrap();
+    line_with(&operator_lines, "Paired");
+    assert!(operator.wait().unwrap().success());
+    let server = pairing.join().unwrap().unwrap();
+    assert_eq!(server.to_string(), gateway.server);
+
+    let started = isolated(&root)
+        .args(["session", "start", "--dir"])
+        .arg(&root)
+        .args(["--name", "phone-test", "--background", "--", "begin"])
+        .output()
+        .unwrap();
+    assert!(
+        started.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started.stderr)
+    );
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let remote = tsumugi_net::Remote::new(phone, server, gateway.address.clone());
+        let (told, mut waits) = tokio::sync::mpsc::unbounded_channel();
+        let watching = {
+            let remote = remote.clone();
+            tokio::spawn(async move {
+                tsumugi_mobile::link::watch(&remote, |now| {
+                    let _ = told.send(now);
+                })
+                .await
+            })
+        };
+        let wait = tokio::time::timeout(Duration::from_secs(60), async {
+            loop {
+                let now = waits.recv().await.expect("the watch ended");
+                if let Some(wait) = now
+                    .into_iter()
+                    .find(|w| w.name == "phone-test" && w.answer == Answer::Reply)
+                {
+                    return wait;
+                }
+            }
+        })
+        .await
+        .expect("the session's turn ending was never told");
+
+        let sent = tsumugi_mobile::link::reply(
+            &remote,
+            &wait.session,
+            wait.agent,
+            wait.wait,
+            "hello from the phone",
+        )
+        .await;
+        assert_eq!(sent, Outcome::Sent);
+        let again =
+            tsumugi_mobile::link::reply(&remote, &wait.session, wait.agent, wait.wait, "twice")
+                .await;
+        assert!(matches!(again, Outcome::Refused { .. }), "{again:?}");
+
+        let typed = tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                let text = std::fs::read_to_string(&typed).unwrap_or_default();
+                if text.contains("hello from the phone") {
+                    return text;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("the reply was never typed");
+        assert!(!typed.contains("twice"), "{typed:?}");
+        watching.abort();
+    });
+}

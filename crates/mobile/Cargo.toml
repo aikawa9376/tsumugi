@@ -1,0 +1,38 @@
+[package]
+name = "tsumugi-mobile"
+description = "What the Android app asks of a work machine: pairing, the pinned connection, the sessions that wait on the user and the replies sent to them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "tsumugi_mobile"
+
+[dependencies]
+tsumugi-model.workspace = true
+tsumugi-net.workspace = true
+tsumugi-protocol = { workspace = true, features = ["client"] }
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+uniffi.workspace = true
+uuid.workspace = true
+
+[features]
+# The bindings' generator, which the app's build runs.
+bindgen = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+required-features = ["bindgen"]
+
+[dev-dependencies]
+tempfile.workspace = true
+tsumugi-model = { workspace = true, features = ["testing"] }
+tsumugi-protocol = { workspace = true, features = ["testing"] }

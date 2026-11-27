@@ -23,6 +23,7 @@ tracing-subscriber.workspace = true
 tsumugi-sys.workspace = true
 tsumugi-model.workspace = true
 tsumugi-net.workspace = true
+tsumugi-mobile.workspace = true
 tsumugi-protocol = { workspace = true, features = ["client"] }
 tsumugi-term.workspace = true
 serde_json.workspace = true

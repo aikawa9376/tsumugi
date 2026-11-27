@@ -35,6 +35,9 @@ An Agent Workspace for people who live in Vim: drive any coding agent in its own
 
 Run `cargo xtask ci` before reporting a change as done. CI runs the same
 command on every platform; it runs the checks of the platform it runs on.
+A change to `android/` or `crates/mobile/` also passes
+`./gradlew testDebugUnitTest assembleDebug` in `android/`, which CI runs as a
+job of its own with the Android SDK and NDK.
 
 ## Layout
 
@@ -60,6 +63,7 @@ command on every platform; it runs the checks of the platform it runs on.
 | `crates/host/nvim/` | the colorscheme the Neovims a session runs can choose to draw in the theme in force, taken in with `include_str!` |
 | `crates/host/tests/` | tests that start the terminal host, sessions and shells |
 | `crates/term/` | the terminal host's client and server: felis sessions, their tags, screens and keys, and the protocol's versions |
+| `crates/mobile/` | the Android app's core: pairing, the pinned connection, the sessions that wait and the replies sent to them, which the app reaches through uniffi |
 | `crates/nvim/` | the Neovims the window embeds for the prompt and the console's reader |
 | `crates/nvim/lua/` | the Lua the prompt's and the reader's Neovims run, taken in with `include_str!` |
 | `crates/vcs/` | what Tsumugi reads of and makes in Git repositories, and the repositories ghq keeps |
@@ -71,6 +75,7 @@ command on every platform; it runs the checks of the platform it runs on.
 | `assets/arto-frontend/` | the licences of the packages Arto's frontend bundles, which the Markdown viewer draws with and `Tsumugi.app` ships |
 | `assets/fonts/` | JetBrainsMono Nerd Font Mono in the styles the console draws, its licences, the release it came from, and `update.sh` that copies it again |
 | `assets/neovim/` | the Neovim release the macOS app carries and the tests run in, pinned by its tag and archives' SHA-256, its licence, `fetch.sh` that fetches and checks it, and `update.sh` that pins another |
+| `android/` | the Android app: its Gradle build, which builds `crates/mobile` with the NDK and writes its Kotlin bindings, and its Kotlin and Jetpack Compose interface |
 | `docs/` | concept, ADRs, specs, references |
 
 ## Language
@@ -110,6 +115,7 @@ Scoped Commits:
 | `core` | `crates/core/` |
 | `host` | `crates/host/` |
 | `nvim` | `crates/nvim/` |
+| `mobile` | `crates/mobile/` |
 | `model` | `crates/model/` |
 | `protocol` | `crates/protocol/` |
 | `connect` | `crates/connect/` |
@@ -119,6 +125,7 @@ Scoped Commits:
 | `sys` | `crates/sys/` |
 | `xtask` | `crates/xtask/` |
 | `assets` | `assets/` |
+| `android` | `android/` |
 | `docs` | `docs/concept.md`, `README.md`, `AGENTS.md` |
 | `adr` | `docs/adr/` |
 | `spec` | `docs/spec/` |
