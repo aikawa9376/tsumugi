@@ -4,13 +4,13 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::json;
-use tsumugi_model::{LocalIssue, LocalIssueAction, LocalIssueState, NewLocalIssue};
+use tsumugi_model::{LocalIssue, LocalIssueAction, LocalIssueState, NewLocalIssue, TryAs};
 
 use crate::command::Output;
 use crate::delegation::{Code, Error};
 use crate::watch::Watched;
 
-const USAGE: &str = "usage: tsumugi issue <list [--state <state>] [--dir <path>] | show <issue> | create --title <title> [--body <text|->] [--dir <path>] | start <issue> | cancel <issue> | retry <issue> | close <issue> | reopen <issue> | delete <issue>> [--json] [--instance <name>]";
+const USAGE: &str = "usage: tsumugi issue <list [--state <state>] [--dir <path>] | show <issue> | create --title <title> [--body <text|->] [--dir <path>] | start <issue> [--attempt <profile>[:<model>]]... | cancel <issue> | retry <issue> | close <issue> | reopen <issue> | delete <issue>> [--json] [--instance <name>]";
 
 /// What `tsumugi issue` was asked.
 #[derive(Debug, PartialEq, Eq)]
@@ -33,12 +33,15 @@ enum What {
         dir: Option<PathBuf>,
     },
     Act(LocalIssueAction, String),
+    /// Start the issue as one attempt for each of these.
+    Try(String, Vec<TryAs>),
 }
 
 fn parse(args: &[String]) -> Option<Asked> {
     let (verb, mut rest) = args.split_first()?;
     let (mut json, mut state, mut dir, mut title, mut body) = (false, None, None, None, None);
     let mut selector = None;
+    let mut tries = Vec::new();
     while let Some((word, after)) = rest.split_first() {
         rest = after;
         let mut value = || {
@@ -57,6 +60,7 @@ fn parse(args: &[String]) -> Option<Asked> {
             ("list" | "create", "--dir") if dir.is_none() => dir = Some(PathBuf::from(value()?)),
             ("create", "--title") if title.is_none() => title = Some(value()?),
             ("create", "--body") if body.is_none() => body = Some(value()?),
+            ("start", "--attempt") => tries.push(TryAs::parse(&value()?)?),
             (_, name) if name.starts_with("--") => return None,
             (
                 "show" | "start" | "cancel" | "retry" | "close" | "reopen" | "delete",
@@ -75,6 +79,7 @@ fn parse(args: &[String]) -> Option<Asked> {
             dir,
         },
         "show" => What::Show(selector?),
+        "start" if !tries.is_empty() => What::Try(selector?, tries),
         word => What::Act(LocalIssueAction::parse(word)?, selector?),
     };
     Some(Asked { json, what })
@@ -195,6 +200,12 @@ async fn carry_out(
             let (number, issue) = crate::local_issues::act(watched, &selector, action).await?;
             Ok(Shown::Changed(action, number, issue))
         }
+        What::Try(selector, tries) => {
+            let (number, issue) = crate::local_issues::try_as(watched, selector, tries)
+                .await
+                .map_err(|message| Error::new(Code::Refused, message))?;
+            Ok(Shown::One(number, issue))
+        }
     }
 }
 
@@ -258,6 +269,20 @@ fn detail(number: u64, issue: &LocalIssue) -> String {
     if let Some(error) = &issue.error {
         text.push_str(&format!("\nerror: {error}"));
     }
+    for attempt in &issue.attempts {
+        text.push_str(&format!(
+            "\nattempt {}: {:<9}  {}",
+            attempt.number,
+            attempt.state.word(),
+            crate::local_issues::tried_as_word(&attempt.tried_as)
+        ));
+        if let Some(worktree) = &attempt.worktree {
+            text.push_str(&format!("  {}", worktree.display()));
+        }
+        if let Some(error) = &attempt.error {
+            text.push_str(&format!("  ({error})"));
+        }
+    }
     if !issue.body.is_empty() {
         text.push_str(&format!("\n\n{}", issue.body));
     }
@@ -285,6 +310,7 @@ mod tests {
             session: Some("0f".into()),
             error: Some("It failed".into()),
             schedule: None,
+            attempts: Vec::new(),
         }
     }
 
@@ -299,6 +325,31 @@ mod tests {
             assert_eq!(asked(&[action.word(), "3", "4"]), None);
         }
         assert_eq!(asked(&["show", "ab12"]), Some(What::Show("ab12".into())));
+    }
+
+    #[test]
+    fn start_with_attempts_tries_the_issue_once_for_each_time_one_is_given() {
+        let tried = |word: &str| TryAs::parse(word).unwrap();
+        assert_eq!(
+            asked(&[
+                "start",
+                "3",
+                "--attempt",
+                "claude:opus",
+                "--attempt",
+                "codex"
+            ]),
+            Some(What::Try(
+                "3".into(),
+                vec![tried("claude:opus"), tried("codex")]
+            ))
+        );
+        assert_eq!(
+            asked(&["start", "--attempt", "codex", "--attempt", "codex", "3"]),
+            Some(What::Try("3".into(), vec![tried("codex"), tried("codex")]))
+        );
+        assert_eq!(asked(&["start", "3", "--attempt", ":opus"]), None);
+        assert_eq!(asked(&["retry", "3", "--attempt", "codex"]), None);
     }
 
     #[test]

@@ -149,6 +149,19 @@ pub(crate) fn merged(
             let mut told = format!("Merged {branch} into {base} at {commit}");
             if let Some(issue) = closed {
                 told.push_str(&format!("; closed #{}", issue.number));
+                if !issue.others.is_empty() {
+                    let count = issue.others.len();
+                    told.push_str(&format!(
+                        "; {count} other attempt{} offered for deleting next",
+                        if count == 1 { " is" } else { "s are" }
+                    ));
+                }
+                state.overlays.discards.extend(
+                    issue
+                        .others
+                        .into_iter()
+                        .map(|other| (environment.clone(), other)),
+                );
             }
             if let Some(stash) = stash {
                 told.push_str(&format!(

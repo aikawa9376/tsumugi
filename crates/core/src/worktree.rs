@@ -21,7 +21,9 @@ pub(crate) use cleanup::{
     toggle as cleanup_toggle,
 };
 pub(crate) use composer::{composer_key, cursor_at, focus, open, open_at, read_starts, type_into};
-pub(crate) use delete::{confirmed as delete_confirmed, delete, inspected, removed};
+pub(crate) use delete::{
+    confirmed as delete_confirmed, delete, inspected, offer_next_discard, removed,
+};
 pub(crate) use merge::{
     confirmed as merge_confirmed, inspected as merge_inspected, merge, merged, resolved,
 };

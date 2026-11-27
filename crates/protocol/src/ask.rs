@@ -22,6 +22,12 @@ pub enum Ask {
     StartLocalIssue {
         id: String,
     },
+    /// Start the issue of `id` as one attempt for each of `tries`, each in a
+    /// worktree of its own.
+    TryLocalIssue {
+        id: String,
+        tries: Vec<tsumugi_model::TryAs>,
+    },
     QueueLocalIssue(tsumugi_model::NewLocalIssue),
     /// Hand the open issues of `issues`, by id, to a leader session, which
     /// carries them through itself; `max_workers` limits its workers for this

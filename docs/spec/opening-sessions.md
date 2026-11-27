@@ -68,7 +68,10 @@ cannot act as another.
   carries is sent to the resumed session as a message.
   A start that names a **local issue** works it ([see
   below](#working-an-issue)); it starts in the issue's directory unless it
-  names another.
+  names another. One that also lists **attempts** starts the issue as one
+  session for each, each in a worktree of its own
+  ([trying an issue several ways](local-issues.md#attempts-a-session-opens)),
+  and answers with the issue and its attempts.
 - **`review`** reads the review of the caller's worktree: every comment and
   note, with its file, side, lines, what it says, and whether it is outdated,
   resolved or sent ([review](review.md#notes-from-agents)).

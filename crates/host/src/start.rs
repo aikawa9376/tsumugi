@@ -142,6 +142,7 @@ async fn start_as(
             supervised: asked.supervised,
             resume: None,
             issue: None,
+            attempts: Vec::new(),
         });
     let started: crate::delegation::protocol::Started =
         crate::delegation::protocol::ask_for(root, credential, command, None)

@@ -128,6 +128,7 @@ fn local_issues_share_the_issues_toggle_at_the_same_depth_as_github_issues() {
         session: None,
         error: None,
         schedule: None,
+        attempts: Vec::new(),
     };
     let row = Item::LocalIssue(here(), issue.dir.clone(), issue.id.clone());
     let heading = on_github("/api", Listing::Issues);
@@ -177,6 +178,7 @@ fn local_issues_share_the_issues_toggle_at_the_same_depth_as_github_issues() {
         session: None,
         error: None,
         schedule: None,
+        attempts: Vec::new(),
     }];
     let rows = items_with_issues(&here(), &tree, &folds, &|_| vec![], &github, &issues, &[]);
     let remote = Item::GitHubItem(here(), "/api".into(), Listing::Issues, 42);

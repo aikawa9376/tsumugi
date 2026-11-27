@@ -13,8 +13,9 @@ use tsumugi_model::{Agent, AgentPermissions, Exit, Rest, SessionCode, TerminalSe
 use super::{Code, Error, Message, MessageId, Readiness, Result, Session, SessionId};
 use crate::settings::Settings;
 
-const SCHEMA_VERSION: i64 = 20;
+const SCHEMA_VERSION: i64 = 21;
 
+mod attempts;
 mod checkpoints;
 mod issues;
 mod resources;
@@ -226,6 +227,20 @@ const MIGRATIONS: &[&str] = &[
          session TEXT PRIMARY KEY REFERENCES sessions(id),
          at_ms INTEGER NOT NULL,
          tail TEXT NOT NULL
+     );",
+    // The attempts an issue was last started as, each a session in a
+    // worktree of its own made from the same commit.
+    "CREATE TABLE IF NOT EXISTS issue_attempts (
+         issue TEXT NOT NULL REFERENCES local_issues(id) ON DELETE CASCADE,
+         number INTEGER NOT NULL,
+         profile TEXT,
+         model TEXT,
+         base TEXT NOT NULL,
+         state TEXT NOT NULL,
+         worked INTEGER NOT NULL DEFAULT 0,
+         session TEXT REFERENCES sessions(id),
+         error TEXT,
+         PRIMARY KEY (issue, number)
      );",
 ];
 

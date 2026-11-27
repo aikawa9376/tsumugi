@@ -264,6 +264,13 @@ mod tests {
         round_trips(ask);
         round_trips(Ask::CreateLocalIssue(new.clone()));
         round_trips(Ask::StartLocalIssue { id: new.id.clone() });
+        round_trips(Ask::TryLocalIssue {
+            id: new.id.clone(),
+            tries: vec![
+                tsumugi_model::TryAs::parse("claude:opus").unwrap(),
+                tsumugi_model::TryAs::default(),
+            ],
+        });
         round_trips(Ask::StartLeader {
             issues: vec![new.id.clone()],
             max_workers: Some(3),
@@ -366,6 +373,7 @@ mod tests {
                 session: Some("ffff".into()),
                 error: None,
                 schedule: None,
+                attempts: Vec::new(),
             }],
         });
     }

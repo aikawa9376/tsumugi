@@ -5,6 +5,7 @@
 
 mod appearance;
 mod asks;
+mod attempts;
 pub mod awake;
 mod browser;
 mod browser_cli;

@@ -186,6 +186,10 @@ pub enum MainChanges {
 pub struct LinkedIssue {
     pub number: u64,
     pub title: String,
+    /// The worktrees of the issue's other attempts, which a merge of this
+    /// one leaves to be discarded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub others: Vec<std::path::PathBuf>,
 }
 
 /// How merging the branch of a worktree into the main checkout stands.

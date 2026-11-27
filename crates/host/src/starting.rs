@@ -79,6 +79,7 @@ pub(crate) struct Place {
 }
 
 /// What runs where the work host keeps its records and finds itself.
+#[derive(Clone, Copy)]
 pub(crate) struct Host<'a> {
     pub(crate) daemon: &'a Daemon,
     pub(crate) root: &'a Path,

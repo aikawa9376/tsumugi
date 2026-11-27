@@ -24,3 +24,12 @@
 .schedule-next, .schedule-last { color: var(--text-3); font-size: var(--ui-font-caption); overflow-wrap: anywhere; }
 .schedule-when { display: flex; flex-wrap: wrap; gap: 8px; }
 .schedule-when .adding-input { flex: 1 1 120px; min-width: 0; }
+.local-issue-try-form { margin: 8px 0; }
+.local-issue-try-form summary { cursor: pointer; color: var(--text-2); font-size: var(--ui-font-small); }
+.local-issue-try { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.local-issue-try .adding-input { flex: 1 1 160px; min-width: 0; }
+.local-issue-attempts { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.local-issue-attempt { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.local-issue-attempt-head { display: flex; align-items: baseline; gap: 8px; }
+.local-issue-attempt-name { flex: 1; overflow-wrap: anywhere; }
+.local-issue-attempt-head .local-issue-state { float: none; margin-left: 0; }

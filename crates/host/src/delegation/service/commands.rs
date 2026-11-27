@@ -769,6 +769,9 @@ pub(super) async fn start(
             "the user has switched off sessions opening sessions; carry on yourself, or ask the user to open the session",
         ));
     }
+    if !start.attempts.is_empty() {
+        return start_attempts(context, caller, &settings, start).await;
+    }
     let tier = start.tier;
     let start = with_tier(&settings, start)?;
     let resumed = match &start.resume {
@@ -936,6 +939,69 @@ pub(super) async fn start(
         name: started.name,
         dir: started.dir,
     })
+}
+
+/// Start the issue `start` names as the attempts it lists, each opened by
+/// the caller.
+async fn start_attempts(
+    context: &Context,
+    caller: &Session,
+    settings: &crate::settings::Settings,
+    start: protocol::Start,
+) -> Result<Value> {
+    let Some(issue) = start.issue.clone() else {
+        return Err(Error::new(
+            Code::Invalid,
+            "attempts try a local issue: name it with `issue`",
+        ));
+    };
+    let beside: Vec<&str> = [
+        ("dir", start.dir.is_some()),
+        ("worktree", start.worktree),
+        ("base", start.base.is_some()),
+        ("agent", start.agent.is_some()),
+        ("profile", start.profile.is_some()),
+        ("model", start.model.is_some()),
+        ("tier", start.tier.is_some()),
+        ("resume", start.resume.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(name, given)| given.then_some(name))
+    .collect();
+    if !beside.is_empty() {
+        return Err(Error::new(
+            Code::Invalid,
+            format!(
+                "each attempt starts in a worktree of its own from its own profile and model; leave {} out",
+                beside.join(", ")
+            ),
+        ));
+    }
+    for tried in &start.attempts {
+        let chosen = crate::attempts::context_of(settings, tried)
+            .map_err(|error| Error::new(Code::Invalid, error))?;
+        context
+            .models
+            .lock()
+            .expect("the models' lock")
+            .check(&chosen.profile, tried.model.as_deref())
+            .map_err(|error| Error::new(Code::Invalid, error))?;
+    }
+    let opener = crate::attempts::Opener {
+        id: caller.id,
+        supervised: start.supervised.then(|| supervised_prompt("", caller)),
+        show: !start.background,
+    };
+    let host = crate::starting::Host {
+        daemon: &context.daemon,
+        root: &context.root,
+        program: &context.program,
+    };
+    let (number, issue) =
+        crate::attempts::start(host, settings, issue, start.attempts, Some(opener), None)
+            .await
+            .map_err(|error| Error::new(Code::Refused, error))?;
+    answer(serde_json::json!({"issue": crate::local_issues::view(number, &issue)}))
 }
 
 /// Start the session `start` asks for, once what it asks was found fit.

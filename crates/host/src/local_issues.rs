@@ -1,5 +1,5 @@
 //! The work host owns issue processing independently of its connected windows.
-use tsumugi_model::{LocalIssue, LocalIssueAction, NewLocalIssue, Session};
+use tsumugi_model::{LocalIssue, LocalIssueAction, NewLocalIssue, Session, TryAs};
 use tsumugi_protocol::{Answer, TreeChange};
 
 use crate::delegation::app::{root, with_store};
@@ -81,7 +81,17 @@ pub(crate) fn view(number: u64, issue: &LocalIssue) -> serde_json::Value {
         "session": issue.session,
         "error": issue.error,
         "schedule": issue.schedule,
+        "attempts": issue.attempts,
     })
+}
+
+/// An attempt's profile and model as a command names them.
+pub(crate) fn tried_as_word(tried: &TryAs) -> String {
+    let profile = tried.profile.as_deref().unwrap_or("default profile");
+    match &tried.model {
+        Some(model) => format!("{profile}:{model}"),
+        None => profile.to_owned(),
+    }
 }
 
 async fn edit(
@@ -184,4 +194,28 @@ async fn start(issue: &tsumugi_model::LocalIssue) -> Result<(), String> {
         .await
         .map(|_| ())
         .map_err(|failure| failure.message)
+}
+
+/// Start the issue `selector` names as one attempt for each of `tries`, as
+/// the user asks from a window or the command line.
+pub(crate) async fn try_as(
+    watched: &Watched,
+    selector: String,
+    tries: Vec<TryAs>,
+) -> Result<(u64, LocalIssue), String> {
+    let settings = crate::settings::current();
+    let (root, daemon, program) = (
+        root(),
+        crate::daemon::daemon(),
+        crate::work_host::tsumugi_program(),
+    );
+    let host = crate::starting::Host {
+        daemon: &daemon,
+        root: &root,
+        program: &program,
+    };
+    let started =
+        crate::attempts::start(host, &settings, selector, tries, None, Some(watched)).await;
+    watched.relist();
+    started
 }

@@ -64,6 +64,10 @@ pub struct Overlays {
     /// The tabs listed while the keys that opened the switcher are held.
     pub switcher: Option<Switcher>,
     pub banner: Banner,
+    /// Worktrees still to be offered for deleting, one at a time, once the
+    /// question about the one before is answered: the attempts a merge did
+    /// not choose.
+    pub discards: std::collections::VecDeque<(EnvironmentId, std::path::PathBuf)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -507,6 +511,15 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
     let Some(ask) = state.overlays.confirm.take() else {
         return Vec::new();
     };
+    if matches!(ask, Ask::DeleteWorktree { .. }) {
+        let mut effects = if yes {
+            crate::worktree::delete_confirmed(ask)
+        } else {
+            Vec::new()
+        };
+        effects.extend(crate::worktree::offer_next_discard(state));
+        return effects;
+    }
     // Not running a script is an answer too: the worktree goes on without it.
     if matches!(ask, Ask::SetupWorktree { .. }) {
         return crate::worktree::answered(ask, yes);
@@ -619,7 +632,8 @@ pub(crate) fn answer(state: &mut ViewState, yes: bool) -> Vec<Effect> {
                 .chain([dropped])
                 .collect()
         }
-        ask @ Ask::DeleteWorktree { .. } => crate::worktree::delete_confirmed(ask),
+        // Answered before the match, with the next discard offered.
+        Ask::DeleteWorktree { .. } => Vec::new(),
         ask @ (Ask::MergeWorktree { .. } | Ask::ResolveMerge { .. }) => {
             crate::worktree::merge_confirmed(ask)
         }

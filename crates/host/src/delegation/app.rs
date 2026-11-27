@@ -92,6 +92,7 @@ async fn record(
     // copies.
     let resumes = request.resume.clone().filter(|_| !request.fork);
     let local_issue = request.local_issue.clone();
+    let attempt = request.attempt;
     let (id, token, code) = with_store(root, move |store| {
         let new = match (&new.code, &resumes) {
             (None, Some(conversation)) => NewSession {
@@ -101,8 +102,10 @@ async fn record(
             _ => new,
         };
         let (id, token) = store.register(new)?;
-        if let Some(issue) = local_issue {
-            store.attach_local_issue(&issue, id)?;
+        match (local_issue, attempt) {
+            (Some(issue), Some(number)) => store.attach_attempt(&issue, number, id)?,
+            (Some(issue), None) => store.attach_local_issue(&issue, id)?,
+            (None, _) => {}
         }
         Ok((id, token, store.known(id)?.code))
     })

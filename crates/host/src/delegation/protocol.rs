@@ -442,6 +442,9 @@ pub struct Start {
     /// Supervise it as a worker: it reports to you with `report_done` once its work is done, and you are told when it stops without one, so you can `wait` for it instead of polling. The user still sees and steers it.
     #[serde(default)]
     pub supervised: bool,
+    /// With `issue`, try it several ways at once: one session for each entry, each in a new worktree of the issue's directory made from the commit it is at, started from the entry's profile and model and opened by you (supervised by you with `supervised`). The user compares them and merges the one to keep. `dir`, `worktree`, `base`, `agent`, `profile`, `model`, `tier` and `resume` are refused beside it. Answered with the issue and its attempts.
+    #[serde(default)]
+    pub attempts: Vec<tsumugi_model::TryAs>,
 }
 
 /// How a worker's work ended.

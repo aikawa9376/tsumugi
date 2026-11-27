@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct Version(pub u32);
 
 /// The versions this build speaks, oldest first.
-pub const SPOKEN: &[Version] = &[Version(9)];
+pub const SPOKEN: &[Version] = &[Version(10)];
 
 /// The version two peers work in: the newest both speak, or none.
 pub fn agree(ours: &[Version], theirs: &[Version]) -> Option<Version> {

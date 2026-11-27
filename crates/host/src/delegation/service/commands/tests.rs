@@ -1307,6 +1307,7 @@ fn an_issue_is_worked_from_its_own_text_followed_by_what_the_opener_adds() {
         session: None,
         error: None,
         schedule: None,
+        attempts: Vec::new(),
     };
 
     let alone = issue_prompt(41, &issue, "");
@@ -1338,6 +1339,50 @@ async fn an_issue_that_does_not_exist_or_cannot_be_worked_on_refuses_the_start_a
     assert_eq!(missing.code, Code::NotFound);
     assert_eq!(closed.code, Code::Refused);
     assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn attempts_need_an_issue_and_leave_where_and_as_what_to_each_attempt() {
+    let (dir, context, caller, _) = conversation_watch("lead");
+    saved(&context, &caller, "compare", dir.path()).await;
+    let request =
+        |asked: serde_json::Value| serde_json::from_value::<protocol::Start>(asked).unwrap();
+    let attempts = json!([{"profile": "claude"}, {"profile": "codex"}]);
+
+    let no_issue = start(
+        &context,
+        &caller,
+        request(json!({"prompt": "go", "attempts": attempts})),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(no_issue.code, Code::Invalid);
+    for (field, value) in [
+        ("dir", json!("/repo")),
+        ("worktree", json!(true)),
+        ("base", json!("main")),
+        ("agent", json!("codex")),
+        ("profile", json!("claude")),
+        ("model", json!("opus")),
+        ("tier", json!("light")),
+    ] {
+        let mut asked = json!({"issue": "1", "attempts": attempts});
+        asked[field] = value;
+        let refused = start(&context, &caller, request(asked)).await.unwrap_err();
+        assert_eq!(refused.code, Code::Invalid, "{field}");
+    }
+    let outside_git = start(
+        &context,
+        &caller,
+        request(json!({"issue": "1", "attempts": attempts})),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(outside_git.code, Code::Refused, "{}", outside_git.message);
+    assert_eq!(context.call(|s| s.sessions()).await.unwrap().len(), 1);
+    let (_, issue) = context.call(|s| s.local_issue_named("1")).await.unwrap();
+    assert_eq!(issue.state, tsumugi_model::LocalIssueState::Open);
 }
 
 /// A terminal host with one agent session of Claude Code running in `dir`,

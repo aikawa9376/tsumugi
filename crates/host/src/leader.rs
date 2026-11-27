@@ -156,6 +156,7 @@ mod tests {
             session: None,
             error: None,
             schedule: None,
+            attempts: Vec::new(),
         }
     }
 

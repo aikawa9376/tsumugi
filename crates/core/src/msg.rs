@@ -686,6 +686,12 @@ pub enum Msg {
         path: PathBuf,
         result: Result<tsumugi_model::WorktreeStanding, String>,
     },
+    /// Discard the worktree at `path`, an attempt at an issue, as deleting
+    /// its row in the tree does: the host is asked first how it stands.
+    WorktreeDiscard {
+        environment: EnvironmentId,
+        path: PathBuf,
+    },
     /// The work host answered deleting the worktree at `path`.
     WorktreeDeleted {
         path: PathBuf,

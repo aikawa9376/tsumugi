@@ -74,6 +74,9 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             max_workers,
         } => crate::leader::start(watched, issues, max_workers).await,
         Ask::StartLocalIssue { id } => crate::local_issues::start_saved(watched, id).await,
+        Ask::TryLocalIssue { id, tries } => crate::local_issues::try_as(watched, id, tries)
+            .await
+            .map(|_| Answer::Done),
         Ask::CancelLocalIssue { id } => crate::local_issues::change(watched, id, false).await,
         Ask::RetryLocalIssue { id } => crate::local_issues::change(watched, id, true).await,
         Ask::CloseLocalIssue { id } => crate::local_issues::close(watched, id).await,

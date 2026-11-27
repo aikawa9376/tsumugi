@@ -559,6 +559,11 @@ pub fn update(state: &mut ViewState, msg: Msg) -> Vec<Effect> {
             result,
         } => crate::worktree::inspected(state, environment, path, result),
         Msg::WorktreeDeleted { path, result } => crate::worktree::removed(state, &path, result),
+        Msg::WorktreeDiscard { environment, path } => {
+            // The question it asks is drawn over the window, not the sheet.
+            state.overlays.local_issues = None;
+            crate::worktree::delete(state, &crate::tree::nav::Item::Worktree(environment, path))
+        }
         Msg::WorktreeMergeInspected {
             environment,
             path,

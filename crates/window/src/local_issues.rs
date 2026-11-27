@@ -10,6 +10,8 @@ use crate::bridge::AppCtx;
 use crate::components::{Button, Dialog};
 use crate::icons::{Icon, IconView};
 
+mod attempts;
+
 #[component]
 pub(crate) fn StartIssue(environment: tsumugi_model::EnvironmentId, issue: LocalIssue) -> Element {
     let ask = match issue.state {
@@ -149,7 +151,7 @@ fn IssueSheet(place: Place, selected: Option<String>, leader: bool) -> Element {
         Dialog { kind: "local-issues-dialog", title: "Local Issues · {name}", escapes: true, onclose: move |_| close(),
             div { class: "local-issues-body",
                 if selected.is_none() {
-                    p { class: "adding-note", "Save issues for later, then press ▸ to start with this environment's default agent. One issue runs at a time in each working directory." }
+                    p { class: "adding-note", "Save issues for later, then press ▸ to start with this environment's default agent, or try one several ways, each in a worktree of its own. One issue runs at a time in each working directory." }
                 }
                 div { class: "local-issues-list",
                     if issues.is_empty() { p { class: "adding-note", "No local issues yet." } }
@@ -223,6 +225,12 @@ fn IssueRow(
                 if issue.schedule.is_some() { " · from a schedule" }
             }
             if let Some(text) = &issue.error { p { class: "adding-error", "{text}" } }
+            if !issue.attempts.is_empty() {
+                attempts::Attempts { environment: environment.clone(), issue: issue.clone() }
+            }
+            if matches!(issue.state, LocalIssueState::Open | LocalIssueState::Failed | LocalIssueState::Cancelled) {
+                attempts::TryForm { issue: issue.id.clone(), busy, mutate }
+            }
             div { class: "local-issue-actions",
                 if let Some(session) = issue.session {
                     Button { onclick: move |_| {

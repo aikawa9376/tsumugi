@@ -14,15 +14,25 @@ use crate::delegation::app::{root, with_store};
 /// and it is not closed.
 async fn linked(root: &Path, path: &Path) -> Result<Option<(u64, LinkedIssue)>, String> {
     let dir = tsumugi_sys::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let found = with_store(root, move |store| store.local_issue_worked_in(&dir))
-        .await
-        .map_err(|error| error.to_string())?;
+    let found = with_store(root, {
+        let dir = dir.clone();
+        move |store| store.local_issue_worked_in(&dir)
+    })
+    .await
+    .map_err(|error| error.to_string())?;
     Ok(found.map(|(number, issue)| {
+        let others = issue
+            .attempts
+            .into_iter()
+            .filter_map(|attempt| attempt.worktree)
+            .filter(|worktree| !worktree.starts_with(&dir))
+            .collect();
         (
             number,
             LinkedIssue {
                 number,
                 title: issue.title,
+                others,
             },
         )
     }))

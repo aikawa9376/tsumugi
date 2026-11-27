@@ -92,11 +92,15 @@ impl Store {
                 session: row.get(6)?,
                 error: row.get(7)?,
                 schedule: row.get(9)?,
+                attempts: Vec::new(),
             };
             Ok((row.get::<_, i64>(8)?.unsigned_abs(), issue))
         })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        let mut issues = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        for (_, issue) in &mut issues {
+            issue.attempts = self.attempts_of(&issue.id)?;
+        }
+        Ok(issues)
     }
 
     /// The issue `selector` names: its number, or the start of its id when
@@ -159,7 +163,9 @@ impl Store {
         self.local_issue_named(&issue.id)
     }
 
-    /// Reserve one request per directory before any program is started.
+    /// Reserve one request per directory before any program is started. An
+    /// issue tried as attempts works in worktrees of its own and holds no
+    /// directory.
     pub fn claim_local_issues(&mut self) -> Result<Vec<LocalIssue>> {
         let transaction = self
             .connection
@@ -168,7 +174,8 @@ impl Store {
             let mut query = transaction.prepare(
                 "SELECT i.id FROM local_issues i WHERE i.state = 'queued'
                  AND NOT EXISTS (SELECT 1 FROM local_issues active WHERE active.dir = i.dir
-                     AND active.state IN ('starting', 'running', 'waiting'))
+                     AND active.state IN ('starting', 'running', 'waiting')
+                     AND NOT EXISTS (SELECT 1 FROM issue_attempts a WHERE a.issue = active.id))
                  AND NOT EXISTS (SELECT 1 FROM local_issues earlier WHERE earlier.dir = i.dir
                      AND earlier.state = 'queued' AND earlier.seq < i.seq) ORDER BY i.seq",
             )?;
@@ -210,6 +217,7 @@ impl Store {
                 ),
             ));
         }
+        self.forget_attempts(&issue.id)?;
         self.local_issue_named(&issue.id)
     }
 
@@ -241,11 +249,21 @@ impl Store {
     }
 
     pub fn start_local_issue(&mut self, id: &str) -> Result<()> {
-        self.change_local_issue(id, "queued", "state = 'open'")
+        self.change_local_issue(id, "queued", "state = 'open'")?;
+        self.forget_attempts(id)
     }
 
     pub fn retry_local_issue(&mut self, id: &str) -> Result<()> {
-        self.change_local_issue(id, "queued", "state IN ('failed', 'cancelled')")
+        self.change_local_issue(id, "queued", "state IN ('failed', 'cancelled')")?;
+        self.forget_attempts(id)
+    }
+
+    /// Let go of the attempts of an issue now worked where it is; their
+    /// sessions and worktrees stay.
+    fn forget_attempts(&mut self, id: &str) -> Result<()> {
+        self.connection
+            .execute("DELETE FROM issue_attempts WHERE issue = ?1", [id])?;
+        Ok(())
     }
 
     pub fn close_local_issue(&mut self, id: &str) -> Result<()> {
@@ -284,12 +302,17 @@ impl Store {
             .numbered_local_issues()?
             .into_iter()
             .find(|(_, issue)| {
+                let works_here = |record: &SessionId| {
+                    sessions
+                        .iter()
+                        .any(|s| s.id == *record && s.cwd.starts_with(dir))
+                };
                 issue.state != LocalIssueState::Closed
-                    && issue.record.is_some_and(|record| {
-                        sessions
+                    && (issue.record.as_ref().is_some_and(works_here)
+                        || issue
+                            .attempts
                             .iter()
-                            .any(|s| s.id == record && s.cwd.starts_with(dir))
-                    })
+                            .any(|a| a.record.as_ref().is_some_and(works_here)))
             }))
     }
 
@@ -338,38 +361,52 @@ impl Store {
             ) {
                 continue;
             }
-            let found = issue
-                .record
-                .and_then(|id| sessions.iter().find(|s| s.delegation == Some(id)));
+            if !issue.attempts.is_empty() {
+                self.follow_attempts(&issue.id, sessions)?;
+                continue;
+            }
             let worked: bool = self.connection.query_row(
                 "SELECT worked FROM local_issues WHERE id = ?1",
                 [&issue.id],
                 |row| row.get(0),
             )?;
-            let working = found
-                .is_some_and(|session| matches!(session.state, State::Working | State::Background));
-            let state = match found.map(|s| &s.state) {
-                Some(State::Done) => LocalIssueState::Done,
-                Some(State::Idle) if worked => LocalIssueState::Done,
-                Some(State::Idle | State::Starting) => LocalIssueState::Starting,
-                Some(State::Waiting(_)) => LocalIssueState::Waiting,
-                Some(State::Failed) | None => LocalIssueState::Failed,
-                Some(_) => LocalIssueState::Running,
-            };
-            let error = match found {
-                None => Some(
-                    "The session start or execution was interrupted; inspect the work before retrying",
-                ),
-                Some(_) if state == LocalIssueState::Failed => Some("The agent reported a failure"),
-                _ => None,
-            };
+            let (state, error, worked) = followed(issue.record, sessions, worked);
             self.connection.execute(
                 "UPDATE local_issues SET state = ?2, error = ?3, worked = ?4 WHERE id = ?1",
-                params![issue.id, state.word(), error, worked || working],
+                params![issue.id, state.word(), error, worked],
             )?;
         }
         Ok(())
     }
+}
+
+/// How the work of the session `record` stands among `sessions`, with
+/// whether it was ever seen at work: an idle screen ends the work only once
+/// it was.
+pub(super) fn followed(
+    record: Option<SessionId>,
+    sessions: &[Session],
+    worked: bool,
+) -> (LocalIssueState, Option<&'static str>, bool) {
+    let found = record.and_then(|id| sessions.iter().find(|s| s.delegation == Some(id)));
+    let working =
+        found.is_some_and(|session| matches!(session.state, State::Working | State::Background));
+    let state = match found.map(|s| &s.state) {
+        Some(State::Done) => LocalIssueState::Done,
+        Some(State::Idle) if worked => LocalIssueState::Done,
+        Some(State::Idle | State::Starting) => LocalIssueState::Starting,
+        Some(State::Waiting(_)) => LocalIssueState::Waiting,
+        Some(State::Failed) | None => LocalIssueState::Failed,
+        Some(_) => LocalIssueState::Running,
+    };
+    let error = match found {
+        None => {
+            Some("The session start or execution was interrupted; inspect the work before retrying")
+        }
+        Some(_) if state == LocalIssueState::Failed => Some("The agent reported a failure"),
+        _ => None,
+    };
+    (state, error, worked || working)
 }
 
 #[cfg(test)]

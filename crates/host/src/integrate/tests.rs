@@ -122,6 +122,74 @@ async fn a_merge_closes_the_issue_it_finishes_when_asked() {
 }
 
 #[tokio::test]
+async fn merging_one_attempt_closes_the_issue_and_names_the_others_worktrees() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let main = root.join("api");
+    std::fs::create_dir(&main).unwrap();
+    git(&main, &["init", "-q", "-b", "main"]);
+    commit(&main, "shared.txt", "one\n");
+    let base = git(&main, &["rev-parse", "HEAD"]);
+    let mut worktrees = Vec::new();
+    for name in ["try-1", "try-2", "try-3"] {
+        let made = tsumugi_vcs::worktree::create(&main, name, Some(&base))
+            .await
+            .unwrap();
+        worktrees.push(made.path);
+    }
+    let state = root.join("state");
+    std::fs::create_dir(&state).unwrap();
+    let mut store = Store::open(&crate::delegation::app::database(&state)).unwrap();
+    let id = SessionId::new().to_string();
+    store
+        .add_local_issue(NewLocalIssue {
+            id: id.clone(),
+            dir: main.clone(),
+            title: "Try it three ways".into(),
+            body: "body".into(),
+        })
+        .unwrap();
+    let tries: Vec<_> = ["claude", "codex", "pi"]
+        .iter()
+        .map(|word| tsumugi_model::TryAs::parse(word).unwrap())
+        .collect();
+    store.begin_attempts(&id, &tries, &base).unwrap();
+    for (number, worktree) in (1..).zip(&worktrees) {
+        let record = store
+            .register(NewSession {
+                parent: None,
+                agent: Agent::Claude,
+                profile: ProfileId::builtin(Agent::Claude),
+                home: None,
+                name: format!("try {number}"),
+                cwd: worktree.clone(),
+                launch: Settings::default(),
+                model: None,
+                permissions: tsumugi_model::AgentPermissions::Default,
+                started_ms: 1,
+                name_given: true,
+                code: None,
+            })
+            .unwrap()
+            .0;
+        store.attach_attempt(&id, number, record).unwrap();
+    }
+    drop(store);
+    commit(&worktrees[1], "chosen.txt", "chosen\n");
+
+    let merged = merge_in(&state, &worktrees[1], MainChanges::Refuse, None, true)
+        .await
+        .unwrap();
+
+    let Merged::Done { closed, .. } = merged else {
+        panic!("{merged:?}");
+    };
+    let closed = closed.unwrap();
+    assert_eq!(closed.others, [worktrees[0].clone(), worktrees[2].clone()]);
+    assert_eq!(issue_state(&state), LocalIssueState::Closed);
+}
+
+#[tokio::test]
 async fn a_merge_leaves_the_issue_alone_unless_asked_to_close_it() {
     let w = work().await;
     commit(&w.feature, "new.txt", "new\n");

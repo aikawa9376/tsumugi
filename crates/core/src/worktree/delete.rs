@@ -53,24 +53,29 @@ pub(crate) fn inspected(
     path: PathBuf,
     result: Result<WorktreeStanding, String>,
 ) -> Vec<Effect> {
+    let refused = |state: &mut ViewState, why: String| {
+        let mut effects = status_line::notice(&mut state.chrome.status, why);
+        effects.extend(offer_next_discard(state));
+        effects
+    };
     let standing = match result {
         Ok(standing) => standing,
         Err(why) => {
-            return status_line::notice(
-                &mut state.chrome.status,
+            return refused(
+                state,
                 format!("cannot delete {}: {why}", called(None, &path)),
             );
         }
     };
     if standing.main {
-        return status_line::notice(
-            &mut state.chrome.status,
+        return refused(
+            state,
             "The main checkout is not a worktree to delete".into(),
         );
     }
     if standing.locked {
-        return status_line::notice(
-            &mut state.chrome.status,
+        return refused(
+            state,
             format!(
                 "{} is locked: unlock it with git worktree unlock first",
                 called(standing.branch.as_deref(), &path)
@@ -102,6 +107,21 @@ pub(crate) fn inspected(
         delete_branch,
     });
     Vec::new()
+}
+
+/// The next worktree waiting to be offered for deleting, asked of the host
+/// as deleting one from its row is, unless a question is open already.
+pub(crate) fn offer_next_discard(state: &mut ViewState) -> Vec<Effect> {
+    if state.overlays.confirm.is_some() {
+        return Vec::new();
+    }
+    state
+        .overlays
+        .discards
+        .pop_front()
+        .map(|(environment, path)| Effect::WorktreeInspect { environment, path })
+        .into_iter()
+        .collect()
 }
 
 /// The branch choice of the question open flipped, when it has one.

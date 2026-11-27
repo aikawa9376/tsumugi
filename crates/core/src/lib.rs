@@ -5,6 +5,7 @@ pub mod actions;
 pub mod agent_browser;
 pub mod agent_pages;
 pub mod ai;
+pub mod attempts;
 pub mod attention;
 pub mod board;
 pub mod browser;

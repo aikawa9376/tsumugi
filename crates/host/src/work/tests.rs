@@ -78,6 +78,7 @@ fn local_issues_reach_every_window_and_are_in_a_new_windows_snapshot() {
         session: None,
         error: None,
         schedule: None,
+        attempts: Vec::new(),
     };
     let change = TreeChange::LocalIssues {
         issues: vec![issue.clone()],

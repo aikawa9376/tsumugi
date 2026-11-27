@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use tsumugi_model::{
     BranchFate, KeptBranch, Key, LinkedIssue, MainChanges, MergeStanding, Merged, NewWorktree,
     SetupChoice, SetupOutcome, StartChoice, StartPoint, WorktreeRemoved, WorktreeSetup,
@@ -984,6 +986,7 @@ fn the_question_names_the_issue_the_merge_closes_and_the_merge_closes_it() {
             issue: Some(LinkedIssue {
                 number: 44,
                 title: "Integrate".into(),
+                others: Vec::new(),
             }),
             changed: 2,
             ..mergeable()
@@ -1093,6 +1096,7 @@ fn a_merged_branch_is_said_and_its_worktree_is_offered_for_deleting() {
             closed: Some(LinkedIssue {
                 number: 44,
                 title: "Integrate".into(),
+                others: Vec::new(),
             }),
         }),
     });
@@ -1104,6 +1108,104 @@ fn a_merged_branch_is_said_and_its_worktree_is_offered_for_deleting() {
     assert!(run.last_effects().contains(&Effect::WorktreeInspect {
         environment: here(),
         path: "/r/a".into()
+    }));
+}
+
+fn merged_with_attempts_left(others: &[&str]) -> Scenario {
+    merging().send(Msg::WorktreeMerged {
+        environment: here(),
+        path: "/r/a".into(),
+        result: Ok(Merged::Done {
+            branch: "a".into(),
+            base: "main".into(),
+            commit: "abc1234".into(),
+            stash: None,
+            closed: Some(LinkedIssue {
+                number: 44,
+                title: "Integrate".into(),
+                others: others.iter().map(PathBuf::from).collect(),
+            }),
+        }),
+    })
+}
+
+fn inspected_at(run: Scenario, path: &str) -> Scenario {
+    run.send(Msg::WorktreeInspected {
+        environment: here(),
+        path: path.into(),
+        result: Ok(standing()),
+    })
+}
+
+#[test]
+fn once_an_attempt_is_merged_the_others_are_offered_for_deleting_one_after_another() {
+    let run = merged_with_attempts_left(&["/r/b", "/r/c"]);
+    let said = run.state().chrome.status.line.clone().unwrap();
+    assert!(said.contains("2 other attempts"), "{said}");
+
+    let run = inspected_at(run, "/r/a");
+    let declined = run.send(Msg::ConfirmAnswer(false));
+    assert_eq!(
+        declined.last_effects(),
+        [Effect::WorktreeInspect {
+            environment: here(),
+            path: "/r/b".into()
+        }]
+    );
+
+    let run = inspected_at(declined, "/r/b");
+    let deleted = run.send(Msg::ConfirmAnswer(true));
+    assert_eq!(
+        deleted.last_effects().last(),
+        Some(&Effect::WorktreeInspect {
+            environment: here(),
+            path: "/r/c".into()
+        })
+    );
+    assert!(
+        deleted
+            .last_effects()
+            .iter()
+            .any(|e| matches!(e, Effect::WorktreeDelete { path, .. } if path == Path::new("/r/b")))
+    );
+
+    let last = inspected_at(deleted, "/r/c").send(Msg::ConfirmAnswer(false));
+    assert!(last.last_effects().is_empty());
+}
+
+#[test]
+fn an_attempt_discarded_from_its_issue_is_asked_about_as_deleting_its_row_is() {
+    let run = repository()
+        .send(perform(Action::LocalIssues))
+        .send(Msg::WorktreeDiscard {
+            environment: here(),
+            path: "/r/a".into(),
+        });
+
+    assert_eq!(
+        run.last_effects(),
+        [Effect::WorktreeInspect {
+            environment: here(),
+            path: "/r/a".into()
+        }]
+    );
+    assert!(run.state().overlays.local_issues.is_none());
+}
+
+#[test]
+fn an_attempt_that_cannot_be_looked_at_is_passed_over_for_the_next() {
+    let run = merged_with_attempts_left(&["/r/b", "/r/c"]);
+    let run = inspected_at(run, "/r/a").send(Msg::ConfirmAnswer(false));
+
+    let gone = run.send(Msg::WorktreeInspected {
+        environment: here(),
+        path: "/r/b".into(),
+        result: Err("no such worktree".into()),
+    });
+
+    assert!(gone.last_effects().contains(&Effect::WorktreeInspect {
+        environment: here(),
+        path: "/r/c".into()
     }));
 }
 
