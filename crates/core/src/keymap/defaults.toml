@@ -347,6 +347,7 @@
 "r" = "review.resolve"
 "s" = "review.send"
 "S" = "review.draft"
+"T" = "review.take"
 "] c" = "diff.next_hunk"
 "[ c" = "diff.prev_hunk"
 "] f" = "diff.next_file"

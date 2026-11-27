@@ -151,8 +151,39 @@ mod tests {
                     resolved: true,
                     sent: true,
                     author: None,
+                    github: None,
                 },
                 freshness: Freshness::Outdated,
+            }],
+        });
+    }
+
+    #[test]
+    fn a_branch_s_line_threads_are_asked_without_mutating_and_round_trip() {
+        use crate::{Answer, Ask};
+        use tsumugi_model::github::{LineRemark, LineThread};
+        use tsumugi_model::review::{Anchor, Side};
+        let ask = Ask::LineThreads {
+            worktree: "/プロジェクト/a b".into(),
+        };
+        assert!(!ask.mutates());
+        round_trips(ask);
+        round_trips(Answer::LineThreads {
+            threads: vec![LineThread {
+                url: "https://github.com/o/r/pull/1#discussion_r1".into(),
+                anchor: Anchor {
+                    path: "src/メモ.rs".into(),
+                    side: Side::New,
+                    start: 2,
+                    end: 3,
+                },
+                quoted: vec!["a".into(), "b".into()],
+                resolved: false,
+                outdated: true,
+                remarks: vec![LineRemark {
+                    author: "alice".into(),
+                    body: "なぜ?".into(),
+                }],
             }],
         });
     }

@@ -12,6 +12,7 @@ use tsumugi_core::diff_view::{Row, folds, pieces, rows, word_marks};
 use tsumugi_core::msg::Msg;
 use tsumugi_core::review::{Go, Mode, Pane, Reading, Target};
 use tsumugi_core::viewers::{Diff, Review, ViewerAction};
+use tsumugi_model::github::LineThread;
 use tsumugi_model::repository::{DiffKind, DiffLine, Rev};
 use tsumugi_model::review::{self as notes, Change, Judged};
 use tsumugi_model::{Agent, EnvironmentId};
@@ -62,6 +63,8 @@ struct Review_ {
     lines: Vec<DiffLine>,
     pane: Signal<Pane>,
     comments: Signal<Vec<Judged>>,
+    /// The review threads of the branch's pull request on GitHub.
+    threads: Signal<Vec<LineThread>>,
     /// The discard key was pressed once, and waits to be pressed again.
     armed: Signal<bool>,
     /// What is being written to search for, while it is.
@@ -86,7 +89,7 @@ impl Review_ {
     /// Bring the cursor to the line `way` of it holding what was sought.
     fn find(&self, way: tsumugi_core::diff_view::Way) {
         let mut pane = self.pane;
-        let comments = self.comments.peek().clone();
+        let comments = self.all();
         let reading = self.reading(&comments);
         let here = pane
             .peek()
@@ -102,7 +105,7 @@ impl Review_ {
 
     /// Mark the file the cursor is in viewed, or not.
     fn viewed(&self) {
-        let comments = self.comments.peek().clone();
+        let comments = self.all();
         let reading = self.reading(&comments);
         let at = self.pane.peek().cursor(&reading);
         if at < self.lines.len()
@@ -118,7 +121,7 @@ impl Review_ {
         let Some(onneovim) = self.onneovim else {
             return;
         };
-        let comments = self.comments.peek().clone();
+        let comments = self.all();
         let reading = self.reading(&comments);
         let at = self.pane.peek().cursor(&reading);
         if at < self.lines.len() {
@@ -131,7 +134,7 @@ impl Review_ {
 
     /// Show the file the cursor is in whole, or as its hunks again.
     fn unfold(&self) {
-        let comments = self.comments.peek().clone();
+        let comments = self.all();
         let reading = self.reading(&comments);
         let at = self.pane.peek().cursor(&reading);
         if at >= self.lines.len() {
@@ -153,7 +156,7 @@ impl Review_ {
             pane.write().notice = Some("Stage from what is not committed: t shows it".into());
             return;
         }
-        let comments = self.comments.peek().clone();
+        let comments = self.all();
         let reading = self.reading(&comments);
         let (first, last) = pane.peek().span(&reading);
         if pane.peek().cursor(&reading) >= self.lines.len() {
@@ -197,6 +200,42 @@ impl Review_ {
                 _ => "The work host did not answer".to_string(),
             };
             pane.write().notice = Some(said);
+        });
+    }
+
+    /// The comments kept and the threads of GitHub's, as the diff draws them.
+    fn all(&self) -> Vec<Judged> {
+        let mut all = self.comments.peek().clone();
+        all.extend(tsumugi_core::review::github_threads(
+            &self.lines,
+            &self.path,
+            &self.rev,
+            &self.threads.peek(),
+        ));
+        all
+    }
+
+    /// Read the threads of the branch's pull request from GitHub, in a diff
+    /// against the base alone; what cannot be read draws none.
+    fn read_threads(&self) {
+        let (this, mut threads) = (self.clone(), self.threads);
+        if !matches!(self.rev, Rev::Branch(_) | Rev::Base(_)) {
+            if !threads.peek().is_empty() {
+                threads.set(Vec::new());
+            }
+            return;
+        }
+        spawn(async move {
+            let ask = Ask::LineThreads {
+                worktree: this.worktree.clone(),
+            };
+            let now = match this.app.ask_in(&this.environment, ask).await {
+                Answer::LineThreads { threads } => threads,
+                _ => Vec::new(),
+            };
+            if *threads.peek() != now {
+                threads.set(now);
+            }
         });
     }
 
@@ -336,7 +375,7 @@ impl Review_ {
             let mut armed = self.armed;
             armed.set(false);
         }
-        let comments = self.comments.peek().clone();
+        let comments = self.all();
         let reading = self.reading(&comments);
         let mut pane = self.pane;
         let mode = pane.peek().mode.clone();
@@ -396,6 +435,13 @@ impl Review_ {
             }
             (_, ViewerAction::Review(Review::Send)) => pane.write().preview(&comments),
             (_, ViewerAction::Review(Review::Draft)) => self.draft(),
+            (_, ViewerAction::Review(Review::Take)) => {
+                let taken = pane.write().take(&reading);
+                if let Some(change) = taken {
+                    self.apply(change);
+                    pane.write().notice = Some("Taken into your review".into());
+                }
+            }
             _ => {}
         }
         let _ = window;
@@ -509,14 +555,21 @@ fn Thread(judged: Judged, at: bool, outdated: bool) -> Element {
     let comment = judged.comment;
     let class = format!(
         "rv-thread{}{}{}{}",
-        if comment.is_note() { " rv-note" } else { "" },
+        if comment.is_note() {
+            " rv-note"
+        } else if comment.is_github() {
+            " rv-github"
+        } else {
+            ""
+        },
         if comment.resolved { " resolved" } else { "" },
         if outdated { " outdated" } else { "" },
         if at { " rv-cursor" } else { "" },
     );
     rsx! { div { class,
         div { class: "rv-head",
-            if let Some(author) = &comment.author { span { class: "rv-badge rv-author", title: "A note the session's agent left", "note · {author}" } }
+            if let Some(url) = &comment.github { span { class: "rv-badge rv-author", title: "A review thread of the pull request on GitHub, {url}: T takes it into your review", "GitHub" } }
+            else if let Some(author) = &comment.author { span { class: "rv-badge rv-author", title: "A note the session's agent left", "note · {author}" } }
             span { class: "rv-range", "{said(&comment.anchor)}" }
             if outdated { span { class: "rv-badge", title: "The lines changed since it was written; it is not moved to others", "outdated" } }
             if comment.resolved { span { class: "rv-badge", "resolved" } }
@@ -566,6 +619,7 @@ pub(crate) fn ReviewRows(
     let app = use_context::<AppCtx>();
     let pane = use_signal(Pane::default);
     let comments = use_signal(Vec::<Judged>::new);
+    let threads = use_signal(Vec::<LineThread>::new);
     let armed = use_signal(|| false);
     let written = use_signal(Vec::<notes::Written>::new);
     let mut searching = use_signal(|| None::<String>);
@@ -580,6 +634,7 @@ pub(crate) fn ReviewRows(
         lines: lines.clone(),
         pane,
         comments,
+        threads,
         armed,
         searching,
         written,
@@ -592,6 +647,18 @@ pub(crate) fn ReviewRows(
     use_effect(use_reactive((&lines, &worktree, &rev), {
         let this = this.clone();
         move |_| this.reload()
+    }));
+    // GitHub is asked only as the diff is opened, never as its code changes.
+    use_effect(use_reactive((&worktree, &rev), {
+        let this = this.clone();
+        move |(worktree, rev)| {
+            Review_ {
+                worktree,
+                rev,
+                ..this.clone()
+            }
+            .read_threads()
+        }
     }));
     let last = use_hook(|| Rc::new(Cell::new(command.peek().map_or(0, |c| c.seq))));
     use_effect(use_reactive((&lines, &path, &rev, &worktree), {
@@ -653,7 +720,13 @@ pub(crate) fn ReviewRows(
             ));
         }
     });
-    let all = comments.read().clone();
+    let mut all = comments.read().clone();
+    all.extend(tsumugi_core::review::github_threads(
+        &lines,
+        &path,
+        &rev,
+        &threads.read(),
+    ));
     let reading = this.reading(&all);
     let state = pane.read().clone();
     let cursor = state.cursor(&reading);
@@ -661,7 +734,12 @@ pub(crate) fn ReviewRows(
     let marking = state.marking();
     let numbers = notes::numbered(&lines);
     let outdated = reading.outdated();
-    let open = all.iter().filter(|j| !j.comment.resolved).count();
+    let kept_count = all.iter().filter(|j| !j.comment.is_github()).count();
+    let open = all
+        .iter()
+        .filter(|j| !j.comment.resolved && !j.comment.is_github())
+        .count();
+    let from_github = all.len() - kept_count;
     let choices = destinations(app, &environment, &worktree);
     // In one column every line is a row; a removed and an added line are
     // still compared, to mark the words each does not share.
@@ -869,7 +947,10 @@ pub(crate) fn ReviewRows(
                             if hide_notes() { "Notes hidden" } else { "Notes shown" }
                         }
                     }
-                    span { class: "rv-count", "{open} open · {all.len() - open} resolved" }
+                    if from_github > 0 {
+                        span { class: "rv-dim", title: "Review threads of the pull request on GitHub; T takes the one under the cursor into your review", "{from_github} on GitHub" }
+                    }
+                    span { class: "rv-count", "{open} open · {kept_count - open} resolved" }
                 }
             }
         }

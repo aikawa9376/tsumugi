@@ -125,6 +125,7 @@ pub(crate) fn perform(
         | Action::ReviewResolve
         | Action::ReviewSend
         | Action::ReviewDraft
+        | Action::ReviewTake
         | Action::DiffNextHunk
         | Action::DiffPrevHunk
         | Action::DiffNextFile

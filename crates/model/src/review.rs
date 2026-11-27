@@ -43,12 +43,26 @@ pub struct Comment {
     /// person's comment has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
+    /// Where it is seen on GitHub, for a review thread of the branch's pull
+    /// request drawn in the diff; Tsumugi never keeps one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github: Option<String>,
 }
 
 impl Comment {
     /// Whether an agent left it, as a note, rather than a person.
     pub fn is_note(&self) -> bool {
-        self.author.is_some()
+        self.author.is_some() && self.github.is_none()
+    }
+
+    /// Whether it is a review thread of GitHub's, drawn but not kept.
+    pub fn is_github(&self) -> bool {
+        self.github.is_some()
+    }
+
+    /// Whether a prompt to an agent carries it: the user's own, open.
+    pub fn is_carried(&self) -> bool {
+        !self.resolved && self.author.is_none() && self.github.is_none()
     }
 }
 
@@ -266,11 +280,9 @@ pub fn judge(comment: &Comment, lines: &[DiffLine]) -> Freshness {
 
 /// The prompt that carries `comments` to an agent, those resolved left out.
 pub fn prompt(comments: &[Judged]) -> String {
-    // An agent's notes are for the person reviewing, never sent back.
-    let mut open: Vec<&Judged> = comments
-        .iter()
-        .filter(|j| !j.comment.resolved && !j.comment.is_note())
-        .collect();
+    // An agent's notes are for the person reviewing, never sent back, and
+    // a thread of GitHub's goes only once the user has taken it in.
+    let mut open: Vec<&Judged> = comments.iter().filter(|j| j.comment.is_carried()).collect();
     if open.is_empty() {
         return String::new();
     }
@@ -455,6 +467,7 @@ mod tests {
             resolved: false,
             sent: false,
             author: None,
+            github: None,
         }
     }
 

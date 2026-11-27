@@ -34,6 +34,7 @@ impl Ask {
                 | Self::PastPreview { .. }
                 | Self::Drafts
                 | Self::Review { .. }
+                | Self::LineThreads { .. }
                 | Self::Viewed { .. }
                 | Self::Written { .. }
                 | Self::Picture { .. }

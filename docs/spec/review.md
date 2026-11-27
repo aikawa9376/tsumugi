@@ -38,6 +38,25 @@ The agent can also read the worktree's review: every comment and note, with
 its file, side, lines and whether it is outdated, resolved or sent. It cannot
 change or resolve a comment of yours.
 
+## Review threads from GitHub
+
+A diff of a branch against its base, committed or with the worktree, also
+draws the review threads of the branch's open pull request, read through
+`gh` on the work machine ([GitHub](tree.md#writing-on-a-pull-request-or-an-issue))
+each time such a diff is opened. A thread is drawn under the lines it is on,
+marked as GitHub's, with each remark's author and whether it is resolved there.
+It stands where the lines it quoted still read so, and is otherwise listed
+after the diff as outdated, as it is when GitHub calls it outdated. Where `gh`
+is missing, logged out, or the branch has no open pull request, the diff shows
+no threads and says nothing.
+
+Threads are not kept by Tsumugi, are not changed from the diff, and are never
+sent to an agent as they are. `review.take` on a thread keeps it as a comment
+of yours on the same lines, saying who wrote each remark on GitHub and linking
+the thread; from there it is edited, resolved and sent as any comment, to a
+session running in the worktree or a new session's draft. Replying to it and
+resolving it on GitHub are done from the pull request's tab.
+
 ## Lines agents wrote
 
 A diff of the worktree marks, in the gutter beside the line numbers of its
@@ -104,6 +123,13 @@ is not marked as sent.
 - What was edited while sending is not marked sent.
 - A note is kept and checked as a comment is, and is told apart from one.
 - An agent reads every comment and note of its own worktree only.
+- A GitHub thread is drawn only in a diff against the base, and stands only
+  where the lines it quoted read so.
+- A GitHub thread is never carried by the prompt, nor edited, deleted or
+  resolved from the diff.
+- Taking a GitHub thread keeps a comment of the user's on its lines that names
+  each remark's author and links the thread.
+- The threads of a branch's pull request are read from its head's owner only.
 - A viewed mark goes once the file's diff changes, and stays while it does not.
 - A write marks the lines it changed or added and no other.
 - A person's edit turns the line back, and undoing it brings the mark back.

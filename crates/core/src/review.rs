@@ -4,6 +4,7 @@
 //! window asks it, and this holds what the keys have decided.
 
 use crate::diff_view::Way;
+use tsumugi_model::github::LineThread;
 use tsumugi_model::repository::{DiffKind, DiffLine, Rev};
 use tsumugi_model::review::{self, Anchor, Change, Comment, Freshness, Judged, NewComment, Side};
 
@@ -182,6 +183,72 @@ impl<'a> Reading<'a> {
         }
     }
 }
+
+/// The review threads of the branch's pull request, as comments of this
+/// diff: drawn only in a diff against the base, as the pull request's is,
+/// and standing only where the lines GitHub quoted still read so. Their ids
+/// count down from the top, where no kept comment's reach.
+pub fn github_threads(
+    lines: &[DiffLine],
+    path: &str,
+    rev: &Rev,
+    threads: &[LineThread],
+) -> Vec<Judged> {
+    if !matches!(rev, Rev::Branch(_) | Rev::Base(_)) {
+        return Vec::new();
+    }
+    let heads: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.kind == DiffKind::File)
+        .map(|(i, _)| i)
+        .collect();
+    // The lines of one file: under its heading, or all of a file's own diff.
+    let of_file = |file: &str| -> Option<&[DiffLine]> {
+        if heads.is_empty() {
+            return (file == path).then_some(lines);
+        }
+        let at = heads.iter().position(|&h| lines[h].text == file)?;
+        let end = heads.get(at + 1).copied().unwrap_or(lines.len());
+        Some(&lines[heads[at] + 1..end])
+    };
+    threads
+        .iter()
+        .enumerate()
+        .map(|(n, t)| {
+            let stands = !t.outdated
+                && of_file(&t.anchor.path)
+                    .and_then(|file| review::text_at(file, &t.anchor))
+                    .is_some_and(|now| now == t.quoted);
+            let said: Vec<String> = t
+                .remarks
+                .iter()
+                .map(|r| format!("@{}: {}", r.author, r.body.trim()))
+                .collect();
+            Judged {
+                comment: Comment {
+                    id: u64::MAX - n as u64,
+                    rev: rev.clone(),
+                    anchor: t.anchor.clone(),
+                    quoted: t.quoted.clone(),
+                    text: said.join("\n\n"),
+                    resolved: t.resolved,
+                    sent: false,
+                    author: t.remarks.first().map(|r| r.author.clone()),
+                    github: Some(t.url.clone()),
+                },
+                freshness: if stands {
+                    Freshness::Current
+                } else {
+                    Freshness::Outdated
+                },
+            }
+        })
+        .collect()
+}
+
+/// What a key that changes a comment says of a thread of GitHub's.
+const GITHUB_THREAD: &str = "This thread is GitHub's: T takes it into your review";
 
 /// What the comment being written is for.
 #[derive(Debug, Clone, PartialEq)]
@@ -363,6 +430,10 @@ impl Pane {
             self.notice = Some("No comment here".into());
             return;
         };
+        if found.comment.is_github() {
+            self.notice = Some(GITHUB_THREAD.into());
+            return;
+        }
         self.mode = Mode::Writing {
             target: Target::Edit {
                 id: found.comment.id,
@@ -416,6 +487,10 @@ impl Pane {
     pub fn delete(&mut self, reading: &Reading) -> Option<Change> {
         self.notice = None;
         match reading.comment_at(self.cursor(reading)) {
+            Some(found) if found.comment.is_github() => {
+                self.notice = Some(GITHUB_THREAD.into());
+                None
+            }
             Some(found) => Some(Change::Remove {
                 id: found.comment.id,
             }),
@@ -430,6 +505,10 @@ impl Pane {
     pub fn resolve(&mut self, reading: &Reading) -> Option<Change> {
         self.notice = None;
         match reading.comment_at(self.cursor(reading)) {
+            Some(found) if found.comment.is_github() => {
+                self.notice = Some(GITHUB_THREAD.into());
+                None
+            }
             Some(found) => Some(Change::Resolve {
                 id: found.comment.id,
                 resolved: !found.comment.resolved,
@@ -439,6 +518,28 @@ impl Pane {
                 None
             }
         }
+    }
+
+    /// Keep the thread of GitHub's under the cursor as a comment of the
+    /// user's on its lines, saying who said what and where it is.
+    pub fn take(&mut self, reading: &Reading) -> Option<Change> {
+        self.notice = None;
+        let Some(found) = reading.comment_at(self.cursor(reading)) else {
+            self.notice = Some("No thread here".into());
+            return None;
+        };
+        let Some(url) = &found.comment.github else {
+            self.notice = Some("Only a thread from GitHub is taken in".into());
+            return None;
+        };
+        let c = &found.comment;
+        Some(Change::Add(NewComment {
+            rev: c.rev.clone(),
+            anchor: c.anchor.clone(),
+            quoted: c.quoted.clone(),
+            text: format!("From the review thread on GitHub at {url}:\n\n{}", c.text),
+            author: None,
+        }))
     }
 
     /// Show the prompt that carries every comment not resolved, of every
@@ -452,7 +553,7 @@ impl Pane {
         }
         let carries = comments
             .iter()
-            .filter(|j| !j.comment.resolved && !j.comment.is_note())
+            .filter(|j| j.comment.is_carried())
             .map(|j| (j.comment.id, j.comment.text.clone()))
             .collect();
         self.mode = Mode::Previewing(Preview {
@@ -535,6 +636,7 @@ mod tests {
                 resolved: false,
                 sent: false,
                 author: None,
+                github: None,
             },
             freshness,
         }
@@ -972,5 +1074,119 @@ mod tests {
         };
         assert_eq!(p.choice, 0);
         pane.choose(1, 0);
+    }
+
+    fn github(side: Side, at: u32, quoted: &str, outdated: bool) -> LineThread {
+        use tsumugi_model::github::LineRemark;
+        LineThread {
+            url: "https://github.com/o/r/pull/1#discussion_r9".into(),
+            anchor: Anchor {
+                path: "src/メモ.rs".into(),
+                side,
+                start: at,
+                end: at,
+            },
+            quoted: vec![quoted.into()],
+            resolved: false,
+            outdated,
+            remarks: vec![
+                LineRemark {
+                    author: "alice".into(),
+                    body: "Why upper case?".into(),
+                },
+                LineRemark {
+                    author: "bob".into(),
+                    body: "Agreed".into(),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn a_github_thread_is_drawn_only_in_a_diff_against_the_base_and_stands_only_where_its_lines_read_so()
+     {
+        let lines = diff();
+        let threads = [
+            github(Side::New, 2, "TWO", false),
+            github(Side::New, 2, "two", false),
+            github(Side::Old, 2, "two", true),
+        ];
+        for rev in [
+            Rev::WorkingCopy,
+            Rev::Commit("c".into()),
+            Rev::Range("a".into(), "b".into()),
+        ] {
+            assert!(
+                github_threads(&lines, "", &rev, &threads).is_empty(),
+                "{rev:?}"
+            );
+        }
+        let base = Rev::Base("abc".into());
+        let judged = github_threads(&lines, "", &base, &threads);
+        assert_eq!(
+            judged.iter().map(|j| j.freshness).collect::<Vec<_>>(),
+            [Freshness::Current, Freshness::Outdated, Freshness::Outdated],
+            "GitHub calling it outdated makes it so"
+        );
+        let r = Reading::new(&lines, "", &base, &judged);
+        assert_eq!(r.ending_at(4).len(), 1);
+        assert_eq!(r.outdated().len(), 2);
+        assert!(
+            judged
+                .iter()
+                .all(|j| j.comment.is_github() && !j.comment.is_note())
+        );
+        assert_eq!(
+            judged[0].comment.text,
+            "@alice: Why upper case?\n\n@bob: Agreed"
+        );
+        let branch = Rev::Branch("abc".into());
+        assert_eq!(github_threads(&lines, "", &branch, &threads).len(), 3);
+    }
+
+    #[test]
+    fn a_github_thread_is_never_carried_by_the_prompt_nor_edited_deleted_or_resolved_from_the_diff()
+    {
+        let lines = diff();
+        let base = Rev::Base("abc".into());
+        let judged = github_threads(&lines, "", &base, &[github(Side::New, 2, "TWO", false)]);
+        assert_eq!(review::prompt(&judged), "");
+        let r = Reading::new(&lines, "", &base, &judged);
+        let mut pane = Pane::default();
+        pane.go(&r, Go::By(4));
+        pane.preview(&judged);
+        assert_eq!(pane.mode, Mode::Browsing);
+        pane.edit(&r);
+        assert_eq!(pane.mode, Mode::Browsing);
+        assert_eq!(pane.delete(&r), None);
+        assert_eq!(pane.resolve(&r), None);
+        assert!(pane.notice.as_deref().is_some_and(|n| n.contains("GitHub")));
+    }
+
+    #[test]
+    fn taking_a_github_thread_keeps_a_comment_of_the_user_s_on_its_lines_naming_each_author_and_linking_it()
+     {
+        let lines = diff();
+        let base = Rev::Base("abc".into());
+        let judged = github_threads(&lines, "", &base, &[github(Side::New, 2, "TWO", false)]);
+        let r = Reading::new(&lines, "", &base, &judged);
+        let mut pane = Pane::default();
+        assert_eq!(pane.take(&r), None);
+        pane.go(&r, Go::By(4));
+        let Some(Change::Add(new)) = pane.take(&r) else {
+            panic!("nothing taken");
+        };
+        assert_eq!(new.author, None);
+        assert_eq!(new.rev, base);
+        assert_eq!(new.anchor, judged[0].comment.anchor);
+        assert_eq!(new.quoted, vec!["TWO".to_string()]);
+        assert!(
+            new.text
+                .contains("https://github.com/o/r/pull/1#discussion_r9")
+        );
+        assert!(new.text.contains("@alice: Why upper case?") && new.text.contains("@bob: Agreed"));
+        let own = [stored(4, Side::New, 2, "TWO", Freshness::Current)];
+        let r = reading(&lines, &own);
+        assert_eq!(pane.take(&r), None, "a comment of the user's is not taken");
     }
 }

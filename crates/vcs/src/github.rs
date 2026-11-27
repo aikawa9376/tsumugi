@@ -12,11 +12,13 @@ use crate::{Error, run};
 mod create;
 mod fix;
 mod job_log;
+mod lines;
 mod thread;
 mod write;
 pub use create::*;
 pub use fix::fix_context;
 pub use job_log::job_log;
+pub use lines::line_threads;
 pub use thread::*;
 pub use write::write;
 

@@ -319,6 +319,9 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
                 Err(text) => Err(text),
             }
         }
+        Ask::LineThreads { worktree } => tsumugi_vcs::github::line_threads(&worktree)
+            .await
+            .map(|threads| Answer::LineThreads { threads }),
         Ask::Viewed { worktree } => {
             let dir = crate::paths::instance_state();
             blocking(move || crate::viewed_files::load(&dir, &worktree))

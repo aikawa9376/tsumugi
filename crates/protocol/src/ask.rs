@@ -194,6 +194,11 @@ pub enum Ask {
         worktree: PathBuf,
         change: Box<tsumugi_model::review::Change>,
     },
+    /// The review threads on lines of the open pull request of the branch a
+    /// worktree has checked out, read from GitHub through `gh`. Reads only.
+    LineThreads {
+        worktree: PathBuf,
+    },
     /// The files of a worktree's changes marked viewed.
     Viewed {
         worktree: PathBuf,
@@ -664,6 +669,10 @@ pub enum Answer {
     /// The image asked for, or none when it cannot be read or shown.
     Picture {
         url: Option<String>,
+    },
+    /// The review threads on lines of a branch's pull request.
+    LineThreads {
+        threads: Vec<tsumugi_model::github::LineThread>,
     },
     /// The files of a worktree's changes marked viewed.
     Viewed {

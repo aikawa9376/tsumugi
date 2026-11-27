@@ -732,3 +732,26 @@ mod tests {
         assert_eq!(repository.item(Listing::Pulls, 1), None);
     }
 }
+
+/// A review thread on lines of a pull request, as a diff of its branch
+/// draws it: pinned to the lines GitHub quoted of the pull request's diff.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LineThread {
+    /// Where it is seen on GitHub.
+    pub url: String,
+    pub anchor: crate::review::Anchor,
+    /// The lines it is on, as GitHub quoted them, one entry each.
+    pub quoted: Vec<String>,
+    pub resolved: bool,
+    /// GitHub says it was made on an older revision of the file.
+    pub outdated: bool,
+    /// What was said in it, oldest first.
+    pub remarks: Vec<LineRemark>,
+}
+
+/// One remark of a [`LineThread`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LineRemark {
+    pub author: String,
+    pub body: String,
+}

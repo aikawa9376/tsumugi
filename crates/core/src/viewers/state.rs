@@ -99,6 +99,7 @@ pub enum Review {
     Resolve,
     Send,
     Draft,
+    Take,
 }
 
 impl ViewerAction {
@@ -129,6 +130,7 @@ impl ViewerAction {
             Action::ReviewResolve => V::Review(Review::Resolve),
             Action::ReviewSend => V::Review(Review::Send),
             Action::ReviewDraft => V::Review(Review::Draft),
+            Action::ReviewTake => V::Review(Review::Take),
             Action::DiffNextHunk => V::Diff(Diff::Hunk(Way::Next)),
             Action::DiffPrevHunk => V::Diff(Diff::Hunk(Way::Prev)),
             Action::DiffNextFile => V::Diff(Diff::File(Way::Next)),

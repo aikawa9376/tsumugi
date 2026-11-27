@@ -88,6 +88,7 @@ pub fn change(directory: &Path, worktree: &Path, change: Change) -> Result<Vec<C
                 resolved: false,
                 sent: false,
                 author: new.author,
+                github: None,
             });
             *next += 1;
         }
@@ -310,6 +311,7 @@ mod tests {
             resolved: false,
             sent: false,
             author: None,
+            github: None,
         }
     }
 

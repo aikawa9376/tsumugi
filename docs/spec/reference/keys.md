@@ -214,6 +214,7 @@ changes them ([keys](../keys.md)).
 | `review.resolve` |  | in a diff of lines, resolve the comment on the line the cursor is on, or open it again; only this resolves a comment | `viewer`: `r` |
 | `review.send` |  | in a diff of lines, show the prompt that carries every comment not resolved; shown, send it to the session chosen with the movement keys | `viewer`: `s` |
 | `review.draft` |  | in a diff of lines, or in the prompt shown, write the prompt in a new session's draft in the worktree instead of sending it | `viewer`: `S` |
+| `review.take` |  | in a diff of a branch against its base, keep the review thread of its pull request on GitHub the cursor is on as a comment of yours, to send as any comment ([review](../review.md#review-threads-from-github)) | `viewer`: `T` |
 | `diff.next_hunk` |  | in a diff tab, move to the next change of the file ([details](../details.md#diff-tabs)) | `viewer`: `] c` |
 | `diff.prev_hunk` |  | in a diff tab, move to the previous change of the file | `viewer`: `[ c` |
 | `diff.next_file` |  | in a diff tab, open the next file of the list of files changed | `viewer`: `] f` |
@@ -643,6 +644,7 @@ changes them ([keys](../keys.md)).
 "r" = "review.resolve"
 "s" = "review.send"
 "S" = "review.draft"
+"T" = "review.take"
 "] c" = "diff.next_hunk"
 "[ c" = "diff.prev_hunk"
 "] f" = "diff.next_file"

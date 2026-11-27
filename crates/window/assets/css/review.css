@@ -46,6 +46,7 @@
 .rv-fold:hover { background:var(--select); color:var(--text); }
 .rv-viewed { margin-left:12px; color:var(--done); font-size:var(--ui-font-small); }
 .rv-thread.rv-note { border-left-color:#8a63d2; }
+.rv-thread.rv-github { border-left-color:var(--text-2); }
 .rv-author { color:#8a63d2; }
 .rv-notes { margin-left:auto; cursor:pointer; color:var(--text-2); background:none; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font:inherit; font-size:var(--ui-font-small); }
 .rv-notes.on { border-color:#8a63d2; }
