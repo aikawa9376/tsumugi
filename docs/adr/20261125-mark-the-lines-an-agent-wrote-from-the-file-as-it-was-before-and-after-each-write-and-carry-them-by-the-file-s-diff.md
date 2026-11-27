@@ -47,7 +47,9 @@ session that wrote each.
 ## Consequences
 
 - A line is marked only when the agent's own writing tool wrote it, in a
-  session whose agent runs the hooks or the plugin Tsumugi loads into it. A shell command, a formatter or another
+  session whose agent runs the hooks or the plugin Tsumugi loads into it.
+  An agent that runs hooks only once the user has trusted them marks nothing
+  until the user does; Tsumugi does not trust them on the user's behalf. A shell command, a formatter or another
   program the agent runs leaves the lines it changes the person's.
 - What changed between the two reads of a write is taken as the write's.
 - The marks follow the worktree's files as they are, committed or not; a diff

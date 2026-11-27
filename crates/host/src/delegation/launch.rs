@@ -123,6 +123,8 @@ impl Delegation {
                 ]
                 .into_iter()
                 .flat_map(|value| ["-c".into(), value])
+                // Its hooks ask through the credential, as its server does.
+                .chain(tsumugi_agents::codex_hook_args(program))
                 .collect()
             }
         }
@@ -346,6 +348,13 @@ mod tests {
             .find(|arg| arg.starts_with("mcp_servers.tsumugi.env_vars="))
             .unwrap();
         assert!(variables.contains("TSUMUGI_WORK_INSTANCE"));
+    }
+
+    #[test]
+    fn a_codex_session_carrying_its_credential_is_given_the_hooks_that_follow_its_patches() {
+        let args = delegation(None).args(Agent::Codex, Path::new("/bin/tsumugi"));
+        let hooks = tsumugi_agents::codex_hook_args(Path::new("/bin/tsumugi"));
+        assert!(args.ends_with(&hooks), "{args:?}");
     }
 
     #[test]

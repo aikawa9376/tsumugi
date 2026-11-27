@@ -44,10 +44,11 @@ A diff of the worktree marks, in the gutter beside the line numbers of its
 new side, every line a session's agent wrote, and names that session on the
 line under the cursor and when the mark is pointed at. A line is the agent's
 when the agent wrote it with one of its own file-writing tools, in a session
-Tsumugi started with Claude Code, Pi or OpenCode; whatever else changes a
-file, a person, a shell command or a formatter, leaves the lines it changed
-unmarked, as does an agent Tsumugi cannot follow without the user trusting
-hooks of its own first, such as Codex.
+Tsumugi started with Claude Code, Pi, OpenCode or Codex; whatever else
+changes a file, a person, a shell command or a formatter, leaves the lines it
+changed unmarked. Codex runs the hooks Tsumugi gives it only once you have
+trusted them in its `/hooks`, which it asks for as a session starts; until
+then its sessions mark nothing, and Tsumugi never trusts them for you.
 
 The marks follow each file as it reads now, committed or not: a line keeps
 its mark wherever it moves, loses it once a person changes it, and gets it
@@ -113,6 +114,7 @@ is not marked as sent.
 - Claude Code's plugin tells Tsumugi of each write before and after it.
 - Pi's extension and OpenCode's plugin tell Tsumugi of each write before and
   after it, waiting until it has read the file, and of no other tool.
+- Codex is given hooks that tell Tsumugi of each patch before and after it.
 - A patch tells Tsumugi of every file it adds, updates, deletes or moves to.
 - The lines kept aside are those of the files the diff shows, as JSON of each
   file's runs and who wrote them.

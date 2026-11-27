@@ -12,6 +12,23 @@ mod usage;
 
 pub struct Codex;
 
+/// The arguments that give a Codex session hooks asking `program` to read
+/// each file a patch writes, before and after it.
+// Codex runs hooks given so only once the user has trusted them in its
+// `/hooks`, and takes no trust given alongside: Tsumugi leaves that to the
+// user rather than writing it into Codex's configuration.
+pub fn hook_args(program: &Path) -> Vec<String> {
+    let command = toml::Value::String(format!("{} mcp hook", crate::shell_word(program)));
+    let hooks = format!(
+        "[{{matcher=\"^{}$\",hooks=[{{type=\"command\",command={command},timeout=5}}]}}]",
+        crate::patch::CODEX_TOOL
+    );
+    ["PreToolUse", "PostToolUse"]
+        .into_iter()
+        .flat_map(|event| ["-c".into(), format!("hooks.{event}={hooks}")])
+        .collect()
+}
+
 /// What starts Codex's app server as `context` runs sessions, to ask it something.
 fn app_server(context: &AgentContext) -> crate::Started {
     launch_in(context, vec!["app-server".into()], Vec::new())
@@ -510,6 +527,32 @@ mod tests {
             args,
             ["-c", "tui.terminal_title=[\"app-name\",\"thread-id\"]"]
         );
+    }
+
+    #[test]
+    fn codex_is_given_hooks_that_tell_tsumugi_of_each_patch_before_and_after_it() {
+        let args = hook_args(Path::new("/My Apps/tsumugi"));
+        let overrides: Vec<&str> = args
+            .chunks(2)
+            .filter(|pair| pair[0] == "-c")
+            .map(|pair| pair[1].as_str())
+            .collect();
+        for event in ["PreToolUse", "PostToolUse"] {
+            let given = overrides
+                .iter()
+                .find_map(|o| o.strip_prefix(&format!("hooks.{event}=")))
+                .unwrap_or_else(|| panic!("no {event} in {overrides:?}"));
+            let value: toml::Value = toml::from_str(&format!("v = {given}")).unwrap();
+            let groups = value["v"].as_array().unwrap();
+            assert_eq!(groups.len(), 1, "{event}");
+            assert_eq!(groups[0]["matcher"].as_str(), Some("^apply_patch$"));
+            let hook = &groups[0]["hooks"].as_array().unwrap()[0];
+            assert_eq!(hook["type"].as_str(), Some("command"));
+            assert_eq!(
+                hook["command"].as_str(),
+                Some("'/My Apps/tsumugi' mcp hook")
+            );
+        }
     }
 
     #[test]

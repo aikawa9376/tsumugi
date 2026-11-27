@@ -622,17 +622,18 @@ async fn rpc_error<W: AsyncWrite + Unpin>(
     .await
 }
 
-/// What a Claude Code hook `event` is answered with: what the work host
-/// tells the agent as a prompt arrives or once the conversation was cleared;
-/// nothing for any other event, or while the work host cannot say. Around a
-/// tool that writes a file, the work host is told so and nothing is said.
+/// What a Claude Code or Codex hook `event` is answered with: what the work
+/// host tells the agent as a prompt arrives or once the conversation was
+/// cleared; nothing for any other event, or while the work host cannot say.
+/// Around a tool that writes files, the work host is told of each and
+/// nothing is said.
 async fn hook(event: &Value, daemon: impl Daemon) -> Option<Value> {
     let name = event["hook_event_name"].as_str()?;
     let cleared = match name {
         "UserPromptSubmit" => false,
         "SessionStart" if event["source"] == "clear" => true,
         "PreToolUse" | "PostToolUse" => {
-            if let Some(writing) = writing(event, name == "PostToolUse") {
+            for writing in writing(event, name == "PostToolUse") {
                 let _ = daemon.ask(Command::Writing(writing), None).await;
             }
             return None;
@@ -646,23 +647,46 @@ async fn hook(event: &Value, daemon: impl Daemon) -> Option<Value> {
     Some(json!({"hookSpecificOutput": {"hookEventName": name, "additionalContext": note}}))
 }
 
-/// The file a writing tool's hook `event` names, read after the tool ran
-/// when `done`.
-fn writing(event: &Value, done: bool) -> Option<super::protocol::Writing> {
-    let tool = event["tool_name"].as_str()?;
-    if !tsumugi_agents::claude::WRITING_TOOLS.contains(&tool) {
-        return None;
-    }
-    let path = Path::new(event["tool_input"]["file_path"].as_str()?);
-    let path = match event["cwd"].as_str() {
-        Some(cwd) if path.is_relative() => Path::new(cwd).join(path),
-        _ => path.to_path_buf(),
+/// The files a writing tool's hook `event` names, read after the tool ran
+/// when `done`: the one a Claude Code tool writes, or every one a Codex
+/// patch writes.
+fn writing(event: &Value, done: bool) -> Vec<super::protocol::Writing> {
+    let (Some(tool), Some(call)) = (event["tool_name"].as_str(), event["tool_use_id"].as_str())
+    else {
+        return Vec::new();
     };
-    Some(super::protocol::Writing {
-        path,
-        call: event["tool_use_id"].as_str()?.to_string(),
-        done,
-    })
+    let input = &event["tool_input"];
+    let paths = if tsumugi_agents::claude::WRITING_TOOLS.contains(&tool) {
+        input["file_path"]
+            .as_str()
+            .map(str::to_string)
+            .into_iter()
+            .collect()
+    } else if tool == tsumugi_agents::patch::CODEX_TOOL {
+        input["command"]
+            .as_str()
+            .or(input.as_str())
+            .map(tsumugi_agents::patch::files)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let cwd = event["cwd"].as_str().map(Path::new);
+    paths
+        .into_iter()
+        .map(|path| {
+            let path = Path::new(&path);
+            let path = match cwd {
+                Some(cwd) if path.is_relative() => cwd.join(path),
+                _ => path.to_path_buf(),
+            };
+            super::protocol::Writing {
+                path,
+                call: call.to_string(),
+                done,
+            }
+        })
+        .collect()
 }
 
 /// The files an agent's plugin names as one write of its own tools: the
@@ -878,20 +902,35 @@ mod tests {
             json!({"hook_event_name": "PreToolUse", "tool_name": tool, "cwd": "/w",
                 "tool_use_id": "toolu_1", "tool_input": {"file_path": path}})
         };
-        let told = writing(&event("Edit", "/w/a.rs"), false).unwrap();
+        let told = writing(&event("Edit", "/w/a.rs"), false);
         assert_eq!(
             told,
-            super::super::protocol::Writing {
+            [super::super::protocol::Writing {
                 path: "/w/a.rs".into(),
                 call: "toolu_1".into(),
                 done: false,
-            }
+            }]
         );
         assert_eq!(
-            writing(&event("Write", "b.rs"), true).unwrap().path,
+            writing(&event("Write", "b.rs"), true)[0].path,
             Path::new("/w/b.rs")
         );
-        assert!(writing(&event("Read", "/w/a.rs"), false).is_none());
+        assert!(writing(&event("Read", "/w/a.rs"), false).is_empty());
+    }
+
+    #[test]
+    fn a_codex_patch_s_hooks_name_every_file_it_writes() {
+        let patch = "*** Begin Patch\n*** Update File: src/a.rs\n@@\n-x\n+y\n*** Add File: /w/b.rs\n+z\n*** End Patch";
+        let event = |tool: &str| {
+            json!({"hook_event_name": "PostToolUse", "tool_name": tool, "cwd": "/w",
+                "tool_use_id": "call_1", "tool_input": {"command": patch},
+                "tool_response": "Success"})
+        };
+        let told = writing(&event("apply_patch"), true);
+        let paths: Vec<_> = told.iter().map(|w| w.path.clone()).collect();
+        assert_eq!(paths, [Path::new("/w/src/a.rs"), Path::new("/w/b.rs")]);
+        assert!(told.iter().all(|w| w.call == "call_1" && w.done));
+        assert!(writing(&event("Bash"), true).is_empty());
     }
 
     #[test]
