@@ -251,7 +251,6 @@ mod tests {
     #[cfg(unix)]
     mod with_a_fake_gh {
         use super::*;
-        use std::os::unix::fs::PermissionsExt;
 
         fn git_in(dir: &Path, args: &[&str]) {
             let ok = std::process::Command::new("git")
@@ -286,15 +285,13 @@ mod tests {
         /// A `gh` that answers the way `script` says; `log` collects its calls.
         fn gh(dir: &Path, script: &str) -> String {
             let path = dir.join("gh");
-            std::fs::write(
+            crate::testing::program(
                 &path,
-                format!(
+                &format!(
                     "#!/bin/sh\necho \"$@\" >> \"{}/calls\"\n{script}\n",
                     dir.display()
                 ),
-            )
-            .unwrap();
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            );
             path.to_str().unwrap().into()
         }
 

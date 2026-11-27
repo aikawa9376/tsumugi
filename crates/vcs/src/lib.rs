@@ -14,6 +14,8 @@ pub mod github;
 pub mod integrate;
 mod picture;
 mod review;
+#[cfg(all(test, unix))]
+mod testing;
 mod view;
 pub mod worktree;
 pub mod write;

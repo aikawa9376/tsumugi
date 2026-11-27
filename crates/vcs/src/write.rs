@@ -869,17 +869,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_hook_that_refuses_a_commit_has_its_words_returned_and_the_index_kept() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = repo();
         git_in(dir.path(), &["config", "user.name", "a"]);
         git_in(dir.path(), &["config", "user.email", "a@b"]);
         let hook = dir.path().join(".git/hooks/pre-commit");
-        std::fs::write(
+        crate::testing::program(
             &hook,
             "#!/bin/sh\necho 'lint said no'\necho 'and on stderr' >&2\nexit 1\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        );
         write(dir.path(), "a.txt", "x\n");
         git_in(dir.path(), &["add", "a.txt"]);
         let Err(Error::Failed { stderr, .. }) = commit(dir.path(), "msg", false).await else {

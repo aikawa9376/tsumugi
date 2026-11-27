@@ -293,8 +293,10 @@ fn the_issue_command_changes_the_queue_the_running_work_host_owns() {
     let shown = hosts.run(&["issue", "show", "#1", "--json"]);
     assert_eq!(shown["result"]["issue"]["body"], "Read them.");
 
+    // Not a bare number: one no issue has falls back to the start of an id,
+    // and the issue's random id may start with it.
     let missing = isolated(root)
-        .args(["issue", "show", "9", "--json"])
+        .args(["issue", "show", "z9", "--json"])
         .output()
         .unwrap();
     assert_eq!(missing.status.code(), Some(1));
@@ -302,7 +304,7 @@ fn the_issue_command_changes_the_queue_the_running_work_host_owns() {
     assert_eq!(said["ok"], false);
     assert_eq!(said["error"]["code"], "not_found");
     let plain = isolated(root)
-        .args(["issue", "delete", "9"])
+        .args(["issue", "delete", "z9"])
         .output()
         .unwrap();
     assert_eq!(plain.status.code(), Some(1));
