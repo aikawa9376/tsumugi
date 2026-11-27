@@ -286,6 +286,7 @@ impl Review_ {
                 agent: to.agent,
                 text: preview.text.clone(),
                 images: Vec::new(),
+                wait: None,
             };
             match this.app.ask_in(&this.environment, ask).await {
                 Answer::Done => {

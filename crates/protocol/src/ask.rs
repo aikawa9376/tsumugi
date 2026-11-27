@@ -124,11 +124,17 @@ pub enum Ask {
         stamp: crate::MutationStamp,
     },
     MutationEpoch,
+    /// Type `text`, with `images` attached, into the prompt of `session`,
+    /// whose agent is `agent`. Naming `wait`, the session's wait as the
+    /// tree's waits number it, it is typed only while the session still
+    /// stands in that wait, with its turn ended.
     SubmitPrompt {
         session: String,
         agent: Agent,
         text: String,
         images: Vec<PathBuf>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wait: Option<u64>,
     },
     /// Start a session with its program held back until the session is
     /// released.

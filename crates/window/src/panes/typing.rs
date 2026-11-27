@@ -239,6 +239,7 @@ impl Ui {
                             agent: taken.agent,
                             text: taken.text,
                             images: taken.images,
+                            wait: None,
                         },
                         context.clone(),
                     )

@@ -423,6 +423,7 @@ mod tests {
                         agent: tsumugi_model::Agent::Codex,
                         text: prompt.text.clone(),
                         images: vec![],
+                        wait: None,
                     }),
                 },
                 prompt.clone(),
@@ -525,6 +526,7 @@ mod tests {
                         agent: tsumugi_model::Agent::Codex,
                         text: "never admitted".into(),
                         images: vec![],
+                        wait: None,
                     }),
                 })
                 .await

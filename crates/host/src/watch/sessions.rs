@@ -72,9 +72,14 @@ pub(super) async fn watch(mut watched: Watched) {
                 // listing that fails is not read as every session gone and
                 // back.
                 notices.look(&tree(&[]), tsumugi_model::time::now_ms());
-                watched.record([TreeChange::Notices {
-                    notices: notices.list().to_vec(),
-                }]);
+                watched.record([
+                    TreeChange::Notices {
+                        notices: notices.list().to_vec(),
+                    },
+                    TreeChange::Waits {
+                        waits: crate::waits::look(&sessions),
+                    },
+                ]);
                 let started = ran.started(&tree(&[]), &sessions, &terminals);
                 if !started.is_empty()
                     && let Err(error) =

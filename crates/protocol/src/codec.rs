@@ -341,6 +341,9 @@ mod tests {
                 note: None,
             }],
         });
+        round_trips(TreeChange::Waits {
+            waits: [("ffff".to_string(), 3)].into_iter().collect(),
+        });
         round_trips(TreeChange::Notices {
             notices: vec![tsumugi_model::Notice {
                 id: 7,
@@ -1272,6 +1275,23 @@ mod tests {
                 ask: Box::new(ask),
             });
         }
+    }
+
+    #[test]
+    fn a_prompt_naming_the_wait_it_answers_round_trips_and_one_naming_none_reads_as_before() {
+        let ask = |wait| crate::Ask::SubmitPrompt {
+            session: "a".into(),
+            agent: tsumugi_model::Agent::Claude,
+            text: "go on".into(),
+            images: Vec::new(),
+            wait,
+        };
+        round_trips(Request::Ask {
+            asked: 1,
+            ask: Box::new(ask(Some(7))),
+        });
+        assert!(!encode(&ask(None)).contains("wait"));
+        assert!(ask(Some(7)).mutates());
     }
 
     #[test]

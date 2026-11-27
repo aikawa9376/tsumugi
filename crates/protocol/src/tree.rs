@@ -47,6 +47,11 @@ pub struct TreeWork {
     /// What needed the user, as the host keeps it, the oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<tsumugi_model::Notice>,
+    /// The wait of each session that waits on the user, by its id: a number
+    /// the host gave as the session began to wait, never given twice by one
+    /// run of the host, so an answer can name the wait it answers.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub waits: BTreeMap<String, u64>,
     /// The sessions and terminals as last listed; none before the first
     /// list.
     pub listed: Option<Box<Listed>>,
@@ -135,6 +140,10 @@ pub enum TreeChange {
     Notices {
         notices: Vec<tsumugi_model::Notice>,
     },
+    /// The wait of each session that waits on the user.
+    Waits {
+        waits: BTreeMap<String, u64>,
+    },
     /// How each worktree listed stands against its branch's base.
     Standings {
         standings: BTreeMap<PathBuf, Standing>,
@@ -181,6 +190,7 @@ impl TreeWork {
             TreeChange::Checkpoints { checkpoints } => set(&mut self.checkpoints, checkpoints),
             TreeChange::Schedules { schedules } => set(&mut self.schedules, schedules),
             TreeChange::Notices { notices } => set(&mut self.notices, notices),
+            TreeChange::Waits { waits } => set(&mut self.waits, waits),
             TreeChange::Standings { standings } => set(&mut self.standings, standings),
             TreeChange::Listed { listed } => set(&mut self.listed, Some(listed)),
             TreeChange::Failing { error } => set(&mut self.failing, error),
@@ -267,6 +277,12 @@ mod tests {
         }
     }
 
+    fn waits(waits: &[(&str, u64)]) -> TreeChange {
+        TreeChange::Waits {
+            waits: waits.iter().map(|(id, n)| (id.to_string(), *n)).collect(),
+        }
+    }
+
     fn entries(dir: &str, names: &[&str]) -> TreeChange {
         TreeChange::Entries {
             dir: dir.into(),
@@ -298,6 +314,9 @@ mod tests {
             (notices(&[1]), true),
             (notices(&[1]), false),
             (notices(&[1, 2]), true),
+            (waits(&[("a", 1)]), true),
+            (waits(&[("a", 1)]), false),
+            (waits(&[("a", 2)]), true),
             (entries("/w", &["a.rs"]), true),
             (entries("/w", &["a.rs"]), false),
             (entries("/w", &["b.rs"]), true),

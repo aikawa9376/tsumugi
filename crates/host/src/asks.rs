@@ -123,7 +123,8 @@ async fn answer(watched: &Watched, judged: &watch::Sender<Judged>, ask: Ask) -> 
             agent,
             text,
             images,
-        } => submit_prompt(&session, agent, &text, &images).await,
+            wait,
+        } => submit_prompt(&session, agent, &text, &images, wait).await,
         Ask::StartSession(start) => start_session(watched, *start).await,
         Ask::StartTerminal(start) => start_terminal(watched, *start).await,
         Ask::TerminalHost => terminal_host::judged(judged.subscribe())
@@ -455,6 +456,7 @@ async fn submit_prompt(
     agent: tsumugi_model::Agent,
     text: &str,
     images: &[PathBuf],
+    wait: Option<u64>,
 ) -> Result<Answer, String> {
     let id = sessions::id_of(session).ok_or("invalid session ID")?;
     let listed = daemon::daemon()
@@ -470,6 +472,15 @@ async fn submit_prompt(
     let composed = crate::compose::compose(0, agent, text, images);
     if composed.image_missing {
         return Err("a prompt attachment is missing on the work machine".into());
+    }
+    // Taken before it is typed, so a second prompt for the same wait is
+    // refused however soon it follows; one that names none answers it too.
+    match wait {
+        Some(wait) if !crate::waits::take(session, wait) => {
+            return Err("the session no longer waits for this answer".into());
+        }
+        Some(_) => {}
+        None => crate::waits::answered(session),
     }
     match type_prompt(id, &composed.typing).await {
         Ok(()) => Ok(Answer::Done),

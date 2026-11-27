@@ -72,6 +72,7 @@ pub mod terminals;
 mod testing;
 pub mod themes;
 pub mod viewed_files;
+mod waits;
 pub mod watch;
 pub mod work;
 pub mod work_host;

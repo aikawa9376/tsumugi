@@ -702,6 +702,7 @@ fn common(change: &Change) -> bool {
                 | TreeChange::Checkpoints { .. }
                 | TreeChange::Schedules { .. }
                 | TreeChange::Notices { .. }
+                | TreeChange::Waits { .. }
                 | TreeChange::Standings { .. }
         ) | Change::Details(
             DetailsChange::Usage { .. }
@@ -726,6 +727,7 @@ fn in_sight(change: &Change, sight: &Sight) -> bool {
             | TreeChange::Checkpoints { .. }
             | TreeChange::Schedules { .. }
             | TreeChange::Notices { .. }
+            | TreeChange::Waits { .. }
             | TreeChange::Standings { .. },
         ) => true,
         Change::Tree(TreeChange::Marks { worktree, .. } | TreeChange::MarksLeft { worktree }) => {

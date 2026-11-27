@@ -59,6 +59,12 @@ that number, to the asker alone, with what came of it or why it failed. A
 notice or a failure the host has for the user goes to the window whose request
 it concerns.
 
+The host numbers each wait of a session that waits on the user as it begins,
+and every window is told the waits there are. A prompt sent to a session may
+name the wait it answers; the host then types it only while the session
+still stands in that wait with its turn ended, and refuses it otherwise, so a
+wait answered from two places is answered once.
+
 ## When the work host goes
 
 A window that loses its work host connects again, starting one where none
