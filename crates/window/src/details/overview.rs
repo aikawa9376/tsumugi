@@ -15,8 +15,9 @@ use super::timeline::TaskView;
 use crate::bridge::AppCtx;
 use crate::components::{CopyValue, Fact, Facts, ListRow, Section};
 use crate::details::{
-    Component, Entry, Group, change_line, entry_listing, link_sections, opened_agent, opened_note,
-    opened_process, opened_prompt, opened_task, overview_facts, shown_session, stats, working_copy,
+    Component, Entry, Group, change_line, entry_listing, head_facts, link_sections, opened_agent,
+    opened_note, opened_process, opened_prompt, opened_task, shown_place, shown_session, stats,
+    working_copy,
 };
 use crate::icons::{Icon, IconView};
 
@@ -32,7 +33,7 @@ pub(crate) struct LinkMenu {
     pub pinned: bool,
 }
 
-/// The session's name, state, model and times.
+/// The session's name, state, model and times, and where it runs.
 #[component]
 pub(super) fn SessionHead(live_input_ms: Option<u64>, now_ms: u64) -> Element {
     let app = use_context::<AppCtx>();
@@ -44,7 +45,15 @@ pub(super) fn SessionHead(live_input_ms: Option<u64>, now_ms: u64) -> Element {
         return rsx! {};
     };
     let stats = stats(&details, work).unwrap_or_default();
-    let facts = overview_facts(&s, &stats, s.last_input_ms.max(live_input_ms), now_ms);
+    let machine = (!hosts.is_local(&environment)).then(|| hosts.name(&environment));
+    let place = shown_place(&details, work, machine);
+    let facts = head_facts(
+        &s,
+        &stats,
+        s.last_input_ms.max(live_input_ms),
+        now_ms,
+        &place,
+    );
     rsx! {
         Section { label: "{s.name}",
             Facts {

@@ -10,7 +10,7 @@ use tsumugi_model::time::ago;
 use tsumugi_model::usage::{Limit, Severity, Window};
 use tsumugi_model::{Session, State};
 
-use tsumugi_model::repository::{Change, Commit, DiffLine, Operation, Rev, Spot};
+use tsumugi_model::repository::{Change, Commit, DiffLine, Head, Operation, Rev, Spot};
 use tsumugi_protocol::RepositoryRead;
 
 pub use tsumugi_model::Note;
@@ -100,6 +100,131 @@ pub fn overview_facts(
         ));
     }
     out
+}
+
+/// Where the session shown runs: the checkout, the branch and how it
+/// stands, the machine and the session that opened it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Place {
+    pub checkout: Checkout,
+    /// What is checked out, none while it is not known.
+    pub head: Option<Head>,
+    /// The operation Git has not finished there.
+    pub operation: Option<Operation>,
+    /// How the branch stands against its base, as the tree reads it.
+    pub standing: Option<tsumugi_model::repository::Standing>,
+    /// The base it is compared with, when it is named.
+    pub base: Option<String>,
+    /// The work machine it runs on, none on this computer.
+    pub machine: Option<String>,
+    /// The name of the session that opened it.
+    pub opener: Option<String>,
+}
+
+/// What kind of directory a session runs in.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Checkout {
+    /// Not known yet.
+    #[default]
+    Unknown,
+    /// The repository `repo`'s main checkout.
+    Main { repo: String },
+    /// A linked worktree of the repository `repo`.
+    Worktree { repo: String },
+    /// A directory outside git.
+    Plain,
+    /// The scratch directory.
+    Scratch,
+}
+
+/// What the overview's head says of the session `s`: how it stands, as
+/// [`overview_facts`] says, with an unfinished Git operation beside its
+/// state, then where it runs, as `place` tells.
+pub fn head_facts(
+    s: &Session,
+    stats: &tsumugi_model::ConversationStats,
+    last_input_ms: Option<u64>,
+    now_ms: u64,
+    place: &Place,
+) -> Vec<Fact> {
+    let mut out = overview_facts(s, stats, last_input_ms, now_ms);
+    if let Some(operation) = place.operation {
+        let at = out
+            .iter()
+            .position(|f| f.label == "State")
+            .map_or(0, |i| i + 1);
+        out.insert(
+            at,
+            Fact {
+                label: "Git",
+                value: format!("{} in progress", operation.name()),
+                tone: Some("wait"),
+                note: None,
+            },
+        );
+    }
+    out.extend(place_facts(place));
+    out
+}
+
+/// Where `place` says the session runs, as the head's facts.
+fn place_facts(place: &Place) -> Vec<Fact> {
+    let mut out = Vec::new();
+    let git = matches!(
+        place.checkout,
+        Checkout::Main { .. } | Checkout::Worktree { .. }
+    );
+    if git && let Some(head) = &place.head {
+        out.push(Fact::plain(
+            "Branch",
+            match head {
+                Head::Branch(name) => name.clone(),
+                Head::Detached(short) => format!("detached at {short}"),
+            },
+        ));
+    }
+    let checkout = match &place.checkout {
+        Checkout::Unknown => None,
+        Checkout::Main { repo } => Some(format!("main checkout of {repo}")),
+        Checkout::Worktree { repo } => Some(format!("worktree of {repo}")),
+        Checkout::Plain => Some("outside git".into()),
+        Checkout::Scratch => Some("scratch".into()),
+    };
+    if let Some(checkout) = checkout {
+        out.push(Fact::plain("Checkout", checkout));
+    }
+    if git && let Some(standing) = &place.standing {
+        out.push(Fact::plain(
+            "Base",
+            base_line(standing, place.base.as_deref()),
+        ));
+    }
+    if let Some(machine) = &place.machine {
+        out.push(Fact::plain("Machine", machine.clone()));
+    }
+    if let Some(opener) = &place.opener {
+        out.push(Fact::plain("Opened by", opener.clone()));
+    }
+    out
+}
+
+/// How `standing` reads against `base`, named when known.
+fn base_line(standing: &tsumugi_model::repository::Standing, base: Option<&str>) -> String {
+    let tsumugi_model::repository::Standing {
+        ahead,
+        behind,
+        added,
+        removed,
+        ..
+    } = *standing;
+    if ahead == 0 && behind == 0 && added == 0 && removed == 0 {
+        return match base {
+            Some(base) => format!("even with {base}"),
+            None => "even with its base".into(),
+        };
+    }
+    let against = base.map(|b| format!(" vs {b}")).unwrap_or_default();
+    format!("↑{ahead} ↓{behind}{against} · +{added} −{removed}")
 }
 
 /// What the overview says of what the session `s` started from, as
@@ -1914,6 +2039,149 @@ mod tests {
             .build();
         let got = overview_facts(&s, &tsumugi_model::ConversationStats::default(), None, 0);
         assert_eq!(labels(&got), ["State"]);
+    }
+
+    fn worktree_of_demo(branch: &str) -> Place {
+        Place {
+            checkout: Checkout::Worktree {
+                repo: "demo".into(),
+            },
+            head: Some(Head::Branch(branch.into())),
+            ..Place::default()
+        }
+    }
+
+    fn head(place: &Place) -> Vec<(&'static str, String)> {
+        let s = session("s").state(State::Idle).build();
+        head_facts(
+            &s,
+            &tsumugi_model::ConversationStats::default(),
+            None,
+            0,
+            place,
+        )
+        .into_iter()
+        .map(|f| (f.label, f.value))
+        .collect()
+    }
+
+    #[test]
+    fn the_head_says_the_branch_and_whether_it_is_a_worktree_or_the_main_checkout() {
+        assert_eq!(
+            head(&worktree_of_demo("fix-x"))[1..],
+            [
+                ("Branch", "fix-x".to_string()),
+                ("Checkout", "worktree of demo".to_string()),
+            ]
+        );
+        let main = Place {
+            checkout: Checkout::Main {
+                repo: "demo".into(),
+            },
+            head: Some(Head::Branch("main".into())),
+            ..Place::default()
+        };
+        assert_eq!(
+            head(&main)[1..],
+            [
+                ("Branch", "main".to_string()),
+                ("Checkout", "main checkout of demo".to_string()),
+            ]
+        );
+        let detached = Place {
+            head: Some(Head::Detached("fd56e7d".into())),
+            ..worktree_of_demo("")
+        };
+        assert_eq!(
+            head(&detached)[1],
+            ("Branch", "detached at fd56e7d".to_string())
+        );
+    }
+
+    #[test]
+    fn outside_git_the_head_names_no_branch() {
+        let plain = Place {
+            checkout: Checkout::Plain,
+            ..Place::default()
+        };
+        assert_eq!(head(&plain)[1..], [("Checkout", "outside git".to_string())]);
+        let scratch = Place {
+            checkout: Checkout::Scratch,
+            ..Place::default()
+        };
+        assert_eq!(head(&scratch)[1..], [("Checkout", "scratch".to_string())]);
+        assert_eq!(labels_of(&head(&Place::default())), ["State"]);
+    }
+
+    fn labels_of(facts: &[(&'static str, String)]) -> Vec<&'static str> {
+        facts.iter().map(|f| f.0).collect()
+    }
+
+    #[test]
+    fn the_head_says_how_the_branch_stands_against_its_base() {
+        let standing = tsumugi_model::repository::Standing {
+            merge_base: "abc".into(),
+            ahead: 3,
+            behind: 1,
+            added: 120,
+            removed: 40,
+        };
+        let based = Place {
+            standing: Some(standing.clone()),
+            base: Some("main".into()),
+            ..worktree_of_demo("fix-x")
+        };
+        let base = |place: &Place| head(place).into_iter().find(|f| f.0 == "Base").map(|f| f.1);
+        assert_eq!(base(&based).as_deref(), Some("↑3 ↓1 vs main · +120 −40"));
+        let unnamed = Place {
+            base: None,
+            ..based.clone()
+        };
+        assert_eq!(base(&unnamed).as_deref(), Some("↑3 ↓1 · +120 −40"));
+        let even = Place {
+            standing: Some(tsumugi_model::repository::Standing {
+                merge_base: "abc".into(),
+                ..Default::default()
+            }),
+            ..based.clone()
+        };
+        assert_eq!(base(&even).as_deref(), Some("even with main"));
+        assert_eq!(base(&worktree_of_demo("fix-x")), None);
+    }
+
+    #[test]
+    fn an_unfinished_git_operation_follows_the_state_as_a_badge() {
+        let s = session("s").state(State::Idle).build();
+        let place = Place {
+            operation: Some(Operation::Rebase),
+            ..worktree_of_demo("fix-x")
+        };
+        let got = head_facts(
+            &s,
+            &tsumugi_model::ConversationStats::default(),
+            None,
+            0,
+            &place,
+        );
+        assert_eq!(labels(&got), ["State", "Git", "Branch", "Checkout"]);
+        assert_eq!(got[1].value, "rebase in progress");
+        assert_eq!(got[1].tone, Some("wait"));
+    }
+
+    #[test]
+    fn the_head_names_the_work_machine_and_the_session_that_opened_it() {
+        let place = Place {
+            machine: Some("build-box".into()),
+            opener: Some("lead".into()),
+            ..worktree_of_demo("fix-x")
+        };
+        assert_eq!(
+            head(&place)[3..],
+            [
+                ("Machine", "build-box".to_string()),
+                ("Opened by", "lead".to_string()),
+            ]
+        );
     }
 
     #[test]

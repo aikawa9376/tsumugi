@@ -43,7 +43,12 @@ window or such a row is described.
   started and how long ago it last took input. A session waiting on the user
   or failed shows, beside its state, what its program said of why. Input
   sent through Tsumugi includes answers to approvals and choices; its latest
-  time stays with the running session when the window closes.
+  time stays with the running session when the window closes. It then says
+  where the session runs: the branch checked out, whether that is the
+  repository's main checkout, another worktree of it, a directory outside
+  git or the scratch directory, how the branch stands against its base, a
+  merge, rebase, cherry-pick or revert Git has not finished there, the work
+  machine when it is not this computer, and the session that opened it.
 - **change** — the change the worktree is on: its description's first line
   and how many files it changes; a click on it shows the tab that holds
   **changes**.

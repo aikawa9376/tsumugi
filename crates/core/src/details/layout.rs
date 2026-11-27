@@ -25,7 +25,8 @@ pub enum Component {
     /// A heading of the user's own over what follows it.
     Section,
     /// The session's name, state, latest model, when it started and last
-    /// took input.
+    /// took input, and where it runs: its branch and checkout, how the
+    /// branch stands against its base, its machine and who opened it.
     Session,
     /// The change the worktree is on, which opens the files it changes.
     Change,

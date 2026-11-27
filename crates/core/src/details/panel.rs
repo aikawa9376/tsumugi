@@ -595,6 +595,56 @@ pub fn branch(
     }
 }
 
+/// Where the session shown runs, as last read, on the work machine called
+/// `machine`, none for this computer.
+pub fn shown_place(
+    details: &Details,
+    work: Option<&WorkSnapshot>,
+    machine: Option<String>,
+) -> super::Place {
+    use super::{Checkout, Place};
+    let tree = crate::tree::listed(work);
+    let worktree = details.shown.worktree.as_ref();
+    let workspace = worktree.and_then(|w| tree.workspace_of(w));
+    let node = workspace.and_then(|ws| {
+        ws.worktrees
+            .iter()
+            .find(|n| Some(&n.worktree.path) == worktree)
+    });
+    let checkout = match (workspace, node) {
+        (Some(ws), _) if ws.scratch => Checkout::Scratch,
+        (Some(ws), _) if !ws.git => Checkout::Plain,
+        (Some(ws), Some(n)) if n.worktree.is_main() => Checkout::Main {
+            repo: ws.name.clone(),
+        },
+        (Some(ws), Some(_)) => Checkout::Worktree {
+            repo: ws.name.clone(),
+        },
+        _ => Checkout::Unknown,
+    };
+    let read = branch(details, work);
+    let head = read.as_ref().map(|b| b.head.clone()).or_else(|| {
+        node.and_then(|n| n.worktree.branch.clone())
+            .map(tsumugi_model::repository::Head::Branch)
+    });
+    let standing = worktree.and_then(|w| work?.tree.standings.get(w).cloned());
+    let shown = shown_session(details, work);
+    let opener = shown.and_then(|s| s.parent).and_then(|parent| {
+        tree.sessions()
+            .find(|(_, s)| s.delegation == Some(parent))
+            .map(|(_, s)| s.name.clone())
+    });
+    Place {
+        checkout,
+        head,
+        operation: read.as_ref().and_then(|b| b.operation),
+        standing,
+        base: read.and_then(|b| b.comparison.base),
+        machine,
+        opener,
+    }
+}
+
 /// The files of the working copy in conflict, as last read.
 pub fn conflicts(details: &Details, work: Option<&WorkSnapshot>) -> Vec<Change> {
     match working_copy(details, work).map(|v| v.listing) {
@@ -1558,7 +1608,8 @@ pub(crate) fn sight(details: &Details) -> Sight {
     if has(Component::Change) || has(Component::Changes) {
         spots.push(Spot::Files(Rev::WorkingCopy));
     }
-    if has(Component::Changes) {
+    // The head says what Git has not finished and the base it compares with.
+    if has(Component::Changes) || has(Component::Session) {
         spots.push(Spot::Branch);
     }
     if has(Component::Log) {
@@ -1829,7 +1880,10 @@ pub(crate) mod tests {
                 (
                     Some("a".into()),
                     true,
-                    vec![("/w".into(), Spot::Files(Rev::WorkingCopy))]
+                    vec![
+                        ("/w".into(), Spot::Files(Rev::WorkingCopy)),
+                        ("/w".into(), Spot::Branch)
+                    ]
                 ),
                 (Some("a".into()), false, vec![("/w".into(), Spot::Log)]),
                 (None, false, vec![("/w".into(), Spot::Log)]),
@@ -3228,6 +3282,15 @@ pub(crate) mod tests {
             [Spot::Files(Rev::WorkingCopy), Spot::Branch, Spot::Log]
         );
         assert_eq!(repository.system, Some(UsageSettings::NONE));
+        let head = sight(
+            "[panel.session]\nfoot = []\n[[panel.session.tabs]]\ntitle = \"H\"\ncomponents = [\"session\"]\n",
+        );
+        let spots: Vec<Spot> = head.repositories.into_iter().map(|r| r.spot).collect();
+        assert_eq!(
+            spots,
+            [Spot::Branch],
+            "the head says where the branch stands"
+        );
         let links = sight(
             "[panel.session]\nfoot = []\n[[panel.session.tabs]]\ntitle = \"L\"\ncomponents = [\"links\"]\n",
         );
